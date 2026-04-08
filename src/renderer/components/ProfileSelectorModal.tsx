@@ -24,12 +24,14 @@ export function ProfileSelectorModal({
 }: ProfileSelectorModalProps) {
   if (!open) return null;
 
+  const hasProfiles = profiles.length > 0;
+
   return (
     <div style={styles.modalOverlay}>
       <section style={styles.modalCard}>
         <h2 style={styles.modalTitle}>Select Profile</h2>
 
-        {profiles.length > 0 ? (
+        {hasProfiles ? (
           <label style={styles.label}>
             Profile
             <select
@@ -50,28 +52,33 @@ export function ProfileSelectorModal({
           </div>
         )}
 
-        <label style={styles.checkboxLabel}>
-          <input
-            type="checkbox"
-            checked={skipPromptAgain}
-            onChange={(event) => onChangeSkipPromptAgain(event.target.checked)}
-          />
-          Do not ask me again
-        </label>
+        {hasProfiles ? (
+          <>
+            <label style={styles.checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={skipPromptAgain}
+                onChange={(event) => onChangeSkipPromptAgain(event.target.checked)}
+              />
+              Do not ask me again
+            </label>
 
-        <div style={styles.modalActions}>
-          <button type="button" style={styles.secondaryButton} onClick={onCreateProfile}>
-            Create profile
-          </button>
-          <button
-            type="button"
-            style={styles.primaryButton}
-            disabled={profiles.length === 0 || !selectorProfileId}
-            onClick={onConfirm}
-          >
-            Continue with profile
-          </button>
-        </div>
+            <div style={styles.modalActions}>
+              <button type="button" style={styles.secondaryButton} onClick={onCreateProfile}>
+                Create profile
+              </button>
+              <button type="button" style={styles.primaryButton} onClick={onConfirm}>
+                Continue with profile
+              </button>
+            </div>
+          </>
+        ) : (
+          <div style={styles.modalActions}>
+            <button type="button" style={styles.primaryButton} onClick={onCreateProfile}>
+              Create first profile
+            </button>
+          </div>
+        )}
       </section>
     </div>
   );
