@@ -8,6 +8,7 @@ import type {
   DeleteProfileInput,
   EventLogEntry,
   EventLogFilters,
+  GeneralSettings,
   ObsConnectionSettings,
   ObsStatsSnapshot,
   RenameProfileInput,
@@ -34,6 +35,9 @@ const copilotApi: CopilotApi = {
   cloneProfile: (input: CloneProfileInput) => ipcRenderer.invoke(IPC_CHANNELS.profilesClone, input),
   deleteProfile: (input: DeleteProfileInput) => ipcRenderer.invoke(IPC_CHANNELS.profilesDelete, input),
   pickProfileDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.profilesPickDirectory),
+  getGeneralSettings: () => ipcRenderer.invoke(IPC_CHANNELS.generalGetSettings) as Promise<GeneralSettings>,
+  saveGeneralSettings: (input: GeneralSettings) =>
+    ipcRenderer.invoke(IPC_CHANNELS.generalSaveSettings, input) as Promise<GeneralSettings>,
   listScheduledMessages: () => ipcRenderer.invoke(IPC_CHANNELS.scheduledList),
   upsertScheduledMessage: (input: ScheduledMessageUpsertInput) => ipcRenderer.invoke(IPC_CHANNELS.scheduledUpsert, input),
   deleteScheduledMessage: (input: ScheduledMessageDeleteInput) => ipcRenderer.invoke(IPC_CHANNELS.scheduledDelete, input),

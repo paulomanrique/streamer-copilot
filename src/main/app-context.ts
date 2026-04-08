@@ -16,6 +16,7 @@ import { ObsSettingsStore } from '../modules/obs/obs-settings-store.js';
 import { ScheduledMessageRepository } from '../modules/scheduled/scheduled-repository.js';
 import { SchedulerService } from '../modules/scheduled/scheduler-service.js';
 import { AppSettingsRepository } from '../modules/settings/app-settings-repository.js';
+import { GeneralSettingsStore } from '../modules/settings/general-settings-store.js';
 import { ProfileStore } from '../modules/settings/profile-store.js';
 import { SoundCommandRepository } from '../modules/sounds/sound-repository.js';
 import { SoundService } from '../modules/sounds/sound-service.js';
@@ -31,6 +32,7 @@ import {
   createProfileInputSchema,
   deleteProfileInputSchema,
   eventLogFiltersSchema,
+  generalSettingsSchema,
   obsConnectionSettingsSchema,
   renameProfileInputSchema,
   rendererVoiceCapabilitiesSchema,
@@ -50,6 +52,8 @@ import { StateHub } from './state-hub.js';
 interface AppContextOptions {
   appVersion: string;
   databaseHandle: DatabaseHandle;
+  generalSettingsStore: GeneralSettingsStore;
+  onGeneralSettingsChanged: (settings: import('../shared/types.js').GeneralSettings) => Promise<void> | void;
   stateHub: StateHub;
   userDataPath: string;
 }
@@ -58,6 +62,7 @@ export function createAppContext(options: AppContextOptions): () => void {
   const execFile = promisify(execFileCallback);
   const profileStore = new ProfileStore(options.userDataPath);
   const appSettingsRepository = new AppSettingsRepository(options.databaseHandle.db);
+  const generalSettingsStore = options.generalSettingsStore;
   const obsSettingsStore = new ObsSettingsStore(appSettingsRepository);
   const logRepository = new LogRepository(options.databaseHandle.db);
   const logService = new LogService(logRepository);
@@ -206,6 +211,16 @@ export function createAppContext(options: AppContextOptions): () => void {
     return result.filePaths[0];
   });
 
+  ipcMain.handle(IPC_CHANNELS.generalGetSettings, async () => generalSettingsStore.load());
+
+  ipcMain.handle(IPC_CHANNELS.generalSaveSettings, async (_event, rawInput: unknown) => {
+    const input = generalSettingsSchema.parse(rawInput);
+    const saved = generalSettingsStore.save(input);
+    await options.onGeneralSettingsChanged(saved);
+    logService.info('settings', 'General settings saved', saved);
+    return saved;
+  });
+
   ipcMain.handle(IPC_CHANNELS.scheduledList, async () => schedulerService.list());
 
   ipcMain.handle(IPC_CHANNELS.scheduledUpsert, async (_event, rawInput: unknown) => {
@@ -331,6 +346,8 @@ export function createAppContext(options: AppContextOptions): () => void {
     ipcMain.removeHandler(IPC_CHANNELS.profilesClone);
     ipcMain.removeHandler(IPC_CHANNELS.profilesDelete);
     ipcMain.removeHandler(IPC_CHANNELS.profilesPickDirectory);
+    ipcMain.removeHandler(IPC_CHANNELS.generalGetSettings);
+    ipcMain.removeHandler(IPC_CHANNELS.generalSaveSettings);
     ipcMain.removeHandler(IPC_CHANNELS.scheduledList);
     ipcMain.removeHandler(IPC_CHANNELS.scheduledUpsert);
     ipcMain.removeHandler(IPC_CHANNELS.scheduledDelete);

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { AppInfo, PermissionLevel, ProfilesSnapshot, VoiceSpeakPayload } from '../shared/types.js';
+import type { AppInfo, GeneralSettings, PermissionLevel, ProfilesSnapshot, VoiceSpeakPayload } from '../shared/types.js';
 import { readSkipPromptPreference, shouldPromptProfileSelector } from './profile-startup.js';
 import { useAppStore } from './store.js';
 import { AppHeader } from './components/AppHeader.js';
@@ -15,6 +15,11 @@ import { EventLogPage } from './pages/EventLog.js';
 import { styles } from './components/app-styles.js';
 
 const SKIP_PROFILE_SELECTOR_KEY = 'streamerCopilot.skipProfileSelector';
+const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
+  startOnLogin: false,
+  minimizeToTray: true,
+  eventNotifications: true,
+};
 
 export default function App() {
   const {
@@ -36,6 +41,7 @@ export default function App() {
   const [selectorProfileId, setSelectorProfileId] = useState('');
   const [skipPromptAgain, setSkipPromptAgain] = useState(false);
   const [currentSection, setCurrentSection] = useState<AppSection>('dashboard');
+  const [generalSettings, setGeneralSettings] = useState<GeneralSettings>(DEFAULT_GENERAL_SETTINGS);
   const [languageCode, setLanguageCode] = useState('en-US');
   const [permissionLevels, setPermissionLevels] = useState<PermissionLevel[]>(['everyone', 'moderator']);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -57,14 +63,16 @@ export default function App() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [info, snapshot, recentChat] = await Promise.all([
+        const [info, snapshot, recentChat, nextGeneralSettings] = await Promise.all([
           window.copilot.getAppInfo(),
           window.copilot.listProfiles(),
           window.copilot.getRecentChat(),
+          window.copilot.getGeneralSettings(),
         ]);
         setAppInfo(info);
         setProfiles(snapshot);
         setChatSnapshot(recentChat);
+        setGeneralSettings(nextGeneralSettings);
         setSelectorProfileId(snapshot.activeProfileId);
         const skipPreference = readSkipPromptPreference(localStorage.getItem(SKIP_PROFILE_SELECTOR_KEY));
         setSkipPromptAgain(skipPreference);
@@ -282,6 +290,17 @@ export default function App() {
 
   const activeProfileName = activeProfile?.name ?? '—';
 
+  const saveGeneralSettings = async (settings: GeneralSettings) => {
+    try {
+      const saved = await window.copilot.saveGeneralSettings(settings);
+      setGeneralSettings(saved);
+      setError(null);
+    } catch (cause) {
+      pushError(cause instanceof Error ? cause.message : 'Failed to save general settings');
+      throw cause;
+    }
+  };
+
   return (
     <main style={styles.page}>
       <section style={styles.card}>
@@ -312,6 +331,8 @@ export default function App() {
             onCloneProfile={() => void cloneActiveProfile()}
             onDeleteProfile={() => void deleteActiveProfile()}
             onSelectProfile={(profileId) => void onSelectProfile(profileId)}
+            generalSettings={generalSettings}
+            onSaveGeneralSettings={saveGeneralSettings}
             languageCode={languageCode}
             permissionLevels={permissionLevels}
             onChangeLanguageCode={setLanguageCode}

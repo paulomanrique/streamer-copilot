@@ -28,6 +28,12 @@ export const deleteProfileInputSchema = z.object({
   profileId: z.string().min(1),
 });
 
+export const generalSettingsSchema = z.object({
+  startOnLogin: z.boolean(),
+  minimizeToTray: z.boolean(),
+  eventNotifications: z.boolean(),
+});
+
 export const scheduledMessageUpsertInputSchema = z.object({
   id: z.string().min(1).optional(),
   message: z.string().min(1).max(500),
@@ -100,6 +106,7 @@ export type CreateProfileInputSchema = z.infer<typeof createProfileInputSchema>;
 export type RenameProfileInputSchema = z.infer<typeof renameProfileInputSchema>;
 export type CloneProfileInputSchema = z.infer<typeof cloneProfileInputSchema>;
 export type DeleteProfileInputSchema = z.infer<typeof deleteProfileInputSchema>;
+export type GeneralSettingsSchema = z.infer<typeof generalSettingsSchema>;
 export type ScheduledMessageUpsertInputSchema = z.infer<typeof scheduledMessageUpsertInputSchema>;
 export type ScheduledMessageDeleteInputSchema = z.infer<typeof scheduledMessageDeleteInputSchema>;
 export type VoiceCommandUpsertInputSchema = z.infer<typeof voiceCommandUpsertInputSchema>;

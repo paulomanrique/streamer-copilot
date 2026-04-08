@@ -4,12 +4,14 @@ import type { ObsStatsSnapshot, PermissionLevel, ProfileSummary } from '../../sh
 import { PlatformSettingsPreview } from '../components/PlatformSettingsPreview.js';
 import { SettingsProfilesPanel } from '../components/SettingsProfilesPanel.js';
 import { styles } from '../components/app-styles.js';
+import { GeneralSettingsPage } from './GeneralSettings.js';
 import { ObsSettingsPage } from './ObsSettings.js';
 import { ScheduledMessagesPage } from './ScheduledMessages.js';
 import { SoundCommandsPage } from './SoundCommands.js';
 import { VoiceCommandsPage } from './VoiceCommands.js';
+import type { GeneralSettings } from '../../shared/types.js';
 
-type SettingsView = 'profiles' | 'platforms' | 'obs' | 'sound' | 'voice' | 'scheduled';
+type SettingsView = 'general' | 'profiles' | 'platforms' | 'obs' | 'sound' | 'voice' | 'scheduled';
 
 interface SettingsWorkspaceProps {
   activeProfileId: string;
@@ -20,6 +22,8 @@ interface SettingsWorkspaceProps {
   onCloneProfile: () => void;
   onDeleteProfile: () => void;
   onSelectProfile: (profileId: string) => void;
+  generalSettings: GeneralSettings;
+  onSaveGeneralSettings: (settings: GeneralSettings) => Promise<void>;
   languageCode: string;
   permissionLevels: PermissionLevel[];
   onChangeLanguageCode: (code: string) => void;
@@ -32,6 +36,7 @@ interface SettingsWorkspaceProps {
 }
 
 const SETTINGS_VIEWS: Array<{ id: SettingsView; label: string }> = [
+  { id: 'general', label: 'General' },
   { id: 'profiles', label: 'Profiles' },
   { id: 'platforms', label: 'Platforms' },
   { id: 'obs', label: 'OBS' },
@@ -41,7 +46,7 @@ const SETTINGS_VIEWS: Array<{ id: SettingsView; label: string }> = [
 ];
 
 export function SettingsWorkspace(props: SettingsWorkspaceProps) {
-  const [currentView, setCurrentView] = useState<SettingsView>('profiles');
+  const [currentView, setCurrentView] = useState<SettingsView>('general');
 
   return (
     <section style={styles.settingsLayout}>
@@ -59,6 +64,10 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
       </aside>
 
       <div>
+        {currentView === 'general' ? (
+          <GeneralSettingsPage settings={props.generalSettings} onSave={props.onSaveGeneralSettings} />
+        ) : null}
+
         {currentView === 'profiles' ? (
           <SettingsProfilesPanel
             activeProfileId={props.activeProfileId}

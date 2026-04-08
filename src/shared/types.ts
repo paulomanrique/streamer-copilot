@@ -6,6 +6,12 @@ export interface AppInfo {
   nodeVersion: string;
 }
 
+export interface GeneralSettings {
+  startOnLogin: boolean;
+  minimizeToTray: boolean;
+  eventNotifications: boolean;
+}
+
 export type PermissionLevel = 'everyone' | 'follower' | 'subscriber' | 'moderator' | 'broadcaster';
 
 export interface CommandPermission {

@@ -6,6 +6,7 @@ import type {
   DeleteProfileInput,
   EventLogEntry,
   EventLogFilters,
+  GeneralSettings,
   ObsConnectionSettings,
   ObsStatsSnapshot,
   ProfilesSnapshot,
@@ -36,6 +37,8 @@ export const IPC_CHANNELS = {
   profilesClone: 'profiles:clone',
   profilesDelete: 'profiles:delete',
   profilesPickDirectory: 'profiles:pick-directory',
+  generalGetSettings: 'general:get-settings',
+  generalSaveSettings: 'general:save-settings',
   scheduledList: 'scheduled:list',
   scheduledUpsert: 'scheduled:upsert',
   scheduledDelete: 'scheduled:delete',
@@ -78,6 +81,8 @@ export interface CopilotApi {
   cloneProfile: (input: CloneProfileInput) => Promise<ProfilesSnapshot>;
   deleteProfile: (input: DeleteProfileInput) => Promise<ProfilesSnapshot>;
   pickProfileDirectory: () => Promise<string | null>;
+  getGeneralSettings: () => Promise<GeneralSettings>;
+  saveGeneralSettings: (input: GeneralSettings) => Promise<GeneralSettings>;
   listScheduledMessages: () => Promise<ScheduledMessage[]>;
   upsertScheduledMessage: (input: ScheduledMessageUpsertInput) => Promise<ScheduledMessage[]>;
   deleteScheduledMessage: (input: ScheduledMessageDeleteInput) => Promise<ScheduledMessage[]>;
