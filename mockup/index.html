@@ -98,7 +98,7 @@
           <div class="flex items-center justify-between px-4 py-2 border-b border-gray-800 shrink-0">
             <div class="flex items-center gap-2">
               <h2 class="text-sm font-semibold text-gray-200">Chat Unificado</h2>
-              <span class="text-xs text-gray-500">3 plataformas • 127 viewers</span>
+              <span class="text-xs text-gray-500">5 fontes • 4.6k viewers</span>
             </div>
             <div class="flex items-center gap-1.5 text-xs">
               <!-- Platform filter toggles -->
@@ -112,10 +112,20 @@
                 class="flex items-center gap-1.5 px-2 py-1 rounded bg-red-500/20 text-red-300 hover:opacity-90 transition-all">
                 <span class="w-2 h-2 rounded-full bg-red-500"></span> YouTube
               </button>
+              <button data-platform-filter="youtube-v" onclick="togglePlatformFilter('youtube-v')"
+                title="Mostrar/ocultar mensagens do YouTube Vertical"
+                class="flex items-center gap-1.5 px-2 py-1 rounded bg-rose-400/20 text-rose-300 hover:opacity-90 transition-all">
+                <span class="w-2 h-2 rounded-full bg-rose-400"></span> YT Vert.
+              </button>
               <button data-platform-filter="kick" onclick="togglePlatformFilter('kick')"
                 title="Mostrar/ocultar mensagens do Kick"
                 class="flex items-center gap-1.5 px-2 py-1 rounded bg-green-500/20 text-green-300 hover:opacity-90 transition-all">
                 <span class="w-2 h-2 rounded-full bg-green-500"></span> Kick
+              </button>
+              <button data-platform-filter="tiktok" onclick="togglePlatformFilter('tiktok')"
+                title="Mostrar/ocultar mensagens do TikTok"
+                class="flex items-center gap-1.5 px-2 py-1 rounded bg-pink-500/20 text-pink-300 hover:opacity-90 transition-all">
+                <span class="w-2 h-2 rounded-full bg-pink-500"></span> TikTok
               </button>
             </div>
           </div>
@@ -130,8 +140,10 @@
             <div class="flex gap-2">
               <select data-chat-platform class="bg-gray-800 border border-gray-700 rounded text-xs text-gray-300 px-2 py-1.5 focus:outline-none focus:border-violet-500">
                 <option value="twitch">Twitch</option>
-                <option value="youtube">YouTube</option>
+                <option value="youtube">YouTube (Horizontal)</option>
+                <option value="youtube-v">YouTube (Vertical)</option>
                 <option value="kick">Kick</option>
+                <option value="tiktok">TikTok</option>
               </select>
               <input id="chat-input" type="text" placeholder="Enviar mensagem… (Enter para enviar)"
                 class="flex-1 bg-gray-800 border border-gray-700 rounded text-sm text-gray-300 px-3 py-1.5 focus:outline-none focus:border-violet-500 placeholder-gray-600">
@@ -188,7 +200,7 @@
               </div>
 
               <!-- Row 3: Viewers per platform -->
-              <div class="col-span-4 grid grid-cols-3 gap-2">
+              <div class="col-span-4 grid grid-cols-5 gap-2">
                 <div class="bg-purple-500/10 border border-purple-500/20 rounded-lg p-2.5 text-center">
                   <div class="flex items-center justify-center gap-1 mb-0.5">
                     <svg class="w-3 h-3 text-purple-400" viewBox="0 0 24 24" fill="currentColor"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"/></svg>
@@ -200,11 +212,21 @@
                 <div class="bg-red-500/10 border border-red-500/20 rounded-lg p-2.5 text-center">
                   <div class="flex items-center justify-center gap-1 mb-0.5">
                     <svg class="w-3 h-3 text-red-400" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
-                    <span class="text-xs text-red-400">YouTube</span>
+                    <span class="text-xs text-red-400">YT Hor.</span>
                   </div>
                   <div class="text-base font-mono font-bold text-red-300" id="viewers-youtube">834</div>
                   <div class="text-xs text-gray-500 mt-0.5">
                     viewers · <span class="text-pink-400" id="likes-youtube">2.1k</span> likes
+                  </div>
+                </div>
+                <div class="bg-rose-500/10 border border-rose-500/20 rounded-lg p-2.5 text-center">
+                  <div class="flex items-center justify-center gap-1 mb-0.5">
+                    <svg class="w-3 h-3 text-rose-400" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
+                    <span class="text-xs text-rose-400">YT Vert.</span>
+                  </div>
+                  <div class="text-base font-mono font-bold text-rose-300" id="viewers-youtube-v">291</div>
+                  <div class="text-xs text-gray-500 mt-0.5">
+                    viewers · <span class="text-pink-400" id="likes-youtube-v">876</span> likes
                   </div>
                 </div>
                 <div class="bg-green-500/10 border border-green-500/20 rounded-lg p-2.5 text-center">
@@ -214,6 +236,16 @@
                   </div>
                   <div class="text-base font-mono font-bold text-green-300" id="viewers-kick">392</div>
                   <div class="text-xs text-gray-500 mt-0.5">viewers</div>
+                </div>
+                <div class="bg-pink-500/10 border border-pink-500/20 rounded-lg p-2.5 text-center">
+                  <div class="flex items-center justify-center gap-1 mb-0.5">
+                    <svg class="w-3 h-3 text-pink-400" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.67a8.17 8.17 0 0 0 4.79 1.53V6.75a4.85 4.85 0 0 1-1.02-.06z"/></svg>
+                    <span class="text-xs text-pink-400">TikTok</span>
+                  </div>
+                  <div class="text-base font-mono font-bold text-pink-300" id="viewers-tiktok">1.8k</div>
+                  <div class="text-xs text-gray-500 mt-0.5">
+                    viewers · <span class="text-pink-400" id="likes-tiktok">5.3k</span> likes
+                  </div>
                 </div>
               </div>
             </div>
@@ -258,11 +290,19 @@
         </div>
         <div class="flex items-center gap-1.5">
           <span class="w-2 h-2 rounded-full bg-red-500 pulse-dot"></span>
-          <span>YouTube: <span class="text-gray-300">Meu Canal</span></span>
+          <span>YT Hor.: <span class="text-gray-300">Meu Canal</span></span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-rose-400 pulse-dot"></span>
+          <span>YT Vert.: <span class="text-gray-300">Meu Canal Shorts</span></span>
         </div>
         <div class="flex items-center gap-1.5">
           <span class="w-2 h-2 rounded-full bg-green-500 pulse-dot"></span>
           <span>Kick: <span class="text-gray-300">meucanal</span></span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-pink-500"></span>
+          <span>TikTok: <span class="text-gray-300">Em breve</span></span>
         </div>
         <div class="flex items-center gap-1.5 ml-2">
           <span class="w-2 h-2 rounded-full bg-cyan-500"></span>
@@ -360,7 +400,7 @@
             </div>
           </div>
 
-          <!-- YouTube -->
+          <!-- YouTube (Horizontal) -->
           <div class="bg-gray-800/60 rounded-xl p-5 mb-4 border border-gray-700">
             <div class="flex items-start gap-4">
               <div class="w-10 h-10 rounded-lg bg-red-600/20 flex items-center justify-center text-red-400">
@@ -369,8 +409,8 @@
               <div class="flex-1">
                 <div class="flex items-center justify-between">
                   <div>
-                    <h3 class="font-semibold">YouTube</h3>
-                    <p class="text-sm text-gray-400 mt-0.5">Meu Canal • <span class="text-green-400">Conectado</span></p>
+                    <h3 class="font-semibold">YouTube (Horizontal)</h3>
+                    <p class="text-sm text-gray-400 mt-0.5">Meu Canal • Live ID: <code class="text-red-300">dQw4w9WgXcQ</code> • <span class="text-green-400">Conectado</span></p>
                   </div>
                   <button class="px-3 py-1.5 rounded bg-red-600/20 hover:bg-red-600/30 text-red-400 text-sm transition-colors">Desconectar</button>
                 </div>
@@ -379,8 +419,27 @@
             </div>
           </div>
 
+          <!-- YouTube (Vertical) -->
+          <div class="bg-gray-800/60 rounded-xl p-5 mb-4 border border-gray-700">
+            <div class="flex items-start gap-4">
+              <div class="w-10 h-10 rounded-lg bg-rose-600/20 flex items-center justify-center text-rose-400">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
+              </div>
+              <div class="flex-1">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <h3 class="font-semibold">YouTube (Vertical)</h3>
+                    <p class="text-sm text-gray-400 mt-0.5">Meu Canal Shorts • Live ID: <code class="text-rose-300">AbC123Shorts</code> • <span class="text-green-400">Conectado</span></p>
+                  </div>
+                  <button class="px-3 py-1.5 rounded bg-red-600/20 hover:bg-red-600/30 text-red-400 text-sm transition-colors">Desconectar</button>
+                </div>
+                <p class="text-xs text-gray-500 mt-2">Polling a cada 5s · Quota: compartilhada com YouTube API</p>
+              </div>
+            </div>
+          </div>
+
           <!-- Kick -->
-          <div class="bg-gray-800/60 rounded-xl p-5 border border-gray-700">
+          <div class="bg-gray-800/60 rounded-xl p-5 mb-4 border border-gray-700">
             <div class="flex items-start gap-4">
               <div class="w-10 h-10 rounded-lg bg-green-600/20 flex items-center justify-center text-green-400">
                 <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M2 2h4v8l4-4h4l-6 6 6 6h-4l-4-4v4H2V2zm14 0h4v20h-4z"/></svg>
@@ -397,6 +456,25 @@
                   <input type="text" placeholder="Nome do canal no Kick (ex: meucanal)" class="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-500">
                   <p class="text-xs text-gray-600 mt-1">O Kick não requer autenticação para leitura de chat público.</p>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TikTok (Placeholder) -->
+          <div class="bg-gray-800/60 rounded-xl p-5 border border-pink-500/20">
+            <div class="flex items-start gap-4">
+              <div class="w-10 h-10 rounded-lg bg-pink-600/20 flex items-center justify-center text-pink-400">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.67a8.17 8.17 0 0 0 4.79 1.53V6.75a4.85 4.85 0 0 1-1.02-.06z"/></svg>
+              </div>
+              <div class="flex-1">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <h3 class="font-semibold">TikTok Live</h3>
+                    <p class="text-sm text-gray-400 mt-0.5"><span class="text-pink-400">Planejado (M2+)</span></p>
+                  </div>
+                  <button class="px-3 py-1.5 rounded bg-gray-700 text-gray-500 text-sm cursor-not-allowed" disabled>Em breve</button>
+                </div>
+                <p class="text-xs text-gray-500 mt-2">Canal reservado no mockup para preparar UI e fluxos antes da implementação real.</p>
               </div>
             </div>
           </div>
@@ -757,10 +835,12 @@
         </div>
         <div>
           <label class="block text-sm text-gray-400 mb-2">Plataformas</label>
-          <div class="flex gap-3">
+          <div class="flex gap-3 flex-wrap">
             <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer"><input type="checkbox" checked class="accent-violet-500"> <span class="text-purple-400">Twitch</span></label>
-            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer"><input type="checkbox" checked class="accent-violet-500"> <span class="text-red-400">YouTube</span></label>
+            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer"><input type="checkbox" checked class="accent-violet-500"> <span class="text-red-400">YT Hor.</span></label>
+            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer"><input type="checkbox" checked class="accent-violet-500"> <span class="text-rose-400">YT Vert.</span></label>
             <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer"><input type="checkbox" checked class="accent-violet-500"> <span class="text-green-400">Kick</span></label>
+            <label class="flex items-center gap-2 text-sm text-gray-500 cursor-not-allowed"><input type="checkbox" disabled class="accent-violet-500"> <span class="text-pink-500">TikTok (em breve)</span></label>
           </div>
           <p class="text-xs text-gray-600 mt-1.5">A mensagem só é enviada nas plataformas conectadas e ao vivo.</p>
         </div>
@@ -802,14 +882,24 @@
             class="shrink-0 text-xs px-2 py-1 rounded bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 transition-colors">Copiar</button>
         </div>
 
-        <!-- YouTube -->
+        <!-- YouTube (Horizontal) -->
         <div class="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-2.5 border border-red-500/30">
           <span class="text-red-400 shrink-0">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
           </span>
-          <span class="flex-1 text-sm text-gray-300 font-mono truncate">youtube.com/live/dQw4w9WgXcQ</span>
+          <span class="flex-1 text-sm text-gray-300 font-mono truncate">youtube.com/live/dQw4w9WgXcQ (horizontal)</span>
           <button onclick="navigator.clipboard.writeText('https://youtube.com/live/dQw4w9WgXcQ').then(()=>this.textContent='✓').catch(()=>{}); setTimeout(()=>this.textContent='Copiar',1500)"
             class="shrink-0 text-xs px-2 py-1 rounded bg-red-600/30 hover:bg-red-600/50 text-red-300 transition-colors">Copiar</button>
+        </div>
+
+        <!-- YouTube (Vertical) -->
+        <div class="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-2.5 border border-rose-500/30">
+          <span class="text-rose-400 shrink-0">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
+          </span>
+          <span class="flex-1 text-sm text-gray-300 font-mono truncate">youtube.com/live/AbC123Shorts (vertical)</span>
+          <button onclick="navigator.clipboard.writeText('https://youtube.com/live/AbC123Shorts').then(()=>this.textContent='✓').catch(()=>{}); setTimeout(()=>this.textContent='Copiar',1500)"
+            class="shrink-0 text-xs px-2 py-1 rounded bg-rose-600/30 hover:bg-rose-600/50 text-rose-300 transition-colors">Copiar</button>
         </div>
 
         <!-- Kick -->
@@ -822,9 +912,19 @@
             class="shrink-0 text-xs px-2 py-1 rounded bg-green-600/30 hover:bg-green-600/50 text-green-300 transition-colors">Copiar</button>
         </div>
 
+        <!-- TikTok -->
+        <div class="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-2.5 border border-pink-500/30">
+          <span class="text-pink-400 shrink-0">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.67a8.17 8.17 0 0 0 4.79 1.53V6.75a4.85 4.85 0 0 1-1.02-.06z"/></svg>
+          </span>
+          <span class="flex-1 text-sm text-gray-300 font-mono truncate">tiktok.com/@meucanal (placeholder)</span>
+          <button onclick="navigator.clipboard.writeText('https://tiktok.com/@meucanal').then(()=>this.textContent='✓').catch(()=>{}); setTimeout(()=>this.textContent='Copiar',1500)"
+            class="shrink-0 text-xs px-2 py-1 rounded bg-pink-600/30 hover:bg-pink-600/50 text-pink-300 transition-colors">Copiar</button>
+        </div>
+
         <!-- Copy all -->
         <button onclick="
-          const urls='Twitch: https://twitch.tv/meucanal\nYouTube: https://youtube.com/live/dQw4w9WgXcQ\nKick: https://kick.com/meucanal';
+          const urls='Twitch: https://twitch.tv/meucanal\nYouTube (horizontal): https://youtube.com/live/dQw4w9WgXcQ\nYouTube (vertical): https://youtube.com/live/AbC123Shorts\nKick: https://kick.com/meucanal\nTikTok (placeholder): https://tiktok.com/@meucanal';
           navigator.clipboard.writeText(urls).then(()=>{this.textContent='✓ Copiado!';setTimeout(()=>this.textContent='Copiar todos os links',1500)}).catch(()=>{});"
           class="w-full py-2 rounded bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 text-sm border border-violet-600/30 transition-colors mt-1">
           Copiar todos os links
@@ -837,24 +937,31 @@
   // ===================== MOCK DATA =====================
 
   const MOCK_MESSAGES = [
-    { id: '1',  platform: 'twitch',  author: 'xGamer99',    content: 'fala galera o/o/o/',              badges: ['subscriber'],             isMod: false, isSub: true,  ts: Date.now() - 60000 },
-    { id: '2',  platform: 'youtube', author: 'TechWatcher', content: 'que jogo incrível cara',           badges: ['member'],                 isMod: false, isSub: true,  ts: Date.now() - 55000 },
-    { id: '3',  platform: 'kick',    author: 'br_live',     content: '!gato',                            badges: [],                         isMod: false, isSub: false, ts: Date.now() - 50000 },
-    { id: '4',  platform: 'twitch',  author: 'ModPower',    content: 'bem vindos ao stream!',            badges: ['moderator'],              isMod: true,  isSub: false, ts: Date.now() - 45000 },
-    { id: '5',  platform: 'youtube', author: 'SuperFan2024',content: '!voice boa tarde a todos',         badges: [],                         isMod: false, isSub: false, ts: Date.now() - 40000 },
-    { id: '6',  platform: 'twitch',  author: 'ProStreamer', content: 'KEKW KEKW KEKW',                  badges: ['subscriber', 'moderator'], isMod: true,  isSub: true,  ts: Date.now() - 35000 },
-    { id: '7',  platform: 'kick',    author: 'kickfan',     content: 'chegando agora, o que perdeu?',   badges: [],                         isMod: false, isSub: false, ts: Date.now() - 30000 },
-    { id: '8',  platform: 'twitch',  author: 'DonorKing',   content: '!cachorro',                        badges: ['subscriber'],             isMod: false, isSub: true,  ts: Date.now() - 25000 },
-    { id: '9',  platform: 'youtube', author: 'Lurker123',   content: 'PogChamp',                        badges: [],                         isMod: false, isSub: false, ts: Date.now() - 20000 },
-    { id: '10', platform: 'twitch',  author: 'NewFollower', content: 'acabei de seguir!',               badges: [],                         isMod: false, isSub: false, ts: Date.now() - 15000 },
+    { id: '1',  platform: 'twitch',     author: 'xGamer99',    content: 'fala galera o/o/o/',              badges: ['subscriber'],             isMod: false, isSub: true,  ts: Date.now() - 62000 },
+    { id: '2',  platform: 'youtube',    author: 'TechWatcher', content: 'que jogo incrível cara',           badges: ['member'],                 isMod: false, isSub: true,  ts: Date.now() - 58000 },
+    { id: '3',  platform: 'kick',       author: 'br_live',     content: '!gato',                            badges: [],                         isMod: false, isSub: false, ts: Date.now() - 54000 },
+    { id: '11', platform: 'tiktok',     author: 'tiktokfã',    content: 'ameii esse conteúdo 🔥🔥',          badges: [],                         isMod: false, isSub: false, ts: Date.now() - 51000 },
+    { id: '4',  platform: 'twitch',     author: 'ModPower',    content: 'bem vindos ao stream!',            badges: ['moderator'],              isMod: true,  isSub: false, ts: Date.now() - 47000 },
+    { id: '12', platform: 'youtube-v',  author: 'VertFan',     content: 'tô vendo no celular, top demais',  badges: [],                         isMod: false, isSub: false, ts: Date.now() - 44000 },
+    { id: '5',  platform: 'youtube',    author: 'SuperFan2024',content: '!voice boa tarde a todos',         badges: [],                         isMod: false, isSub: false, ts: Date.now() - 40000 },
+    { id: '6',  platform: 'twitch',     author: 'ProStreamer', content: 'KEKW KEKW KEKW',                  badges: ['subscriber', 'moderator'], isMod: true,  isSub: true,  ts: Date.now() - 35000 },
+    { id: '13', platform: 'tiktok',     author: 'tiktok_br',   content: '!gato',                            badges: [],                         isMod: false, isSub: false, ts: Date.now() - 31000 },
+    { id: '7',  platform: 'kick',       author: 'kickfan',     content: 'chegando agora, o que perdeu?',   badges: [],                         isMod: false, isSub: false, ts: Date.now() - 28000 },
+    { id: '14', platform: 'youtube-v',  author: 'MobileViewer',content: 'assistindo no shorts!',            badges: [],                         isMod: false, isSub: false, ts: Date.now() - 24000 },
+    { id: '8',  platform: 'twitch',     author: 'DonorKing',   content: '!cachorro',                        badges: ['subscriber'],             isMod: false, isSub: true,  ts: Date.now() - 20000 },
+    { id: '9',  platform: 'youtube',    author: 'Lurker123',   content: 'PogChamp',                        badges: [],                         isMod: false, isSub: false, ts: Date.now() - 16000 },
+    { id: '10', platform: 'twitch',     author: 'NewFollower', content: 'acabei de seguir!',               badges: [],                         isMod: false, isSub: false, ts: Date.now() - 12000 },
+    { id: '15', platform: 'tiktok',     author: 'tiktoker99',  content: 'manda um oi pro TikTok 👋',        badges: [],                         isMod: false, isSub: false, ts: Date.now() -  8000 },
   ];
 
   const MOCK_EVENTS = [
-    { id: 'e1', platform: 'twitch',  type: 'subscription', author: 'xGamer99',     message: 'Mês 3!',     ts: Date.now() - 120000 },
-    { id: 'e2', platform: 'youtube', type: 'superchat',    author: 'TechWatcher',  amount: 10, message: 'Stream top!', ts: Date.now() - 90000 },
-    { id: 'e3', platform: 'twitch',  type: 'raid',         author: 'OtherStreamer',amount: 45,             ts: Date.now() - 60000 },
-    { id: 'e4', platform: 'kick',    type: 'follow',       author: 'NewKickUser',                         ts: Date.now() - 30000 },
-    { id: 'e5', platform: 'twitch',  type: 'cheer',        author: 'ProStreamer',  amount: 500,            ts: Date.now() - 10000 },
+    { id: 'e1', platform: 'twitch',     type: 'subscription', author: 'xGamer99',     message: 'Mês 3!',      ts: Date.now() - 120000 },
+    { id: 'e2', platform: 'youtube',    type: 'superchat',    author: 'TechWatcher',  amount: 10, message: 'Stream top!', ts: Date.now() - 90000 },
+    { id: 'e3', platform: 'twitch',     type: 'raid',         author: 'OtherStreamer',amount: 45,              ts: Date.now() - 60000 },
+    { id: 'e4', platform: 'kick',       type: 'follow',       author: 'NewKickUser',                           ts: Date.now() - 30000 },
+    { id: 'e5', platform: 'twitch',     type: 'cheer',        author: 'ProStreamer',  amount: 500,             ts: Date.now() - 10000 },
+    { id: 'e6', platform: 'tiktok',     type: 'follow',       author: 'tiktokfã',                              ts: Date.now() - 22000 },
+    { id: 'e7', platform: 'youtube-v',  type: 'superchat',    author: 'VertFan',      amount: 5, message: 'só no celular!', ts: Date.now() - 48000 },
   ];
 
   const MOCK_OBS_STATS = {
@@ -865,9 +972,11 @@
   };
 
   const MOCK_PLATFORM_STATS = {
-    twitch:  { viewers: 1247 },
-    youtube: { viewers: 834, likes: 2100 },
-    kick:    { viewers: 392 },
+    twitch:      { viewers: 1247 },
+    youtube:     { viewers: 834, likes: 2100 },
+    'youtube-v': { viewers: 291, likes: 876 },
+    kick:        { viewers: 392 },
+    tiktok:      { viewers: 1840, likes: 5300 },
   };
 
   const MOCK_SOUND_COMMANDS = [
@@ -883,9 +992,9 @@
   ];
 
   const MOCK_SCHEDULED = [
-    { id: 'm1', message: 'Lembre-se de seguir o canal! 💜',          interval: 15, randomWindow: 5,  platforms: ['twitch','youtube','kick'], enabled: true,  lastSent: Date.now() - 420000 },
-    { id: 'm2', message: 'Visite meu Discord: discord.gg/exemplo',    interval: 30, randomWindow: 0,  platforms: ['twitch'],                  enabled: true,  lastSent: null },
-    { id: 'm3', message: 'Comandos disponíveis: !gato !cachorro !voice',interval: 20, randomWindow: 10, platforms: ['twitch','youtube','kick'], enabled: false, lastSent: null },
+    { id: 'm1', message: 'Lembre-se de seguir o canal! 💜',          interval: 15, randomWindow: 5,  platforms: ['twitch','youtube','youtube-v','kick'], enabled: true,  lastSent: Date.now() - 420000 },
+    { id: 'm2', message: 'Visite meu Discord: discord.gg/exemplo',    interval: 30, randomWindow: 0,  platforms: ['twitch'],                               enabled: true,  lastSent: null },
+    { id: 'm3', message: 'Comandos disponíveis: !gato !cachorro !voice',interval: 20, randomWindow: 10, platforms: ['twitch','youtube','youtube-v','kick'], enabled: false, lastSent: null },
   ];
 
   const MOCK_ACTIVITY_LOG = [
@@ -908,15 +1017,19 @@
   // ===================== CHAT RENDERER =====================
 
   const PLATFORM_COLORS = {
-    twitch:  { border: 'border-l-purple-500', bg: 'hover:bg-purple-500/10', badge: 'bg-purple-500/20 text-purple-300', label: 'Twitch' },
-    youtube: { border: 'border-l-red-500',    bg: 'hover:bg-red-500/10',    badge: 'bg-red-500/20 text-red-300',       label: 'YouTube' },
-    kick:    { border: 'border-l-green-500',  bg: 'hover:bg-green-500/10',  badge: 'bg-green-500/20 text-green-300',   label: 'Kick' },
+    twitch:      { border: 'border-l-purple-500', bg: 'hover:bg-purple-500/10', badge: 'bg-purple-500/20 text-purple-300', label: 'Twitch' },
+    youtube:     { border: 'border-l-red-500',    bg: 'hover:bg-red-500/10',    badge: 'bg-red-500/20 text-red-300',       label: 'YT Horiz.' },
+    'youtube-v': { border: 'border-l-rose-400',   bg: 'hover:bg-rose-400/10',   badge: 'bg-rose-400/20 text-rose-300',     label: 'YT Vert.' },
+    kick:        { border: 'border-l-green-500',  bg: 'hover:bg-green-500/10',  badge: 'bg-green-500/20 text-green-300',   label: 'Kick' },
+    tiktok:      { border: 'border-l-pink-500',   bg: 'hover:bg-pink-500/10',   badge: 'bg-pink-500/20 text-pink-300',     label: 'TikTok' },
   };
 
   const PLATFORM_ICONS = {
-    twitch:  `<svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"/></svg>`,
-    youtube: `<svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>`,
-    kick:    `<svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M2 2h4v8l4-4h4l-6 6 6 6h-4l-4-4v4H2V2zm14 0h4v20h-4z"/></svg>`,
+    twitch:      `<svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"/></svg>`,
+    youtube:     `<svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>`,
+    'youtube-v': `<svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>`,
+    kick:        `<svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M2 2h4v8l4-4h4l-6 6 6 6h-4l-4-4v4H2V2zm14 0h4v20h-4z"/></svg>`,
+    tiktok:      `<svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.67a8.17 8.17 0 0 0 4.79 1.53V6.75a4.85 4.85 0 0 1-1.02-.06z"/></svg>`,
   };
 
   const EVENT_ICONS = { subscription: '⭐', superchat: '💰', raid: '⚔️', follow: '💜', cheer: '✨', gift: '🎁' };
@@ -939,7 +1052,7 @@
   };
 
   const activityFilter  = Object.fromEntries(Object.keys(ACTIVITY_CONFIG).map(k => [k, true]));
-  const platformFilter  = { twitch: true, youtube: true, kick: true };
+  const platformFilter  = { twitch: true, youtube: true, 'youtube-v': true, kick: true, tiktok: true };
 
   function formatTime(ts) {
     return new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -1069,9 +1182,13 @@
     // Viewer counts
     const fmtNum = n => n >= 1000 ? `${(n/1000).toFixed(1)}k` : String(n);
     set('viewers-twitch',  fmtNum(ps.twitch.viewers));
-    set('viewers-youtube', fmtNum(ps.youtube.viewers));
-    set('likes-youtube',   fmtNum(ps.youtube.likes));
-    set('viewers-kick',    fmtNum(ps.kick.viewers));
+    set('viewers-youtube',   fmtNum(ps.youtube.viewers));
+    set('likes-youtube',     fmtNum(ps.youtube.likes));
+    set('viewers-youtube-v', fmtNum(ps['youtube-v'].viewers));
+    set('likes-youtube-v',   fmtNum(ps['youtube-v'].likes));
+    set('viewers-kick',      fmtNum(ps.kick.viewers));
+    set('viewers-tiktok',    fmtNum(ps.tiktok.viewers));
+    set('likes-tiktok',      fmtNum(ps.tiktok.likes));
 
     const connPct   = s.outputTotalFrames > 0 ? (1 - s.outputSkippedFrames / s.outputTotalFrames) * 100 : 100;
     const connColor = connPct >= 95 ? 'green' : connPct >= 80 ? 'yellow' : 'red';
@@ -1080,7 +1197,10 @@
     const bar = document.getElementById('obs-conn-bar');
     if (bar) { bar.style.width = `${connPct.toFixed(1)}%`; bar.style.background = connColor === 'green' ? '#22c55e' : connColor === 'yellow' ? '#eab308' : '#ef4444'; }
     const qualEl = document.getElementById('obs-conn-quality');
-    if (qualEl) qualEl.className = `text-xs font-semibold text-${connColor}-400`;
+    if (qualEl) {
+      const connColorClass = connColor === 'green' ? 'text-green-400' : connColor === 'yellow' ? 'text-yellow-400' : 'text-red-400';
+      qualEl.className = `text-xs font-semibold ${connColorClass}`;
+    }
 
     const fmt = (sk, tot) => tot === 0 ? '0' : `${sk} <span class="text-gray-600 text-[10px]">(${((sk/tot)*100).toFixed(2)}%)</span>`;
     const dn = document.getElementById('obs-dropped-net');   if (dn) dn.innerHTML  = fmt(s.outputSkippedFrames,  s.outputTotalFrames);
@@ -1193,6 +1313,12 @@
       { separator: true },
       { id: 'report', label: 'Reportar mensagem', danger: true },
     ],
+    'youtube-v': [
+      { id: 'hide',   label: 'Ocultar usuário no canal' },
+      { id: 'block',  label: 'Bloquear usuário', danger: true },
+      { separator: true },
+      { id: 'report', label: 'Reportar mensagem', danger: true },
+    ],
     kick: [
       { id: 'mute',  label: 'Silenciar usuário' },
       { separator: true },
@@ -1200,6 +1326,10 @@
       { id: 'to30',  label: 'Timeout — 30 minutos' },
       { separator: true },
       { id: 'ban',   label: 'Banir usuário', danger: true },
+    ],
+    tiktok: [
+      { id: 'mute',   label: 'Silenciar usuário' },
+      { id: 'report', label: 'Reportar comentário', danger: true },
     ],
   };
 
