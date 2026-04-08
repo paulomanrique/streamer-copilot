@@ -59,6 +59,23 @@ export const voiceSpeakPayloadSchema = z.object({
   lang: z.string().min(2).max(20),
 });
 
+export const soundCommandUpsertInputSchema = z.object({
+  id: z.string().min(1).optional(),
+  trigger: z.string().min(1).max(80),
+  filePath: z.string().min(1),
+  permissions: z.array(permissionLevelSchema).min(1),
+  cooldownSeconds: z.number().int().min(0).max(3600),
+  enabled: z.boolean(),
+});
+
+export const soundCommandDeleteInputSchema = z.object({
+  id: z.string().min(1),
+});
+
+export const soundPlayPayloadSchema = z.object({
+  filePath: z.string().min(1),
+});
+
 export type SelectProfileInputSchema = z.infer<typeof selectProfileInputSchema>;
 export type CreateProfileInputSchema = z.infer<typeof createProfileInputSchema>;
 export type RenameProfileInputSchema = z.infer<typeof renameProfileInputSchema>;
@@ -69,3 +86,6 @@ export type ScheduledMessageDeleteInputSchema = z.infer<typeof scheduledMessageD
 export type VoiceCommandUpsertInputSchema = z.infer<typeof voiceCommandUpsertInputSchema>;
 export type VoiceCommandDeleteInputSchema = z.infer<typeof voiceCommandDeleteInputSchema>;
 export type VoiceSpeakPayloadSchema = z.infer<typeof voiceSpeakPayloadSchema>;
+export type SoundCommandUpsertInputSchema = z.infer<typeof soundCommandUpsertInputSchema>;
+export type SoundCommandDeleteInputSchema = z.infer<typeof soundCommandDeleteInputSchema>;
+export type SoundPlayPayloadSchema = z.infer<typeof soundPlayPayloadSchema>;

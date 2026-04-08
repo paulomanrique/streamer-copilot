@@ -5,6 +5,10 @@ import type {
   DeleteProfileInput,
   ProfilesSnapshot,
   RenameProfileInput,
+  SoundCommand,
+  SoundCommandDeleteInput,
+  SoundCommandUpsertInput,
+  SoundPlayPayload,
   ScheduledMessage,
   ScheduledMessageDeleteInput,
   ScheduledMessageUpsertInput,
@@ -34,6 +38,12 @@ export const IPC_CHANNELS = {
   voiceDelete: 'voice:delete',
   voicePreviewSpeak: 'voice:preview-speak',
   voiceSpeak: 'voice:speak',
+  soundsList: 'sounds:list',
+  soundsUpsert: 'sounds:upsert',
+  soundsDelete: 'sounds:delete',
+  soundsPickFile: 'sounds:pick-file',
+  soundsPreviewPlay: 'sounds:preview-play',
+  soundsPlay: 'sounds:play',
 } as const;
 
 export interface CopilotApi {
@@ -54,4 +64,10 @@ export interface CopilotApi {
   deleteVoiceCommand: (input: VoiceCommandDeleteInput) => Promise<VoiceCommand[]>;
   previewVoiceSpeak: (input: VoiceSpeakPayload) => Promise<void>;
   onVoiceSpeak: (listener: (payload: VoiceSpeakPayload) => void) => () => void;
+  listSoundCommands: () => Promise<SoundCommand[]>;
+  upsertSoundCommand: (input: SoundCommandUpsertInput) => Promise<SoundCommand[]>;
+  deleteSoundCommand: (input: SoundCommandDeleteInput) => Promise<SoundCommand[]>;
+  pickSoundFile: () => Promise<string | null>;
+  previewSoundPlay: (input: SoundPlayPayload) => Promise<void>;
+  onSoundPlay: (listener: (payload: SoundPlayPayload) => void) => () => void;
 }

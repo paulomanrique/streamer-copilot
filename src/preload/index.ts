@@ -6,6 +6,9 @@ import type {
   CreateProfileInput,
   DeleteProfileInput,
   RenameProfileInput,
+  SoundCommandDeleteInput,
+  SoundCommandUpsertInput,
+  SoundPlayPayload,
   ScheduledMessageDeleteInput,
   ScheduledMessageUpsertInput,
   ScheduledStatusItem,
@@ -43,6 +46,18 @@ const copilotApi: CopilotApi = {
     ipcRenderer.on(IPC_CHANNELS.voiceSpeak, wrappedListener);
     return () => {
       ipcRenderer.removeListener(IPC_CHANNELS.voiceSpeak, wrappedListener);
+    };
+  },
+  listSoundCommands: () => ipcRenderer.invoke(IPC_CHANNELS.soundsList),
+  upsertSoundCommand: (input: SoundCommandUpsertInput) => ipcRenderer.invoke(IPC_CHANNELS.soundsUpsert, input),
+  deleteSoundCommand: (input: SoundCommandDeleteInput) => ipcRenderer.invoke(IPC_CHANNELS.soundsDelete, input),
+  pickSoundFile: () => ipcRenderer.invoke(IPC_CHANNELS.soundsPickFile),
+  previewSoundPlay: (input: SoundPlayPayload) => ipcRenderer.invoke(IPC_CHANNELS.soundsPreviewPlay, input),
+  onSoundPlay: (listener: (payload: SoundPlayPayload) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: SoundPlayPayload) => listener(payload);
+    ipcRenderer.on(IPC_CHANNELS.soundsPlay, wrappedListener);
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.soundsPlay, wrappedListener);
     };
   },
 };

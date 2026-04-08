@@ -1,3 +1,7 @@
+import { randomUUID } from 'node:crypto';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+
 import { BrowserWindow, dialog, ipcMain } from 'electron';
 import type { OpenDialogOptions } from 'electron';
 
@@ -5,6 +9,8 @@ import type { DatabaseHandle } from '../db/database.js';
 import { ScheduledMessageRepository } from '../modules/scheduled/scheduled-repository.js';
 import { SchedulerService } from '../modules/scheduled/scheduler-service.js';
 import { ProfileStore } from '../modules/settings/profile-store.js';
+import { SoundCommandRepository } from '../modules/sounds/sound-repository.js';
+import { SoundService } from '../modules/sounds/sound-service.js';
 import { VoiceCommandRepository } from '../modules/voice/voice-repository.js';
 import { VoiceService } from '../modules/voice/voice-service.js';
 import { APP_NAME } from '../shared/constants.js';
@@ -14,6 +20,9 @@ import {
   createProfileInputSchema,
   deleteProfileInputSchema,
   renameProfileInputSchema,
+  soundCommandDeleteInputSchema,
+  soundCommandUpsertInputSchema,
+  soundPlayPayloadSchema,
   scheduledMessageDeleteInputSchema,
   scheduledMessageUpsertInputSchema,
   selectProfileInputSchema,
@@ -34,15 +43,21 @@ interface AppContextOptions {
 export function createAppContext(options: AppContextOptions): () => void {
   const profileStore = new ProfileStore(options.userDataPath);
   const scheduledRepository = new ScheduledMessageRepository(options.databaseHandle.db);
+  const soundRepository = new SoundCommandRepository(options.databaseHandle.db);
   const voiceRepository = new VoiceCommandRepository(options.databaseHandle.db);
   const schedulerService = new SchedulerService({
     repository: scheduledRepository,
     onStatus: (items) => options.stateHub.pushScheduledStatus(items),
   });
+  const soundService = new SoundService({
+    repository: soundRepository,
+    onPlay: (payload) => options.stateHub.pushSoundPlay(payload),
+  });
   const voiceService = new VoiceService({
     repository: voiceRepository,
     onSpeak: (payload) => options.stateHub.pushVoiceSpeak(payload),
   });
+  const soundsDirectory = path.join(options.userDataPath, 'sounds');
 
   schedulerService.start();
 
@@ -123,6 +138,51 @@ export function createAppContext(options: AppContextOptions): () => void {
     voiceService.previewSpeak(input);
   });
 
+  ipcMain.handle(IPC_CHANNELS.soundsList, async () => soundService.list());
+
+  ipcMain.handle(IPC_CHANNELS.soundsUpsert, async (_event, rawInput: unknown) => {
+    const input = soundCommandUpsertInputSchema.parse(rawInput);
+    return soundService.upsert(input);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.soundsDelete, async (_event, rawInput: unknown) => {
+    const input = soundCommandDeleteInputSchema.parse(rawInput);
+    return soundService.delete(input.id);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.soundsPickFile, async (event) => {
+    const focusedWindow = BrowserWindow.fromWebContents(event.sender);
+    const options: OpenDialogOptions = {
+      title: 'Select sound file',
+      properties: ['openFile'],
+      filters: [
+        {
+          name: 'Audio',
+          extensions: ['mp3', 'ogg', 'wav'],
+        },
+      ],
+    };
+    const result = focusedWindow
+      ? await dialog.showOpenDialog(focusedWindow, options)
+      : await dialog.showOpenDialog(options);
+
+    if (result.canceled || result.filePaths.length === 0) return null;
+
+    const sourcePath = result.filePaths[0];
+    const extension = path.extname(sourcePath);
+    const destinationPath = path.join(soundsDirectory, `${randomUUID()}${extension}`);
+
+    await fs.mkdir(soundsDirectory, { recursive: true });
+    await fs.copyFile(sourcePath, destinationPath);
+
+    return destinationPath;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.soundsPreviewPlay, async (_event, rawInput: unknown) => {
+    const input = soundPlayPayloadSchema.parse(rawInput);
+    soundService.previewPlay(input);
+  });
+
   return () => {
     schedulerService.stop();
     ipcMain.removeHandler(IPC_CHANNELS.appGetInfo);
@@ -140,5 +200,10 @@ export function createAppContext(options: AppContextOptions): () => void {
     ipcMain.removeHandler(IPC_CHANNELS.voiceUpsert);
     ipcMain.removeHandler(IPC_CHANNELS.voiceDelete);
     ipcMain.removeHandler(IPC_CHANNELS.voicePreviewSpeak);
+    ipcMain.removeHandler(IPC_CHANNELS.soundsList);
+    ipcMain.removeHandler(IPC_CHANNELS.soundsUpsert);
+    ipcMain.removeHandler(IPC_CHANNELS.soundsDelete);
+    ipcMain.removeHandler(IPC_CHANNELS.soundsPickFile);
+    ipcMain.removeHandler(IPC_CHANNELS.soundsPreviewPlay);
   };
 }

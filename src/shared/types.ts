@@ -115,6 +115,32 @@ export interface VoiceSpeakPayload {
   lang: string;
 }
 
+export interface SoundCommand {
+  id: string;
+  trigger: string;
+  filePath: string;
+  permissions: PermissionLevel[];
+  cooldownSeconds: number;
+  enabled: boolean;
+}
+
+export interface SoundCommandUpsertInput {
+  id?: string;
+  trigger: string;
+  filePath: string;
+  permissions: PermissionLevel[];
+  cooldownSeconds: number;
+  enabled: boolean;
+}
+
+export interface SoundCommandDeleteInput {
+  id: string;
+}
+
+export interface SoundPlayPayload {
+  filePath: string;
+}
+
 export interface ProfileSummary {
   id: string;
   name: string;

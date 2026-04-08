@@ -59,4 +59,20 @@ export const MIGRATIONS: SqlMigration[] = [
       );
     `,
   },
+  {
+    version: 4,
+    name: 'create_sound_commands',
+    sql: `
+      CREATE TABLE IF NOT EXISTS sound_commands (
+        id TEXT PRIMARY KEY,
+        trigger TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        permissions_json TEXT NOT NULL,
+        cooldown_seconds INTEGER NOT NULL DEFAULT 0,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `,
+  },
 ];

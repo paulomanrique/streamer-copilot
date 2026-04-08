@@ -1,7 +1,7 @@
 import type { BrowserWindow } from 'electron';
 
 import { IPC_CHANNELS } from '../shared/ipc.js';
-import type { ScheduledStatusItem, VoiceSpeakPayload } from '../shared/types.js';
+import type { ScheduledStatusItem, SoundPlayPayload, VoiceSpeakPayload } from '../shared/types.js';
 
 // Foundation placeholder for future push-based state sync to renderer.
 export class StateHub {
@@ -25,5 +25,9 @@ export class StateHub {
 
   pushVoiceSpeak(payload: VoiceSpeakPayload): void {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.voiceSpeak, payload);
+  }
+
+  pushSoundPlay(payload: SoundPlayPayload): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.soundsPlay, payload);
   }
 }

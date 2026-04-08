@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { AppInfo, PermissionLevel, ProfilesSnapshot, VoiceSpeakPayload } from '../shared/types.js';
 import { readSkipPromptPreference, shouldPromptProfileSelector } from './profile-startup.js';
@@ -29,6 +29,7 @@ export default function App() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [voiceRate, setVoiceRate] = useState(1);
   const [voiceVolume, setVoiceVolume] = useState(0.8);
+  const activeSoundsRef = useRef<HTMLAudioElement[]>([]);
 
   const activeProfile = useMemo(
     () => profiles.find((profile) => profile.id === activeProfileId) ?? null,
@@ -92,6 +93,33 @@ export default function App() {
 
     return window.copilot.onVoiceSpeak(speak);
   }, [languageCode, voiceRate, voiceVolume]);
+
+  useEffect(() => {
+    const play = (payload: { filePath: string }) => {
+      const source = payload.filePath.startsWith('file://') ? payload.filePath : `file://${payload.filePath}`;
+      const audio = new Audio(encodeURI(source));
+      audio.preload = 'auto';
+      audio.volume = 1;
+      activeSoundsRef.current = [...activeSoundsRef.current, audio];
+
+      const cleanup = () => {
+        activeSoundsRef.current = activeSoundsRef.current.filter((item) => item !== audio);
+      };
+
+      audio.addEventListener('ended', cleanup, { once: true });
+      audio.addEventListener('error', () => {
+        cleanup();
+        pushError(`Failed to play sound file: ${payload.filePath}`);
+      }, { once: true });
+
+      void audio.play().catch(() => {
+        cleanup();
+        pushError(`Failed to play sound file: ${payload.filePath}`);
+      });
+    };
+
+    return window.copilot.onSoundPlay(play);
+  }, []);
 
   const onSelectProfile = async (profileId: string) => {
     try {
