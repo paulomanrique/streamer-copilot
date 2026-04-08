@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import type { ObsConnectionSettings, ObsStatsSnapshot } from '../../shared/types.js';
+import { SettingsPageShell, SettingsSurface } from '../components/SettingsScaffold.js';
 import { styles } from '../components/app-styles.js';
 
 const DEFAULT_SETTINGS: ObsConnectionSettings = {
@@ -64,72 +65,75 @@ export function ObsSettingsPage({ obsStats }: ObsSettingsPageProps) {
   };
 
   return (
-    <section style={styles.previewCard}>
-      <div style={styles.previewHeader}>
-        <div>
-          <h2 style={styles.subtitle}>OBS WebSocket</h2>
-          <p style={styles.helper}>Encrypted OBS connection settings stored in app settings with a live test flow.</p>
-        </div>
-        <span style={styles.selectionPill}>{obsStats.connected ? 'Connected' : 'Offline'}</span>
+    <SettingsPageShell
+      title="OBS Studio"
+      description="Connect to OBS via WebSocket to display live stream statistics in real time."
+      maxWidth="720px"
+    >
+      <div style={styles.settingsColumn}>
+        <SettingsSurface>
+          <label style={styles.label}>
+            Host
+            <input
+              type="text"
+              value={settings.host}
+              onChange={(event) => setSettings((current) => ({ ...current, host: event.target.value }))}
+              style={styles.searchInput}
+            />
+          </label>
+
+          <label style={styles.label}>
+            Port
+            <input
+              type="number"
+              min="1"
+              max="65535"
+              value={settings.port}
+              onChange={(event) =>
+                setSettings((current) => ({
+                  ...current,
+                  port: Number(event.target.value) || DEFAULT_SETTINGS.port,
+                }))
+              }
+              style={styles.searchInput}
+            />
+          </label>
+
+          <label style={styles.label}>
+            Password (optional)
+            <input
+              type="password"
+              value={settings.password}
+              onChange={(event) => setSettings((current) => ({ ...current, password: event.target.value }))}
+              style={styles.searchInput}
+            />
+          </label>
+
+          <div style={styles.settingsFooterRow}>
+            <button type="button" style={styles.secondaryButton} disabled={isBusy} onClick={() => void testConnection()}>
+              Test connection
+            </button>
+            <button type="button" style={styles.primaryButton} disabled={isBusy} onClick={() => void saveSettings()}>
+              Save
+            </button>
+            <span style={styles.selectionPill}>{obsStats.connected ? 'Connected' : 'Offline'}</span>
+          </div>
+
+          {statusMessage ? <p style={styles.message}>{statusMessage}</p> : null}
+          {error ? <p style={styles.error}>{error}</p> : null}
+        </SettingsSurface>
+
+        <SettingsSurface>
+          <h3 style={styles.settingsSubsectionTitle}>How to enable in OBS</h3>
+          <ol style={styles.settingsOrderedList}>
+            <li>Open OBS Studio 28+.</li>
+            <li>Go to Tools → WebSocket Server Settings.</li>
+            <li>Enable “Enable WebSocket server”.</li>
+            <li>Copy the generated password and paste it above.</li>
+          </ol>
+          <p style={styles.settingsSecondaryText}>Current scene: {obsStats.sceneName} · Uptime: {obsStats.uptimeLabel}</p>
+        </SettingsSurface>
       </div>
-
-      <div style={styles.settingsGrid}>
-        <label style={styles.label}>
-          Host
-          <input
-            type="text"
-            value={settings.host}
-            onChange={(event) => setSettings((current) => ({ ...current, host: event.target.value }))}
-            style={styles.searchInput}
-          />
-        </label>
-
-        <label style={styles.label}>
-          Port
-          <input
-            type="number"
-            min="1"
-            max="65535"
-            value={settings.port}
-            onChange={(event) =>
-              setSettings((current) => ({
-                ...current,
-                port: Number(event.target.value) || DEFAULT_SETTINGS.port,
-              }))
-            }
-            style={styles.searchInput}
-          />
-        </label>
-
-        <label style={styles.label}>
-          Password
-          <input
-            type="password"
-            value={settings.password}
-            onChange={(event) => setSettings((current) => ({ ...current, password: event.target.value }))}
-            style={styles.searchInput}
-          />
-        </label>
-
-        <div style={styles.platformCard}>
-          <span style={styles.statLabel}>Current scene</span>
-          <span style={styles.statValue}>{obsStats.sceneName}</span>
-          <span style={styles.statLabel}>Uptime</span>
-          <span style={styles.statValue}>{obsStats.uptimeLabel}</span>
-        </div>
-
-        <div style={styles.buttonRow}>
-          <button type="button" style={styles.secondaryButton} disabled={isBusy} onClick={() => void testConnection()}>
-            Test connection
-          </button>
-          <button type="button" style={styles.primaryButton} disabled={isBusy} onClick={() => void saveSettings()}>
-            Save settings
-          </button>
-        </div>
-
-        {statusMessage ? <p style={styles.message}>{statusMessage}</p> : null}
-        {error ? <p style={styles.error}>{error}</p> : null}
-      </div>
-    </section>
+    </SettingsPageShell>
   );
 }

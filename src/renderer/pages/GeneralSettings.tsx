@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import type { GeneralSettings } from '../../shared/types.js';
 import { styles } from '../components/app-styles.js';
+import { SettingsPageShell, SettingsSurface, SettingsToggleRow } from '../components/SettingsScaffold.js';
 
 interface GeneralSettingsPageProps {
   settings: GeneralSettings;
@@ -38,51 +39,52 @@ export function GeneralSettingsPage({ settings, onSave }: GeneralSettingsPagePro
   };
 
   return (
-    <section style={styles.previewCard}>
-      <div style={styles.previewHeader}>
-        <div>
-          <h2 style={styles.subtitle}>General Settings</h2>
-          <p style={styles.helper}>Tray behavior, autostart, and app-level runtime toggles persisted in app settings.</p>
-        </div>
-      </div>
-
-      <div style={styles.settingsGrid}>
-        <label style={styles.checkboxLabel}>
-          <input
-            type="checkbox"
+    <SettingsPageShell title="General Settings" description="Application behavior.">
+      <div style={styles.settingsColumn}>
+        <SettingsSurface>
+          <SettingsToggleRow
+            title="Start on login"
+            description="Open automatically when the computer starts."
             checked={draft.startOnLogin}
-            onChange={(event) => updateDraft({ startOnLogin: event.target.checked })}
+            onChange={(checked) => updateDraft({ startOnLogin: checked })}
+            bordered={false}
           />
-          Start on login
-        </label>
-
-        <label style={styles.checkboxLabel}>
-          <input
-            type="checkbox"
+          <SettingsToggleRow
+            title="Minimize to tray"
+            description="Keep the app running in the background when the window closes."
             checked={draft.minimizeToTray}
-            onChange={(event) => updateDraft({ minimizeToTray: event.target.checked })}
+            onChange={(checked) => updateDraft({ minimizeToTray: checked })}
           />
-          Minimize to tray when the window closes
-        </label>
-
-        <label style={styles.checkboxLabel}>
-          <input
-            type="checkbox"
+          <SettingsToggleRow
+            title="Event notifications"
+            description="System notifications for raids, subscriptions, and other stream events."
             checked={draft.eventNotifications}
-            onChange={(event) => updateDraft({ eventNotifications: event.target.checked })}
+            onChange={(checked) => updateDraft({ eventNotifications: checked })}
           />
-          Event notifications
-        </label>
+        </SettingsSurface>
 
-        <div style={styles.buttonRow}>
+        <SettingsSurface>
+          <h3 style={styles.settingsSubsectionTitle}>Diagnostic Log</h3>
+          <div style={styles.buttonRow}>
+            <select defaultValue="info" style={{ ...styles.select, flex: 1 }}>
+              <option value="info">Info</option>
+              <option value="debug">Debug</option>
+              <option value="warn">Warn</option>
+            </select>
+            <button type="button" style={styles.secondaryButton}>Open Logs Folder</button>
+          </div>
+        </SettingsSurface>
+
+        <div style={styles.settingsFooterRow}>
           <button type="button" style={styles.primaryButton} disabled={isBusy} onClick={() => void saveSettings()}>
             Save settings
           </button>
+          {statusMessage ? <p style={styles.message}>{statusMessage}</p> : null}
+          {error ? <p style={styles.error}>{error}</p> : null}
         </div>
 
-        {statusMessage ? <p style={styles.message}>{statusMessage}</p> : null}
-        {error ? <p style={styles.error}>{error}</p> : null}
+        <p style={styles.settingsVersionText}>Streamer Copilot v0.1.0 · Electron 35</p>
       </div>
-    </section>
+    </SettingsPageShell>
   );
 }

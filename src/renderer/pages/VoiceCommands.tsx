@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { PermissionLevel, VoiceCommand, VoiceCommandUpsertInput } from '../../shared/types.js';
 import { LanguagePicker } from '../components/LanguagePicker.js';
 import { PermissionPicker } from '../components/PermissionPicker.js';
+import { SettingsInfoTile, SettingsPageShell, SettingsSurface } from '../components/SettingsScaffold.js';
 import { styles } from '../components/app-styles.js';
 
 interface VoiceCommandsPageProps {
@@ -117,87 +118,76 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
     }
   };
 
-  const previewCommand = async () => {
+  const previewCommand = async (text = previewText, lang = languageCode) => {
     try {
-      await window.copilot.previewVoiceSpeak({
-        text: previewText,
-        lang: languageCode,
-      });
+      await window.copilot.previewVoiceSpeak({ text, lang });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Failed to preview voice command');
     }
   };
 
   return (
-    <section style={styles.previewCard}>
-      <div style={styles.previewHeader}>
-        <div>
-          <h2 style={styles.subtitle}>Voice Commands</h2>
-          <p style={styles.helper}>Persisted command list, reusable editor, and renderer TTS preview wired through IPC.</p>
+    <SettingsPageShell
+      title="Voice Commands (TTS)"
+      description="Use text-to-speech to speak chat messages aloud."
+      action={<button type="button" style={styles.primaryButton} onClick={openCreate}>+ New Command</button>}
+      maxWidth="1160px"
+    >
+      <div style={styles.settingsColumn}>
+        <div style={styles.settingsInfoGrid}>
+          <SettingsInfoTile label="Dynamic prompts" text="Speak the text that comes after the trigger or use a fixed template." />
+          <SettingsInfoTile label="Languages" text="Switch default language and per-command language." />
+          <SettingsInfoTile label="Preview" text="Test the current TTS voice before saving." />
         </div>
-        <button type="button" style={styles.primaryButton} onClick={openCreate}>
-          Add command
-        </button>
-      </div>
 
-      <div style={styles.tableWrap}>
-        <table style={styles.table}>
-          <thead>
-            <tr>
-              <th style={styles.tableHeadCell}>Trigger</th>
-              <th style={styles.tableHeadCell}>Template</th>
-              <th style={styles.tableHeadCell}>Language</th>
-              <th style={styles.tableHeadCell}>Permissions</th>
-              <th style={styles.tableHeadCell}>Cooldown</th>
-              <th style={styles.tableHeadCell}>Enabled</th>
-              <th style={styles.tableHeadCell}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.id}>
-                <td style={styles.tableCell}>
-                  <span style={styles.codeText}>{row.trigger}</span>
-                </td>
-                <td style={styles.tableCell}>{row.template ?? 'Dynamic text after trigger'}</td>
-                <td style={styles.tableCell}>{row.language}</td>
-                <td style={styles.tableCell}>{row.permissions.join(', ')}</td>
-                <td style={styles.tableCell}>{row.cooldownSeconds}s</td>
-                <td style={styles.tableCell}>{row.enabled ? 'Yes' : 'No'}</td>
-                <td style={styles.tableCell}>
-                  <div style={styles.buttonRow}>
-                    <button type="button" style={styles.secondaryButton} onClick={() => openEdit(row)}>
-                      Edit
-                    </button>
-                    <button type="button" style={styles.secondaryButton} onClick={() => void window.copilot.previewVoiceSpeak({ text: row.template ?? 'Preview voice output', lang: row.language })}>
-                      Preview
-                    </button>
-                    <button type="button" style={styles.dangerButton} onClick={() => void deleteCommand(row.id)}>
-                      Delete
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {rows.length === 0 ? (
+        <div style={styles.settingsSurfaceTable}>
+          <table style={styles.table}>
+            <thead>
               <tr>
-                <td style={styles.tableCell} colSpan={7}>
-                  No voice commands saved yet.
-                </td>
+                <th style={styles.tableHeadCell}>Command</th>
+                <th style={styles.tableHeadCell}>Fixed text</th>
+                <th style={styles.tableHeadCell}>Language</th>
+                <th style={styles.tableHeadCell}>Permissions</th>
+                <th style={styles.tableHeadCell}>Cooldown</th>
+                <th style={styles.tableHeadCell}>Active</th>
+                <th style={styles.tableHeadCell}>Actions</th>
               </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id}>
+                  <td style={styles.tableCell}><span style={styles.codeText}>{row.trigger}</span></td>
+                  <td style={styles.tableCell}>{row.template ?? 'Dynamic text after trigger'}</td>
+                  <td style={styles.tableCell}>{row.language}</td>
+                  <td style={styles.tableCell}>{row.permissions.join(', ')}</td>
+                  <td style={styles.tableCell}>{row.cooldownSeconds}s</td>
+                  <td style={styles.tableCell}>{row.enabled ? 'Yes' : 'No'}</td>
+                  <td style={styles.tableCell}>
+                    <div style={styles.actionsRowCompact}>
+                      <button type="button" style={styles.secondaryButton} onClick={() => openEdit(row)}>Edit</button>
+                      <button type="button" style={styles.secondaryButton} onClick={() => void previewCommand(row.template ?? 'Preview voice output', row.language)}>
+                        Preview
+                      </button>
+                      <button type="button" style={styles.dangerButton} onClick={() => void deleteCommand(row.id)}>Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {rows.length === 0 ? (
+                <tr>
+                  <td style={styles.tableCell} colSpan={7}>No voice commands saved yet.</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
 
-      <section style={styles.settingsGrid}>
-        <section style={styles.previewCard}>
-          <h3 style={styles.sectionTitle}>TTS Settings</h3>
-          <p style={styles.helper}>Renderer playback uses the current default language, rate, and volume from this panel.</p>
-          <div style={styles.settingsGrid}>
+        <div style={styles.settingsTwoColumnGrid}>
+          <SettingsSurface>
+            <h3 style={styles.settingsSubsectionTitle}>TTS Settings</h3>
             <LanguagePicker selectedCode={languageCode} onChange={setLanguageCode} />
-            <div style={styles.platformCard}>
-              <span style={styles.statLabel}>Volume</span>
+            <label style={styles.label}>
+              Volume
               <input
                 type="range"
                 min="0"
@@ -205,7 +195,10 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
                 value={Math.round(props.voiceVolume * 100)}
                 onChange={(event) => props.onChangeVoiceVolume(Number(event.target.value) / 100)}
               />
-              <span style={styles.statLabel}>Rate</span>
+              <span style={styles.settingsSecondaryText}>{Math.round(props.voiceVolume * 100)}%</span>
+            </label>
+            <label style={styles.label}>
+              Rate
               <input
                 type="range"
                 min="50"
@@ -213,60 +206,48 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
                 value={Math.round(props.voiceRate * 100)}
                 onChange={(event) => props.onChangeVoiceRate(Number(event.target.value) / 100)}
               />
-              <div style={styles.buttonRow}>
-                <button type="button" style={styles.secondaryButton} onClick={() => void previewCommand()}>
-                  Preview current settings
-                </button>
-              </div>
+              <span style={styles.settingsSecondaryText}>{Math.round(props.voiceRate * 100)}%</span>
+            </label>
+            <div style={styles.settingsFooterRow}>
+              <button type="button" style={styles.secondaryButton} onClick={() => void previewCommand()}>
+                Preview current settings
+              </button>
             </div>
-          </div>
-        </section>
+          </SettingsSurface>
+        </div>
 
         {isModalOpen ? (
-          <section style={styles.modalShell}>
-            <input
-              type="text"
-              value={trigger}
-              onChange={(event) => setTrigger(event.target.value)}
-              style={styles.searchInput}
-              placeholder="!say"
-            />
-            <input
-              type="text"
-              value={template}
-              onChange={(event) => setTemplate(event.target.value)}
-              style={styles.searchInput}
-              placeholder="Optional fixed text"
-            />
+          <SettingsSurface>
+            <h3 style={styles.settingsSubsectionTitle}>{draftId ? 'Edit Voice Command' : 'New Voice Command'}</h3>
+            <label style={styles.label}>
+              Command trigger
+              <input type="text" value={trigger} onChange={(event) => setTrigger(event.target.value)} style={styles.searchInput} />
+            </label>
+            <label style={styles.label}>
+              Fixed text
+              <input type="text" value={template} onChange={(event) => setTemplate(event.target.value)} style={styles.searchInput} placeholder="Optional fixed text" />
+            </label>
             <LanguagePicker selectedCode={languageCode} onChange={setLanguageCode} />
             <PermissionPicker selectedLevels={levels} onChange={setLevels} />
-            <input
-              type="number"
-              min="0"
-              value={cooldownSeconds}
-              onChange={(event) => setCooldownSeconds(Number(event.target.value))}
-              style={styles.searchInput}
-              placeholder="Cooldown in seconds"
-            />
+            <label style={styles.label}>
+              Cooldown in seconds
+              <input type="number" min="0" value={cooldownSeconds} onChange={(event) => setCooldownSeconds(Number(event.target.value))} style={styles.searchInput} />
+            </label>
             <label style={styles.checkboxLabel}>
               <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
-              Enabled
+              Active command
             </label>
-            <div style={styles.buttonRow}>
-              <button type="button" style={styles.secondaryButton} onClick={() => void previewCommand()}>
-                Preview
-              </button>
-              <button type="button" style={styles.secondaryButton} onClick={() => { setIsModalOpen(false); resetForm(); }}>
-                Cancel
-              </button>
+            <div style={styles.settingsFooterRow}>
+              <button type="button" style={styles.secondaryButton} onClick={() => void previewCommand()}>Preview</button>
+              <button type="button" style={styles.secondaryButton} onClick={() => { setIsModalOpen(false); resetForm(); }}>Cancel</button>
               <button type="button" style={styles.primaryButton} disabled={isBusy} onClick={() => void saveCommand()}>
                 {draftId ? 'Save changes' : 'Create command'}
               </button>
             </div>
             {error ? <p style={styles.error}>{error}</p> : null}
-          </section>
+          </SettingsSurface>
         ) : null}
-      </section>
-    </section>
+      </div>
+    </SettingsPageShell>
   );
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import type { ObsStatsSnapshot, PermissionLevel, ProfileSummary } from '../../shared/types.js';
+import type { GeneralSettings } from '../../shared/types.js';
 import { PlatformSettingsPreview } from '../components/PlatformSettingsPreview.js';
 import { SettingsProfilesPanel } from '../components/SettingsProfilesPanel.js';
 import { styles } from '../components/app-styles.js';
@@ -9,7 +10,6 @@ import { ObsSettingsPage } from './ObsSettings.js';
 import { ScheduledMessagesPage } from './ScheduledMessages.js';
 import { SoundCommandsPage } from './SoundCommands.js';
 import { VoiceCommandsPage } from './VoiceCommands.js';
-import type { GeneralSettings } from '../../shared/types.js';
 
 type SettingsView = 'general' | 'profiles' | 'platforms' | 'obs' | 'sound' | 'voice' | 'scheduled';
 
@@ -35,35 +35,56 @@ interface SettingsWorkspaceProps {
   obsStats: ObsStatsSnapshot;
 }
 
-const SETTINGS_VIEWS: Array<{ id: SettingsView; label: string }> = [
-  { id: 'general', label: 'General' },
-  { id: 'profiles', label: 'Profiles' },
-  { id: 'platforms', label: 'Platforms' },
-  { id: 'obs', label: 'OBS' },
-  { id: 'sound', label: 'Sound Commands' },
-  { id: 'voice', label: 'Voice Commands' },
-  { id: 'scheduled', label: 'Scheduled Messages' },
+const SETTINGS_GROUPS: Array<{ label: string; items: Array<{ id: SettingsView; label: string }> }> = [
+  { label: 'Platforms', items: [{ id: 'platforms', label: 'Connections' }] },
+  {
+    label: 'Commands',
+    items: [
+      { id: 'sound', label: 'Sound Commands' },
+      { id: 'voice', label: 'Voice (TTS)' },
+    ],
+  },
+  { label: 'Automations', items: [{ id: 'scheduled', label: 'Scheduled Messages' }] },
+  { label: 'Integrations', items: [{ id: 'obs', label: 'OBS Studio' }] },
+  {
+    label: 'App',
+    items: [
+      { id: 'general', label: 'General' },
+      { id: 'profiles', label: 'Profiles' },
+    ],
+  },
 ];
 
 export function SettingsWorkspace(props: SettingsWorkspaceProps) {
   const [currentView, setCurrentView] = useState<SettingsView>('general');
 
   return (
-    <section style={styles.settingsLayout}>
-      <aside style={styles.settingsNav}>
-        {SETTINGS_VIEWS.map((view) => (
-          <button
-            key={view.id}
-            type="button"
-            style={currentView === view.id ? styles.settingsNavButtonActive : styles.settingsNavButton}
-            onClick={() => setCurrentView(view.id)}
-          >
-            {view.label}
-          </button>
-        ))}
+    <section style={styles.settingsWorkspaceShell}>
+      <aside style={styles.settingsSidebar}>
+        <div style={styles.settingsSidebarHeader}>
+          <h2 style={styles.settingsSidebarTitle}>Settings</h2>
+        </div>
+
+        <nav style={styles.settingsSidebarNav}>
+          {SETTINGS_GROUPS.map((group) => (
+            <section key={group.label} style={styles.settingsSidebarGroup}>
+              <p style={styles.settingsSidebarGroupLabel}>{group.label}</p>
+              {group.items.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  style={currentView === item.id ? styles.settingsSidebarButtonActive : styles.settingsSidebarButton}
+                  onClick={() => setCurrentView(item.id)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </section>
+          ))}
+        </nav>
       </aside>
 
-      <div>
+      <div style={styles.settingsContentArea}>
         {currentView === 'general' ? (
           <GeneralSettingsPage settings={props.generalSettings} onSave={props.onSaveGeneralSettings} />
         ) : null}

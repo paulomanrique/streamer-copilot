@@ -29,56 +29,58 @@ export function ProfileSelectorModal({
   return (
     <div style={styles.modalOverlay}>
       <section style={styles.modalCard}>
-        <h2 style={styles.modalTitle}>Select Profile</h2>
-
-        {hasProfiles ? (
-          <label style={styles.label}>
-            Profile
-            <select
-              value={selectorProfileId}
-              style={styles.select}
-              onChange={(event) => onChangeProfileId(event.target.value)}
-            >
-              {profiles.map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {profile.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : (
-          <div style={styles.settingsSection}>
-            <p style={styles.message}>No profiles exist yet. Create your first profile to continue.</p>
+        <div style={styles.settingsColumn}>
+          <div>
+            <h2 style={styles.modalTitle}>Select Profile</h2>
           </div>
-        )}
 
-        {hasProfiles ? (
-          <>
-            <label style={styles.checkboxLabel}>
-              <input
-                type="checkbox"
-                checked={skipPromptAgain}
-                onChange={(event) => onChangeSkipPromptAgain(event.target.checked)}
-              />
-              Do not ask me again
+          {hasProfiles ? (
+            <label style={styles.label}>
+              Profile
+              <select
+                value={selectorProfileId}
+                style={styles.select}
+                onChange={(event) => onChangeProfileId(event.target.value)}
+              >
+                {profiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.name}
+                  </option>
+                ))}
+              </select>
             </label>
+          ) : (
+            <p style={styles.message}>No profiles exist yet. Create your first profile to continue.</p>
+          )}
 
+          {hasProfiles ? (
+            <>
+              <label style={styles.checkboxLabel}>
+                <input
+                  type="checkbox"
+                  checked={skipPromptAgain}
+                  onChange={(event) => onChangeSkipPromptAgain(event.target.checked)}
+                />
+                Do not ask me again
+              </label>
+
+              <div style={styles.modalActions}>
+                <button type="button" style={styles.secondaryButton} onClick={onCreateProfile}>
+                  Create profile
+                </button>
+                <button type="button" style={styles.primaryButton} onClick={onConfirm}>
+                  Continue with profile
+                </button>
+              </div>
+            </>
+          ) : (
             <div style={styles.modalActions}>
-              <button type="button" style={styles.secondaryButton} onClick={onCreateProfile}>
-                Create profile
-              </button>
-              <button type="button" style={styles.primaryButton} onClick={onConfirm}>
-                Continue with profile
+              <button type="button" style={styles.primaryButton} onClick={onCreateProfile}>
+                Create first profile
               </button>
             </div>
-          </>
-        ) : (
-          <div style={styles.modalActions}>
-            <button type="button" style={styles.primaryButton} onClick={onCreateProfile}>
-              Create first profile
-            </button>
-          </div>
-        )}
+          )}
+        </div>
       </section>
     </div>
   );

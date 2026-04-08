@@ -65,43 +65,46 @@ export function ProfileFormModal({
   return (
     <div style={styles.modalOverlay}>
       <section style={styles.modalCard}>
-        <h2 style={styles.modalTitle}>{TITLES[mode]}</h2>
+        <div style={styles.settingsColumn}>
+          <h2 style={styles.modalTitle}>{TITLES[mode]}</h2>
 
-        <label style={styles.label}>
-          Profile name
-          <input
-            type="text"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            style={styles.searchInput}
-            autoFocus
-          />
-        </label>
-
-        {requireDirectory ? (
           <label style={styles.label}>
-            Directory
-            <div style={styles.buttonRow}>
-              <input
-                type="text"
-                value={selectedDirectory}
-                readOnly
-                style={{ ...styles.searchInput, flex: 1 }}
-              />
-              <button type="button" style={styles.secondaryButton} onClick={() => void onPickDirectory()}>
-                Choose
-              </button>
-            </div>
+            Profile name
+            <input
+              type="text"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              style={styles.searchInput}
+              autoFocus
+            />
           </label>
-        ) : null}
 
-        <div style={styles.modalActions}>
-          <button type="button" style={styles.secondaryButton} onClick={onClose}>
-            Cancel
-          </button>
-          <button type="button" style={styles.primaryButton} disabled={!canSubmit || isSubmitting} onClick={() => void submit()}>
-            {SUBMIT_LABELS[mode]}
-          </button>
+          {requireDirectory ? (
+            <label style={styles.label}>
+              Directory
+              <div style={styles.buttonRow}>
+                <input
+                  type="text"
+                  value={selectedDirectory}
+                  readOnly
+                  onChange={(event) => onChangeSelectedDirectory(event.target.value)}
+                  style={{ ...styles.searchInput, flex: 1 }}
+                />
+                <button type="button" style={styles.secondaryButton} onClick={() => void onPickDirectory()}>
+                  Choose
+                </button>
+              </div>
+            </label>
+          ) : null}
+
+          <div style={styles.modalActions}>
+            <button type="button" style={styles.secondaryButton} onClick={onClose}>
+              Cancel
+            </button>
+            <button type="button" style={styles.primaryButton} disabled={!canSubmit || isSubmitting} onClick={() => void submit()}>
+              {SUBMIT_LABELS[mode]}
+            </button>
+          </div>
         </div>
       </section>
     </div>

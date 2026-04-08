@@ -9,7 +9,7 @@ interface ProfileActionsProps {
 
 export function ProfileActions({ onCreate, onRename, onClone, onDelete }: ProfileActionsProps) {
   return (
-    <div style={styles.actionsRow}>
+    <div style={styles.actionsRowCompact}>
       <button type="button" style={styles.secondaryButton} onClick={onCreate}>
         New
       </button>

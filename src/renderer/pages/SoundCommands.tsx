@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import type { PermissionLevel, SoundCommand, SoundCommandUpsertInput } from '../../shared/types.js';
 import { PermissionPicker } from '../components/PermissionPicker.js';
+import { SettingsInfoTile, SettingsPageShell, SettingsSurface } from '../components/SettingsScaffold.js';
 import { styles } from '../components/app-styles.js';
 
 const EMPTY_FORM: SoundCommandUpsertInput = {
@@ -128,114 +129,117 @@ export function SoundCommandsPage() {
   };
 
   return (
-    <section style={styles.previewCard}>
-      <div style={styles.previewHeader}>
-        <div>
-          <h2 style={styles.subtitle}>Sound Commands</h2>
-          <p style={styles.helper}>Persisted command list, copied sound assets, and renderer playback wired through IPC.</p>
+    <SettingsPageShell
+      title="Sound Commands"
+      description="Configure chat triggers that play copied audio files."
+      action={<button type="button" style={styles.primaryButton} onClick={openCreate}>+ New Command</button>}
+      maxWidth="1160px"
+    >
+      <div style={styles.settingsColumn}>
+        <div style={styles.settingsInfoGrid}>
+          <SettingsInfoTile label="File picker" text="Import .mp3, .ogg, or .wav into the app sounds folder." />
+          <SettingsInfoTile label="Permissions" text="Use compact permission chips to define who can trigger playback." />
+          <SettingsInfoTile label="Test action" text="Preview sound playback before going live." />
         </div>
-        <button type="button" style={styles.primaryButton} onClick={openCreate}>
-          Add command
-        </button>
-      </div>
 
-      <div style={styles.tableWrap}>
-        <table style={styles.table}>
-          <thead>
-            <tr>
-              <th style={styles.tableHeadCell}>Trigger</th>
-              <th style={styles.tableHeadCell}>File</th>
-              <th style={styles.tableHeadCell}>Permissions</th>
-              <th style={styles.tableHeadCell}>Cooldown</th>
-              <th style={styles.tableHeadCell}>Enabled</th>
-              <th style={styles.tableHeadCell}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.id}>
-                <td style={styles.tableCell}>
-                  <span style={styles.codeText}>{row.trigger}</span>
-                </td>
-                <td style={styles.tableCell}>{getFileName(row.filePath)}</td>
-                <td style={styles.tableCell}>{row.permissions.join(', ')}</td>
-                <td style={styles.tableCell}>{row.cooldownSeconds}s</td>
-                <td style={styles.tableCell}>{row.enabled ? 'Yes' : 'No'}</td>
-                <td style={styles.tableCell}>
-                  <div style={styles.buttonRow}>
-                    <button type="button" style={styles.secondaryButton} onClick={() => void previewCommand(row.filePath)}>
-                      Test
-                    </button>
-                    <button type="button" style={styles.secondaryButton} onClick={() => openEdit(row)}>
-                      Edit
-                    </button>
-                    <button type="button" style={styles.dangerButton} onClick={() => void deleteCommand(row.id)}>
-                      Delete
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {rows.length === 0 ? (
+        <div style={styles.settingsSurfaceTable}>
+          <table style={styles.table}>
+            <thead>
               <tr>
-                <td style={styles.tableCell} colSpan={6}>
-                  No sound commands saved yet.
-                </td>
+                <th style={styles.tableHeadCell}>Command</th>
+                <th style={styles.tableHeadCell}>File</th>
+                <th style={styles.tableHeadCell}>Permissions</th>
+                <th style={styles.tableHeadCell}>Cooldown</th>
+                <th style={styles.tableHeadCell}>Active</th>
+                <th style={styles.tableHeadCell}>Actions</th>
               </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id}>
+                  <td style={styles.tableCell}><span style={styles.codeText}>{row.trigger}</span></td>
+                  <td style={styles.tableCell}>{getFileName(row.filePath)}</td>
+                  <td style={styles.tableCell}>{row.permissions.join(', ')}</td>
+                  <td style={styles.tableCell}>{row.cooldownSeconds}s</td>
+                  <td style={styles.tableCell}>{row.enabled ? 'Yes' : 'No'}</td>
+                  <td style={styles.tableCell}>
+                    <div style={styles.actionsRowCompact}>
+                      <button type="button" style={styles.secondaryButton} onClick={() => void previewCommand(row.filePath)}>
+                        Test
+                      </button>
+                      <button type="button" style={styles.secondaryButton} onClick={() => openEdit(row)}>
+                        Edit
+                      </button>
+                      <button type="button" style={styles.dangerButton} onClick={() => void deleteCommand(row.id)}>
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {rows.length === 0 ? (
+                <tr>
+                  <td style={styles.tableCell} colSpan={6}>No sound commands saved yet.</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
 
-      {isModalOpen ? (
-        <section style={styles.modalShell}>
-          <input
-            type="text"
-            value={trigger}
-            onChange={(event) => setTrigger(event.target.value)}
-            style={styles.searchInput}
-            placeholder="!drumroll"
-          />
-          <div style={styles.buttonRow}>
-            <input type="text" value={filePath} readOnly style={styles.searchInput} />
-            <button type="button" style={styles.secondaryButton} onClick={() => void pickSoundFile()}>
-              Pick file
-            </button>
-          </div>
-          <PermissionPicker selectedLevels={levels} onChange={setLevels} />
-          <input
-            type="number"
-            min="0"
-            value={cooldownSeconds}
-            onChange={(event) => setCooldownSeconds(Number(event.target.value))}
-            style={styles.searchInput}
-            placeholder="Cooldown in seconds"
-          />
-          <label style={styles.checkboxLabel}>
-            <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
-            Enabled
-          </label>
-          <div style={styles.buttonRow}>
-            <button type="button" style={styles.secondaryButton} onClick={() => void previewCommand()}>
-              Test
-            </button>
-            <button
-              type="button"
-              style={styles.secondaryButton}
-              onClick={() => {
-                setIsModalOpen(false);
-                resetForm();
-              }}
-            >
-              Cancel
-            </button>
-            <button type="button" style={styles.primaryButton} disabled={isBusy} onClick={() => void saveCommand()}>
-              {draftId ? 'Save changes' : 'Create command'}
-            </button>
-          </div>
-          {error ? <p style={styles.error}>{error}</p> : null}
-        </section>
-      ) : null}
-    </section>
+        {isModalOpen ? (
+          <SettingsSurface>
+            <h3 style={styles.settingsSubsectionTitle}>{draftId ? 'Edit Sound Command' : 'New Sound Command'}</h3>
+            <div style={styles.settingsColumn}>
+              <label style={styles.label}>
+                Command trigger
+                <input
+                  type="text"
+                  value={trigger}
+                  onChange={(event) => setTrigger(event.target.value)}
+                  style={styles.searchInput}
+                  placeholder="!drumroll"
+                />
+              </label>
+              <label style={styles.label}>
+                Sound file
+                <div style={styles.buttonRow}>
+                  <input type="text" value={filePath} readOnly style={{ ...styles.searchInput, flex: 1 }} />
+                  <button type="button" style={styles.secondaryButton} onClick={() => void pickSoundFile()}>
+                    Pick file
+                  </button>
+                </div>
+              </label>
+              <PermissionPicker selectedLevels={levels} onChange={setLevels} />
+              <label style={styles.label}>
+                Cooldown in seconds
+                <input
+                  type="number"
+                  min="0"
+                  value={cooldownSeconds}
+                  onChange={(event) => setCooldownSeconds(Number(event.target.value))}
+                  style={styles.searchInput}
+                />
+              </label>
+              <label style={styles.checkboxLabel}>
+                <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
+                Active command
+              </label>
+              <div style={styles.settingsFooterRow}>
+                <button type="button" style={styles.secondaryButton} onClick={() => void previewCommand()}>
+                  Test
+                </button>
+                <button type="button" style={styles.secondaryButton} onClick={() => { setIsModalOpen(false); resetForm(); }}>
+                  Cancel
+                </button>
+                <button type="button" style={styles.primaryButton} disabled={isBusy} onClick={() => void saveCommand()}>
+                  {draftId ? 'Save changes' : 'Create command'}
+                </button>
+              </div>
+            </div>
+            {error ? <p style={styles.error}>{error}</p> : null}
+          </SettingsSurface>
+        ) : null}
+      </div>
+    </SettingsPageShell>
   );
 }

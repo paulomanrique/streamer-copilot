@@ -1,9 +1,8 @@
-import type { ProfileSummary } from '../../shared/types.js';
-import type { PermissionLevel } from '../../shared/types.js';
+import type { PermissionLevel, ProfileSummary } from '../../shared/types.js';
 import { CommandComponentsPreview } from './CommandComponentsPreview.js';
-import { PlatformSettingsPreview } from './PlatformSettingsPreview.js';
 import { ProfileActions } from './ProfileActions.js';
 import { ProfileList } from './ProfileList.js';
+import { SettingsInfoTile, SettingsPageShell } from './SettingsScaffold.js';
 import { styles } from './app-styles.js';
 
 interface SettingsProfilesPanelProps {
@@ -36,31 +35,42 @@ export function SettingsProfilesPanel({
   onChangePermissionLevels,
 }: SettingsProfilesPanelProps) {
   return (
-    <section style={styles.block}>
-      <h2 style={styles.subtitle}>General</h2>
+    <SettingsPageShell
+      title="Profiles"
+      description="Manage stream setups as isolated profile workspaces."
+      action={<button type="button" style={styles.primaryButton} onClick={onCreateProfile}>+ New Profile</button>}
+      maxWidth="1160px"
+    >
+      <div style={styles.settingsColumn}>
+        <div style={styles.settingsInfoGrid}>
+          <SettingsInfoTile label="Active profile" text={activeProfileName} />
+          <SettingsInfoTile label="Profiles" text={`${profiles.length} configured`} />
+          <SettingsInfoTile label="Defaults" text="Language and permission presets per profile" />
+        </div>
 
-      <div style={styles.settingsSection}>
-        <h3 style={styles.sectionTitle}>Profiles</h3>
-        <p style={styles.message}>Active profile: {activeProfileName}</p>
+        <div style={styles.settingsSurfaceTable}>
+          <div style={styles.settingsSurfaceHeaderRow}>
+            <h3 style={styles.settingsSubsectionTitle}>Profile Library</h3>
+            <ProfileActions
+              onCreate={onCreateProfile}
+              onRename={onRenameProfile}
+              onClone={onCloneProfile}
+              onDelete={onDeleteProfile}
+            />
+          </div>
 
-        <ProfileActions
-          onCreate={onCreateProfile}
-          onRename={onRenameProfile}
-          onClone={onCloneProfile}
-          onDelete={onDeleteProfile}
-        />
+          <ProfileList profiles={profiles} activeProfileId={activeProfileId} onSelectProfile={onSelectProfile} />
+        </div>
 
-        <ProfileList profiles={profiles} activeProfileId={activeProfileId} onSelectProfile={onSelectProfile} />
+        <div style={styles.settingsTwoColumnGrid}>
+          <CommandComponentsPreview
+            languageCode={languageCode}
+            permissionLevels={permissionLevels}
+            onChangeLanguageCode={onChangeLanguageCode}
+            onChangePermissionLevels={onChangePermissionLevels}
+          />
+        </div>
       </div>
-
-      <CommandComponentsPreview
-        languageCode={languageCode}
-        permissionLevels={permissionLevels}
-        onChangeLanguageCode={onChangeLanguageCode}
-        onChangePermissionLevels={onChangePermissionLevels}
-      />
-
-      <PlatformSettingsPreview activeProfileName={activeProfileName} />
-    </section>
+    </SettingsPageShell>
   );
 }

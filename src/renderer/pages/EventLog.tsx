@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import type { EventLogEntry, EventLogFilters } from '../../shared/types.js';
+import { SettingsPageShell, SettingsSurface } from '../components/SettingsScaffold.js';
 import { styles } from '../components/app-styles.js';
 
 const DEFAULT_FILTERS: EventLogFilters = {
@@ -34,43 +35,42 @@ export function EventLogPage() {
   };
 
   return (
-    <section style={styles.previewCard}>
-      <div style={styles.previewHeader}>
-        <div>
-          <h2 style={styles.subtitle}>Activity Log</h2>
-          <p style={styles.helper}>Recent operational events from the desktop app, filterable by level, scope, and text.</p>
-        </div>
-      </div>
+    <SettingsPageShell
+      title="Activity Log"
+      description="Recent operational events from the desktop app."
+      maxWidth="1160px"
+    >
+      <div style={styles.settingsColumn}>
+        <SettingsSurface>
+          <div style={styles.buttonRow}>
+            <select
+              value={filters.level ?? 'all'}
+              onChange={(event) => updateFilters({ ...filters, level: event.target.value as EventLogFilters['level'] })}
+              style={{ ...styles.select, minWidth: '140px' }}
+            >
+              <option value="all">All levels</option>
+              <option value="info">Info</option>
+              <option value="warn">Warn</option>
+              <option value="error">Error</option>
+            </select>
+            <input
+              type="text"
+              value={filters.category ?? ''}
+              onChange={(event) => updateFilters({ ...filters, category: event.target.value })}
+              style={{ ...styles.searchInput, flex: 1 }}
+              placeholder="Category"
+            />
+            <input
+              type="text"
+              value={filters.query ?? ''}
+              onChange={(event) => updateFilters({ ...filters, query: event.target.value })}
+              style={{ ...styles.searchInput, flex: 1.4 }}
+              placeholder="Search message"
+            />
+          </div>
+        </SettingsSurface>
 
-      <div style={styles.settingsGrid}>
-        <div style={styles.buttonRow}>
-          <select
-            value={filters.level ?? 'all'}
-            onChange={(event) => updateFilters({ ...filters, level: event.target.value as EventLogFilters['level'] })}
-            style={styles.select}
-          >
-            <option value="all">All levels</option>
-            <option value="info">Info</option>
-            <option value="warn">Warn</option>
-            <option value="error">Error</option>
-          </select>
-          <input
-            type="text"
-            value={filters.category ?? ''}
-            onChange={(event) => updateFilters({ ...filters, category: event.target.value })}
-            style={styles.searchInput}
-            placeholder="Category"
-          />
-          <input
-            type="text"
-            value={filters.query ?? ''}
-            onChange={(event) => updateFilters({ ...filters, query: event.target.value })}
-            style={styles.searchInput}
-            placeholder="Search message"
-          />
-        </div>
-
-        <div style={styles.tableWrap}>
+        <div style={styles.settingsSurfaceTable}>
           <table style={styles.table}>
             <thead>
               <tr>
@@ -93,9 +93,7 @@ export function EventLogPage() {
               ))}
               {rows.length === 0 ? (
                 <tr>
-                  <td style={styles.tableCell} colSpan={5}>
-                    No log entries match the current filters.
-                  </td>
+                  <td style={styles.tableCell} colSpan={5}>No log entries match the current filters.</td>
                 </tr>
               ) : null}
             </tbody>
@@ -104,6 +102,6 @@ export function EventLogPage() {
 
         {error ? <p style={styles.error}>{error}</p> : null}
       </div>
-    </section>
+    </SettingsPageShell>
   );
 }
