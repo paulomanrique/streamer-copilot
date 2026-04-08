@@ -53,7 +53,7 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
   };
 
   return (
-    <section className="h-full flex flex-col">
+    <section className="flex-1 min-h-0 flex flex-col overflow-hidden">
       <div className="flex-1 flex overflow-hidden">
         <ChatFeed messages={visibleMessages} events={visibleEvents} />
 
