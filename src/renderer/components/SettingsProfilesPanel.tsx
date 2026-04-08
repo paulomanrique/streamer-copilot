@@ -1,6 +1,4 @@
 import type { PermissionLevel, ProfileSummary } from '../../shared/types.js';
-import { CommandComponentsPreview } from './CommandComponentsPreview.js';
-import { ProfileActions } from './ProfileActions.js';
 import { ProfileList } from './ProfileList.js';
 
 interface SettingsProfilesPanelProps {
@@ -20,17 +18,12 @@ interface SettingsProfilesPanelProps {
 
 export function SettingsProfilesPanel({
   activeProfileId,
-  activeProfileName,
   profiles,
   onCreateProfile,
   onRenameProfile,
   onCloneProfile,
   onDeleteProfile,
   onSelectProfile,
-  languageCode,
-  permissionLevels,
-  onChangeLanguageCode,
-  onChangePermissionLevels,
 }: SettingsProfilesPanelProps) {
   return (
     <div id="settings-profiles" className="p-6">
@@ -44,22 +37,14 @@ export function SettingsProfilesPanel({
           + New Profile
         </button>
       </div>
-      <p className="text-sm text-gray-400 mb-6">Active profile: {activeProfileName}</p>
-
-      <div className="bg-gray-800/40 rounded-xl border border-gray-700 overflow-x-auto mb-6">
-        <div className="px-4 py-3 border-b border-gray-700 flex items-center justify-between gap-3">
-          <span className="text-sm text-gray-300 font-medium">Profile Library</span>
-          <ProfileActions onCreate={onCreateProfile} onRename={onRenameProfile} onClone={onCloneProfile} onDelete={onDeleteProfile} />
-        </div>
-        <ProfileList profiles={profiles} activeProfileId={activeProfileId} onSelectProfile={onSelectProfile} />
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <CommandComponentsPreview
-          languageCode={languageCode}
-          permissionLevels={permissionLevels}
-          onChangeLanguageCode={onChangeLanguageCode}
-          onChangePermissionLevels={onChangePermissionLevels}
+      <div className="bg-gray-800/40 rounded-xl border border-gray-700 overflow-x-auto">
+        <ProfileList
+          profiles={profiles}
+          activeProfileId={activeProfileId}
+          onSelectProfile={onSelectProfile}
+          onRenameProfile={onRenameProfile}
+          onCloneProfile={onCloneProfile}
+          onDeleteProfile={onDeleteProfile}
         />
       </div>
     </div>

@@ -67,11 +67,11 @@ const PLATFORM_PREVIEW_DATA = [
       </>
     ),
     note: 'Reserved mockup slot so the multi-live layout is stable before implementation.',
-    action: <button disabled className="px-3 py-1.5 rounded bg-gray-700 text-gray-500 text-sm cursor-not-allowed">Em breve</button>,
+    action: <button disabled className="px-3 py-1.5 rounded bg-gray-700 text-gray-500 text-sm cursor-not-allowed">Soon</button>,
   },
 ];
 
-export function PlatformSettingsPreview({ activeProfileName }: PlatformSettingsPreviewProps) {
+export function PlatformSettingsPreview(_: PlatformSettingsPreviewProps) {
   return (
     <div id="settings-platforms" className="p-6 max-w-2xl">
       <h2 className="text-lg font-semibold mb-1">Platform Connections</h2>
@@ -119,8 +119,6 @@ export function PlatformSettingsPreview({ activeProfileName }: PlatformSettingsP
           </div>
         </div>
       ))}
-
-      <p className="text-xs text-gray-600 mt-4">Profile context: {activeProfileName}</p>
     </div>
   );
 }

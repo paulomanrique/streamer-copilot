@@ -5,9 +5,19 @@ interface ProfileListProps {
   profiles: ProfileSummary[];
   activeProfileId: string;
   onSelectProfile: (profileId: string) => void;
+  onRenameProfile: () => void;
+  onCloneProfile: () => void;
+  onDeleteProfile: () => void;
 }
 
-export function ProfileList({ profiles, activeProfileId, onSelectProfile }: ProfileListProps) {
+export function ProfileList({
+  profiles,
+  activeProfileId,
+  onSelectProfile,
+  onRenameProfile,
+  onCloneProfile,
+  onDeleteProfile,
+}: ProfileListProps) {
   return (
     <table className="w-full min-w-[1080px] text-sm">
       <thead>
@@ -22,23 +32,48 @@ export function ProfileList({ profiles, activeProfileId, onSelectProfile }: Prof
         {profiles.map((profile) => {
           const isActive = profile.id === activeProfileId;
           return (
-            <tr key={profile.id} className={isActive ? 'border-b border-gray-800 bg-violet-500/5 hover:bg-gray-800/50' : 'border-b border-gray-800 hover:bg-gray-800/50'}>
-              <td className="px-4 py-3 text-gray-200 font-semibold">
+            <tr key={profile.id} className="border-b border-gray-800 hover:bg-gray-800/50">
+              <td className="px-4 py-3 text-gray-200">
                 <div className="flex items-center gap-2">
-                  <span>{profile.name}</span>
-                  {isActive ? <span className="text-xs px-2 py-0.5 rounded bg-violet-500/30 text-violet-200">active</span> : null}
+                  <span className="font-medium">{profile.name}</span>
+                  {isActive ? <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-600/30 text-violet-300">active</span> : null}
                 </div>
               </td>
-              <td className="px-4 py-3 text-gray-400 font-mono">{profile.directory}</td>
-              <td className="px-4 py-3 text-gray-500">{formatLastUsedLabel(profile.lastUsedAt)}</td>
+              <td className="px-4 py-3 text-xs text-gray-400 font-mono max-w-[420px]">
+                <span className="block truncate" title={profile.directory}>{profile.directory}</span>
+              </td>
+              <td className="px-4 py-3 text-xs text-gray-500">{formatLastUsedLabel(profile.lastUsedAt)}</td>
               <td className="px-4 py-3">
-                <button
-                  type="button"
-                  onClick={() => onSelectProfile(profile.id)}
-                  className={isActive ? 'px-3 py-1.5 rounded bg-gray-700 text-gray-400 text-sm cursor-default' : 'px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm transition-colors'}
-                >
-                  {isActive ? 'Using' : 'Use'}
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onSelectProfile(profile.id)}
+                    className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-violet-600 text-gray-300 hover:text-white transition-colors whitespace-nowrap"
+                  >
+                    Use
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onRenameProfile}
+                    className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors whitespace-nowrap"
+                  >
+                    Rename
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onCloneProfile}
+                    className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors whitespace-nowrap"
+                  >
+                    Clone
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onDeleteProfile}
+                    className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-red-700 text-gray-300 hover:text-white transition-colors whitespace-nowrap"
+                  >
+                    Delete
+                  </button>
+                </div>
               </td>
             </tr>
           );
