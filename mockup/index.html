@@ -810,10 +810,481 @@
     </div>
   </div>
 
-  <!-- Scripts -->
-  <script src="js/mock-data.js"></script>
-  <script src="js/chat-renderer.js"></script>
-  <script src="js/nav.js"></script>
+  <script>
+  // ===================== MOCK DATA =====================
+
+  const MOCK_MESSAGES = [
+    { id: '1',  platform: 'twitch',  author: 'xGamer99',    content: 'fala galera o/o/o/',              badges: ['subscriber'],             isMod: false, isSub: true,  ts: Date.now() - 60000 },
+    { id: '2',  platform: 'youtube', author: 'TechWatcher', content: 'que jogo incrível cara',           badges: ['member'],                 isMod: false, isSub: true,  ts: Date.now() - 55000 },
+    { id: '3',  platform: 'kick',    author: 'br_live',     content: '!gato',                            badges: [],                         isMod: false, isSub: false, ts: Date.now() - 50000 },
+    { id: '4',  platform: 'twitch',  author: 'ModPower',    content: 'bem vindos ao stream!',            badges: ['moderator'],              isMod: true,  isSub: false, ts: Date.now() - 45000 },
+    { id: '5',  platform: 'youtube', author: 'SuperFan2024',content: '!voice boa tarde a todos',         badges: [],                         isMod: false, isSub: false, ts: Date.now() - 40000 },
+    { id: '6',  platform: 'twitch',  author: 'ProStreamer', content: 'KEKW KEKW KEKW',                  badges: ['subscriber', 'moderator'], isMod: true,  isSub: true,  ts: Date.now() - 35000 },
+    { id: '7',  platform: 'kick',    author: 'kickfan',     content: 'chegando agora, o que perdeu?',   badges: [],                         isMod: false, isSub: false, ts: Date.now() - 30000 },
+    { id: '8',  platform: 'twitch',  author: 'DonorKing',   content: '!cachorro',                        badges: ['subscriber'],             isMod: false, isSub: true,  ts: Date.now() - 25000 },
+    { id: '9',  platform: 'youtube', author: 'Lurker123',   content: 'PogChamp',                        badges: [],                         isMod: false, isSub: false, ts: Date.now() - 20000 },
+    { id: '10', platform: 'twitch',  author: 'NewFollower', content: 'acabei de seguir!',               badges: [],                         isMod: false, isSub: false, ts: Date.now() - 15000 },
+  ];
+
+  const MOCK_EVENTS = [
+    { id: 'e1', platform: 'twitch',  type: 'subscription', author: 'xGamer99',     message: 'Mês 3!',     ts: Date.now() - 120000 },
+    { id: 'e2', platform: 'youtube', type: 'superchat',    author: 'TechWatcher',  amount: 10, message: 'Stream top!', ts: Date.now() - 90000 },
+    { id: 'e3', platform: 'twitch',  type: 'raid',         author: 'OtherStreamer',amount: 45,             ts: Date.now() - 60000 },
+    { id: 'e4', platform: 'kick',    type: 'follow',       author: 'NewKickUser',                         ts: Date.now() - 30000 },
+    { id: 'e5', platform: 'twitch',  type: 'cheer',        author: 'ProStreamer',  amount: 500,            ts: Date.now() - 10000 },
+  ];
+
+  const MOCK_OBS_STATS = {
+    scene: 'Gameplay', streaming: true, streamTime: '01:23:47',
+    cpuUsage: 18.4, memoryUsage: 2340,
+    outputSkippedFrames: 8,  outputTotalFrames: 298800,
+    encoderSkippedFrames: 4, encoderTotalFrames: 298800,
+    renderSkippedFrames: 0,  renderTotalFrames: 298800,
+  };
+
+  const MOCK_SOUND_COMMANDS = [
+    { id: 's1', trigger: '!gato',     file: 'cat.mp3',      permissions: ['everyone'],              cooldown: 10, enabled: true  },
+    { id: 's2', trigger: '!cachorro', file: 'dog.mp3',      permissions: ['subscriber','moderator'],cooldown: 30, enabled: true  },
+    { id: 's3', trigger: '!aplausos', file: 'applause.mp3', permissions: ['moderator'],             cooldown: 60, enabled: true  },
+    { id: 's4', trigger: '!corneta',  file: 'horn.mp3',     permissions: ['everyone'],              cooldown: 15, enabled: false },
+  ];
+
+  const MOCK_VOICE_COMMANDS = [
+    { id: 'v1', trigger: '!voice',   template: null,             language: 'pt-BR', permissions: ['subscriber','moderator'], cooldown: 5,   enabled: true },
+    { id: 'v2', trigger: '!bom_dia', template: 'bom dia a todos!',language: 'pt-BR', permissions: ['everyone'],              cooldown: 300, enabled: true },
+  ];
+
+  const MOCK_SCHEDULED = [
+    { id: 'm1', message: 'Lembre-se de seguir o canal! 💜',          interval: 15, randomWindow: 5,  platforms: ['twitch','youtube','kick'], enabled: true,  lastSent: Date.now() - 420000 },
+    { id: 'm2', message: 'Visite meu Discord: discord.gg/exemplo',    interval: 30, randomWindow: 0,  platforms: ['twitch'],                  enabled: true,  lastSent: null },
+    { id: 'm3', message: 'Comandos disponíveis: !gato !cachorro !voice',interval: 20, randomWindow: 10, platforms: ['twitch','youtube','kick'], enabled: false, lastSent: null },
+  ];
+
+  const MOCK_ACTIVITY_LOG = [
+    { id: 'a1',  ts: Date.now() - 10000,  type: 'cheer',        platform: 'twitch',  author: 'ProStreamer',    amount: 500 },
+    { id: 'a2',  ts: Date.now() - 25000,  type: 'sound',        platform: 'kick',    author: 'br_live',       trigger: '!gato' },
+    { id: 'a3',  ts: Date.now() - 40000,  type: 'follow',       platform: 'kick',    author: 'NewKickUser' },
+    { id: 'a4',  ts: Date.now() - 55000,  type: 'subscription', platform: 'twitch',  author: 'xGamer99',      message: 'Mês 3!' },
+    { id: 'a5',  ts: Date.now() - 90000,  type: 'superchat',    platform: 'youtube', author: 'TechWatcher',   amount: 10, message: 'Stream top!' },
+    { id: 'a6',  ts: Date.now() - 120000, type: 'raid',         platform: 'twitch',  author: 'OtherStreamer', amount: 45 },
+    { id: 'a7',  ts: Date.now() - 150000, type: 'scheduled',    message: 'Lembre-se de seguir o canal! 💜' },
+    { id: 'a8',  ts: Date.now() - 180000, type: 'gift',         platform: 'twitch',  author: 'DonorKing',     amount: 5 },
+    { id: 'a9',  ts: Date.now() - 240000, type: 'follow',       platform: 'twitch',  author: 'NewFollower' },
+    { id: 'a10', ts: Date.now() - 270000, type: 'sound',        platform: 'twitch',  author: 'DonorKing',     trigger: '!cachorro' },
+    { id: 'a11', ts: Date.now() - 300000, type: 'subscription', platform: 'youtube', author: 'SuperFan2024' },
+    { id: 'a12', ts: Date.now() - 360000, type: 'scheduled',    message: 'Visite meu Discord: discord.gg/exemplo' },
+    { id: 'a13', ts: Date.now() - 420000, type: 'cheer',        platform: 'twitch',  author: 'xGamer99',      amount: 100 },
+    { id: 'a14', ts: Date.now() - 480000, type: 'follow',       platform: 'youtube', author: 'Lurker123' },
+  ];
+
+  // ===================== CHAT RENDERER =====================
+
+  const PLATFORM_COLORS = {
+    twitch:  { border: 'border-l-purple-500', bg: 'hover:bg-purple-500/10', badge: 'bg-purple-500/20 text-purple-300', label: 'Twitch' },
+    youtube: { border: 'border-l-red-500',    bg: 'hover:bg-red-500/10',    badge: 'bg-red-500/20 text-red-300',       label: 'YouTube' },
+    kick:    { border: 'border-l-green-500',  bg: 'hover:bg-green-500/10',  badge: 'bg-green-500/20 text-green-300',   label: 'Kick' },
+  };
+
+  const PLATFORM_ICONS = {
+    twitch:  `<svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"/></svg>`,
+    youtube: `<svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>`,
+    kick:    `<svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M2 2h4v8l4-4h4l-6 6 6 6h-4l-4-4v4H2V2zm14 0h4v20h-4z"/></svg>`,
+  };
+
+  const EVENT_ICONS = { subscription: '⭐', superchat: '💰', raid: '⚔️', follow: '💜', cheer: '✨', gift: '🎁' };
+
+  const BADGE_ICONS = {
+    moderator:  `<span title="Moderador" class="inline-flex items-center justify-center w-4 h-4 rounded bg-green-600 text-white text-xs">⚔</span>`,
+    subscriber: `<span title="Inscrito"  class="inline-flex items-center justify-center w-4 h-4 rounded bg-violet-600 text-white text-xs">★</span>`,
+    member:     `<span title="Membro"    class="inline-flex items-center justify-center w-4 h-4 rounded bg-red-600 text-white text-xs">★</span>`,
+  };
+
+  const ACTIVITY_CONFIG = {
+    follow:       { icon: '💜', label: 'Novo seguidor',         color: 'text-pink-400'   },
+    subscription: { icon: '⭐', label: 'Inscrição / Membro',    color: 'text-yellow-400' },
+    gift:         { icon: '🎁', label: 'Inscrição presenteada', color: 'text-orange-400' },
+    superchat:    { icon: '💰', label: 'Super Chat / Bits',      color: 'text-green-400'  },
+    cheer:        { icon: '✨', label: 'Bits (Twitch)',           color: 'text-purple-400' },
+    raid:         { icon: '⚔️', label: 'Raid / Invasão',         color: 'text-red-400'    },
+    sound:        { icon: '🔊', label: 'Comando de som',         color: 'text-violet-400' },
+    scheduled:    { icon: '⏰', label: 'Mensagem agendada',      color: 'text-cyan-400'   },
+  };
+
+  const activityFilter  = Object.fromEntries(Object.keys(ACTIVITY_CONFIG).map(k => [k, true]));
+  const platformFilter  = { twitch: true, youtube: true, kick: true };
+
+  function formatTime(ts) {
+    return new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function renderMessage(msg) {
+    const p = PLATFORM_COLORS[msg.platform];
+    const badges = (msg.badges || []).map(b => BADGE_ICONS[b] || '').join('');
+    const isCmd  = msg.content.startsWith('!');
+    return `<div class="chat-message flex gap-2 px-3 py-1.5 border-l-2 hover:border-l-[3px] ${p.border} ${p.bg} transition-all duration-75 cursor-default select-text ${isCmd ? 'bg-violet-500/5' : ''}"
+        data-platform="${msg.platform}" data-author="${msg.author}">
+      <span class="text-gray-600 text-xs mt-0.5 shrink-0 font-mono">${formatTime(msg.ts)}</span>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-1 flex-wrap">
+          <span class="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded ${p.badge}">${PLATFORM_ICONS[msg.platform]} ${p.label}</span>
+          ${badges}
+          <span class="font-semibold text-sm ${msg.isMod ? 'text-green-400' : 'text-gray-200'}">${msg.author}</span>
+          ${msg.isMod ? '<span class="text-xs text-green-500">MOD</span>' : ''}
+        </div>
+        <p class="text-sm text-gray-300 mt-0.5 break-words ${isCmd ? 'text-violet-300 font-mono' : ''}">${msg.content}</p>
+      </div>
+    </div>`;
+  }
+
+  function renderEvent(evt) {
+    const p    = PLATFORM_COLORS[evt.platform];
+    const icon = EVENT_ICONS[evt.type] || '📢';
+    const labels = {
+      subscription: `<strong>${evt.author}</strong> se inscreveu!`,
+      superchat:    `<strong>${evt.author}</strong> enviou Super Chat de R$${(evt.amount||0).toFixed(2)}`,
+      raid:         `<strong>${evt.author}</strong> fez raid com ${evt.amount||0} viewers!`,
+      follow:       `<strong>${evt.author}</strong> começou a seguir`,
+      cheer:        `<strong>${evt.author}</strong> deu ${evt.amount||0} bits!`,
+      gift:         `<strong>${evt.author}</strong> presenteou uma inscrição`,
+    };
+    return `<div class="mx-3 my-1 px-3 py-2 rounded-lg border ${p.border.replace('border-l-','border-')} bg-gradient-to-r from-gray-800 to-gray-800/50">
+      <div class="flex items-center gap-2">
+        <span class="text-lg">${icon}</span>
+        <div>
+          <p class="text-sm text-gray-200">${labels[evt.type] || evt.type}</p>
+          ${evt.message ? `<p class="text-xs text-gray-400 mt-0.5">"${evt.message}"</p>` : ''}
+        </div>
+        <span class="ml-auto text-xs text-gray-500">${formatTime(evt.ts)}</span>
+      </div>
+    </div>`;
+  }
+
+  function buildActivityText(log) {
+    const p      = log.platform ? PLATFORM_COLORS[log.platform] : null;
+    const pLabel = p ? `<span class="inline-flex items-center gap-0.5 ${p.badge} px-1 rounded text-[10px]">${PLATFORM_ICONS[log.platform]}${p.label}</span> ` : '';
+    switch (log.type) {
+      case 'follow':       return `${pLabel}<strong class="text-gray-200">${log.author}</strong> começou a seguir`;
+      case 'subscription': return `${pLabel}<strong class="text-gray-200">${log.author}</strong> se inscreveu${log.message ? ` — "${log.message}"` : ''}`;
+      case 'gift':         return `${pLabel}<strong class="text-gray-200">${log.author}</strong> presenteou ${log.amount||1} inscrição(ões)`;
+      case 'superchat':    return `${pLabel}<strong class="text-gray-200">${log.author}</strong> enviou R$${(log.amount||0).toFixed(2)}${log.message ? ` — "${log.message}"` : ''}`;
+      case 'cheer':        return `${pLabel}<strong class="text-gray-200">${log.author}</strong> deu ${log.amount||0} bits`;
+      case 'raid':         return `${pLabel}<strong class="text-gray-200">${log.author}</strong> fez raid com ${log.amount||0} viewers`;
+      case 'sound':        return `${pLabel}Comando <span class="font-mono text-violet-300">${log.trigger}</span> por <strong class="text-gray-200">${log.author}</strong>`;
+      case 'scheduled':    return `<span class="text-gray-400 italic">"${log.message}"</span>`;
+      default:             return log.text || log.type;
+    }
+  }
+
+  function renderActivityLog(log) {
+    const cfg = ACTIVITY_CONFIG[log.type] || { icon: '•', color: 'text-gray-400' };
+    return `<div class="flex items-start gap-2 text-xs py-1.5 border-b border-gray-800/60 last:border-0">
+      <span class="shrink-0 mt-0.5">${cfg.icon}</span>
+      <span class="text-gray-600 shrink-0 font-mono">${formatTime(log.ts)}</span>
+      <span class="${cfg.color} leading-relaxed min-w-0">${buildActivityText(log)}</span>
+    </div>`;
+  }
+
+  function applyActivityFilter() {
+    const el = document.getElementById('activity-log');
+    if (!el) return;
+    const filtered = MOCK_ACTIVITY_LOG.filter(item => activityFilter[item.type] !== false);
+    el.innerHTML = filtered.length
+      ? filtered.map(renderActivityLog).join('')
+      : '<p class="text-gray-600 text-xs text-center py-4">Nenhum tipo de evento habilitado.</p>';
+  }
+
+  function toggleActivityFilter(type, enabled) {
+    activityFilter[type] = enabled;
+    applyActivityFilter();
+  }
+
+  function applyPlatformFilter() {
+    document.querySelectorAll('#chat-feed [data-platform]').forEach(el => {
+      el.style.display = platformFilter[el.dataset.platform] === false ? 'none' : '';
+    });
+  }
+
+  function togglePlatformFilter(platform) {
+    platformFilter[platform] = !platformFilter[platform];
+    applyPlatformFilter();
+    const btn = document.querySelector(`[data-platform-filter="${platform}"]`);
+    if (!btn) return;
+    const p = PLATFORM_COLORS[platform];
+    if (platformFilter[platform]) {
+      btn.classList.remove('grayscale', 'opacity-40');
+      btn.classList.add(...p.badge.split(' '), 'hover:opacity-90');
+    } else {
+      btn.classList.remove(...p.badge.split(' '), 'hover:opacity-90');
+      btn.classList.add('grayscale', 'opacity-40');
+    }
+  }
+
+  function initChatFeed() {
+    const feed = document.getElementById('chat-feed');
+    if (!feed) return;
+    const items = [
+      ...MOCK_MESSAGES.map(m => ({ ...m, _type: 'msg' })),
+      ...MOCK_EVENTS.map(e => ({ ...e, _type: 'evt' })),
+    ].sort((a, b) => a.ts - b.ts);
+    feed.innerHTML = items.map(item => item._type === 'msg' ? renderMessage(item) : renderEvent(item)).join('');
+    feed.scrollTop = feed.scrollHeight;
+  }
+
+  function initObsStats() {
+    const s   = MOCK_OBS_STATS;
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    set('obs-scene',  s.scene);
+    set('obs-time',   s.streamTime);
+    set('obs-cpu',    `${s.cpuUsage.toFixed(1)}%`);
+    set('obs-memory', `${(s.memoryUsage / 1024).toFixed(1)} GB`);
+    set('obs-status', s.streaming ? '🔴 AO VIVO' : '⚫ Offline');
+
+    const connPct   = s.outputTotalFrames > 0 ? (1 - s.outputSkippedFrames / s.outputTotalFrames) * 100 : 100;
+    const connColor = connPct >= 95 ? 'green' : connPct >= 80 ? 'yellow' : 'red';
+    set('obs-conn-pct',     `${connPct.toFixed(1)}%`);
+    set('obs-conn-quality', connPct >= 95 ? '● Boa' : connPct >= 80 ? '● Regular' : '● Ruim');
+    const bar = document.getElementById('obs-conn-bar');
+    if (bar) { bar.style.width = `${connPct.toFixed(1)}%`; bar.style.background = connColor === 'green' ? '#22c55e' : connColor === 'yellow' ? '#eab308' : '#ef4444'; }
+    const qualEl = document.getElementById('obs-conn-quality');
+    if (qualEl) qualEl.className = `text-xs font-semibold text-${connColor}-400`;
+
+    const fmt = (sk, tot) => tot === 0 ? '0' : `${sk} <span class="text-gray-600 text-[10px]">(${((sk/tot)*100).toFixed(2)}%)</span>`;
+    const dn = document.getElementById('obs-dropped-net');   if (dn) dn.innerHTML  = fmt(s.outputSkippedFrames,  s.outputTotalFrames);
+    const de = document.getElementById('obs-dropped-enc');   if (de) de.innerHTML  = fmt(s.encoderSkippedFrames, s.encoderTotalFrames);
+    const dr = document.getElementById('obs-dropped-render');if (dr) dr.innerHTML  = fmt(s.renderSkippedFrames,  s.renderTotalFrames);
+  }
+
+  function initSoundCommands() {
+    const tbody = document.getElementById('sounds-table-body');
+    if (!tbody) return;
+    tbody.innerHTML = MOCK_SOUND_COMMANDS.map(cmd => `
+      <tr class="border-b border-gray-800 hover:bg-gray-800/50">
+        <td class="px-4 py-3 font-mono text-violet-300">${cmd.trigger}</td>
+        <td class="px-4 py-3 text-gray-300 text-sm">${cmd.file}</td>
+        <td class="px-4 py-3"><div class="flex gap-1 flex-wrap">${cmd.permissions.map(p=>`<span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">${p}</span>`).join('')}</div></td>
+        <td class="px-4 py-3 text-gray-400 text-sm">${cmd.cooldown}s</td>
+        <td class="px-4 py-3"><label class="toggle-switch"><input type="checkbox" ${cmd.enabled?'checked':''} onchange="void 0"><span class="toggle-slider"></span></label></td>
+        <td class="px-4 py-3"><div class="flex gap-2">
+          <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-violet-600 text-gray-300 hover:text-white transition-colors" onclick="void 0">▶ Testar</button>
+          <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors" onclick="openModal('modal-sound')">✏️</button>
+          <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-red-700 text-gray-300 hover:text-white transition-colors">🗑️</button>
+        </div></td>
+      </tr>`).join('');
+  }
+
+  function initVoiceCommands() {
+    const tbody = document.getElementById('voice-table-body');
+    if (!tbody) return;
+    tbody.innerHTML = MOCK_VOICE_COMMANDS.map(cmd => `
+      <tr class="border-b border-gray-800 hover:bg-gray-800/50">
+        <td class="px-4 py-3 font-mono text-violet-300">${cmd.trigger}</td>
+        <td class="px-4 py-3 text-gray-300 text-sm">${cmd.template || '<span class="text-gray-500 italic">texto livre do chat</span>'}</td>
+        <td class="px-4 py-3 text-gray-300 text-sm">${cmd.language}</td>
+        <td class="px-4 py-3"><div class="flex gap-1 flex-wrap">${cmd.permissions.map(p=>`<span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">${p}</span>`).join('')}</div></td>
+        <td class="px-4 py-3 text-gray-400 text-sm">${cmd.cooldown}s</td>
+        <td class="px-4 py-3"><label class="toggle-switch"><input type="checkbox" ${cmd.enabled?'checked':''} onchange="void 0"><span class="toggle-slider"></span></label></td>
+        <td class="px-4 py-3"><div class="flex gap-2">
+          <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors" onclick="openModal('modal-voice')">✏️</button>
+          <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-red-700 text-gray-300 hover:text-white transition-colors">🗑️</button>
+        </div></td>
+      </tr>`).join('');
+  }
+
+  function initScheduled() {
+    const tbody = document.getElementById('scheduled-table-body');
+    if (!tbody) return;
+    tbody.innerHTML = MOCK_SCHEDULED.map(msg => `
+      <tr class="border-b border-gray-800 hover:bg-gray-800/50">
+        <td class="px-4 py-3 text-gray-300 text-sm max-w-xs truncate">${msg.message}</td>
+        <td class="px-4 py-3 text-gray-400 text-sm">${msg.interval}min ${msg.randomWindow>0?`<span class="text-gray-500 text-xs">(±${msg.randomWindow}min)</span>`:''}</td>
+        <td class="px-4 py-3"><div class="flex gap-1 flex-wrap">${msg.platforms.map(p=>`<span class="text-xs px-2 py-0.5 rounded-full ${PLATFORM_COLORS[p].badge}">${p}</span>`).join('')}</div></td>
+        <td class="px-4 py-3 text-gray-500 text-xs">${msg.lastSent ? formatTime(msg.lastSent) : '—'}</td>
+        <td class="px-4 py-3"><label class="toggle-switch"><input type="checkbox" ${msg.enabled?'checked':''} onchange="void 0"><span class="toggle-slider"></span></label></td>
+        <td class="px-4 py-3"><div class="flex gap-2">
+          <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors" onclick="openModal('modal-scheduled')">✏️</button>
+          <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-red-700 text-gray-300 hover:text-white transition-colors">🗑️</button>
+        </div></td>
+      </tr>`).join('');
+  }
+
+  // ===================== NAVIGATION =====================
+
+  function showSection(sectionId) {
+    document.querySelectorAll('.main-section').forEach(el => el.classList.add('hidden'));
+    const target = document.getElementById(sectionId);
+    if (target) target.classList.remove('hidden');
+    document.querySelectorAll('[data-nav]').forEach(el => {
+      el.classList.remove('bg-violet-600','text-white');
+      el.classList.add('text-gray-400','hover:text-white');
+    });
+    const active = document.querySelector(`[data-nav="${sectionId}"]`);
+    if (active) { active.classList.add('bg-violet-600','text-white'); active.classList.remove('text-gray-400','hover:text-white'); }
+  }
+
+  function showSettingsSection(subId) {
+    document.querySelectorAll('.settings-section').forEach(el => el.classList.add('hidden'));
+    const target = document.getElementById(subId);
+    if (target) target.classList.remove('hidden');
+    document.querySelectorAll('[data-settings-nav]').forEach(el => {
+      el.classList.remove('bg-violet-600/20','text-violet-400','border-l-2','border-violet-500');
+      el.classList.add('text-gray-400');
+    });
+    const active = document.querySelector(`[data-settings-nav="${subId}"]`);
+    if (active) { active.classList.add('bg-violet-600/20','text-violet-400','border-l-2','border-violet-500'); active.classList.remove('text-gray-400'); }
+  }
+
+  function openModal(id)  { const m = document.getElementById(id); if (m) m.classList.remove('hidden'); }
+  function closeModal(id) { const m = document.getElementById(id); if (m) m.classList.add('hidden');    }
+
+  // ===================== CONTEXT MENU =====================
+
+  const CONTEXT_MENU_ACTIONS = {
+    twitch: [
+      { id: 'vip',    label: 'Adicionar VIP' },
+      { id: 'unvip',  label: 'Remover VIP' },
+      { separator: true },
+      { id: 'mod',    label: 'Adicionar Moderador' },
+      { id: 'unmod',  label: 'Remover Moderador' },
+      { separator: true },
+      { id: 'to1',    label: 'Timeout — 1 minuto' },
+      { id: 'to10',   label: 'Timeout — 10 minutos' },
+      { id: 'to60',   label: 'Timeout — 1 hora' },
+      { id: 'to1440', label: 'Timeout — 24 horas' },
+      { separator: true },
+      { id: 'ban',    label: 'Banir usuário', danger: true },
+    ],
+    youtube: [
+      { id: 'hide',   label: 'Ocultar usuário no canal' },
+      { id: 'block',  label: 'Bloquear usuário', danger: true },
+      { separator: true },
+      { id: 'report', label: 'Reportar mensagem', danger: true },
+    ],
+    kick: [
+      { id: 'mute',  label: 'Silenciar usuário' },
+      { separator: true },
+      { id: 'to5',   label: 'Timeout — 5 minutos' },
+      { id: 'to30',  label: 'Timeout — 30 minutos' },
+      { separator: true },
+      { id: 'ban',   label: 'Banir usuário', danger: true },
+    ],
+  };
+
+  function showContextMenu(x, y, platform, author) {
+    const menu = document.getElementById('chat-context-menu');
+    if (!menu) return;
+    const actions = CONTEXT_MENU_ACTIONS[platform] || [];
+    menu.innerHTML = `
+      <div class="px-3 py-1.5 border-b border-gray-700 mb-1">
+        <span class="text-xs text-gray-500">@${author}</span>
+      </div>
+      <button class="w-full text-left px-3 py-1.5 text-sm hover:bg-violet-600/30 text-gray-200 flex items-center gap-2"
+        onclick="replyToUser('${platform}','${author}');hideContextMenu()">
+        <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
+        Responder
+      </button>
+      <div class="border-t border-gray-700 my-1"></div>
+      ${actions.map(a => a.separator
+        ? '<div class="border-t border-gray-700/60 my-1"></div>'
+        : `<button class="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 ${a.danger ? 'text-red-400 hover:bg-red-600/20' : 'text-gray-300'}" onclick="hideContextMenu()">${a.label}</button>`
+      ).join('')}`;
+    menu.style.left = `${x}px`;
+    menu.style.top  = `${y}px`;
+    menu.classList.remove('hidden');
+    requestAnimationFrame(() => {
+      const r = menu.getBoundingClientRect();
+      if (r.right  > window.innerWidth)  menu.style.left = `${x - r.width}px`;
+      if (r.bottom > window.innerHeight) menu.style.top  = `${y - r.height}px`;
+    });
+  }
+
+  function hideContextMenu() {
+    const m = document.getElementById('chat-context-menu');
+    if (m) m.classList.add('hidden');
+  }
+
+  function replyToUser(platform, author) {
+    const sel = document.querySelector('select[data-chat-platform]');
+    if (sel) sel.value = platform;
+    const input = document.getElementById('chat-input');
+    if (input) { input.value = `@${author} `; input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+  }
+
+  // ===================== ACTIVITY FILTER PANEL =====================
+
+  function toggleActivityFilterPanel() {
+    document.getElementById('activity-filter-panel').classList.toggle('hidden');
+  }
+
+  function buildActivityFilterList() {
+    const list = document.getElementById('activity-filter-list');
+    if (!list) return;
+    list.innerHTML = Object.entries(ACTIVITY_CONFIG).map(([type, cfg]) => `
+      <label class="flex items-center gap-2 cursor-pointer py-0.5 group">
+        <input type="checkbox" checked id="filter-${type}" class="accent-violet-500 cursor-pointer"
+          onchange="toggleActivityFilter('${type}', this.checked)">
+        <span class="text-sm">${cfg.icon}</span>
+        <span class="text-xs text-gray-300 group-hover:text-white transition-colors">${cfg.label}</span>
+      </label>`).join('');
+  }
+
+  function setAllActivityFilters(enabled) {
+    Object.keys(ACTIVITY_CONFIG).forEach(type => {
+      const cb = document.getElementById(`filter-${type}`);
+      if (cb) cb.checked = enabled;
+      toggleActivityFilter(type, enabled);
+    });
+  }
+
+  // ===================== GLOBAL EVENTS =====================
+
+  document.addEventListener('click', e => {
+    if (e.target.classList.contains('modal-backdrop')) e.target.closest('[id]').classList.add('hidden');
+    if (!e.target.closest('#chat-context-menu')) hideContextMenu();
+    const panel = document.getElementById('activity-filter-panel');
+    const btn   = document.getElementById('activity-filter-btn');
+    if (panel && !panel.classList.contains('hidden') && !panel.contains(e.target) && btn && !btn.contains(e.target)) {
+      panel.classList.add('hidden');
+    }
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') hideContextMenu();
+    if (e.key === 'Enter' && document.activeElement?.id === 'chat-input') {
+      e.preventDefault();
+      const input = document.getElementById('chat-input');
+      if (input && input.value.trim()) input.value = '';
+    }
+  });
+
+  // ===================== INIT =====================
+
+  document.addEventListener('DOMContentLoaded', () => {
+    showSection('dashboard');
+    showSettingsSection('settings-platforms');
+    initChatFeed();
+    applyActivityFilter();
+    initObsStats();
+    initSoundCommands();
+    initVoiceCommands();
+    initScheduled();
+    buildActivityFilterList();
+
+    // Chat events (double-click reply, right-click context menu)
+    const feed = document.getElementById('chat-feed');
+    if (feed) {
+      feed.addEventListener('dblclick', e => {
+        const msg = e.target.closest('.chat-message');
+        if (msg) replyToUser(msg.dataset.platform, msg.dataset.author);
+      });
+      feed.addEventListener('contextmenu', e => {
+        const msg = e.target.closest('.chat-message');
+        if (!msg) return;
+        e.preventDefault();
+        showContextMenu(e.clientX, e.clientY, msg.dataset.platform, msg.dataset.author);
+      });
+    }
+  });
+  </script>
 
 </body>
 </html>
