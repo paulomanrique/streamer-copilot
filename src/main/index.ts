@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 import { app, BrowserWindow } from 'electron';
 
+import { openDatabase, type DatabaseHandle } from '../db/database.js';
 import { createAppContext } from './app-context.js';
 import { StateHub } from './state-hub.js';
 
@@ -15,6 +16,7 @@ const RENDERER_INDEX_PATH = path.join(DIST_ROOT, 'renderer', 'index.html');
 
 let mainWindow: BrowserWindow | null = null;
 let teardownContext: (() => void) | null = null;
+let databaseHandle: DatabaseHandle | null = null;
 const stateHub = new StateHub();
 
 async function createMainWindow(): Promise<void> {
@@ -53,6 +55,8 @@ async function createMainWindow(): Promise<void> {
 }
 
 app.whenReady().then(async () => {
+  databaseHandle = openDatabase(app.getPath('userData'));
+
   teardownContext = createAppContext({
     appVersion: app.getVersion(),
     userDataPath: app.getPath('userData'),
@@ -76,4 +80,6 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   teardownContext?.();
   teardownContext = null;
+  databaseHandle?.close();
+  databaseHandle = null;
 });
