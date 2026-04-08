@@ -15,7 +15,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const DIST_ROOT = path.resolve(__dirname, '..');
-const PRELOAD_PATH = path.join(DIST_ROOT, 'preload', 'index.js');
+const PRELOAD_PATH = path.join(DIST_ROOT, 'preload', 'index.cjs');
 const RENDERER_INDEX_PATH = path.join(DIST_ROOT, 'renderer', 'index.html');
 
 let mainWindow: BrowserWindow | null = null;
