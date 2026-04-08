@@ -129,6 +129,10 @@ export interface VoiceSpeakPayload {
   lang: string;
 }
 
+export interface RendererVoiceCapabilities {
+  speechSynthesisAvailable: boolean;
+}
+
 export interface SoundCommand {
   id: string;
   trigger: string;

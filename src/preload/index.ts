@@ -9,6 +9,7 @@ import type {
   ObsConnectionSettings,
   ObsStatsSnapshot,
   RenameProfileInput,
+  RendererVoiceCapabilities,
   SoundCommandDeleteInput,
   SoundCommandUpsertInput,
   SoundPlayPayload,
@@ -45,6 +46,8 @@ const copilotApi: CopilotApi = {
   upsertVoiceCommand: (input: VoiceCommandUpsertInput) => ipcRenderer.invoke(IPC_CHANNELS.voiceUpsert, input),
   deleteVoiceCommand: (input: VoiceCommandDeleteInput) => ipcRenderer.invoke(IPC_CHANNELS.voiceDelete, input),
   previewVoiceSpeak: (input: VoiceSpeakPayload) => ipcRenderer.invoke(IPC_CHANNELS.voicePreviewSpeak, input),
+  setRendererVoiceCapabilities: (input: RendererVoiceCapabilities) =>
+    ipcRenderer.invoke(IPC_CHANNELS.voiceSetRendererCapabilities, input),
   onVoiceSpeak: (listener: (payload: VoiceSpeakPayload) => void) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, payload: VoiceSpeakPayload) => listener(payload);
     ipcRenderer.on(IPC_CHANNELS.voiceSpeak, wrappedListener);

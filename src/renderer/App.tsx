@@ -94,6 +94,13 @@ export default function App() {
   }, [toasts]);
 
   useEffect(() => {
+    void window.copilot.setRendererVoiceCapabilities({
+      speechSynthesisAvailable:
+        'speechSynthesis' in window && typeof window.SpeechSynthesisUtterance === 'function',
+    });
+  }, []);
+
+  useEffect(() => {
     const speak = (payload: VoiceSpeakPayload) => {
       if (!('speechSynthesis' in window) || typeof window.SpeechSynthesisUtterance !== 'function') {
         pushError('Speech synthesis is not available in this renderer');

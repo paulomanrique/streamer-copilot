@@ -59,6 +59,10 @@ export const voiceSpeakPayloadSchema = z.object({
   lang: z.string().min(2).max(20),
 });
 
+export const rendererVoiceCapabilitiesSchema = z.object({
+  speechSynthesisAvailable: z.boolean(),
+});
+
 export const soundCommandUpsertInputSchema = z.object({
   id: z.string().min(1).optional(),
   trigger: z.string().min(1).max(80),
@@ -92,6 +96,7 @@ export type ScheduledMessageDeleteInputSchema = z.infer<typeof scheduledMessageD
 export type VoiceCommandUpsertInputSchema = z.infer<typeof voiceCommandUpsertInputSchema>;
 export type VoiceCommandDeleteInputSchema = z.infer<typeof voiceCommandDeleteInputSchema>;
 export type VoiceSpeakPayloadSchema = z.infer<typeof voiceSpeakPayloadSchema>;
+export type RendererVoiceCapabilitiesSchema = z.infer<typeof rendererVoiceCapabilitiesSchema>;
 export type SoundCommandUpsertInputSchema = z.infer<typeof soundCommandUpsertInputSchema>;
 export type SoundCommandDeleteInputSchema = z.infer<typeof soundCommandDeleteInputSchema>;
 export type SoundPlayPayloadSchema = z.infer<typeof soundPlayPayloadSchema>;

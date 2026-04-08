@@ -1,6 +1,8 @@
+import { execFile as execFileCallback } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { promisify } from 'node:util';
 
 import { BrowserWindow, dialog, ipcMain } from 'electron';
 import type { OpenDialogOptions } from 'electron';
@@ -25,6 +27,7 @@ import {
   deleteProfileInputSchema,
   obsConnectionSettingsSchema,
   renameProfileInputSchema,
+  rendererVoiceCapabilitiesSchema,
   soundCommandDeleteInputSchema,
   soundCommandUpsertInputSchema,
   soundPlayPayloadSchema,
@@ -46,6 +49,7 @@ interface AppContextOptions {
 }
 
 export function createAppContext(options: AppContextOptions): () => void {
+  const execFile = promisify(execFileCallback);
   const profileStore = new ProfileStore(options.userDataPath);
   const appSettingsRepository = new AppSettingsRepository(options.databaseHandle.db);
   const obsSettingsStore = new ObsSettingsStore(appSettingsRepository);
@@ -60,9 +64,17 @@ export function createAppContext(options: AppContextOptions): () => void {
     repository: soundRepository,
     onPlay: (payload) => options.stateHub.pushSoundPlay(payload),
   });
+  let rendererSpeechSynthesisAvailable = process.platform !== 'linux';
   const voiceService = new VoiceService({
     repository: voiceRepository,
-    onSpeak: (payload) => options.stateHub.pushVoiceSpeak(payload),
+    onSpeak: (payload) => {
+      if (rendererSpeechSynthesisAvailable) {
+        options.stateHub.pushVoiceSpeak(payload);
+        return;
+      }
+
+      void speakWithOsFallback(payload.text);
+    },
   });
   const chatService = new ChatService({
     soundService,
@@ -159,6 +171,11 @@ export function createAppContext(options: AppContextOptions): () => void {
     voiceService.previewSpeak(input);
   });
 
+  ipcMain.handle(IPC_CHANNELS.voiceSetRendererCapabilities, async (_event, rawInput: unknown) => {
+    const input = rendererVoiceCapabilitiesSchema.parse(rawInput);
+    rendererSpeechSynthesisAvailable = input.speechSynthesisAvailable;
+  });
+
   ipcMain.handle(IPC_CHANNELS.soundsList, async () => soundService.list());
 
   ipcMain.handle(IPC_CHANNELS.soundsUpsert, async (_event, rawInput: unknown) => {
@@ -237,6 +254,7 @@ export function createAppContext(options: AppContextOptions): () => void {
     ipcMain.removeHandler(IPC_CHANNELS.voiceUpsert);
     ipcMain.removeHandler(IPC_CHANNELS.voiceDelete);
     ipcMain.removeHandler(IPC_CHANNELS.voicePreviewSpeak);
+    ipcMain.removeHandler(IPC_CHANNELS.voiceSetRendererCapabilities);
     ipcMain.removeHandler(IPC_CHANNELS.soundsList);
     ipcMain.removeHandler(IPC_CHANNELS.soundsUpsert);
     ipcMain.removeHandler(IPC_CHANNELS.soundsDelete);
@@ -247,4 +265,28 @@ export function createAppContext(options: AppContextOptions): () => void {
     ipcMain.removeHandler(IPC_CHANNELS.obsTestConnection);
     ipcMain.removeHandler(IPC_CHANNELS.chatGetRecent);
   };
+
+  async function speakWithOsFallback(text: string): Promise<void> {
+    if (process.platform === 'darwin') {
+      await execFile('say', [text]);
+      return;
+    }
+
+    if (process.platform === 'linux') {
+      await execFile('espeak', [text]);
+      return;
+    }
+
+    if (process.platform === 'win32') {
+      const escapedText = text.replace(/'/g, "''");
+      await execFile('powershell', [
+        '-NoProfile',
+        '-Command',
+        `Add-Type -AssemblyName System.Speech; $speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer; $speaker.Speak('${escapedText}')`,
+      ]);
+      return;
+    }
+
+    options.stateHub.pushVoiceSpeak({ text, lang: 'en-US' });
+  }
 }

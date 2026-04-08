@@ -8,6 +8,7 @@ import type {
   ObsStatsSnapshot,
   ProfilesSnapshot,
   RenameProfileInput,
+  RendererVoiceCapabilities,
   SoundCommand,
   SoundCommandDeleteInput,
   SoundCommandUpsertInput,
@@ -42,6 +43,7 @@ export const IPC_CHANNELS = {
   voiceDelete: 'voice:delete',
   voicePreviewSpeak: 'voice:preview-speak',
   voiceSpeak: 'voice:speak',
+  voiceSetRendererCapabilities: 'voice:set-renderer-capabilities',
   soundsList: 'sounds:list',
   soundsUpsert: 'sounds:upsert',
   soundsDelete: 'sounds:delete',
@@ -81,6 +83,7 @@ export interface CopilotApi {
   upsertVoiceCommand: (input: VoiceCommandUpsertInput) => Promise<VoiceCommand[]>;
   deleteVoiceCommand: (input: VoiceCommandDeleteInput) => Promise<VoiceCommand[]>;
   previewVoiceSpeak: (input: VoiceSpeakPayload) => Promise<void>;
+  setRendererVoiceCapabilities: (input: RendererVoiceCapabilities) => Promise<void>;
   onVoiceSpeak: (listener: (payload: VoiceSpeakPayload) => void) => () => void;
   listSoundCommands: () => Promise<SoundCommand[]>;
   upsertSoundCommand: (input: SoundCommandUpsertInput) => Promise<SoundCommand[]>;
