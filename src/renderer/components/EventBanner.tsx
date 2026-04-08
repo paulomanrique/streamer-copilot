@@ -6,6 +6,8 @@ const EVENT_LABELS: Record<StreamEvent['type'], string> = {
   superchat: 'Super Chat',
   raid: 'Raid',
   cheer: 'Cheer',
+  follow: 'Follow',
+  gift: 'Gift',
 };
 
 interface EventBannerProps {
@@ -37,6 +39,10 @@ function buildEventTitle(event: StreamEvent) {
       return `${event.author} raided with ${event.amount ?? 0} viewers`;
     case 'cheer':
       return `${event.author} cheered ${event.amount ?? 0} bits`;
+    case 'follow':
+      return `${event.author} followed`;
+    case 'gift':
+      return `${event.author} gifted ${event.amount ?? 1} subscription(s)`;
     default:
       return event.author;
   }

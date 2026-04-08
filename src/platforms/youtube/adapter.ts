@@ -145,25 +145,10 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
   async sendMessage(content: string): Promise<void> {
     const config = this.resolveConfig();
     if (!this.connected || this.mockMode || !this.client || !config.liveChatId) {
-      this.emitMessage({
-        platform: 'youtube',
-        author: config.mockAuthor ?? config.channelTitle ?? DEFAULT_MOCK_AUTHOR,
-        content,
-        badges: [],
-      });
-      return;
+      throw new Error('YouTube adapter is not connected to an active live chat');
     }
 
-    try {
-      await this.client.sendMessage({ liveChatId: config.liveChatId, messageText: content });
-    } catch {
-      this.emitMessage({
-        platform: 'youtube',
-        author: config.mockAuthor ?? config.channelTitle ?? DEFAULT_MOCK_AUTHOR,
-        content,
-        badges: [],
-      });
-    }
+    await this.client.sendMessage({ liveChatId: config.liveChatId, messageText: content });
   }
 
   private resolveConfig(): Required<Pick<YouTubeAdapterOptions, 'mockAuthor' | 'mockChannel'>> &

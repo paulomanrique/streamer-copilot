@@ -100,13 +100,7 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
       await this.client.say(channel, content);
       return;
     }
-
-    this.emitMessage({
-      platform: 'twitch',
-      author: this.options.mockAuthor ?? this.options.username ?? DEFAULT_MOCK_AUTHOR,
-      content,
-      badges: [],
-    });
+    throw new Error('Twitch adapter is not connected with send-capable credentials');
   }
 
   private async createClient(): Promise<TmiLikeClient | null> {

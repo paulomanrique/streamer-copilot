@@ -21,6 +21,9 @@ import { SoundCommandRepository } from '../modules/sounds/sound-repository.js';
 import { SoundService } from '../modules/sounds/sound-service.js';
 import { VoiceCommandRepository } from '../modules/voice/voice-repository.js';
 import { VoiceService } from '../modules/voice/voice-service.js';
+import { createKickChatAdapter } from '../platforms/kick/adapter.js';
+import { createTwitchChatAdapter } from '../platforms/twitch/adapter.js';
+import { createYouTubeChatAdapter } from '../platforms/youtube/adapter.js';
 import { APP_NAME } from '../shared/constants.js';
 import { IPC_CHANNELS } from '../shared/ipc.js';
 import {
@@ -87,6 +90,32 @@ export function createAppContext(options: AppContextOptions): () => void {
     onMessage: (message) => options.stateHub.pushChatMessage(message),
     onEvent: (event) => options.stateHub.pushChatEvent(event),
   });
+  chatService.registerAdapter(
+    createTwitchChatAdapter({
+      channels: readCsvEnv('TWITCH_CHANNELS') ?? readSingleValueAsArray(process.env.TWITCH_CHANNEL),
+      username: process.env.TWITCH_USERNAME ?? process.env.TWITCH_BOT_USERNAME,
+      password: process.env.TWITCH_OAUTH_TOKEN ?? process.env.TWITCH_PASSWORD,
+      mockAuthor: 'Streamer',
+    }),
+  );
+  chatService.registerAdapter(
+    createYouTubeChatAdapter({
+      liveChatId: process.env.YOUTUBE_LIVE_CHAT_ID,
+      accessToken: process.env.YOUTUBE_ACCESS_TOKEN,
+      refreshToken: process.env.YOUTUBE_REFRESH_TOKEN,
+      clientId: process.env.YOUTUBE_CLIENT_ID,
+      clientSecret: process.env.YOUTUBE_CLIENT_SECRET,
+      apiKey: process.env.YOUTUBE_API_KEY,
+      mockAuthor: 'YouTube',
+      mockChannel: process.env.YOUTUBE_CHANNEL_TITLE ?? 'YouTube',
+    }),
+  );
+  chatService.registerAdapter(
+    createKickChatAdapter({
+      channelSlug: process.env.KICK_CHANNEL_SLUG,
+      chatroomId: process.env.KICK_CHATROOM_ID,
+    }),
+  );
   const obsService = new ObsService({
     settingsStore: obsSettingsStore,
     onConnected: () => {
@@ -102,7 +131,11 @@ export function createAppContext(options: AppContextOptions): () => void {
   const soundsDirectory = path.join(options.userDataPath, 'sounds');
 
   schedulerService.start();
-  void chatService.connectAll();
+  void chatService.connectAll().catch((cause: unknown) => {
+    logService.warn('chat', 'Chat adapters failed to connect cleanly', {
+      error: cause instanceof Error ? cause.message : String(cause),
+    });
+  });
   obsService.start();
   logService.info('app', 'Application context initialized', {
     userDataPath: options.userDataPath,
@@ -337,5 +370,19 @@ export function createAppContext(options: AppContextOptions): () => void {
     }
 
     options.stateHub.pushVoiceSpeak({ text, lang: 'en-US' });
+  }
+
+  function readCsvEnv(value: string | undefined): string[] | undefined {
+    if (!value) return undefined;
+    const items = value
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+    return items.length > 0 ? items : undefined;
+  }
+
+  function readSingleValueAsArray(value: string | undefined): string[] | undefined {
+    if (!value?.trim()) return undefined;
+    return [value.trim()];
   }
 }

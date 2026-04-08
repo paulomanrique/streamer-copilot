@@ -33,7 +33,7 @@ export interface ChatMessage {
   timestampLabel: string;
 }
 
-export type StreamEventType = 'subscription' | 'superchat' | 'raid' | 'cheer';
+export type StreamEventType = 'subscription' | 'superchat' | 'raid' | 'cheer' | 'follow' | 'gift';
 
 export interface StreamEvent {
   id: string;
