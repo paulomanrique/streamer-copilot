@@ -6,17 +6,15 @@ interface AppHeaderProps {
   appInfo: AppInfo | null;
   currentSection: AppSection;
   onChangeSection: (section: AppSection) => void;
-  onOpenProfileSelector: () => void;
 }
 
-export function AppHeader({ appInfo, currentSection, onChangeSection, onOpenProfileSelector }: AppHeaderProps) {
+export function AppHeader({ appInfo, currentSection, onChangeSection }: AppHeaderProps) {
   return (
     <header style={styles.topBar}>
       <div style={styles.brandRow}>
         <div style={styles.brandBadge}>SC</div>
         <div>
           <h1 style={styles.topBarTitle}>{appInfo?.appName ?? 'Streamer Copilot'}</h1>
-          {appInfo ? <p style={styles.topBarMeta}>v{appInfo.appVersion} • Electron {appInfo.electronVersion}</p> : null}
         </div>
       </div>
 
@@ -30,13 +28,6 @@ export function AppHeader({ appInfo, currentSection, onChangeSection, onOpenProf
         </button>
         <button
           type="button"
-          style={currentSection === 'activity' ? styles.topNavButtonActive : styles.topNavButton}
-          onClick={() => onChangeSection('activity')}
-        >
-          Activity
-        </button>
-        <button
-          type="button"
           style={currentSection === 'settings' ? styles.topNavButtonActive : styles.topNavButton}
           onClick={() => onChangeSection('settings')}
         >
@@ -45,9 +36,6 @@ export function AppHeader({ appInfo, currentSection, onChangeSection, onOpenProf
       </nav>
 
       <div style={styles.topActions}>
-        <button type="button" style={styles.topGhostButton} onClick={onOpenProfileSelector}>
-          Profiles
-        </button>
         <button type="button" style={styles.liveButton}>
           Go Live
         </button>

@@ -1,6 +1,6 @@
 import { styles } from './app-styles.js';
 
-export type AppSection = 'dashboard' | 'activity' | 'settings';
+export type AppSection = 'dashboard' | 'settings';
 
 interface SectionTabsProps {
   currentSection: AppSection;
@@ -16,13 +16,6 @@ export function SectionTabs({ currentSection, onChangeSection }: SectionTabsProp
         onClick={() => onChangeSection('dashboard')}
       >
         Dashboard
-      </button>
-      <button
-        type="button"
-        style={currentSection === 'activity' ? styles.tabButtonActive : styles.tabButton}
-        onClick={() => onChangeSection('activity')}
-      >
-        Activity
       </button>
       <button
         type="button"

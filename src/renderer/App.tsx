@@ -1,26 +1,416 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+
+import type { AppInfo, GeneralSettings, PermissionLevel, ProfilesSnapshot, VoiceSpeakPayload } from '../shared/types.js';
+import { readSkipPromptPreference, shouldPromptProfileSelector } from './profile-startup.js';
+import { useAppStore } from './store.js';
+import { AppHeader } from './components/AppHeader.js';
+import { DashboardSummary } from './components/DashboardSummary.js';
+import { ProfileFormModal } from './components/ProfileFormModal.js';
+import { ProfileSelectorModal } from './components/ProfileSelectorModal.js';
+import type { AppSection } from './components/SectionTabs.js';
+import { StatusMessages } from './components/StatusMessages.js';
+import { ToastStack, type ToastItem } from './components/ToastStack.js';
+import { SettingsWorkspace } from './pages/SettingsWorkspace.js';
+import { styles } from './components/app-styles.js';
+
+const SKIP_PROFILE_SELECTOR_KEY = 'streamerCopilot.skipProfileSelector';
+const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
+  startOnLogin: false,
+  minimizeToTray: true,
+  eventNotifications: true,
+};
+
+type ProfileFormMode = 'create' | 'rename' | 'clone';
+
 export default function App() {
+  const {
+    profiles,
+    activeProfileId,
+    chatMessages,
+    chatEvents,
+    obsStats,
+    setProfiles,
+    setObsStats,
+    setChatSnapshot,
+    appendChatMessage,
+    appendChatEvent,
+  } = useAppStore();
+  const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isProfileSelectorOpen, setIsProfileSelectorOpen] = useState(false);
+  const [isProfileFormOpen, setIsProfileFormOpen] = useState(false);
+  const [profileFormMode, setProfileFormMode] = useState<ProfileFormMode>('create');
+  const [profileFormName, setProfileFormName] = useState('');
+  const [profileFormDirectory, setProfileFormDirectory] = useState('');
+  const [selectorProfileId, setSelectorProfileId] = useState('');
+  const [skipPromptAgain, setSkipPromptAgain] = useState(false);
+  const [currentSection, setCurrentSection] = useState<AppSection>('dashboard');
+  const [generalSettings, setGeneralSettings] = useState<GeneralSettings>(DEFAULT_GENERAL_SETTINGS);
+  const [languageCode, setLanguageCode] = useState('en-US');
+  const [permissionLevels, setPermissionLevels] = useState<PermissionLevel[]>(['everyone', 'moderator']);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [voiceRate, setVoiceRate] = useState(1);
+  const [voiceVolume, setVoiceVolume] = useState(0.8);
+  const activeSoundsRef = useRef<HTMLAudioElement[]>([]);
+
+  const activeProfile = useMemo(
+    () => profiles.find((profile) => profile.id === activeProfileId) ?? null,
+    [profiles, activeProfileId],
+  );
+
+  const pushError = (message: string) => {
+    const toastId = Date.now() + Math.floor(Math.random() * 1000);
+    setError(message);
+    setToasts((current) => [...current, { id: toastId, title: 'Renderer error', message }]);
+  };
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [info, snapshot, recentChat, nextGeneralSettings] = await Promise.all([
+          window.copilot.getAppInfo(),
+          window.copilot.listProfiles(),
+          window.copilot.getRecentChat(),
+          window.copilot.getGeneralSettings(),
+        ]);
+        setAppInfo(info);
+        setProfiles(snapshot);
+        setChatSnapshot(recentChat);
+        setGeneralSettings(nextGeneralSettings);
+        setSelectorProfileId(snapshot.activeProfileId);
+        const skipPreference = readSkipPromptPreference(localStorage.getItem(SKIP_PROFILE_SELECTOR_KEY));
+        setSkipPromptAgain(skipPreference);
+        setIsProfileSelectorOpen(
+          shouldPromptProfileSelector({
+            forceOpen: snapshot.profiles.length === 0,
+            skipPromptPreference: skipPreference,
+          }),
+        );
+      } catch (cause) {
+        pushError(cause instanceof Error ? cause.message : 'Failed to load initial data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    void load();
+  }, [setChatSnapshot, setProfiles]);
+
+  useEffect(() => {
+    if (toasts.length === 0) return undefined;
+
+    const timerId = window.setTimeout(() => {
+      setToasts((current) => current.slice(1));
+    }, 4000);
+
+    return () => window.clearTimeout(timerId);
+  }, [toasts]);
+
+  useEffect(() => {
+    void window.copilot.setRendererVoiceCapabilities({
+      speechSynthesisAvailable:
+        'speechSynthesis' in window && typeof window.SpeechSynthesisUtterance === 'function',
+    });
+  }, []);
+
+  useEffect(() => {
+    const speak = (payload: VoiceSpeakPayload) => {
+      if (!('speechSynthesis' in window) || typeof window.SpeechSynthesisUtterance !== 'function') {
+        pushError('Speech synthesis is not available in this renderer');
+        return;
+      }
+
+      const utterance = new window.SpeechSynthesisUtterance(payload.text);
+      utterance.lang = payload.lang || languageCode;
+      utterance.rate = voiceRate;
+      utterance.volume = voiceVolume;
+      window.speechSynthesis.speak(utterance);
+    };
+
+    return window.copilot.onVoiceSpeak(speak);
+  }, [languageCode, voiceRate, voiceVolume]);
+
+  useEffect(() => {
+    const play = (payload: { filePath: string }) => {
+      const source = payload.filePath.startsWith('file://') ? payload.filePath : `file://${payload.filePath}`;
+      const audio = new Audio(encodeURI(source));
+      audio.preload = 'auto';
+      audio.volume = 1;
+      activeSoundsRef.current = [...activeSoundsRef.current, audio];
+
+      const cleanup = () => {
+        activeSoundsRef.current = activeSoundsRef.current.filter((item) => item !== audio);
+      };
+
+      audio.addEventListener('ended', cleanup, { once: true });
+      audio.addEventListener(
+        'error',
+        () => {
+          cleanup();
+          pushError(`Failed to play sound file: ${payload.filePath}`);
+        },
+        { once: true },
+      );
+
+      void audio.play().catch(() => {
+        cleanup();
+        pushError(`Failed to play sound file: ${payload.filePath}`);
+      });
+    };
+
+    return window.copilot.onSoundPlay(play);
+  }, []);
+
+  useEffect(() => {
+    const disconnectStats = window.copilot.onObsStats((stats) => {
+      setObsStats(stats);
+    });
+    const disconnectConnected = window.copilot.onObsConnected(() => {
+      setObsStats((current) => ({ ...current, connected: true }));
+    });
+    const disconnectDisconnected = window.copilot.onObsDisconnected(() => {
+      setObsStats((current) => ({ ...current, connected: false }));
+    });
+
+    return () => {
+      disconnectStats();
+      disconnectConnected();
+      disconnectDisconnected();
+    };
+  }, [setObsStats]);
+
+  useEffect(() => {
+    const disconnectMessage = window.copilot.onChatMessage((message) => {
+      appendChatMessage(message);
+    });
+    const disconnectEvent = window.copilot.onChatEvent((event) => {
+      appendChatEvent(event);
+    });
+
+    return () => {
+      disconnectMessage();
+      disconnectEvent();
+    };
+  }, [appendChatEvent, appendChatMessage]);
+
+  const onSelectProfile = async (profileId: string) => {
+    try {
+      const snapshot = await window.copilot.selectProfile({ profileId });
+      setProfiles(snapshot);
+      setSelectorProfileId(snapshot.activeProfileId);
+      setError(null);
+      return snapshot;
+    } catch (cause) {
+      pushError(cause instanceof Error ? cause.message : 'Failed to select profile');
+      return null;
+    }
+  };
+
+  const applyProfilesSnapshot = (snapshot: ProfilesSnapshot) => {
+    setProfiles(snapshot);
+    setSelectorProfileId(snapshot.activeProfileId);
+  };
+
+  const createProfile = async (name: string, directory: string) => {
+    try {
+      const snapshot = await window.copilot.createProfile({ name: name.trim(), directory });
+      applyProfilesSnapshot(snapshot);
+      setSelectorProfileId(snapshot.activeProfileId);
+      setIsProfileFormOpen(false);
+      setProfileFormDirectory('');
+      setProfileFormName('');
+      setError(null);
+    } catch (cause) {
+      pushError(cause instanceof Error ? cause.message : 'Failed to create profile');
+      throw cause;
+    }
+  };
+
+  const renameActiveProfile = async (name: string) => {
+    if (!activeProfileId) return;
+
+    try {
+      const snapshot = await window.copilot.renameProfile({ profileId: activeProfileId, name: name.trim() });
+      applyProfilesSnapshot(snapshot);
+      setIsProfileFormOpen(false);
+      setProfileFormName('');
+      setError(null);
+    } catch (cause) {
+      pushError(cause instanceof Error ? cause.message : 'Failed to rename profile');
+      throw cause;
+    }
+  };
+
+  const cloneActiveProfile = async (name: string, directory: string) => {
+    if (!activeProfileId) return;
+
+    try {
+      const snapshot = await window.copilot.cloneProfile({
+        profileId: activeProfileId,
+        name: name.trim(),
+        directory,
+      });
+      applyProfilesSnapshot(snapshot);
+      setIsProfileFormOpen(false);
+      setProfileFormDirectory('');
+      setProfileFormName('');
+      setError(null);
+    } catch (cause) {
+      pushError(cause instanceof Error ? cause.message : 'Failed to clone profile');
+      throw cause;
+    }
+  };
+
+  const deleteActiveProfile = async () => {
+    if (!activeProfileId) return;
+    const current = profiles.find((profile) => profile.id === activeProfileId);
+    const confirmed = confirm(`Delete profile "${current?.name ?? activeProfileId}"?`);
+    if (!confirmed) return;
+
+    try {
+      const snapshot = await window.copilot.deleteProfile({ profileId: activeProfileId });
+      applyProfilesSnapshot(snapshot);
+      setError(null);
+    } catch (cause) {
+      pushError(cause instanceof Error ? cause.message : 'Failed to delete profile');
+    }
+  };
+
+  const openCreateProfileModal = () => {
+    setProfileFormMode('create');
+    setProfileFormName('');
+    setProfileFormDirectory('');
+    setIsProfileFormOpen(true);
+  };
+
+  const openRenameProfileModal = () => {
+    if (!activeProfile) return;
+    setProfileFormMode('rename');
+    setProfileFormName(activeProfile.name);
+    setProfileFormDirectory('');
+    setIsProfileFormOpen(true);
+  };
+
+  const openCloneProfileModal = () => {
+    if (!activeProfile) return;
+    setProfileFormMode('clone');
+    setProfileFormName(`${activeProfile.name} copy`);
+    setProfileFormDirectory('');
+    setIsProfileFormOpen(true);
+  };
+
+  const pickProfileDirectory = async () => {
+    const directory = await window.copilot.pickProfileDirectory();
+    if (!directory) return;
+    setProfileFormDirectory(directory);
+  };
+
+  const submitProfileForm = async (name: string) => {
+    if (profileFormMode === 'create') {
+      await createProfile(name, profileFormDirectory);
+      return;
+    }
+
+    if (profileFormMode === 'rename') {
+      await renameActiveProfile(name);
+      return;
+    }
+
+    await cloneActiveProfile(name, profileFormDirectory);
+  };
+
+  const confirmProfileSelector = async () => {
+    const targetProfileId = selectorProfileId || activeProfileId;
+    if (!targetProfileId) return;
+
+    const selected = await onSelectProfile(targetProfileId);
+    if (!selected) return;
+
+    if (skipPromptAgain) localStorage.setItem(SKIP_PROFILE_SELECTOR_KEY, '1');
+    else localStorage.removeItem(SKIP_PROFILE_SELECTOR_KEY);
+
+    setIsProfileSelectorOpen(false);
+  };
+
+  const activeProfileName = activeProfile?.name ?? '-';
+
+  const saveGeneralSettings = async (settings: GeneralSettings) => {
+    try {
+      const saved = await window.copilot.saveGeneralSettings(settings);
+      setGeneralSettings(saved);
+      setError(null);
+    } catch (cause) {
+      pushError(cause instanceof Error ? cause.message : 'Failed to save general settings');
+      throw cause;
+    }
+  };
+
   return (
-    <main
-      style={{
-        width: '100vw',
-        height: '100vh',
-        margin: 0,
-        padding: 0,
-        overflow: 'hidden',
-        background: '#030712',
-      }}
-    >
-      <iframe
-        title="Streamer Copilot Mock"
-        src="/mockup/index.html"
-        style={{
-          width: '100%',
-          height: '100%',
-          border: 'none',
-          display: 'block',
-          background: '#030712',
-        }}
+    <main style={styles.page}>
+      <section style={styles.card}>
+        <AppHeader appInfo={appInfo} currentSection={currentSection} onChangeSection={setCurrentSection} />
+
+        <StatusMessages isLoading={isLoading} error={error} />
+
+        {currentSection === 'dashboard' ? (
+          <DashboardSummary
+            activeProfileName={activeProfileName}
+            chatEvents={chatEvents}
+            chatMessages={chatMessages}
+            obsStats={obsStats}
+          />
+        ) : null}
+
+        {currentSection === 'settings' ? (
+          <SettingsWorkspace
+            activeProfileId={activeProfileId}
+            activeProfileName={activeProfileName}
+            profiles={profiles}
+            onCreateProfile={openCreateProfileModal}
+            onRenameProfile={openRenameProfileModal}
+            onCloneProfile={openCloneProfileModal}
+            onDeleteProfile={() => void deleteActiveProfile()}
+            onSelectProfile={(profileId) => void onSelectProfile(profileId)}
+            generalSettings={generalSettings}
+            onSaveGeneralSettings={saveGeneralSettings}
+            languageCode={languageCode}
+            permissionLevels={permissionLevels}
+            onChangeLanguageCode={setLanguageCode}
+            onChangePermissionLevels={setPermissionLevels}
+            voiceRate={voiceRate}
+            voiceVolume={voiceVolume}
+            onChangeVoiceRate={setVoiceRate}
+            onChangeVoiceVolume={setVoiceVolume}
+            obsStats={obsStats}
+          />
+        ) : null}
+      </section>
+
+      <ProfileSelectorModal
+        open={isProfileSelectorOpen}
+        profiles={profiles}
+        selectorProfileId={selectorProfileId}
+        skipPromptAgain={skipPromptAgain}
+        onChangeProfileId={setSelectorProfileId}
+        onChangeSkipPromptAgain={setSkipPromptAgain}
+        onCreateProfile={openCreateProfileModal}
+        onConfirm={() => void confirmProfileSelector()}
       />
+
+      <ProfileFormModal
+        open={isProfileFormOpen}
+        mode={profileFormMode}
+        initialName={profileFormName}
+        requireDirectory={profileFormMode !== 'rename'}
+        selectedDirectory={profileFormDirectory}
+        onChangeSelectedDirectory={setProfileFormDirectory}
+        onPickDirectory={pickProfileDirectory}
+        onClose={() => setIsProfileFormOpen(false)}
+        onSubmit={submitProfileForm}
+      />
+
+      <ToastStack toasts={toasts} />
     </main>
   );
 }
