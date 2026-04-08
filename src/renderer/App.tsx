@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { AppInfo } from '../shared/types.js';
+import type { AppInfo, ProfilesSnapshot } from '../shared/types.js';
 import { readSkipPromptPreference, shouldPromptProfileSelector } from './profile-startup.js';
 import { useAppStore } from './store.js';
 
@@ -58,6 +58,77 @@ export default function App() {
     }
   };
 
+  const applyProfilesSnapshot = (snapshot: ProfilesSnapshot) => {
+    setProfiles(snapshot);
+    setSelectorProfileId(snapshot.activeProfileId);
+  };
+
+  const createProfile = async () => {
+    const name = prompt('Nome do novo perfil:');
+    if (!name?.trim()) return;
+    const directory = await window.copilot.pickProfileDirectory();
+    if (!directory) return;
+
+    try {
+      const snapshot = await window.copilot.createProfile({ name: name.trim(), directory });
+      applyProfilesSnapshot(snapshot);
+      setError(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Falha ao criar perfil');
+    }
+  };
+
+  const renameActiveProfile = async () => {
+    if (!activeProfileId) return;
+    const current = profiles.find((profile) => profile.id === activeProfileId);
+    const name = prompt('Novo nome do perfil:', current?.name ?? '');
+    if (!name?.trim()) return;
+
+    try {
+      const snapshot = await window.copilot.renameProfile({ profileId: activeProfileId, name: name.trim() });
+      applyProfilesSnapshot(snapshot);
+      setError(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Falha ao renomear perfil');
+    }
+  };
+
+  const cloneActiveProfile = async () => {
+    if (!activeProfileId) return;
+    const current = profiles.find((profile) => profile.id === activeProfileId);
+    const name = prompt('Nome do perfil clonado:', `${current?.name ?? 'Perfil'} (cópia)`);
+    if (!name?.trim()) return;
+    const directory = await window.copilot.pickProfileDirectory();
+    if (!directory) return;
+
+    try {
+      const snapshot = await window.copilot.cloneProfile({
+        profileId: activeProfileId,
+        name: name.trim(),
+        directory,
+      });
+      applyProfilesSnapshot(snapshot);
+      setError(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Falha ao clonar perfil');
+    }
+  };
+
+  const deleteActiveProfile = async () => {
+    if (!activeProfileId) return;
+    const current = profiles.find((profile) => profile.id === activeProfileId);
+    const confirmed = confirm(`Apagar perfil "${current?.name ?? activeProfileId}"?`);
+    if (!confirmed) return;
+
+    try {
+      const snapshot = await window.copilot.deleteProfile({ profileId: activeProfileId });
+      applyProfilesSnapshot(snapshot);
+      setError(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Falha ao apagar perfil');
+    }
+  };
+
   const openProfileSelector = () => {
     setSelectorProfileId(activeProfileId);
     setSkipPromptAgain(readSkipPromptPreference(localStorage.getItem(SKIP_PROFILE_SELECTOR_KEY)));
@@ -96,6 +167,20 @@ export default function App() {
             <h2 style={styles.subtitle}>Perfis</h2>
             <button type="button" style={styles.secondaryButton} onClick={openProfileSelector}>
               Trocar Perfil
+            </button>
+          </div>
+          <div style={styles.actionsRow}>
+            <button type="button" style={styles.secondaryButton} onClick={() => void createProfile()}>
+              Novo
+            </button>
+            <button type="button" style={styles.secondaryButton} onClick={() => void renameActiveProfile()}>
+              Renomear
+            </button>
+            <button type="button" style={styles.secondaryButton} onClick={() => void cloneActiveProfile()}>
+              Clonar
+            </button>
+            <button type="button" style={styles.dangerButton} onClick={() => void deleteActiveProfile()}>
+              Apagar
             </button>
           </div>
           <p style={styles.message}>Perfil ativo: {activeProfile?.name ?? '—'}</p>
@@ -246,6 +331,22 @@ const styles: Record<string, React.CSSProperties> = {
     background: '#1f2937',
     border: '1px solid #374151',
     color: '#e5e7eb',
+    borderRadius: '8px',
+    padding: '8px 10px',
+    cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: 600,
+  },
+  actionsRow: {
+    marginTop: '12px',
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px',
+  },
+  dangerButton: {
+    background: '#3f1d2e',
+    border: '1px solid #7f1d1d',
+    color: '#fecaca',
     borderRadius: '8px',
     padding: '8px 10px',
     cursor: 'pointer',

@@ -21,3 +21,23 @@ export interface ProfilesSnapshot {
 export interface SelectProfileInput {
   profileId: string;
 }
+
+export interface CreateProfileInput {
+  name: string;
+  directory: string;
+}
+
+export interface RenameProfileInput {
+  profileId: string;
+  name: string;
+}
+
+export interface CloneProfileInput {
+  profileId: string;
+  name: string;
+  directory: string;
+}
+
+export interface DeleteProfileInput {
+  profileId: string;
+}
