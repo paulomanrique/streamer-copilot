@@ -156,22 +156,28 @@
               <span class="text-xs text-gray-500">Cena: <span id="obs-scene" class="text-gray-300">Gameplay</span></span>
             </div>
 
-            <div class="grid grid-cols-3 gap-2">
+            <div class="grid grid-cols-4 gap-2">
+              <!-- Row 1: Tempo + dropped frames -->
               <div class="bg-gray-800/60 rounded-lg p-2.5 text-center">
-                <div class="text-lg font-mono font-bold text-violet-400" id="obs-time">00:00:00</div>
+                <div class="text-base font-mono font-bold text-violet-400" id="obs-time">00:00:00</div>
                 <div class="text-xs text-gray-500 mt-0.5">Tempo</div>
               </div>
               <div class="bg-gray-800/60 rounded-lg p-2.5 text-center">
-                <div class="text-base font-mono font-bold text-yellow-400" id="obs-cpu">0%</div>
-                <div class="text-xs text-gray-500 mt-0.5">CPU</div>
+                <div class="text-base font-mono font-bold text-red-400" id="obs-dropped-net">0</div>
+                <div class="text-xs text-gray-500 mt-0.5 leading-tight">Frames<br>perdidos (rede)</div>
               </div>
               <div class="bg-gray-800/60 rounded-lg p-2.5 text-center">
-                <div class="text-base font-mono font-bold text-orange-400" id="obs-memory">0 GB</div>
-                <div class="text-xs text-gray-500 mt-0.5">RAM</div>
+                <div class="text-base font-mono font-bold text-orange-400" id="obs-dropped-enc">0</div>
+                <div class="text-xs text-gray-500 mt-0.5 leading-tight">Frames<br>perdidos (enc.)</div>
               </div>
-              <!-- Connection quality — full width row -->
-              <div class="col-span-3 bg-gray-800/60 rounded-lg px-3 py-2 flex items-center gap-3">
-                <div class="flex items-center gap-1.5">
+              <div class="bg-gray-800/60 rounded-lg p-2.5 text-center">
+                <div class="text-base font-mono font-bold text-yellow-400" id="obs-dropped-render">0</div>
+                <div class="text-xs text-gray-500 mt-0.5 leading-tight">Frames<br>perdidos (render)</div>
+              </div>
+
+              <!-- Row 2: Connection quality bar -->
+              <div class="col-span-4 bg-gray-800/60 rounded-lg px-3 py-2 flex items-center gap-3">
+                <div class="flex items-center gap-1.5 shrink-0">
                   <span class="text-xs text-gray-500">Conexão</span>
                   <span id="obs-conn-quality" class="text-xs font-semibold text-green-400">● Boa</span>
                 </div>
@@ -180,18 +186,35 @@
                 </div>
                 <span id="obs-conn-pct" class="text-xs font-mono text-gray-300">97%</span>
               </div>
-              <!-- Dropped frames split -->
-              <div class="bg-gray-800/60 rounded-lg p-2.5 text-center">
-                <div class="text-base font-mono font-bold text-red-400" id="obs-dropped-net">0</div>
-                <div class="text-xs text-gray-500 mt-0.5 leading-tight">Frames<br>Perdidos (rede)</div>
-              </div>
-              <div class="bg-gray-800/60 rounded-lg p-2.5 text-center">
-                <div class="text-base font-mono font-bold text-orange-400" id="obs-dropped-enc">0</div>
-                <div class="text-xs text-gray-500 mt-0.5 leading-tight">Frames<br>Perdidos (enc.)</div>
-              </div>
-              <div class="bg-gray-800/60 rounded-lg p-2.5 text-center">
-                <div class="text-base font-mono font-bold text-yellow-400" id="obs-dropped-render">0</div>
-                <div class="text-xs text-gray-500 mt-0.5 leading-tight">Frames<br>Perdidos (render)</div>
+
+              <!-- Row 3: Viewers per platform -->
+              <div class="col-span-4 grid grid-cols-3 gap-2">
+                <div class="bg-purple-500/10 border border-purple-500/20 rounded-lg p-2.5 text-center">
+                  <div class="flex items-center justify-center gap-1 mb-0.5">
+                    <svg class="w-3 h-3 text-purple-400" viewBox="0 0 24 24" fill="currentColor"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"/></svg>
+                    <span class="text-xs text-purple-400">Twitch</span>
+                  </div>
+                  <div class="text-base font-mono font-bold text-purple-300" id="viewers-twitch">1.247</div>
+                  <div class="text-xs text-gray-500 mt-0.5">viewers</div>
+                </div>
+                <div class="bg-red-500/10 border border-red-500/20 rounded-lg p-2.5 text-center">
+                  <div class="flex items-center justify-center gap-1 mb-0.5">
+                    <svg class="w-3 h-3 text-red-400" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
+                    <span class="text-xs text-red-400">YouTube</span>
+                  </div>
+                  <div class="text-base font-mono font-bold text-red-300" id="viewers-youtube">834</div>
+                  <div class="text-xs text-gray-500 mt-0.5">
+                    viewers · <span class="text-pink-400" id="likes-youtube">2.1k</span> likes
+                  </div>
+                </div>
+                <div class="bg-green-500/10 border border-green-500/20 rounded-lg p-2.5 text-center">
+                  <div class="flex items-center justify-center gap-1 mb-0.5">
+                    <svg class="w-3 h-3 text-green-400" viewBox="0 0 24 24" fill="currentColor"><path d="M2 2h4v8l4-4h4l-6 6 6 6h-4l-4-4v4H2V2zm14 0h4v20h-4z"/></svg>
+                    <span class="text-xs text-green-400">Kick</span>
+                  </div>
+                  <div class="text-base font-mono font-bold text-green-300" id="viewers-kick">392</div>
+                  <div class="text-xs text-gray-500 mt-0.5">viewers</div>
+                </div>
               </div>
             </div>
           </div>
@@ -836,10 +859,15 @@
 
   const MOCK_OBS_STATS = {
     scene: 'Gameplay', streaming: true, streamTime: '01:23:47',
-    cpuUsage: 18.4, memoryUsage: 2340,
     outputSkippedFrames: 8,  outputTotalFrames: 298800,
     encoderSkippedFrames: 4, encoderTotalFrames: 298800,
     renderSkippedFrames: 0,  renderTotalFrames: 298800,
+  };
+
+  const MOCK_PLATFORM_STATS = {
+    twitch:  { viewers: 1247 },
+    youtube: { viewers: 834, likes: 2100 },
+    kick:    { viewers: 392 },
   };
 
   const MOCK_SOUND_COMMANDS = [
@@ -1032,12 +1060,18 @@
 
   function initObsStats() {
     const s   = MOCK_OBS_STATS;
+    const ps  = MOCK_PLATFORM_STATS;
     const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
     set('obs-scene',  s.scene);
     set('obs-time',   s.streamTime);
-    set('obs-cpu',    `${s.cpuUsage.toFixed(1)}%`);
-    set('obs-memory', `${(s.memoryUsage / 1024).toFixed(1)} GB`);
     set('obs-status', s.streaming ? '🔴 AO VIVO' : '⚫ Offline');
+
+    // Viewer counts
+    const fmt = n => n >= 1000 ? `${(n/1000).toFixed(1)}k` : String(n);
+    set('viewers-twitch',  fmt(ps.twitch.viewers));
+    set('viewers-youtube', fmt(ps.youtube.viewers));
+    set('likes-youtube',   fmt(ps.youtube.likes));
+    set('viewers-kick',    fmt(ps.kick.viewers));
 
     const connPct   = s.outputTotalFrames > 0 ? (1 - s.outputSkippedFrames / s.outputTotalFrames) * 100 : 100;
     const connColor = connPct >= 95 ? 'green' : connPct >= 80 ? 'yellow' : 'red';
