@@ -25,6 +25,7 @@
     "rebuild:native": "electron-rebuild -f -w better-sqlite3"
   },
   "dependencies": {
+    "@nekiro/kick-api": "^2.1.2",
     "better-sqlite3": "^12.4.1",
     "electron-updater": "^6.8.3",
     "googleapis": "^171.4.0",

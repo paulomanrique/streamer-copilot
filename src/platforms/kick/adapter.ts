@@ -14,6 +14,8 @@ export interface KickChatAdapterOptions {
   apiBaseUrl?: string;
   pusherAppKey?: string;
   pusherCluster?: string;
+  clientId?: string;
+  clientSecret?: string;
   fetchFn?: typeof fetch;
 }
 
@@ -131,8 +133,17 @@ export class KickChatAdapter implements PlatformChatAdapter {
     this.pusher = null;
   }
 
-  async sendMessage(_content: string): Promise<void> {
-    throw new Error('Kick adapter sendMessage is not implemented yet');
+  async sendMessage(content: string): Promise<void> {
+    if (!this.connected) {
+      throw new Error('Kick adapter is not connected to a live chatroom');
+    }
+
+    const client = await this.createSendClient();
+    if (!client) {
+      throw new Error('Kick adapter is missing bot credentials for chat posting');
+    }
+
+    await client.postMessage(content);
   }
 
   onMessage(handler: (message: ChatMessage) => void): () => void {
@@ -158,6 +169,32 @@ export class KickChatAdapter implements PlatformChatAdapter {
         forceTLS: true,
         enableStats: false,
       });
+    } catch {
+      return null;
+    }
+  }
+
+  private async createSendClient(): Promise<{ postMessage: (content: string) => Promise<void> } | null> {
+    if (!this.options.clientId || !this.options.clientSecret) return null;
+
+    try {
+      const importer = new Function('return import("@nekiro/kick-api")') as () => Promise<{
+        client?: new (options: { clientId: string; clientSecret: string }) => {
+          chat: { postMessage: (input: { type: 'bot'; content: string }) => Promise<void> };
+        };
+      }>;
+      const module = await importer();
+      const KickClient = module.client;
+      if (typeof KickClient !== 'function') return null;
+      const kickClient = new KickClient({
+        clientId: this.options.clientId,
+        clientSecret: this.options.clientSecret,
+      });
+      return {
+        postMessage: async (content: string) => {
+          await kickClient.chat.postMessage({ type: 'bot', content });
+        },
+      };
     } catch {
       return null;
     }

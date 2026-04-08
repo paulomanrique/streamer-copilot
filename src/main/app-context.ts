@@ -122,6 +122,8 @@ export function createAppContext(options: AppContextOptions): () => void {
     createKickChatAdapter({
       channelSlug: process.env.KICK_CHANNEL_SLUG,
       chatroomId: process.env.KICK_CHATROOM_ID,
+      clientId: process.env.KICK_CLIENT_ID,
+      clientSecret: process.env.KICK_CLIENT_SECRET,
     }),
   );
   const obsService = new ObsService({
