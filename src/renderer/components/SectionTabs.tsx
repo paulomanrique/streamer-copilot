@@ -22,7 +22,7 @@ export function SectionTabs({ currentSection, onChangeSection }: SectionTabsProp
         style={currentSection === 'settings' ? styles.tabButtonActive : styles.tabButton}
         onClick={() => onChangeSection('settings')}
       >
-        Configurações
+        Settings
       </button>
     </nav>
   );

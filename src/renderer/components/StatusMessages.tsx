@@ -8,7 +8,7 @@ interface StatusMessagesProps {
 export function StatusMessages({ isLoading, error }: StatusMessagesProps) {
   return (
     <>
-      {isLoading ? <p style={styles.message}>Carregando...</p> : null}
+      {isLoading ? <p style={styles.message}>Loading...</p> : null}
       {error ? <p style={styles.error}>{error}</p> : null}
     </>
   );

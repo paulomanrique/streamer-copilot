@@ -25,10 +25,10 @@ export function ProfileSelectorModal({
   return (
     <div style={styles.modalOverlay}>
       <section style={styles.modalCard}>
-        <h2 style={styles.modalTitle}>Selecionar Perfil</h2>
+        <h2 style={styles.modalTitle}>Select Profile</h2>
 
         <label style={styles.label}>
-          Perfil
+          Profile
           <select
             value={selectorProfileId}
             style={styles.select}
@@ -48,12 +48,12 @@ export function ProfileSelectorModal({
             checked={skipPromptAgain}
             onChange={(event) => onChangeSkipPromptAgain(event.target.checked)}
           />
-          Não me pergunte novamente
+          Do not ask me again
         </label>
 
         <div style={styles.modalActions}>
           <button type="button" style={styles.primaryButton} onClick={onConfirm}>
-            Entrar com perfil
+            Continue with profile
           </button>
         </div>
       </section>

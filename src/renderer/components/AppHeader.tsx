@@ -19,7 +19,7 @@ export function AppHeader({ appInfo, onOpenProfileSelector }: AppHeaderProps) {
       </div>
 
       <button type="button" style={styles.secondaryButton} onClick={onOpenProfileSelector}>
-        Trocar Perfil
+        Switch Profile
       </button>
     </header>
   );

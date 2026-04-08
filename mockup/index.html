@@ -72,7 +72,7 @@
       <button data-nav="settings" onclick="showSection('settings')"
         class="flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition-colors text-gray-400 hover:text-white">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
-        Configurações
+        Settings
       </button>
     </nav>
 
@@ -97,7 +97,7 @@
           <!-- Chat header -->
           <div class="flex items-center justify-between px-4 py-2 border-b border-gray-800 shrink-0">
             <div class="flex items-center gap-2">
-              <h2 class="text-sm font-semibold text-gray-200">Chat Unificado</h2>
+              <h2 class="text-sm font-semibold text-gray-200">Unified Chat</h2>
               <div class="inline-flex items-center bg-gray-800 border border-gray-700 rounded-lg p-0.5 text-xs">
                 <button id="chat-mode-all" onclick="setChatFeedMode('all')"
                   class="px-2 py-1 rounded bg-violet-600 text-white transition-colors">
@@ -112,29 +112,34 @@
             <div class="flex items-center gap-1.5 text-xs">
               <!-- Platform filter toggles -->
               <button data-platform-filter="twitch" onclick="togglePlatformFilter('twitch')"
-                title="Mostrar/ocultar mensagens do Twitch"
-                class="flex items-center gap-1.5 px-2 py-1 rounded bg-purple-500/20 text-purple-300 hover:opacity-90 transition-all">
-                <span class="w-2 h-2 rounded-full bg-purple-500"></span> Twitch
+                title="Show/hide Twitch messages"
+                aria-label="Twitch"
+                class="flex items-center justify-center w-8 h-8 rounded bg-purple-500/20 text-purple-300 hover:opacity-90 transition-all">
+                <svg class="w-3.5 h-3.5" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"/></svg>
               </button>
               <button data-platform-filter="youtube" onclick="togglePlatformFilter('youtube')"
-                title="Mostrar/ocultar mensagens do YouTube"
-                class="flex items-center gap-1.5 px-2 py-1 rounded bg-red-500/20 text-red-300 hover:opacity-90 transition-all">
-                <span class="w-2 h-2 rounded-full bg-red-500"></span> YouTube
+                title="Show/hide YouTube messages"
+                aria-label="YouTube Horizontal"
+                class="flex items-center justify-center w-8 h-8 rounded bg-red-500/20 text-red-300 hover:opacity-90 transition-all">
+                <svg class="w-3.5 h-3.5" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
               </button>
               <button data-platform-filter="youtube-v" onclick="togglePlatformFilter('youtube-v')"
-                title="Mostrar/ocultar mensagens do YouTube Vertical"
-                class="flex items-center gap-1.5 px-2 py-1 rounded bg-rose-400/20 text-rose-300 hover:opacity-90 transition-all">
-                <span class="w-2 h-2 rounded-full bg-rose-400"></span> YT Vert.
+                title="Show/hide YouTube Vertical messages"
+                aria-label="YouTube Vertical"
+                class="flex items-center justify-center w-8 h-8 rounded bg-rose-400/20 text-rose-300 hover:opacity-90 transition-all">
+                <svg class="w-3.5 h-3.5" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
               </button>
               <button data-platform-filter="kick" onclick="togglePlatformFilter('kick')"
-                title="Mostrar/ocultar mensagens do Kick"
-                class="flex items-center gap-1.5 px-2 py-1 rounded bg-green-500/20 text-green-300 hover:opacity-90 transition-all">
-                <span class="w-2 h-2 rounded-full bg-green-500"></span> Kick
+                title="Show/hide Kick messages"
+                aria-label="Kick"
+                class="flex items-center justify-center w-8 h-8 rounded bg-green-500/20 text-green-300 hover:opacity-90 transition-all">
+                <svg class="w-3.5 h-3.5" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M2 2h4v8l4-4h4l-6 6 6 6h-4l-4-4v4H2V2zm14 0h4v20h-4z"/></svg>
               </button>
               <button data-platform-filter="tiktok" onclick="togglePlatformFilter('tiktok')"
-                title="Mostrar/ocultar mensagens do TikTok"
-                class="flex items-center gap-1.5 px-2 py-1 rounded bg-pink-500/20 text-pink-300 hover:opacity-90 transition-all">
-                <span class="w-2 h-2 rounded-full bg-pink-500"></span> TikTok
+                title="Show/hide TikTok messages"
+                aria-label="TikTok"
+                class="flex items-center justify-center w-8 h-8 rounded bg-pink-500/20 text-pink-300 hover:opacity-90 transition-all">
+                <svg class="w-3.5 h-3.5" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.67a8.17 8.17 0 0 0 4.79 1.53V6.75a4.85 4.85 0 0 1-1.02-.06z"/></svg>
               </button>
             </div>
           </div>
@@ -154,7 +159,7 @@
                 <option value="kick">Kick</option>
                 <option value="tiktok">TikTok</option>
               </select>
-              <input id="chat-input" type="text" placeholder="Enviar mensagem… (Enter para enviar)"
+              <input id="chat-input" type="text" placeholder="Send message... (Press Enter)"
                 class="flex-1 bg-gray-800 border border-gray-700 rounded text-sm text-gray-300 px-3 py-1.5 focus:outline-none focus:border-violet-500 placeholder-gray-600">
               <button onclick="document.getElementById('chat-input').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))"
                 class="px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">
@@ -199,7 +204,7 @@
               <!-- Row 2: Connection quality bar -->
               <div class="col-span-4 bg-gray-800/60 rounded-lg px-3 py-2 flex items-center gap-3">
                 <div class="flex items-center gap-1.5 shrink-0">
-                  <span class="text-xs text-gray-500">Conexão</span>
+                  <span class="text-xs text-gray-500">Connection</span>
                   <span id="obs-conn-quality" class="text-xs font-semibold text-green-400">● Boa</span>
                 </div>
                 <div class="flex-1 bg-gray-700 rounded-full h-1.5 overflow-hidden">
@@ -322,7 +327,7 @@
         </div>
         <div class="flex items-center gap-1.5">
           <span class="w-2 h-2 rounded-full bg-violet-500"></span>
-          <span>Perfil: <span id="current-profile-name" class="text-gray-300">—</span></span>
+          <span>Profile: <span id="current-profile-name" class="text-gray-300">—</span></span>
         </div>
         <div class="ml-auto">v0.1.0-mockup</div>
       </footer>
@@ -334,7 +339,7 @@
       <!-- Settings Sidebar -->
       <aside class="w-56 bg-gray-900 border-r border-gray-800 flex flex-col shrink-0">
         <div class="px-4 py-3 border-b border-gray-800">
-          <h2 class="text-sm font-semibold text-gray-300">Configurações</h2>
+          <h2 class="text-sm font-semibold text-gray-300">Settings</h2>
         </div>
         <nav class="flex-1 overflow-y-auto py-2">
           <div class="px-3 pb-1">
@@ -342,7 +347,7 @@
             <button data-settings-nav="settings-platforms" onclick="showSettingsSection('settings-platforms')"
               class="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded text-sm transition-colors text-gray-400 hover:text-white">
               <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
-              Conexões
+              Connections
             </button>
           </div>
           <div class="px-3 pb-1">
@@ -359,7 +364,7 @@
             </button>
           </div>
           <div class="px-3 pb-1">
-            <p class="text-xs text-gray-600 uppercase tracking-wider px-2 py-1">Automações</p>
+            <p class="text-xs text-gray-600 uppercase tracking-wider px-2 py-1">Automations</p>
             <button data-settings-nav="settings-scheduled" onclick="showSettingsSection('settings-scheduled')"
               class="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded text-sm transition-colors text-gray-400 hover:text-white">
               <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
@@ -367,7 +372,7 @@
             </button>
           </div>
           <div class="px-3 pb-1">
-            <p class="text-xs text-gray-600 uppercase tracking-wider px-2 py-1">Integrações</p>
+            <p class="text-xs text-gray-600 uppercase tracking-wider px-2 py-1">Integrations</p>
             <button data-settings-nav="settings-obs" onclick="showSettingsSection('settings-obs')"
               class="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded text-sm transition-colors text-gray-400 hover:text-white">
               <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke-width="2"/></svg>
@@ -379,12 +384,12 @@
             <button data-settings-nav="settings-general" onclick="showSettingsSection('settings-general')"
               class="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded text-sm transition-colors text-gray-400 hover:text-white">
               <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
-              Geral
+              General
             </button>
             <button data-settings-nav="settings-profiles" onclick="showSettingsSection('settings-profiles')"
               class="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded text-sm transition-colors text-gray-400 hover:text-white">
               <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5V4H2v16h5m10 0v-2a4 4 0 00-8 0v2m8 0H9m8-10a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
-              Perfis
+              Profiles
             </button>
           </div>
         </nav>
@@ -395,8 +400,8 @@
 
         <!-- ---- Platforms ---- -->
         <div id="settings-platforms" class="settings-section p-6 max-w-2xl">
-          <h2 class="text-lg font-semibold mb-1">Conexões de Plataforma</h2>
-          <p class="text-sm text-gray-400 mb-6">Conecte suas contas para receber chat e enviar mensagens em tempo real.</p>
+          <h2 class="text-lg font-semibold mb-1">Platform Connections</h2>
+          <p class="text-sm text-gray-400 mb-6">Connect your accounts to receive chat and send messages in real time.</p>
 
           <!-- Twitch -->
           <div class="bg-gray-800/60 rounded-xl p-5 mb-4 border border-gray-700">
@@ -469,13 +474,13 @@
                 <div class="flex items-center justify-between">
                   <div>
                     <h3 class="font-semibold">Kick</h3>
-                    <p class="text-sm text-gray-400 mt-0.5"><span class="text-yellow-400">Não conectado</span></p>
+                    <p class="text-sm text-gray-400 mt-0.5"><span class="text-yellow-400">Not connected</span></p>
                   </div>
                   <button class="px-3 py-1.5 rounded bg-green-600/20 hover:bg-green-600/30 text-green-400 text-sm transition-colors">Conectar</button>
                 </div>
                 <div class="mt-3">
                   <input type="text" placeholder="Nome do canal no Kick (ex: meucanal)" class="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-500">
-                  <p class="text-xs text-gray-600 mt-1">O Kick não requer autenticação para leitura de chat público.</p>
+                  <p class="text-xs text-gray-600 mt-1">Kick does not require authentication for public chat read access.</p>
                 </div>
               </div>
             </div>
@@ -495,7 +500,7 @@
                   </div>
                   <button class="px-3 py-1.5 rounded bg-gray-700 text-gray-500 text-sm cursor-not-allowed" disabled>Em breve</button>
                 </div>
-                <p class="text-xs text-gray-500 mt-2">Canal reservado no mockup para preparar UI e fluxos antes da implementação real.</p>
+                <p class="text-xs text-gray-500 mt-2">Reserved mockup channel to prepare UI and flows before real implementation.</p>
               </div>
             </div>
           </div>
@@ -506,7 +511,7 @@
           <div class="flex items-center justify-between mb-1">
             <h2 class="text-lg font-semibold">Comandos de Som</h2>
             <button onclick="openModal('modal-sound')" class="flex items-center gap-1.5 px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">
-              + Novo Comando
+              + New Command
             </button>
           </div>
           <p class="text-sm text-gray-400 mb-6">Configure comandos de chat que reproduzem sons. Ex: <code class="text-violet-300 text-xs bg-gray-800 px-1 py-0.5 rounded">!gato</code></p>
@@ -517,10 +522,10 @@
                 <tr class="border-b border-gray-700 bg-gray-800/60">
                   <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Comando</th>
                   <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Arquivo</th>
-                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Permissões</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Permissions</th>
                   <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Cooldown</th>
                   <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Ativo</th>
-                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Ações</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody id="sounds-table-body">
@@ -535,7 +540,7 @@
           <div class="flex items-center justify-between mb-1">
             <h2 class="text-lg font-semibold">Comandos de Voz (TTS)</h2>
             <button onclick="openModal('modal-voice')" class="flex items-center gap-1.5 px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">
-              + Novo Comando
+              + New Command
             </button>
           </div>
           <p class="text-sm text-gray-400 mb-6">Use TTS para falar mensagens do chat em voz alta. Ex: <code class="text-violet-300 text-xs bg-gray-800 px-1 py-0.5 rounded">!voice bom dia</code></p>
@@ -546,11 +551,11 @@
                 <tr class="border-b border-gray-700 bg-gray-800/60">
                   <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Comando</th>
                   <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Texto Fixo</th>
-                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Idioma</th>
-                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Permissões</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Language</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Permissions</th>
                   <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Cooldown</th>
                   <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Ativo</th>
-                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Ações</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody id="voice-table-body">
@@ -561,22 +566,22 @@
 
           <!-- TTS Settings -->
           <div class="bg-gray-800/40 rounded-xl border border-gray-700 p-5">
-            <h3 class="font-semibold mb-4">Configurações de TTS</h3>
+            <h3 class="font-semibold mb-4">TTS Settings</h3>
             <div class="grid grid-cols-2 gap-4">
               <div>
-                <label class="block text-sm text-gray-400 mb-1.5">Idioma padrão</label>
+                <label class="block text-sm text-gray-400 mb-1.5">Default language</label>
                 <select class="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
-                  <option value="pt-BR">Português (Brasil)</option>
-                  <option value="en-US">Inglês</option>
+                  <option value="pt-BR">Portuguese (Brazil)</option>
+                  <option value="en-US">English</option>
                   <option value="es-ES">Espanhol</option>
-                  <option value="fr-FR">Francês</option>
-                  <option value="de-DE">Alemão</option>
-                  <option value="nl-NL">Holandês</option>
+                  <option value="fr-FR">French</option>
+                  <option value="de-DE">German</option>
+                  <option value="nl-NL">Dutch</option>
                   <option value="ru-RU">Russo</option>
                   <option value="ko-KR">Coreano</option>
-                  <option value="ja-JP">Japonês</option>
-                  <option value="zh-CN">Chinês</option>
-                  <option value="ar-SA">Árabe</option>
+                  <option value="ja-JP">Japanese</option>
+                  <option value="zh-CN">Chinese</option>
+                  <option value="ar-SA">Arabic</option>
                 </select>
               </div>
               <div>
@@ -596,7 +601,7 @@
             </div>
             <div class="mt-4 flex items-center justify-between">
               <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
-                <input type="checkbox" checked class="accent-violet-500"> Anunciar nome do usuário
+                <input type="checkbox" checked class="accent-violet-500"> Announce username
               </label>
               <button class="px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">Salvar</button>
             </div>
@@ -620,9 +625,9 @@
                   <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Mensagem</th>
                   <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Intervalo</th>
                   <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Plataformas</th>
-                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Último Envio</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Last Sent</th>
                   <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Ativo</th>
-                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Ações</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody id="scheduled-table-body">
@@ -635,7 +640,7 @@
         <!-- ---- OBS Settings ---- -->
         <div id="settings-obs" class="settings-section hidden p-6 max-w-lg">
           <h2 class="text-lg font-semibold mb-1">OBS Studio</h2>
-          <p class="text-sm text-gray-400 mb-6">Conecte ao OBS via WebSocket para exibir estatísticas de transmissão em tempo real.</p>
+          <p class="text-sm text-gray-400 mb-6">Connect to OBS via WebSocket to display live stream statistics in real time.</p>
 
           <div class="bg-gray-800/40 rounded-xl border border-gray-700 p-5 space-y-4">
             <div>
@@ -651,7 +656,7 @@
               <input type="password" placeholder="••••••••" class="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
             </div>
             <div class="flex gap-3 pt-2">
-              <button class="flex-1 px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">Testar Conexão</button>
+              <button class="flex-1 px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">Test Connection</button>
               <button class="flex-1 px-3 py-2 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">Salvar</button>
             </div>
           </div>
@@ -660,17 +665,17 @@
             <p class="text-cyan-400 font-medium mb-1">Como ativar no OBS:</p>
             <ol class="text-gray-400 space-y-1 text-xs list-decimal list-inside">
               <li>Abra o OBS Studio 28+</li>
-              <li>Vá em <strong class="text-gray-300">Ferramentas → Configurações do Servidor WebSocket</strong></li>
-              <li>Ative <strong class="text-gray-300">"Ativar servidor WebSocket"</strong></li>
-              <li>Copie a senha gerada e cole acima</li>
+              <li>Go to <strong class="text-gray-300">Tools → WebSocket Server Settings</strong></li>
+              <li>Enable <strong class="text-gray-300">"Enable WebSocket server"</strong></li>
+              <li>Copy the generated password and paste it above</li>
             </ol>
           </div>
         </div>
 
         <!-- ---- General Settings ---- -->
         <div id="settings-general" class="settings-section hidden p-6 max-w-lg">
-          <h2 class="text-lg font-semibold mb-1">Configurações Gerais</h2>
-          <p class="text-sm text-gray-400 mb-6">Comportamento do aplicativo.</p>
+          <h2 class="text-lg font-semibold mb-1">General Settings</h2>
+          <p class="text-sm text-gray-400 mb-6">Application behavior.</p>
 
           <div class="space-y-4">
             <div class="bg-gray-800/40 rounded-xl border border-gray-700 p-5 space-y-4">
@@ -694,8 +699,8 @@
               </div>
               <div class="flex items-center justify-between border-t border-gray-700 pt-4">
                 <div>
-                  <p class="text-sm font-medium">Notificações de eventos</p>
-                  <p class="text-xs text-gray-500 mt-0.5">Notificações do sistema para raids e inscrições</p>
+                  <p class="text-sm font-medium">Event notifications</p>
+                  <p class="text-xs text-gray-500 mt-0.5">System notifications for raids and subscriptions</p>
                 </div>
                 <label class="toggle-switch">
                   <input type="checkbox" checked> <span class="toggle-slider"></span>
@@ -704,7 +709,7 @@
             </div>
 
             <div class="bg-gray-800/40 rounded-xl border border-gray-700 p-5">
-              <h3 class="text-sm font-medium mb-3">Log de Diagnóstico</h3>
+              <h3 class="text-sm font-medium mb-3">Diagnostic Log</h3>
               <div class="flex gap-2">
                 <select class="flex-1 bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
                   <option>Info</option>
@@ -724,23 +729,23 @@
         <!-- ---- Profiles ---- -->
         <div id="settings-profiles" class="settings-section hidden p-6">
           <div class="flex items-center justify-between mb-1">
-            <h2 class="text-lg font-semibold">Perfis</h2>
+            <h2 class="text-lg font-semibold">Profiles</h2>
             <button onclick="createProfile()" class="flex items-center gap-1.5 px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">
-              + Novo Perfil
+              + New Profile
             </button>
           </div>
           <p class="text-sm text-gray-400 mb-6">
-            Cada perfil usa um diretório próprio e salva as configurações em arquivos <code class="text-violet-300 text-xs bg-gray-800 px-1 py-0.5 rounded">.json</code>.
+            Each profile uses its own directory and stores settings in <code class="text-violet-300 text-xs bg-gray-800 px-1 py-0.5 rounded">.json</code>.
           </p>
 
           <div class="bg-gray-800/40 rounded-xl border border-gray-700 overflow-x-auto">
             <table class="w-full min-w-[1080px] text-sm">
               <thead>
                 <tr class="border-b border-gray-700 bg-gray-800/60">
-                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Perfil</th>
-                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Diretório</th>
-                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Último uso</th>
-                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Ações</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Profile</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Directory</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Last used</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody id="profiles-table-body">
@@ -762,23 +767,20 @@
     <div class="absolute inset-0 bg-black/75 backdrop-blur-sm"></div>
     <div class="relative bg-gray-900 border border-gray-700 rounded-xl w-full max-w-xl shadow-2xl">
       <div class="px-5 py-4 border-b border-gray-700">
-        <h3 class="font-semibold">Selecionar Perfil</h3>
+        <h3 class="font-semibold">Select Profile</h3>
       </div>
       <div class="p-5 space-y-4">
         <div>
-          <label class="block text-sm text-gray-400 mb-1.5">Perfil</label>
+          <label class="block text-sm text-gray-400 mb-1.5">Profile</label>
           <select id="profile-selector-select" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"></select>
         </div>
         <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
           <input id="profile-selector-skip" type="checkbox" class="accent-violet-500">
-          Não me pergunte novamente
+          Do not ask me again
         </label>
       </div>
-      <div class="flex gap-3 px-5 py-4 border-t border-gray-700">
-        <button onclick="createProfile()" class="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">Novo Perfil</button>
-        <button onclick="renameProfile(currentProfileId)" class="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">Renomear</button>
-        <button onclick="cloneProfile(currentProfileId)" class="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">Clonar</button>
-        <button onclick="selectStartupProfile()" class="ml-auto px-3 py-2 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">Entrar com perfil</button>
+      <div class="flex justify-end px-5 py-4 border-t border-gray-700">
+        <button onclick="selectStartupProfile()" class="px-3 py-2 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">Continue with profile</button>
       </div>
     </div>
   </div>
@@ -788,7 +790,7 @@
     <div class="modal-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
     <div class="relative bg-gray-900 border border-gray-700 rounded-xl w-full max-w-md shadow-2xl">
       <div class="flex items-center justify-between px-5 py-4 border-b border-gray-700">
-        <h3 class="font-semibold">Novo Comando de Som</h3>
+        <h3 class="font-semibold">New Sound Command</h3>
         <button onclick="closeModal('modal-sound')" class="text-gray-400 hover:text-white">✕</button>
       </div>
       <div class="p-5 space-y-4">
@@ -797,7 +799,7 @@
           <input type="text" placeholder="!gato" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600 font-mono">
         </div>
         <div>
-          <label class="block text-sm text-gray-400 mb-1.5">Arquivo de Áudio <span class="text-violet-400">*</span></label>
+          <label class="block text-sm text-gray-400 mb-1.5">Audio File <span class="text-violet-400">*</span></label>
           <div class="flex gap-2">
             <input type="text" placeholder="nenhum arquivo selecionado" class="flex-1 bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600" readonly>
             <button class="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors whitespace-nowrap">Escolher...</button>
@@ -805,7 +807,7 @@
           <p class="text-xs text-gray-600 mt-1">Formatos suportados: MP3, OGG, WAV</p>
         </div>
         <div>
-          <label class="block text-sm text-gray-400 mb-2">Permissões</label>
+          <label class="block text-sm text-gray-400 mb-2">Permissions</label>
           <div class="grid grid-cols-2 gap-2">
             <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
               <input type="checkbox" checked class="accent-violet-500"> Todos
@@ -827,7 +829,7 @@
             <input type="number" value="10" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
           </div>
           <div>
-            <label class="block text-sm text-gray-400 mb-1.5">Cooldown por Usuário (s)</label>
+            <label class="block text-sm text-gray-400 mb-1.5">Per-user Cooldown (s)</label>
             <input type="number" value="30" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
           </div>
         </div>
@@ -844,7 +846,7 @@
     <div class="modal-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
     <div class="relative bg-gray-900 border border-gray-700 rounded-xl w-full max-w-md shadow-2xl">
       <div class="flex items-center justify-between px-5 py-4 border-b border-gray-700">
-        <h3 class="font-semibold">Novo Comando de Voz</h3>
+        <h3 class="font-semibold">New Voice Command</h3>
         <button onclick="closeModal('modal-voice')" class="text-gray-400 hover:text-white">✕</button>
       </div>
       <div class="p-5 space-y-4">
@@ -854,27 +856,27 @@
         </div>
         <div>
           <label class="block text-sm text-gray-400 mb-1">Texto Fixo <span class="text-gray-600">(opcional)</span></label>
-          <p class="text-xs text-gray-600 mb-1.5">Se vazio, fala o texto após o comando digitado no chat.</p>
+          <p class="text-xs text-gray-600 mb-1.5">If empty, speaks the text after the command typed in chat.</p>
           <input type="text" placeholder="ex: bom dia a todos!" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600">
         </div>
         <div>
-          <label class="block text-sm text-gray-400 mb-1.5">Idioma</label>
+          <label class="block text-sm text-gray-400 mb-1.5">Language</label>
           <select class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
-            <option value="pt-BR">Português (Brasil)</option>
-            <option value="en-US">Inglês</option>
+            <option value="pt-BR">Portuguese (Brazil)</option>
+            <option value="en-US">English</option>
             <option value="es-ES">Espanhol</option>
-            <option value="fr-FR">Francês</option>
-            <option value="de-DE">Alemão</option>
-            <option value="nl-NL">Holandês</option>
+            <option value="fr-FR">French</option>
+            <option value="de-DE">German</option>
+            <option value="nl-NL">Dutch</option>
             <option value="ru-RU">Russo</option>
             <option value="ko-KR">Coreano</option>
-            <option value="ja-JP">Japonês</option>
-            <option value="zh-CN">Chinês</option>
-            <option value="ar-SA">Árabe</option>
+            <option value="ja-JP">Japanese</option>
+            <option value="zh-CN">Chinese</option>
+            <option value="ar-SA">Arabic</option>
           </select>
         </div>
         <div>
-          <label class="block text-sm text-gray-400 mb-2">Permissões</label>
+          <label class="block text-sm text-gray-400 mb-2">Permissions</label>
           <div class="grid grid-cols-2 gap-2">
             <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer"><input type="checkbox" class="accent-violet-500"> Todos</label>
             <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer"><input type="checkbox" class="accent-violet-500"> Seguidores</label>
@@ -883,7 +885,7 @@
           </div>
         </div>
         <div>
-          <label class="block text-sm text-gray-400 mb-1.5">Cooldown por Usuário (s)</label>
+          <label class="block text-sm text-gray-400 mb-1.5">Per-user Cooldown (s)</label>
           <input type="number" value="5" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
         </div>
       </div>
@@ -905,7 +907,7 @@
       <div class="p-5 space-y-4">
         <div>
           <label class="block text-sm text-gray-400 mb-1.5">Mensagem <span class="text-violet-400">*</span></label>
-          <textarea rows="3" placeholder="Lembre-se de seguir o canal! 💜" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600 resize-none"></textarea>
+          <textarea rows="3" placeholder="Remember to follow the channel! 💜" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600 resize-none"></textarea>
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
@@ -913,7 +915,7 @@
             <input type="number" value="15" min="1" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
           </div>
           <div>
-            <label class="block text-sm text-gray-400 mb-1">Janela Aleatória (min)</label>
+            <label class="block text-sm text-gray-400 mb-1">Random Window (min)</label>
             <p class="text-xs text-gray-600 mb-1">0 = intervalo exato</p>
             <input type="number" value="0" min="0" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
           </div>
@@ -927,7 +929,7 @@
             <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer"><input type="checkbox" checked class="accent-violet-500"> <span class="text-green-400">Kick</span></label>
             <label class="flex items-center gap-2 text-sm text-gray-500 cursor-not-allowed"><input type="checkbox" disabled class="accent-violet-500"> <span class="text-pink-500">TikTok (em breve)</span></label>
           </div>
-          <p class="text-xs text-gray-600 mt-1.5">A mensagem só é enviada nas plataformas conectadas e ao vivo.</p>
+          <p class="text-xs text-gray-600 mt-1.5">Message is sent only to connected and live platforms.</p>
         </div>
       </div>
       <div class="flex gap-3 px-5 py-4 border-t border-gray-700">
@@ -1023,11 +1025,11 @@
 
   const MOCK_MESSAGES = [
     { id: '1',  platform: 'twitch',     author: 'xGamer99',    content: 'fala galera o/o/o/',              badges: ['subscriber'],             isMod: false, isSub: true,  ts: Date.now() - 62000 },
-    { id: '2',  platform: 'youtube',    author: 'TechWatcher', content: 'que jogo incrível cara',           badges: ['member'],                 isMod: false, isSub: true,  ts: Date.now() - 58000 },
+    { id: '2',  platform: 'youtube',    author: 'TechWatcher', content: 'this game is incredible',          badges: ['member'],                 isMod: false, isSub: true,  ts: Date.now() - 58000 },
     { id: '3',  platform: 'kick',       author: 'br_live',     content: '!gato',                            badges: [],                         isMod: false, isSub: false, ts: Date.now() - 54000 },
-    { id: '11', platform: 'tiktok',     author: 'tiktokfã',    content: 'ameii esse conteúdo 🔥🔥',          badges: [],                         isMod: false, isSub: false, ts: Date.now() - 51000 },
+    { id: '11', platform: 'tiktok',     author: 'tiktokfan',   content: 'love this content 🔥🔥',            badges: [],                         isMod: false, isSub: false, ts: Date.now() - 51000 },
     { id: '4',  platform: 'twitch',     author: 'ModPower',    content: 'bem vindos ao stream!',            badges: ['moderator'],              isMod: true,  isSub: false, ts: Date.now() - 47000 },
-    { id: '12', platform: 'youtube-v',  author: 'VertFan',     content: 'tô vendo no celular, top demais',  badges: [],                         isMod: false, isSub: false, ts: Date.now() - 44000 },
+    { id: '12', platform: 'youtube-v',  author: 'VertFan',     content: 'watching on mobile, this is great', badges: [],                        isMod: false, isSub: false, ts: Date.now() - 44000 },
     { id: '5',  platform: 'youtube',    author: 'SuperFan2024',content: '!voice boa tarde a todos',         badges: [],                         isMod: false, isSub: false, ts: Date.now() - 40000 },
     { id: '6',  platform: 'twitch',     author: 'ProStreamer', content: 'KEKW KEKW KEKW',                  badges: ['subscriber', 'moderator'], isMod: true,  isSub: true,  ts: Date.now() - 35000 },
     { id: '13', platform: 'tiktok',     author: 'tiktok_br',   content: '!gato',                            badges: [],                         isMod: false, isSub: false, ts: Date.now() - 31000 },
@@ -1035,18 +1037,18 @@
     { id: '14', platform: 'youtube-v',  author: 'MobileViewer',content: 'assistindo no shorts!',            badges: [],                         isMod: false, isSub: false, ts: Date.now() - 24000 },
     { id: '8',  platform: 'twitch',     author: 'DonorKing',   content: '!cachorro',                        badges: ['subscriber'],             isMod: false, isSub: true,  ts: Date.now() - 20000 },
     { id: '9',  platform: 'youtube',    author: 'Lurker123',   content: 'PogChamp',                        badges: [],                         isMod: false, isSub: false, ts: Date.now() - 16000 },
-    { id: '10', platform: 'twitch',     author: 'NewFollower', content: 'acabei de seguir!',               badges: [],                         isMod: false, isSub: false, ts: Date.now() - 12000 },
+    { id: '10', platform: 'twitch',     author: 'NewFollower', content: 'just followed!',                  badges: [],                         isMod: false, isSub: false, ts: Date.now() - 12000 },
     { id: '15', platform: 'tiktok',     author: 'tiktoker99',  content: 'manda um oi pro TikTok 👋',        badges: [],                         isMod: false, isSub: false, ts: Date.now() -  8000 },
   ];
 
   const MOCK_EVENTS = [
-    { id: 'e1', platform: 'twitch',     type: 'subscription', author: 'xGamer99',     message: 'Mês 3!',      ts: Date.now() - 120000 },
+    { id: 'e1', platform: 'twitch',     type: 'subscription', author: 'xGamer99',     message: 'Month 3!',    ts: Date.now() - 120000 },
     { id: 'e2', platform: 'youtube',    type: 'superchat',    author: 'TechWatcher',  amount: 10, message: 'Stream top!', ts: Date.now() - 90000 },
     { id: 'e3', platform: 'twitch',     type: 'raid',         author: 'OtherStreamer',amount: 45,              ts: Date.now() - 60000 },
     { id: 'e4', platform: 'kick',       type: 'follow',       author: 'NewKickUser',                           ts: Date.now() - 30000 },
     { id: 'e5', platform: 'twitch',     type: 'cheer',        author: 'ProStreamer',  amount: 500,             ts: Date.now() - 10000 },
-    { id: 'e6', platform: 'tiktok',     type: 'follow',       author: 'tiktokfã',                              ts: Date.now() - 22000 },
-    { id: 'e7', platform: 'youtube-v',  type: 'superchat',    author: 'VertFan',      amount: 5, message: 'só no celular!', ts: Date.now() - 48000 },
+    { id: 'e6', platform: 'tiktok',     type: 'follow',       author: 'tiktokfan',                             ts: Date.now() - 22000 },
+    { id: 'e7', platform: 'youtube-v',  type: 'superchat',    author: 'VertFan',      amount: 5, message: 'mobile only!', ts: Date.now() - 48000 },
   ];
 
   const MOCK_OBS_STATS = {
@@ -1077,19 +1079,19 @@
   ];
 
   const MOCK_SCHEDULED = [
-    { id: 'm1', message: 'Lembre-se de seguir o canal! 💜',          interval: 15, randomWindow: 5,  platforms: ['twitch','youtube','youtube-v','kick'], enabled: true,  lastSent: Date.now() - 420000 },
+    { id: 'm1', message: 'Remember to follow the channel! 💜',        interval: 15, randomWindow: 5,  platforms: ['twitch','youtube','youtube-v','kick'], enabled: true,  lastSent: Date.now() - 420000 },
     { id: 'm2', message: 'Visite meu Discord: discord.gg/exemplo',    interval: 30, randomWindow: 0,  platforms: ['twitch'],                               enabled: true,  lastSent: null },
-    { id: 'm3', message: 'Comandos disponíveis: !gato !cachorro !voice',interval: 20, randomWindow: 10, platforms: ['twitch','youtube','youtube-v','kick'], enabled: false, lastSent: null },
+    { id: 'm3', message: 'Available commands: !gato !cachorro !voice',interval: 20, randomWindow: 10, platforms: ['twitch','youtube','youtube-v','kick'], enabled: false, lastSent: null },
   ];
 
   const MOCK_ACTIVITY_LOG = [
     { id: 'a1',  ts: Date.now() - 10000,  type: 'cheer',        platform: 'twitch',  author: 'ProStreamer',    amount: 500 },
     { id: 'a2',  ts: Date.now() - 25000,  type: 'sound',        platform: 'kick',    author: 'br_live',       trigger: '!gato' },
     { id: 'a3',  ts: Date.now() - 40000,  type: 'follow',       platform: 'kick',    author: 'NewKickUser' },
-    { id: 'a4',  ts: Date.now() - 55000,  type: 'subscription', platform: 'twitch',  author: 'xGamer99',      message: 'Mês 3!' },
+    { id: 'a4',  ts: Date.now() - 55000,  type: 'subscription', platform: 'twitch',  author: 'xGamer99',      message: 'Month 3!' },
     { id: 'a5',  ts: Date.now() - 90000,  type: 'superchat',    platform: 'youtube', author: 'TechWatcher',   amount: 10, message: 'Stream top!' },
     { id: 'a6',  ts: Date.now() - 120000, type: 'raid',         platform: 'twitch',  author: 'OtherStreamer', amount: 45 },
-    { id: 'a7',  ts: Date.now() - 150000, type: 'scheduled',    message: 'Lembre-se de seguir o canal! 💜' },
+    { id: 'a7',  ts: Date.now() - 150000, type: 'scheduled',    message: 'Remember to follow the channel! 💜' },
     { id: 'a8',  ts: Date.now() - 180000, type: 'gift',         platform: 'twitch',  author: 'DonorKing',     amount: 5 },
     { id: 'a9',  ts: Date.now() - 240000, type: 'follow',       platform: 'twitch',  author: 'NewFollower' },
     { id: 'a10', ts: Date.now() - 270000, type: 'sound',        platform: 'twitch',  author: 'DonorKing',     trigger: '!cachorro' },
@@ -1126,12 +1128,12 @@
   };
 
   const ACTIVITY_CONFIG = {
-    follow:       { icon: '💜', label: 'Novo seguidor',         color: 'text-pink-400'   },
-    subscription: { icon: '⭐', label: 'Inscrição / Membro',    color: 'text-yellow-400' },
-    gift:         { icon: '🎁', label: 'Inscrição presenteada', color: 'text-orange-400' },
+    follow:       { icon: '💜', label: 'New follower',         color: 'text-pink-400'   },
+    subscription: { icon: '⭐', label: 'Subscription / Member',    color: 'text-yellow-400' },
+    gift:         { icon: '🎁', label: 'Gifted subscription', color: 'text-orange-400' },
     superchat:    { icon: '💰', label: 'Super Chat / Bits',      color: 'text-green-400'  },
     cheer:        { icon: '✨', label: 'Bits (Twitch)',           color: 'text-purple-400' },
-    raid:         { icon: '⚔️', label: 'Raid / Invasão',         color: 'text-red-400'    },
+    raid:         { icon: '⚔️', label: 'Raid',         color: 'text-red-400'    },
     sound:        { icon: '🔊', label: 'Comando de som',         color: 'text-violet-400' },
     scheduled:    { icon: '⏰', label: 'Mensagem agendada',      color: 'text-cyan-400'   },
   };
@@ -1184,9 +1186,9 @@
       subscription: `<strong>${evt.author}</strong> se inscreveu!`,
       superchat:    `<strong>${evt.author}</strong> enviou Super Chat de R$${(evt.amount||0).toFixed(2)}`,
       raid:         `<strong>${evt.author}</strong> fez raid com ${evt.amount||0} viewers!`,
-      follow:       `<strong>${evt.author}</strong> começou a seguir`,
+      follow:       `<strong>${evt.author}</strong> started following`,
       cheer:        `<strong>${evt.author}</strong> deu ${evt.amount||0} bits!`,
-      gift:         `<strong>${evt.author}</strong> presenteou uma inscrição`,
+      gift:         `<strong>${evt.author}</strong> gifted a subscription`,
     };
     return `<div class="mx-3 my-1 px-3 py-2 rounded-lg border ${p.border.replace('border-l-','border-')} bg-gradient-to-r from-gray-800 to-gray-800/50">
       <div class="flex items-center gap-2">
@@ -1204,9 +1206,9 @@
     const p      = log.platform ? PLATFORM_COLORS[log.platform] : null;
     const pLabel = p ? `<span class="inline-flex items-center gap-0.5 ${p.badge} px-1 rounded text-[10px]">${PLATFORM_ICONS[log.platform]}${p.label}</span> ` : '';
     switch (log.type) {
-      case 'follow':       return `${pLabel}<strong class="text-gray-200">${log.author}</strong> começou a seguir`;
+      case 'follow':       return `${pLabel}<strong class="text-gray-200">${log.author}</strong> started following`;
       case 'subscription': return `${pLabel}<strong class="text-gray-200">${log.author}</strong> se inscreveu${log.message ? ` — "${log.message}"` : ''}`;
-      case 'gift':         return `${pLabel}<strong class="text-gray-200">${log.author}</strong> presenteou ${log.amount||1} inscrição(ões)`;
+      case 'gift':         return `${pLabel}<strong class="text-gray-200">${log.author}</strong> presenteou ${log.amount||1} subscription(s)`;
       case 'superchat':    return `${pLabel}<strong class="text-gray-200">${log.author}</strong> enviou R$${(log.amount||0).toFixed(2)}${log.message ? ` — "${log.message}"` : ''}`;
       case 'cheer':        return `${pLabel}<strong class="text-gray-200">${log.author}</strong> deu ${log.amount||0} bits`;
       case 'raid':         return `${pLabel}<strong class="text-gray-200">${log.author}</strong> fez raid com ${log.amount||0} viewers`;
@@ -1420,9 +1422,9 @@
         <td class="px-4 py-3">
           <div class="flex flex-wrap gap-2">
             <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-violet-600 text-gray-300 hover:text-white transition-colors whitespace-nowrap" onclick="selectProfile('${profile.id}')">Usar</button>
-            <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors whitespace-nowrap" onclick="renameProfile('${profile.id}')">Renomear</button>
-            <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors whitespace-nowrap" onclick="cloneProfile('${profile.id}')">Clonar</button>
-            <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-red-700 text-gray-300 hover:text-white transition-colors whitespace-nowrap" onclick="deleteProfile('${profile.id}')">Apagar</button>
+            <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors whitespace-nowrap" onclick="renameProfile('${profile.id}')">Rename</button>
+            <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors whitespace-nowrap" onclick="cloneProfile('${profile.id}')">Clone</button>
+            <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-red-700 text-gray-300 hover:text-white transition-colors whitespace-nowrap" onclick="deleteProfile('${profile.id}')">Delete</button>
           </div>
         </td>
       </tr>`).join('');
@@ -1443,10 +1445,10 @@
   }
 
   function createProfile() {
-    const name = prompt('Nome do novo perfil:');
+    const name = prompt('New profile name:');
     if (!name) return;
     const defaultDir = `/Users/paulo/StreamerCopilot/profiles/${name.toLowerCase().replace(/\s+/g, '-')}`;
-    const directory = prompt('Diretório do perfil (.json):', defaultDir);
+    const directory = prompt('Profile directory (.json):', defaultDir);
     if (!directory) return;
     const id = `p${Date.now()}`;
     MOCK_PROFILES.push({ id, name: name.trim(), directory: directory.trim(), lastUsed: Date.now() });
@@ -1457,7 +1459,7 @@
   function renameProfile(profileId) {
     const profile = getProfileById(profileId);
     if (!profile) return;
-    const nextName = prompt('Novo nome do perfil:', profile.name);
+    const nextName = prompt('New profile name:', profile.name);
     if (!nextName) return;
     profile.name = nextName.trim();
     syncProfilesUI();
@@ -1466,7 +1468,7 @@
   function cloneProfile(profileId) {
     const profile = getProfileById(profileId);
     if (!profile) return;
-    const cloneName = prompt('Nome do perfil clonado:', `${profile.name} (cópia)`);
+    const cloneName = prompt('Cloned profile name:', `${profile.name} (copy)`);
     if (!cloneName) return;
     const id = `p${Date.now()}`;
     MOCK_PROFILES.push({
@@ -1481,12 +1483,12 @@
 
   function deleteProfile(profileId) {
     if (MOCK_PROFILES.length === 1) {
-      alert('Você precisa manter pelo menos 1 perfil.');
+      alert('You must keep at least 1 profile.');
       return;
     }
     const profile = getProfileById(profileId);
     if (!profile) return;
-    const ok = confirm(`Apagar o perfil "${profile.name}"?`);
+    const ok = confirm(`Delete profile "${profile.name}"?`);
     if (!ok) return;
     const idx = MOCK_PROFILES.findIndex(p => p.id === profileId);
     MOCK_PROFILES.splice(idx, 1);
@@ -1550,31 +1552,31 @@
       { id: 'to60',   label: 'Timeout — 1 hora' },
       { id: 'to1440', label: 'Timeout — 24 horas' },
       { separator: true },
-      { id: 'ban',    label: 'Banir usuário', danger: true },
+      { id: 'ban',    label: 'Ban user', danger: true },
     ],
     youtube: [
-      { id: 'hide',   label: 'Ocultar usuário no canal' },
-      { id: 'block',  label: 'Bloquear usuário', danger: true },
+      { id: 'hide',   label: 'Hide user on channel' },
+      { id: 'block',  label: 'Block user', danger: true },
       { separator: true },
-      { id: 'report', label: 'Reportar mensagem', danger: true },
+      { id: 'report', label: 'Report message', danger: true },
     ],
     'youtube-v': [
-      { id: 'hide',   label: 'Ocultar usuário no canal' },
-      { id: 'block',  label: 'Bloquear usuário', danger: true },
+      { id: 'hide',   label: 'Hide user on channel' },
+      { id: 'block',  label: 'Block user', danger: true },
       { separator: true },
-      { id: 'report', label: 'Reportar mensagem', danger: true },
+      { id: 'report', label: 'Report message', danger: true },
     ],
     kick: [
-      { id: 'mute',  label: 'Silenciar usuário' },
+      { id: 'mute',  label: 'Mute user' },
       { separator: true },
       { id: 'to5',   label: 'Timeout — 5 minutos' },
       { id: 'to30',  label: 'Timeout — 30 minutos' },
       { separator: true },
-      { id: 'ban',   label: 'Banir usuário', danger: true },
+      { id: 'ban',   label: 'Ban user', danger: true },
     ],
     tiktok: [
-      { id: 'mute',   label: 'Silenciar usuário' },
-      { id: 'report', label: 'Reportar comentário', danger: true },
+      { id: 'mute',   label: 'Mute user' },
+      { id: 'report', label: 'Report comment', danger: true },
     ],
   };
 
@@ -1589,7 +1591,7 @@
       <button class="w-full text-left px-3 py-1.5 text-sm hover:bg-yellow-500/20 text-yellow-300 flex items-center gap-2"
         onclick="highlightAuthorMessages('${author}');hideContextMenu()">
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.95a1 1 0 00.95.69h4.153c.969 0 1.371 1.24.588 1.81l-3.36 2.44a1 1 0 00-.364 1.118l1.285 3.95c.3.922-.755 1.688-1.54 1.118l-3.359-2.44a1 1 0 00-1.176 0l-3.36 2.44c-.783.57-1.838-.196-1.539-1.118l1.285-3.95a1 1 0 00-.364-1.118l-3.36-2.44c-.782-.57-.38-1.81.588-1.81h4.154a1 1 0 00.95-.69l1.286-3.95z"/></svg>
-        Destacar
+        Highlight
       </button>
       <div class="border-t border-gray-700 my-1"></div>
       <button class="w-full text-left px-3 py-1.5 text-sm hover:bg-violet-600/30 text-gray-200 flex items-center gap-2"

@@ -45,7 +45,7 @@ export default function App() {
           }),
         );
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : 'Falha ao carregar dados iniciais');
+        setError(cause instanceof Error ? cause.message : 'Failed to load initial data');
       } finally {
         setIsLoading(false);
       }
@@ -62,7 +62,7 @@ export default function App() {
       setError(null);
       return snapshot;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Falha ao selecionar perfil');
+      setError(cause instanceof Error ? cause.message : 'Failed to select profile');
       return null;
     }
   };
@@ -73,7 +73,7 @@ export default function App() {
   };
 
   const createProfile = async () => {
-    const name = prompt('Nome do novo perfil:');
+    const name = prompt('New profile name:');
     if (!name?.trim()) return;
     const directory = await window.copilot.pickProfileDirectory();
     if (!directory) return;
@@ -83,14 +83,14 @@ export default function App() {
       applyProfilesSnapshot(snapshot);
       setError(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Falha ao criar perfil');
+      setError(cause instanceof Error ? cause.message : 'Failed to create profile');
     }
   };
 
   const renameActiveProfile = async () => {
     if (!activeProfileId) return;
     const current = profiles.find((profile) => profile.id === activeProfileId);
-    const name = prompt('Novo nome do perfil:', current?.name ?? '');
+    const name = prompt('New profile name:', current?.name ?? '');
     if (!name?.trim()) return;
 
     try {
@@ -98,14 +98,14 @@ export default function App() {
       applyProfilesSnapshot(snapshot);
       setError(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Falha ao renomear perfil');
+      setError(cause instanceof Error ? cause.message : 'Failed to rename profile');
     }
   };
 
   const cloneActiveProfile = async () => {
     if (!activeProfileId) return;
     const current = profiles.find((profile) => profile.id === activeProfileId);
-    const name = prompt('Nome do perfil clonado:', `${current?.name ?? 'Perfil'} (cópia)`);
+    const name = prompt('Cloned profile name:', `${current?.name ?? 'Profile'} (copy)`);
     if (!name?.trim()) return;
     const directory = await window.copilot.pickProfileDirectory();
     if (!directory) return;
@@ -119,14 +119,14 @@ export default function App() {
       applyProfilesSnapshot(snapshot);
       setError(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Falha ao clonar perfil');
+      setError(cause instanceof Error ? cause.message : 'Failed to clone profile');
     }
   };
 
   const deleteActiveProfile = async () => {
     if (!activeProfileId) return;
     const current = profiles.find((profile) => profile.id === activeProfileId);
-    const confirmed = confirm(`Apagar perfil "${current?.name ?? activeProfileId}"?`);
+    const confirmed = confirm(`Delete profile "${current?.name ?? activeProfileId}"?`);
     if (!confirmed) return;
 
     try {
@@ -134,7 +134,7 @@ export default function App() {
       applyProfilesSnapshot(snapshot);
       setError(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Falha ao apagar perfil');
+      setError(cause instanceof Error ? cause.message : 'Failed to delete profile');
     }
   };
 

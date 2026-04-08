@@ -11,16 +11,16 @@ export function ProfileActions({ onCreate, onRename, onClone, onDelete }: Profil
   return (
     <div style={styles.actionsRow}>
       <button type="button" style={styles.secondaryButton} onClick={onCreate}>
-        Novo
+        New
       </button>
       <button type="button" style={styles.secondaryButton} onClick={onRename}>
-        Renomear
+        Rename
       </button>
       <button type="button" style={styles.secondaryButton} onClick={onClone}>
-        Clonar
+        Clone
       </button>
       <button type="button" style={styles.dangerButton} onClick={onDelete}>
-        Apagar
+        Delete
       </button>
     </div>
   );

@@ -26,11 +26,11 @@ export function SettingsProfilesPanel({
 }: SettingsProfilesPanelProps) {
   return (
     <section style={styles.block}>
-      <h2 style={styles.subtitle}>Geral</h2>
+      <h2 style={styles.subtitle}>General</h2>
 
       <div style={styles.settingsSection}>
-        <h3 style={styles.sectionTitle}>Perfis</h3>
-        <p style={styles.message}>Perfil ativo: {activeProfileName}</p>
+        <h3 style={styles.sectionTitle}>Profiles</h3>
+        <p style={styles.message}>Active profile: {activeProfileName}</p>
 
         <ProfileActions
           onCreate={onCreateProfile}

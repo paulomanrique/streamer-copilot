@@ -7,9 +7,9 @@ interface DashboardSummaryProps {
 export function DashboardSummary({ activeProfileName }: DashboardSummaryProps) {
   return (
     <section style={styles.block}>
-      <h2 style={styles.subtitle}>Resumo</h2>
-      <p style={styles.message}>Perfil ativo: {activeProfileName}</p>
-      <p style={styles.message}>Painel principal em preparação para integração do mockup Phase 1.</p>
+      <h2 style={styles.subtitle}>Summary</h2>
+      <p style={styles.message}>Active profile: {activeProfileName}</p>
+      <p style={styles.message}>Main panel is being prepared for Phase 1 mockup integration.</p>
     </section>
   );
 }
