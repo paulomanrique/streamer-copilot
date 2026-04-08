@@ -183,35 +183,43 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.id} className="border-b border-gray-800/80 last:border-b-0">
-                  <td className="px-4 py-3 text-gray-300 font-mono">{row.trigger}</td>
-                  <td className="px-4 py-3 text-gray-300">{row.template ?? 'Dynamic text after trigger'}</td>
-                  <td className="px-4 py-3 text-gray-300">{row.language}</td>
-                  <td className="px-4 py-3 text-gray-300">{row.permissions.map((level) => PERMISSION_LABELS[level]).join(', ')}</td>
-                  <td className="px-4 py-3 text-gray-300">{row.cooldownSeconds}s</td>
-                  <td className="px-4 py-3 text-gray-300">{row.enabled ? 'Yes' : 'No'}</td>
+                <tr key={row.id} className="border-b border-gray-800 hover:bg-gray-800/50">
+                  <td className="px-4 py-3 font-mono text-violet-300">{row.trigger}</td>
+                  <td className="px-4 py-3 text-gray-300 text-sm">
+                    {row.template ?? <span className="text-gray-500 italic">free text after the trigger</span>}
+                  </td>
+                  <td className="px-4 py-3 text-gray-300 text-sm">{row.language}</td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex gap-1 flex-wrap">
+                      {row.permissions.map((level) => (
+                        <span key={level} className="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">
+                          {level}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-400 text-sm">{row.cooldownSeconds}s</td>
+                  <td className="px-4 py-3">
+                    <label className="toggle-switch">
+                      <input type="checkbox" checked={row.enabled} readOnly />
+                      <span className="toggle-slider" />
+                    </label>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-2">
                       <button
                         type="button"
                         onClick={() => openEdit(row)}
-                        className="px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors"
+                        className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
                       >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void previewCommand(row.template ?? 'Preview voice output', row.language)}
-                        className="px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors"
-                      >
-                        Preview
+                        ✏️
                       </button>
                       <button
                         type="button"
                         onClick={() => void deleteCommand(row.id)}
-                        className="px-3 py-1.5 rounded bg-red-500/15 hover:bg-red-500/25 text-red-300 text-sm transition-colors"
+                        className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-red-700 text-gray-300 hover:text-white transition-colors"
                       >
-                        Delete
+                        🗑️
                       </button>
                     </div>
                   </td>

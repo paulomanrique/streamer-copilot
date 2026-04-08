@@ -81,17 +81,43 @@ export function ScheduledMessagesPage() {
             </thead>
             <tbody>
               {SCHEDULED_MESSAGE_ROWS.map((row) => (
-                <tr key={row.id} className="border-b border-gray-800/80 last:border-b-0">
-                  <td className="px-4 py-3 text-gray-300">{row.message}</td>
-                  <td className="px-4 py-3 text-gray-300">{row.intervalMinutes} min</td>
-                  <td className="px-4 py-3 text-gray-300">{row.randomWindowMinutes} min</td>
-                  <td className="px-4 py-3 text-gray-300">{row.platforms.map((platform) => PLATFORM_LABELS[platform] ?? platform).join(', ')}</td>
-                  <td className="px-4 py-3 text-gray-300">{row.lastSentLabel}</td>
-                  <td className="px-4 py-3 text-gray-300">{row.enabled ? 'Yes' : 'No'}</td>
+                <tr key={row.id} className="border-b border-gray-800 hover:bg-gray-800/50">
+                  <td className="px-4 py-3 text-gray-300 text-sm max-w-xs truncate">{row.message}</td>
+                  <td className="px-4 py-3 text-gray-400 text-sm">{row.intervalMinutes} min</td>
+                  <td className="px-4 py-3 text-gray-400 text-sm">{row.randomWindowMinutes > 0 ? `±${row.randomWindowMinutes} min` : 'Exact'}</td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <button type="button" className="px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">Edit</button>
-                      <button type="button" className="px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">Pause</button>
+                    <div className="flex gap-1 flex-wrap">
+                      {row.platforms.map((platform) => (
+                        <span
+                          key={platform}
+                          className={`text-xs px-2 py-0.5 rounded-full ${
+                            platform === 'twitch'
+                              ? 'bg-purple-500/20 text-purple-300'
+                              : platform === 'youtube'
+                                ? 'bg-red-500/20 text-red-300'
+                                : platform === 'youtube-v'
+                                  ? 'bg-rose-500/20 text-rose-300'
+                                  : platform === 'kick'
+                                    ? 'bg-green-500/20 text-green-300'
+                                    : 'bg-pink-500/20 text-pink-300'
+                          }`}
+                        >
+                          {platform}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-500 text-xs">{row.lastSentLabel || '—'}</td>
+                  <td className="px-4 py-3">
+                    <label className="toggle-switch">
+                      <input type="checkbox" checked={row.enabled} readOnly />
+                      <span className="toggle-slider" />
+                    </label>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-2">
+                      <button type="button" className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors">✏️</button>
+                      <button type="button" className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-red-700 text-gray-300 hover:text-white transition-colors">🗑️</button>
                     </div>
                   </td>
                 </tr>
