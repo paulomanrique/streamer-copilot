@@ -320,6 +320,10 @@
           <span class="w-2 h-2 rounded-full bg-cyan-500"></span>
           <span>OBS: <span class="text-gray-300">Conectado</span></span>
         </div>
+        <div class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-violet-500"></span>
+          <span>Perfil: <span id="current-profile-name" class="text-gray-300">—</span></span>
+        </div>
         <div class="ml-auto">v0.1.0-mockup</div>
       </footer>
     </section>
@@ -376,6 +380,11 @@
               class="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded text-sm transition-colors text-gray-400 hover:text-white">
               <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
               Geral
+            </button>
+            <button data-settings-nav="settings-profiles" onclick="showSettingsSection('settings-profiles')"
+              class="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded text-sm transition-colors text-gray-400 hover:text-white">
+              <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5V4H2v16h5m10 0v-2a4 4 0 00-8 0v2m8 0H9m8-10a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+              Perfis
             </button>
           </div>
         </nav>
@@ -558,13 +567,16 @@
                 <label class="block text-sm text-gray-400 mb-1.5">Idioma padrão</label>
                 <select class="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
                   <option value="pt-BR">Português (Brasil)</option>
-                  <option value="en-US">English (US)</option>
-                  <option value="es-ES">Español (España)</option>
-                  <option value="es-MX">Español (México)</option>
-                  <option value="fr-FR">Français</option>
-                  <option value="de-DE">Deutsch</option>
-                  <option value="ja-JP">日本語</option>
-                  <option value="ko-KR">한국어</option>
+                  <option value="en-US">Inglês</option>
+                  <option value="es-ES">Espanhol</option>
+                  <option value="fr-FR">Francês</option>
+                  <option value="de-DE">Alemão</option>
+                  <option value="nl-NL">Holandês</option>
+                  <option value="ru-RU">Russo</option>
+                  <option value="ko-KR">Coreano</option>
+                  <option value="ja-JP">Japonês</option>
+                  <option value="zh-CN">Chinês</option>
+                  <option value="ar-SA">Árabe</option>
                 </select>
               </div>
               <div>
@@ -709,12 +721,73 @@
           </div>
         </div>
 
+        <!-- ---- Profiles ---- -->
+        <div id="settings-profiles" class="settings-section hidden p-6 max-w-3xl">
+          <div class="flex items-center justify-between mb-1">
+            <h2 class="text-lg font-semibold">Perfis</h2>
+            <button onclick="createProfile()" class="flex items-center gap-1.5 px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">
+              + Novo Perfil
+            </button>
+          </div>
+          <p class="text-sm text-gray-400 mb-6">
+            Cada perfil usa um diretório próprio e salva as configurações em arquivos <code class="text-violet-300 text-xs bg-gray-800 px-1 py-0.5 rounded">.json</code>.
+          </p>
+
+          <div class="bg-gray-800/40 rounded-xl border border-gray-700 overflow-hidden">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="border-b border-gray-700 bg-gray-800/60">
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Perfil</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Diretório</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Último uso</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="profiles-table-body">
+                <!-- populated by script -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
       </div>
     </section>
 
   </main>
 
   <!-- ===================== MODALS ===================== -->
+
+  <!-- Modal: Profile Selector (startup) -->
+  <div id="modal-profile-selector" class="hidden fixed inset-0 z-[70] flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/75 backdrop-blur-sm"></div>
+    <div class="relative bg-gray-900 border border-gray-700 rounded-xl w-full max-w-xl shadow-2xl">
+      <div class="px-5 py-4 border-b border-gray-700">
+        <h3 class="font-semibold">Selecionar Perfil</h3>
+        <p class="text-xs text-gray-500 mt-1">
+          Cada perfil é salvo em um diretório separado, com configurações em arquivos <code class="text-violet-300">.json</code>.
+        </p>
+      </div>
+      <div class="p-5 space-y-4">
+        <div>
+          <label class="block text-sm text-gray-400 mb-1.5">Perfil</label>
+          <select id="profile-selector-select" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"></select>
+        </div>
+        <div>
+          <label class="block text-sm text-gray-400 mb-1.5">Diretório do perfil</label>
+          <input id="profile-selector-dir" type="text" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500" readonly>
+        </div>
+        <div class="p-3 rounded-lg bg-gray-800/70 border border-gray-700 text-xs text-gray-400">
+          Arquivos esperados neste diretório: <code class="text-violet-300">settings.json</code>, <code class="text-violet-300">commands.sound.json</code>, <code class="text-violet-300">commands.voice.json</code>, <code class="text-violet-300">scheduled.json</code>.
+        </div>
+      </div>
+      <div class="flex gap-3 px-5 py-4 border-t border-gray-700">
+        <button onclick="createProfile()" class="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">Novo Perfil</button>
+        <button onclick="renameProfile(currentProfileId)" class="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">Renomear</button>
+        <button onclick="cloneProfile(currentProfileId)" class="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">Clonar</button>
+        <button onclick="selectStartupProfile()" class="ml-auto px-3 py-2 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">Entrar com perfil</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Modal: Add/Edit Sound Command -->
   <div id="modal-sound" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -794,10 +867,16 @@
           <label class="block text-sm text-gray-400 mb-1.5">Idioma</label>
           <select class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
             <option value="pt-BR">Português (Brasil)</option>
-            <option value="en-US">English (US)</option>
-            <option value="es-ES">Español</option>
-            <option value="fr-FR">Français</option>
-            <option value="de-DE">Deutsch</option>
+            <option value="en-US">Inglês</option>
+            <option value="es-ES">Espanhol</option>
+            <option value="fr-FR">Francês</option>
+            <option value="de-DE">Alemão</option>
+            <option value="nl-NL">Holandês</option>
+            <option value="ru-RU">Russo</option>
+            <option value="ko-KR">Coreano</option>
+            <option value="ja-JP">Japonês</option>
+            <option value="zh-CN">Chinês</option>
+            <option value="ar-SA">Árabe</option>
           </select>
         </div>
         <div>
@@ -1066,9 +1145,22 @@
   const activityFilter  = Object.fromEntries(Object.keys(ACTIVITY_CONFIG).map(k => [k, true]));
   const platformFilter  = { twitch: true, youtube: true, 'youtube-v': true, kick: true, tiktok: true };
   let chatFeedMode = 'all';
+  const MOCK_PROFILES = [
+    { id: 'p1', name: 'Principal', directory: '/Users/paulo/StreamerCopilot/profiles/principal', lastUsed: Date.now() - 600000 },
+    { id: 'p2', name: 'Shorts',    directory: '/Users/paulo/StreamerCopilot/profiles/shorts',    lastUsed: Date.now() - 3600000 },
+  ];
+  let currentProfileId = MOCK_PROFILES[0].id;
 
   function formatTime(ts) {
     return new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function formatDateTime(ts) {
+    return new Date(ts).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function getProfileById(id) {
+    return MOCK_PROFILES.find(p => p.id === id);
   }
 
   function renderMessage(msg) {
@@ -1299,6 +1391,126 @@
       </tr>`).join('');
   }
 
+  function updateCurrentProfileLabel() {
+    const el = document.getElementById('current-profile-name');
+    const profile = getProfileById(currentProfileId);
+    if (el) el.textContent = profile ? profile.name : '—';
+  }
+
+  function renderProfileSelector() {
+    const sel = document.getElementById('profile-selector-select');
+    const dir = document.getElementById('profile-selector-dir');
+    if (!sel || !dir) return;
+    sel.innerHTML = MOCK_PROFILES.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    sel.value = currentProfileId;
+    const profile = getProfileById(currentProfileId);
+    dir.value = profile ? profile.directory : '';
+    sel.onchange = () => {
+      currentProfileId = sel.value;
+      const selected = getProfileById(currentProfileId);
+      dir.value = selected ? selected.directory : '';
+    };
+  }
+
+  function renderProfilesSettings() {
+    const tbody = document.getElementById('profiles-table-body');
+    if (!tbody) return;
+    tbody.innerHTML = MOCK_PROFILES.map(profile => `
+      <tr class="border-b border-gray-800 hover:bg-gray-800/50">
+        <td class="px-4 py-3 text-gray-200">
+          <div class="flex items-center gap-2">
+            <span class="font-medium">${profile.name}</span>
+            ${profile.id === currentProfileId ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-violet-600/30 text-violet-300">ativo</span>' : ''}
+          </div>
+        </td>
+        <td class="px-4 py-3 text-xs text-gray-400 font-mono">${profile.directory}</td>
+        <td class="px-4 py-3 text-xs text-gray-500">${formatDateTime(profile.lastUsed)}</td>
+        <td class="px-4 py-3">
+          <div class="flex gap-2">
+            <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-violet-600 text-gray-300 hover:text-white transition-colors" onclick="selectProfile('${profile.id}')">Usar</button>
+            <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors" onclick="renameProfile('${profile.id}')">Renomear</button>
+            <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors" onclick="cloneProfile('${profile.id}')">Clonar</button>
+            <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-red-700 text-gray-300 hover:text-white transition-colors" onclick="deleteProfile('${profile.id}')">Apagar</button>
+          </div>
+        </td>
+      </tr>`).join('');
+  }
+
+  function syncProfilesUI() {
+    renderProfileSelector();
+    renderProfilesSettings();
+    updateCurrentProfileLabel();
+  }
+
+  function selectProfile(profileId) {
+    const profile = getProfileById(profileId);
+    if (!profile) return;
+    currentProfileId = profile.id;
+    profile.lastUsed = Date.now();
+    syncProfilesUI();
+  }
+
+  function createProfile() {
+    const name = prompt('Nome do novo perfil:');
+    if (!name) return;
+    const defaultDir = `/Users/paulo/StreamerCopilot/profiles/${name.toLowerCase().replace(/\s+/g, '-')}`;
+    const directory = prompt('Diretório do perfil (.json):', defaultDir);
+    if (!directory) return;
+    const id = `p${Date.now()}`;
+    MOCK_PROFILES.push({ id, name: name.trim(), directory: directory.trim(), lastUsed: Date.now() });
+    currentProfileId = id;
+    syncProfilesUI();
+  }
+
+  function renameProfile(profileId) {
+    const profile = getProfileById(profileId);
+    if (!profile) return;
+    const nextName = prompt('Novo nome do perfil:', profile.name);
+    if (!nextName) return;
+    profile.name = nextName.trim();
+    syncProfilesUI();
+  }
+
+  function cloneProfile(profileId) {
+    const profile = getProfileById(profileId);
+    if (!profile) return;
+    const cloneName = prompt('Nome do perfil clonado:', `${profile.name} (cópia)`);
+    if (!cloneName) return;
+    const id = `p${Date.now()}`;
+    MOCK_PROFILES.push({
+      id,
+      name: cloneName.trim(),
+      directory: `${profile.directory}-copy`,
+      lastUsed: Date.now(),
+    });
+    currentProfileId = id;
+    syncProfilesUI();
+  }
+
+  function deleteProfile(profileId) {
+    if (MOCK_PROFILES.length === 1) {
+      alert('Você precisa manter pelo menos 1 perfil.');
+      return;
+    }
+    const profile = getProfileById(profileId);
+    if (!profile) return;
+    const ok = confirm(`Apagar o perfil "${profile.name}"?`);
+    if (!ok) return;
+    const idx = MOCK_PROFILES.findIndex(p => p.id === profileId);
+    MOCK_PROFILES.splice(idx, 1);
+    if (currentProfileId === profileId) currentProfileId = MOCK_PROFILES[0].id;
+    syncProfilesUI();
+  }
+
+  function selectStartupProfile() {
+    const sel = document.getElementById('profile-selector-select');
+    if (sel?.value) currentProfileId = sel.value;
+    const profile = getProfileById(currentProfileId);
+    if (profile) profile.lastUsed = Date.now();
+    syncProfilesUI();
+    closeModal('modal-profile-selector');
+  }
+
   // ===================== NAVIGATION =====================
 
   function showSection(sectionId) {
@@ -1379,6 +1591,12 @@
       <div class="px-3 py-1.5 border-b border-gray-700 mb-1">
         <span class="text-xs text-gray-500">@${author}</span>
       </div>
+      <button class="w-full text-left px-3 py-1.5 text-sm hover:bg-yellow-500/20 text-yellow-300 flex items-center gap-2"
+        onclick="highlightAuthorMessages('${author}');hideContextMenu()">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.95a1 1 0 00.95.69h4.153c.969 0 1.371 1.24.588 1.81l-3.36 2.44a1 1 0 00-.364 1.118l1.285 3.95c.3.922-.755 1.688-1.54 1.118l-3.359-2.44a1 1 0 00-1.176 0l-3.36 2.44c-.783.57-1.838-.196-1.539-1.118l1.285-3.95a1 1 0 00-.364-1.118l-3.36-2.44c-.782-.57-.38-1.81.588-1.81h4.154a1 1 0 00.95-.69l1.286-3.95z"/></svg>
+        Destacar
+      </button>
+      <div class="border-t border-gray-700 my-1"></div>
       <button class="w-full text-left px-3 py-1.5 text-sm hover:bg-violet-600/30 text-gray-200 flex items-center gap-2"
         onclick="replyToUser('${platform}','${author}');hideContextMenu()">
         <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
@@ -1402,6 +1620,15 @@
   function hideContextMenu() {
     const m = document.getElementById('chat-context-menu');
     if (m) m.classList.add('hidden');
+  }
+
+  function highlightAuthorMessages(author) {
+    document.querySelectorAll('#chat-feed .chat-message').forEach(el => {
+      el.classList.remove('ring-1', 'ring-yellow-400/70', 'bg-yellow-500/10');
+      if (el.dataset.author === author) {
+        el.classList.add('ring-1', 'ring-yellow-400/70', 'bg-yellow-500/10');
+      }
+    });
   }
 
   function replyToUser(platform, author) {
@@ -1463,6 +1690,7 @@
   document.addEventListener('DOMContentLoaded', () => {
     showSection('dashboard');
     showSettingsSection('settings-platforms');
+    syncProfilesUI();
     setChatFeedMode('all');
     applyActivityFilter();
     initObsStats();
@@ -1470,6 +1698,7 @@
     initVoiceCommands();
     initScheduled();
     buildActivityFilterList();
+    openModal('modal-profile-selector');
 
     // Chat events (double-click reply, right-click context menu)
     const feed = document.getElementById('chat-feed');
