@@ -1,6 +1,7 @@
 import type { ProfileSummary } from '../../shared/types.js';
 import type { PermissionLevel } from '../../shared/types.js';
 import { CommandComponentsPreview } from './CommandComponentsPreview.js';
+import { PlatformSettingsPreview } from './PlatformSettingsPreview.js';
 import { ProfileActions } from './ProfileActions.js';
 import { ProfileList } from './ProfileList.js';
 import { styles } from './app-styles.js';
@@ -58,6 +59,8 @@ export function SettingsProfilesPanel({
         onChangeLanguageCode={onChangeLanguageCode}
         onChangePermissionLevels={onChangePermissionLevels}
       />
+
+      <PlatformSettingsPreview activeProfileName={activeProfileName} />
     </section>
   );
 }

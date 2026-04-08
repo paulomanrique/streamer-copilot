@@ -10,6 +10,7 @@ import { SectionTabs } from './components/SectionTabs.js';
 import type { AppSection } from './components/SectionTabs.js';
 import { SettingsProfilesPanel } from './components/SettingsProfilesPanel.js';
 import { StatusMessages } from './components/StatusMessages.js';
+import { ToastStack, type ToastItem } from './components/ToastStack.js';
 import { styles } from './components/app-styles.js';
 
 const SKIP_PROFILE_SELECTOR_KEY = 'streamerCopilot.skipProfileSelector';
@@ -25,11 +26,18 @@ export default function App() {
   const [currentSection, setCurrentSection] = useState<AppSection>('dashboard');
   const [languageCode, setLanguageCode] = useState('en-US');
   const [permissionLevels, setPermissionLevels] = useState<PermissionLevel[]>(['everyone', 'moderator']);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const activeProfile = useMemo(
     () => profiles.find((profile) => profile.id === activeProfileId) ?? null,
     [profiles, activeProfileId],
   );
+
+  const pushError = (message: string) => {
+    const toastId = Date.now() + Math.floor(Math.random() * 1000);
+    setError(message);
+    setToasts((current) => [...current, { id: toastId, title: 'Renderer error', message }]);
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -47,7 +55,7 @@ export default function App() {
           }),
         );
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : 'Failed to load initial data');
+        pushError(cause instanceof Error ? cause.message : 'Failed to load initial data');
       } finally {
         setIsLoading(false);
       }
@@ -55,6 +63,16 @@ export default function App() {
 
     void load();
   }, [setProfiles]);
+
+  useEffect(() => {
+    if (toasts.length === 0) return undefined;
+
+    const timerId = window.setTimeout(() => {
+      setToasts((current) => current.slice(1));
+    }, 4000);
+
+    return () => window.clearTimeout(timerId);
+  }, [toasts]);
 
   const onSelectProfile = async (profileId: string) => {
     try {
@@ -64,7 +82,7 @@ export default function App() {
       setError(null);
       return snapshot;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Failed to select profile');
+      pushError(cause instanceof Error ? cause.message : 'Failed to select profile');
       return null;
     }
   };
@@ -85,7 +103,7 @@ export default function App() {
       applyProfilesSnapshot(snapshot);
       setError(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Failed to create profile');
+      pushError(cause instanceof Error ? cause.message : 'Failed to create profile');
     }
   };
 
@@ -100,7 +118,7 @@ export default function App() {
       applyProfilesSnapshot(snapshot);
       setError(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Failed to rename profile');
+      pushError(cause instanceof Error ? cause.message : 'Failed to rename profile');
     }
   };
 
@@ -121,7 +139,7 @@ export default function App() {
       applyProfilesSnapshot(snapshot);
       setError(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Failed to clone profile');
+      pushError(cause instanceof Error ? cause.message : 'Failed to clone profile');
     }
   };
 
@@ -136,7 +154,7 @@ export default function App() {
       applyProfilesSnapshot(snapshot);
       setError(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Failed to delete profile');
+      pushError(cause instanceof Error ? cause.message : 'Failed to delete profile');
     }
   };
 
@@ -199,6 +217,8 @@ export default function App() {
         onChangeSkipPromptAgain={setSkipPromptAgain}
         onConfirm={() => void confirmProfileSelector()}
       />
+
+      <ToastStack toasts={toasts} />
     </main>
   );
 }

@@ -6,6 +6,7 @@ import {
 } from '../dashboard-mock-data.js';
 import { ChatFeed } from './ChatFeed.js';
 import { EventBanner } from './EventBanner.js';
+import { ObsStatsPanel } from './ObsStatsPanel.js';
 import { StatusBar } from './StatusBar.js';
 import { styles } from './app-styles.js';
 
@@ -27,6 +28,16 @@ export function DashboardSummary({ activeProfileName }: DashboardSummaryProps) {
         <ChatFeed messages={DASHBOARD_MESSAGES} events={DASHBOARD_EVENTS} />
 
         <aside style={styles.sideStack}>
+          <ObsStatsPanel
+            sceneName={DASHBOARD_OBS_STATUS.sceneName}
+            uptimeLabel={DASHBOARD_OBS_STATUS.uptimeLabel}
+            bitrateKbps={6120}
+            fps={60}
+            cpuPercent={32}
+            ramMb={2480}
+            droppedFrames={0}
+          />
+
           <section style={styles.previewCard}>
             <div style={styles.previewHeader}>
               <div>
