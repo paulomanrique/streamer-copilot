@@ -47,13 +47,41 @@ function formatTime(ts) {
   return new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
+// Platform visibility filter state
+const platformFilter = { twitch: true, youtube: true, kick: true };
+
+function applyPlatformFilter() {
+  document.querySelectorAll('#chat-feed [data-platform]').forEach(el => {
+    const platform = el.dataset.platform;
+    el.style.display = platformFilter[platform] === false ? 'none' : '';
+  });
+}
+
+function togglePlatformFilter(platform) {
+  platformFilter[platform] = !platformFilter[platform];
+  applyPlatformFilter();
+
+  // Update button appearance
+  const btn = document.querySelector(`[data-platform-filter="${platform}"]`);
+  if (!btn) return;
+  const p = PLATFORM_COLORS[platform];
+  if (platformFilter[platform]) {
+    btn.className = btn.className.replace('grayscale opacity-40', '');
+    btn.classList.add(...p.badge.split(' '), 'hover:opacity-90');
+  } else {
+    btn.classList.remove(...p.badge.split(' '), 'hover:opacity-90');
+    btn.classList.add('grayscale', 'opacity-40');
+  }
+}
+
 function renderMessage(msg) {
   const p = PLATFORM_COLORS[msg.platform];
   const badges = (msg.badges || []).map(b => BADGE_ICONS[b] || '').join('');
   const isCommand = msg.content.startsWith('!');
 
   return `
-    <div class="flex gap-2 px-3 py-1.5 border-l-2 ${p.border} ${p.bg} transition-colors group ${isCommand ? 'bg-violet-500/5' : ''}">
+    <div class="chat-message flex gap-2 px-3 py-1.5 border-l-2 ${p.border} ${p.bg} transition-colors group cursor-default select-text ${isCommand ? 'bg-violet-500/5' : ''}"
+      data-platform="${msg.platform}" data-author="${msg.author}">
       <span class="text-gray-600 text-xs mt-0.5 shrink-0 font-mono">${formatTime(msg.ts)}</span>
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-1 flex-wrap">
@@ -159,15 +187,40 @@ function initActivityLog() {
 function initObsStats() {
   const s = MOCK_OBS_STATS;
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  const setStyle = (id, prop, val) => { const el = document.getElementById(id); if (el) el.style[prop] = val; };
+  const setClass = (id, cls) => { const el = document.getElementById(id); if (el) { el.className = el.className.replace(/text-\w+-400/g, ''); el.classList.add(cls); } };
 
   set('obs-scene', s.scene);
   set('obs-time', s.streamTime);
-  set('obs-bitrate', `${(s.bitrate / 1000).toFixed(1)} Mbps`);
-  set('obs-fps', `${s.fps} FPS`);
   set('obs-cpu', `${s.cpuUsage.toFixed(1)}%`);
   set('obs-memory', `${(s.memoryUsage / 1024).toFixed(1)} GB`);
-  set('obs-dropped', `${s.droppedFrames} (${((s.droppedFrames / s.totalFrames) * 100).toFixed(2)}%)`);
   set('obs-status', s.streaming ? '🔴 AO VIVO' : '⚫ Offline');
+
+  // Connection quality (based on network-dropped frames)
+  const connPct = s.outputTotalFrames > 0
+    ? ((1 - s.outputSkippedFrames / s.outputTotalFrames) * 100)
+    : 100;
+  const connColor = connPct >= 95 ? 'green' : connPct >= 80 ? 'yellow' : 'red';
+  const connLabel = connPct >= 95 ? '● Boa' : connPct >= 80 ? '● Regular' : '● Ruim';
+  set('obs-conn-pct', `${connPct.toFixed(1)}%`);
+  set('obs-conn-quality', connLabel);
+  setStyle('obs-conn-bar', 'width', `${connPct.toFixed(1)}%`);
+  setStyle('obs-conn-bar', 'background', connColor === 'green' ? '#22c55e' : connColor === 'yellow' ? '#eab308' : '#ef4444');
+  const qualityEl = document.getElementById('obs-conn-quality');
+  if (qualityEl) qualityEl.className = `text-xs font-semibold text-${connColor}-400`;
+
+  // Dropped frames by category
+  const fmtDropped = (skipped, total) => {
+    if (total === 0) return '0';
+    const pct = ((skipped / total) * 100).toFixed(2);
+    return `${skipped} <span class="text-gray-600 text-[10px]">(${pct}%)</span>`;
+  };
+  const droppedNetEl  = document.getElementById('obs-dropped-net');
+  const droppedEncEl  = document.getElementById('obs-dropped-enc');
+  const droppedRendEl = document.getElementById('obs-dropped-render');
+  if (droppedNetEl)  droppedNetEl.innerHTML  = fmtDropped(s.outputSkippedFrames,  s.outputTotalFrames);
+  if (droppedEncEl)  droppedEncEl.innerHTML  = fmtDropped(s.encoderSkippedFrames, s.encoderTotalFrames);
+  if (droppedRendEl) droppedRendEl.innerHTML = fmtDropped(s.renderSkippedFrames,  s.renderTotalFrames);
 }
 
 function initSoundCommands() {

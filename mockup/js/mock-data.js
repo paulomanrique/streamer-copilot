@@ -53,13 +53,17 @@ const MOCK_OBS_STATS = {
   scene: 'Gameplay',
   streaming: true,
   streamTime: '01:23:47',
-  bitrate: 6000,
-  fps: 60,
-  droppedFrames: 12,
-  totalFrames: 298800,
   cpuUsage: 18.4,
   memoryUsage: 2340,
-  renderMissedFrames: 0,
+  // Connection quality: ratio of successfully sent frames
+  outputSkippedFrames: 8,    // dropped by network/connection
+  outputTotalFrames: 298800,
+  // Encoding: frames dropped because encoder couldn't keep up
+  encoderSkippedFrames: 4,
+  encoderTotalFrames: 298800,
+  // Render: frames missed by the renderer (GPU/display)
+  renderSkippedFrames: 0,
+  renderTotalFrames: 298800,
 };
 
 const MOCK_SOUND_COMMANDS = [
