@@ -10,6 +10,10 @@ import type {
   ScheduledMessageUpsertInput,
   ScheduledStatusItem,
   SelectProfileInput,
+  VoiceCommand,
+  VoiceCommandDeleteInput,
+  VoiceCommandUpsertInput,
+  VoiceSpeakPayload,
 } from './types.js';
 
 export const IPC_CHANNELS = {
@@ -25,6 +29,11 @@ export const IPC_CHANNELS = {
   scheduledUpsert: 'scheduled:upsert',
   scheduledDelete: 'scheduled:delete',
   scheduledStatus: 'scheduled:status',
+  voiceList: 'voice:list',
+  voiceUpsert: 'voice:upsert',
+  voiceDelete: 'voice:delete',
+  voicePreviewSpeak: 'voice:preview-speak',
+  voiceSpeak: 'voice:speak',
 } as const;
 
 export interface CopilotApi {
@@ -40,4 +49,9 @@ export interface CopilotApi {
   upsertScheduledMessage: (input: ScheduledMessageUpsertInput) => Promise<ScheduledMessage[]>;
   deleteScheduledMessage: (input: ScheduledMessageDeleteInput) => Promise<ScheduledMessage[]>;
   onScheduledStatus: (listener: (items: ScheduledStatusItem[]) => void) => () => void;
+  listVoiceCommands: () => Promise<VoiceCommand[]>;
+  upsertVoiceCommand: (input: VoiceCommandUpsertInput) => Promise<VoiceCommand[]>;
+  deleteVoiceCommand: (input: VoiceCommandDeleteInput) => Promise<VoiceCommand[]>;
+  previewVoiceSpeak: (input: VoiceSpeakPayload) => Promise<void>;
+  onVoiceSpeak: (listener: (payload: VoiceSpeakPayload) => void) => () => void;
 }

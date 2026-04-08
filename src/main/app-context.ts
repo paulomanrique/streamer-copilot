@@ -5,6 +5,8 @@ import type { DatabaseHandle } from '../db/database.js';
 import { ScheduledMessageRepository } from '../modules/scheduled/scheduled-repository.js';
 import { SchedulerService } from '../modules/scheduled/scheduler-service.js';
 import { ProfileStore } from '../modules/settings/profile-store.js';
+import { VoiceCommandRepository } from '../modules/voice/voice-repository.js';
+import { VoiceService } from '../modules/voice/voice-service.js';
 import { APP_NAME } from '../shared/constants.js';
 import { IPC_CHANNELS } from '../shared/ipc.js';
 import {
@@ -15,6 +17,9 @@ import {
   scheduledMessageDeleteInputSchema,
   scheduledMessageUpsertInputSchema,
   selectProfileInputSchema,
+  voiceCommandDeleteInputSchema,
+  voiceCommandUpsertInputSchema,
+  voiceSpeakPayloadSchema,
 } from '../shared/schemas.js';
 import type { AppInfo } from '../shared/types.js';
 import { StateHub } from './state-hub.js';
@@ -29,9 +34,14 @@ interface AppContextOptions {
 export function createAppContext(options: AppContextOptions): () => void {
   const profileStore = new ProfileStore(options.userDataPath);
   const scheduledRepository = new ScheduledMessageRepository(options.databaseHandle.db);
+  const voiceRepository = new VoiceCommandRepository(options.databaseHandle.db);
   const schedulerService = new SchedulerService({
     repository: scheduledRepository,
     onStatus: (items) => options.stateHub.pushScheduledStatus(items),
+  });
+  const voiceService = new VoiceService({
+    repository: voiceRepository,
+    onSpeak: (payload) => options.stateHub.pushVoiceSpeak(payload),
   });
 
   schedulerService.start();
@@ -96,6 +106,23 @@ export function createAppContext(options: AppContextOptions): () => void {
     return schedulerService.delete(input.id);
   });
 
+  ipcMain.handle(IPC_CHANNELS.voiceList, async () => voiceService.list());
+
+  ipcMain.handle(IPC_CHANNELS.voiceUpsert, async (_event, rawInput: unknown) => {
+    const input = voiceCommandUpsertInputSchema.parse(rawInput);
+    return voiceService.upsert(input);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.voiceDelete, async (_event, rawInput: unknown) => {
+    const input = voiceCommandDeleteInputSchema.parse(rawInput);
+    return voiceService.delete(input.id);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.voicePreviewSpeak, async (_event, rawInput: unknown) => {
+    const input = voiceSpeakPayloadSchema.parse(rawInput);
+    voiceService.previewSpeak(input);
+  });
+
   return () => {
     schedulerService.stop();
     ipcMain.removeHandler(IPC_CHANNELS.appGetInfo);
@@ -109,5 +136,9 @@ export function createAppContext(options: AppContextOptions): () => void {
     ipcMain.removeHandler(IPC_CHANNELS.scheduledList);
     ipcMain.removeHandler(IPC_CHANNELS.scheduledUpsert);
     ipcMain.removeHandler(IPC_CHANNELS.scheduledDelete);
+    ipcMain.removeHandler(IPC_CHANNELS.voiceList);
+    ipcMain.removeHandler(IPC_CHANNELS.voiceUpsert);
+    ipcMain.removeHandler(IPC_CHANNELS.voiceDelete);
+    ipcMain.removeHandler(IPC_CHANNELS.voicePreviewSpeak);
   };
 }

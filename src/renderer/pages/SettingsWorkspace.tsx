@@ -23,6 +23,10 @@ interface SettingsWorkspaceProps {
   permissionLevels: PermissionLevel[];
   onChangeLanguageCode: (code: string) => void;
   onChangePermissionLevels: (levels: PermissionLevel[]) => void;
+  voiceRate: number;
+  voiceVolume: number;
+  onChangeVoiceRate: (value: number) => void;
+  onChangeVoiceVolume: (value: number) => void;
 }
 
 const SETTINGS_VIEWS: Array<{ id: SettingsView; label: string }> = [
@@ -71,7 +75,14 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
 
         {currentView === 'platforms' ? <PlatformSettingsPreview activeProfileName={props.activeProfileName} /> : null}
         {currentView === 'sound' ? <SoundCommandsPage /> : null}
-        {currentView === 'voice' ? <VoiceCommandsPage /> : null}
+        {currentView === 'voice' ? (
+          <VoiceCommandsPage
+            voiceRate={props.voiceRate}
+            voiceVolume={props.voiceVolume}
+            onChangeVoiceRate={props.onChangeVoiceRate}
+            onChangeVoiceVolume={props.onChangeVoiceVolume}
+          />
+        ) : null}
         {currentView === 'scheduled' ? <ScheduledMessagesPage /> : null}
       </div>
     </section>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { AppInfo, PermissionLevel, ProfilesSnapshot } from '../shared/types.js';
+import type { AppInfo, PermissionLevel, ProfilesSnapshot, VoiceSpeakPayload } from '../shared/types.js';
 import { readSkipPromptPreference, shouldPromptProfileSelector } from './profile-startup.js';
 import { useAppStore } from './store.js';
 import { AppHeader } from './components/AppHeader.js';
@@ -27,6 +27,8 @@ export default function App() {
   const [languageCode, setLanguageCode] = useState('en-US');
   const [permissionLevels, setPermissionLevels] = useState<PermissionLevel[]>(['everyone', 'moderator']);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [voiceRate, setVoiceRate] = useState(1);
+  const [voiceVolume, setVoiceVolume] = useState(0.8);
 
   const activeProfile = useMemo(
     () => profiles.find((profile) => profile.id === activeProfileId) ?? null,
@@ -73,6 +75,23 @@ export default function App() {
 
     return () => window.clearTimeout(timerId);
   }, [toasts]);
+
+  useEffect(() => {
+    const speak = (payload: VoiceSpeakPayload) => {
+      if (!('speechSynthesis' in window) || typeof window.SpeechSynthesisUtterance !== 'function') {
+        pushError('Speech synthesis is not available in this renderer');
+        return;
+      }
+
+      const utterance = new window.SpeechSynthesisUtterance(payload.text);
+      utterance.lang = payload.lang || languageCode;
+      utterance.rate = voiceRate;
+      utterance.volume = voiceVolume;
+      window.speechSynthesis.speak(utterance);
+    };
+
+    return window.copilot.onVoiceSpeak(speak);
+  }, [languageCode, voiceRate, voiceVolume]);
 
   const onSelectProfile = async (profileId: string) => {
     try {
@@ -204,6 +223,10 @@ export default function App() {
             permissionLevels={permissionLevels}
             onChangeLanguageCode={setLanguageCode}
             onChangePermissionLevels={setPermissionLevels}
+            voiceRate={voiceRate}
+            voiceVolume={voiceVolume}
+            onChangeVoiceRate={setVoiceRate}
+            onChangeVoiceVolume={setVoiceVolume}
           />
         ) : null}
       </section>

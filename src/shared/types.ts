@@ -86,6 +86,35 @@ export interface ScheduledStatusItem {
   enabled: boolean;
 }
 
+export interface VoiceCommand {
+  id: string;
+  trigger: string;
+  template: string | null;
+  language: string;
+  permissions: PermissionLevel[];
+  cooldownSeconds: number;
+  enabled: boolean;
+}
+
+export interface VoiceCommandUpsertInput {
+  id?: string;
+  trigger: string;
+  template: string | null;
+  language: string;
+  permissions: PermissionLevel[];
+  cooldownSeconds: number;
+  enabled: boolean;
+}
+
+export interface VoiceCommandDeleteInput {
+  id: string;
+}
+
+export interface VoiceSpeakPayload {
+  text: string;
+  lang: string;
+}
+
 export interface ProfileSummary {
   id: string;
   name: string;

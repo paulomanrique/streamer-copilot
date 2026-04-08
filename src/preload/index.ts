@@ -10,6 +10,9 @@ import type {
   ScheduledMessageUpsertInput,
   ScheduledStatusItem,
   SelectProfileInput,
+  VoiceCommandDeleteInput,
+  VoiceCommandUpsertInput,
+  VoiceSpeakPayload,
 } from '../shared/types.js';
 
 const copilotApi: CopilotApi = {
@@ -29,6 +32,17 @@ const copilotApi: CopilotApi = {
     ipcRenderer.on(IPC_CHANNELS.scheduledStatus, wrappedListener);
     return () => {
       ipcRenderer.removeListener(IPC_CHANNELS.scheduledStatus, wrappedListener);
+    };
+  },
+  listVoiceCommands: () => ipcRenderer.invoke(IPC_CHANNELS.voiceList),
+  upsertVoiceCommand: (input: VoiceCommandUpsertInput) => ipcRenderer.invoke(IPC_CHANNELS.voiceUpsert, input),
+  deleteVoiceCommand: (input: VoiceCommandDeleteInput) => ipcRenderer.invoke(IPC_CHANNELS.voiceDelete, input),
+  previewVoiceSpeak: (input: VoiceSpeakPayload) => ipcRenderer.invoke(IPC_CHANNELS.voicePreviewSpeak, input),
+  onVoiceSpeak: (listener: (payload: VoiceSpeakPayload) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: VoiceSpeakPayload) => listener(payload);
+    ipcRenderer.on(IPC_CHANNELS.voiceSpeak, wrappedListener);
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.voiceSpeak, wrappedListener);
     };
   },
 };
