@@ -763,22 +763,16 @@
     <div class="relative bg-gray-900 border border-gray-700 rounded-xl w-full max-w-xl shadow-2xl">
       <div class="px-5 py-4 border-b border-gray-700">
         <h3 class="font-semibold">Selecionar Perfil</h3>
-        <p class="text-xs text-gray-500 mt-1">
-          Cada perfil é salvo em um diretório separado, com configurações em arquivos <code class="text-violet-300">.json</code>.
-        </p>
       </div>
       <div class="p-5 space-y-4">
         <div>
           <label class="block text-sm text-gray-400 mb-1.5">Perfil</label>
           <select id="profile-selector-select" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"></select>
         </div>
-        <div>
-          <label class="block text-sm text-gray-400 mb-1.5">Diretório do perfil</label>
-          <input id="profile-selector-dir" type="text" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500" readonly>
-        </div>
-        <div class="p-3 rounded-lg bg-gray-800/70 border border-gray-700 text-xs text-gray-400">
-          Arquivos esperados neste diretório: <code class="text-violet-300">settings.json</code>, <code class="text-violet-300">commands.sound.json</code>, <code class="text-violet-300">commands.voice.json</code>, <code class="text-violet-300">scheduled.json</code>.
-        </div>
+        <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+          <input id="profile-selector-skip" type="checkbox" class="accent-violet-500">
+          Não me pergunte novamente
+        </label>
       </div>
       <div class="flex gap-3 px-5 py-4 border-t border-gray-700">
         <button onclick="createProfile()" class="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">Novo Perfil</button>
@@ -1150,6 +1144,7 @@
     { id: 'p2', name: 'Shorts',    directory: '/Users/paulo/StreamerCopilot/profiles/shorts',    lastUsed: Date.now() - 3600000 },
   ];
   let currentProfileId = MOCK_PROFILES[0].id;
+  const SKIP_PROFILE_SELECTOR_KEY = 'streamerCopilot.skipProfileSelector';
 
   function formatTime(ts) {
     return new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -1399,17 +1394,12 @@
 
   function renderProfileSelector() {
     const sel = document.getElementById('profile-selector-select');
-    const dir = document.getElementById('profile-selector-dir');
-    if (!sel || !dir) return;
+    const skip = document.getElementById('profile-selector-skip');
+    if (!sel) return;
     sel.innerHTML = MOCK_PROFILES.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
     sel.value = currentProfileId;
-    const profile = getProfileById(currentProfileId);
-    dir.value = profile ? profile.directory : '';
-    sel.onchange = () => {
-      currentProfileId = sel.value;
-      const selected = getProfileById(currentProfileId);
-      dir.value = selected ? selected.directory : '';
-    };
+    if (skip) skip.checked = localStorage.getItem(SKIP_PROFILE_SELECTOR_KEY) === '1';
+    sel.onchange = () => { currentProfileId = sel.value; };
   }
 
   function renderProfilesSettings() {
@@ -1506,7 +1496,10 @@
 
   function selectStartupProfile() {
     const sel = document.getElementById('profile-selector-select');
+    const skip = document.getElementById('profile-selector-skip');
     if (sel?.value) currentProfileId = sel.value;
+    if (skip?.checked) localStorage.setItem(SKIP_PROFILE_SELECTOR_KEY, '1');
+    else localStorage.removeItem(SKIP_PROFILE_SELECTOR_KEY);
     const profile = getProfileById(currentProfileId);
     if (profile) profile.lastUsed = Date.now();
     syncProfilesUI();
@@ -1700,7 +1693,7 @@
     initVoiceCommands();
     initScheduled();
     buildActivityFilterList();
-    openModal('modal-profile-selector');
+    if (localStorage.getItem(SKIP_PROFILE_SELECTOR_KEY) !== '1') openModal('modal-profile-selector');
 
     // Chat events (double-click reply, right-click context menu)
     const feed = document.getElementById('chat-feed');
