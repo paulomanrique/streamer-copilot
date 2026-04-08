@@ -16,7 +16,7 @@ import { styles } from './components/app-styles.js';
 const SKIP_PROFILE_SELECTOR_KEY = 'streamerCopilot.skipProfileSelector';
 
 export default function App() {
-  const { profiles, activeProfileId, setProfiles } = useAppStore();
+  const { profiles, activeProfileId, obsStats, setProfiles, setObsStats } = useAppStore();
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -120,6 +120,24 @@ export default function App() {
 
     return window.copilot.onSoundPlay(play);
   }, []);
+
+  useEffect(() => {
+    const disconnectStats = window.copilot.onObsStats((stats) => {
+      setObsStats(stats);
+    });
+    const disconnectConnected = window.copilot.onObsConnected(() => {
+      setObsStats((current) => ({ ...current, connected: true }));
+    });
+    const disconnectDisconnected = window.copilot.onObsDisconnected(() => {
+      setObsStats((current) => ({ ...current, connected: false }));
+    });
+
+    return () => {
+      disconnectStats();
+      disconnectConnected();
+      disconnectDisconnected();
+    };
+  }, [setObsStats]);
 
   const onSelectProfile = async (profileId: string) => {
     try {
@@ -235,7 +253,9 @@ export default function App() {
 
         <SectionTabs currentSection={currentSection} onChangeSection={setCurrentSection} />
 
-        {currentSection === 'dashboard' ? <DashboardSummary activeProfileName={activeProfileName} /> : null}
+        {currentSection === 'dashboard' ? (
+          <DashboardSummary activeProfileName={activeProfileName} obsStats={obsStats} />
+        ) : null}
 
         {currentSection === 'settings' ? (
           <SettingsWorkspace
@@ -255,6 +275,7 @@ export default function App() {
             voiceVolume={voiceVolume}
             onChangeVoiceRate={setVoiceRate}
             onChangeVoiceVolume={setVoiceVolume}
+            obsStats={obsStats}
           />
         ) : null}
       </section>

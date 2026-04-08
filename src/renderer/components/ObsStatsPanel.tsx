@@ -1,24 +1,11 @@
+import type { ObsStatsSnapshot } from '../../shared/types.js';
 import { styles } from './app-styles.js';
 
 interface ObsStatsPanelProps {
-  sceneName: string;
-  uptimeLabel: string;
-  bitrateKbps: number;
-  fps: number;
-  cpuPercent: number;
-  ramMb: number;
-  droppedFrames: number;
+  stats: ObsStatsSnapshot;
 }
 
-export function ObsStatsPanel({
-  sceneName,
-  uptimeLabel,
-  bitrateKbps,
-  fps,
-  cpuPercent,
-  ramMb,
-  droppedFrames,
-}: ObsStatsPanelProps) {
+export function ObsStatsPanel({ stats }: ObsStatsPanelProps) {
   return (
     <section style={styles.previewCard}>
       <div style={styles.previewHeader}>
@@ -26,17 +13,29 @@ export function ObsStatsPanel({
           <h3 style={styles.sectionTitle}>OBS Stats</h3>
           <p style={styles.helper}>Renderer-side stat cards ready to receive streamed OBS state.</p>
         </div>
-        <span style={styles.selectionPill}>Live</span>
+        <span style={styles.selectionPill}>{stats.connected ? 'Live' : 'Offline'}</span>
       </div>
 
       <div style={styles.statsGrid}>
-        <StatCard label="Scene" value={sceneName} tone="good" />
-        <StatCard label="Uptime" value={uptimeLabel} tone="good" />
-        <StatCard label="Bitrate" value={`${bitrateKbps} kbps`} tone={bitrateKbps >= 5500 ? 'good' : 'warn'} />
-        <StatCard label="FPS" value={`${fps}`} tone={fps >= 60 ? 'good' : 'warn'} />
-        <StatCard label="CPU" value={`${cpuPercent}%`} tone={cpuPercent < 70 ? 'good' : 'warn'} />
-        <StatCard label="RAM" value={`${ramMb} MB`} tone={ramMb < 3500 ? 'good' : 'warn'} />
-        <StatCard label="Dropped" value={`${droppedFrames}`} tone={droppedFrames === 0 ? 'good' : 'bad'} />
+        <StatCard label="Scene" value={stats.sceneName} tone={stats.connected ? 'good' : 'warn'} />
+        <StatCard label="Uptime" value={stats.uptimeLabel} tone={stats.connected ? 'good' : 'warn'} />
+        <StatCard
+          label="Bitrate"
+          value={`${stats.bitrateKbps} kbps`}
+          tone={stats.connected && stats.bitrateKbps >= 5500 ? 'good' : 'warn'}
+        />
+        <StatCard label="FPS" value={`${stats.fps}`} tone={stats.connected && stats.fps >= 60 ? 'good' : 'warn'} />
+        <StatCard
+          label="CPU"
+          value={`${stats.cpuPercent}%`}
+          tone={stats.connected && stats.cpuPercent < 70 ? 'good' : 'warn'}
+        />
+        <StatCard
+          label="RAM"
+          value={`${stats.ramMb} MB`}
+          tone={stats.connected && stats.ramMb < 3500 ? 'good' : 'warn'}
+        />
+        <StatCard label="Dropped" value={`${stats.droppedFrames}`} tone={stats.droppedFrames === 0 ? 'good' : 'bad'} />
       </div>
     </section>
   );

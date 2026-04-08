@@ -3,6 +3,8 @@ import type {
   CloneProfileInput,
   CreateProfileInput,
   DeleteProfileInput,
+  ObsConnectionSettings,
+  ObsStatsSnapshot,
   ProfilesSnapshot,
   RenameProfileInput,
   SoundCommand,
@@ -44,6 +46,12 @@ export const IPC_CHANNELS = {
   soundsPickFile: 'sounds:pick-file',
   soundsPreviewPlay: 'sounds:preview-play',
   soundsPlay: 'sounds:play',
+  obsGetSettings: 'obs:get-settings',
+  obsSaveSettings: 'obs:save-settings',
+  obsTestConnection: 'obs:test-connection',
+  obsStats: 'obs:stats',
+  obsConnected: 'obs:connected',
+  obsDisconnected: 'obs:disconnected',
 } as const;
 
 export interface CopilotApi {
@@ -70,4 +78,10 @@ export interface CopilotApi {
   pickSoundFile: () => Promise<string | null>;
   previewSoundPlay: (input: SoundPlayPayload) => Promise<void>;
   onSoundPlay: (listener: (payload: SoundPlayPayload) => void) => () => void;
+  getObsSettings: () => Promise<ObsConnectionSettings>;
+  saveObsSettings: (input: ObsConnectionSettings) => Promise<ObsConnectionSettings>;
+  testObsConnection: (input: ObsConnectionSettings) => Promise<void>;
+  onObsStats: (listener: (payload: ObsStatsSnapshot) => void) => () => void;
+  onObsConnected: (listener: () => void) => () => void;
+  onObsDisconnected: (listener: () => void) => () => void;
 }

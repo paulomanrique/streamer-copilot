@@ -1,14 +1,15 @@
 import { useState } from 'react';
 
-import type { PermissionLevel, ProfileSummary } from '../../shared/types.js';
+import type { ObsStatsSnapshot, PermissionLevel, ProfileSummary } from '../../shared/types.js';
 import { PlatformSettingsPreview } from '../components/PlatformSettingsPreview.js';
 import { SettingsProfilesPanel } from '../components/SettingsProfilesPanel.js';
 import { styles } from '../components/app-styles.js';
+import { ObsSettingsPage } from './ObsSettings.js';
 import { ScheduledMessagesPage } from './ScheduledMessages.js';
 import { SoundCommandsPage } from './SoundCommands.js';
 import { VoiceCommandsPage } from './VoiceCommands.js';
 
-type SettingsView = 'profiles' | 'platforms' | 'sound' | 'voice' | 'scheduled';
+type SettingsView = 'profiles' | 'platforms' | 'obs' | 'sound' | 'voice' | 'scheduled';
 
 interface SettingsWorkspaceProps {
   activeProfileId: string;
@@ -27,11 +28,13 @@ interface SettingsWorkspaceProps {
   voiceVolume: number;
   onChangeVoiceRate: (value: number) => void;
   onChangeVoiceVolume: (value: number) => void;
+  obsStats: ObsStatsSnapshot;
 }
 
 const SETTINGS_VIEWS: Array<{ id: SettingsView; label: string }> = [
   { id: 'profiles', label: 'Profiles' },
   { id: 'platforms', label: 'Platforms' },
+  { id: 'obs', label: 'OBS' },
   { id: 'sound', label: 'Sound Commands' },
   { id: 'voice', label: 'Voice Commands' },
   { id: 'scheduled', label: 'Scheduled Messages' },
@@ -74,6 +77,7 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
         ) : null}
 
         {currentView === 'platforms' ? <PlatformSettingsPreview activeProfileName={props.activeProfileName} /> : null}
+        {currentView === 'obs' ? <ObsSettingsPage obsStats={props.obsStats} /> : null}
         {currentView === 'sound' ? <SoundCommandsPage /> : null}
         {currentView === 'voice' ? (
           <VoiceCommandsPage

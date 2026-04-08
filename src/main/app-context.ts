@@ -6,8 +6,11 @@ import { BrowserWindow, dialog, ipcMain } from 'electron';
 import type { OpenDialogOptions } from 'electron';
 
 import type { DatabaseHandle } from '../db/database.js';
+import { ObsService } from '../modules/obs/obs-service.js';
+import { ObsSettingsStore } from '../modules/obs/obs-settings-store.js';
 import { ScheduledMessageRepository } from '../modules/scheduled/scheduled-repository.js';
 import { SchedulerService } from '../modules/scheduled/scheduler-service.js';
+import { AppSettingsRepository } from '../modules/settings/app-settings-repository.js';
 import { ProfileStore } from '../modules/settings/profile-store.js';
 import { SoundCommandRepository } from '../modules/sounds/sound-repository.js';
 import { SoundService } from '../modules/sounds/sound-service.js';
@@ -19,6 +22,7 @@ import {
   cloneProfileInputSchema,
   createProfileInputSchema,
   deleteProfileInputSchema,
+  obsConnectionSettingsSchema,
   renameProfileInputSchema,
   soundCommandDeleteInputSchema,
   soundCommandUpsertInputSchema,
@@ -42,6 +46,8 @@ interface AppContextOptions {
 
 export function createAppContext(options: AppContextOptions): () => void {
   const profileStore = new ProfileStore(options.userDataPath);
+  const appSettingsRepository = new AppSettingsRepository(options.databaseHandle.db);
+  const obsSettingsStore = new ObsSettingsStore(appSettingsRepository);
   const scheduledRepository = new ScheduledMessageRepository(options.databaseHandle.db);
   const soundRepository = new SoundCommandRepository(options.databaseHandle.db);
   const voiceRepository = new VoiceCommandRepository(options.databaseHandle.db);
@@ -57,9 +63,16 @@ export function createAppContext(options: AppContextOptions): () => void {
     repository: voiceRepository,
     onSpeak: (payload) => options.stateHub.pushVoiceSpeak(payload),
   });
+  const obsService = new ObsService({
+    settingsStore: obsSettingsStore,
+    onConnected: () => options.stateHub.pushObsConnected(),
+    onDisconnected: () => options.stateHub.pushObsDisconnected(),
+    onStats: (stats) => options.stateHub.pushObsStats(stats),
+  });
   const soundsDirectory = path.join(options.userDataPath, 'sounds');
 
   schedulerService.start();
+  obsService.start();
 
   ipcMain.handle(IPC_CHANNELS.appGetInfo, async (): Promise<AppInfo> => ({
     appName: APP_NAME,
@@ -183,8 +196,21 @@ export function createAppContext(options: AppContextOptions): () => void {
     soundService.previewPlay(input);
   });
 
+  ipcMain.handle(IPC_CHANNELS.obsGetSettings, async () => obsService.getSettings());
+
+  ipcMain.handle(IPC_CHANNELS.obsSaveSettings, async (_event, rawInput: unknown) => {
+    const input = obsConnectionSettingsSchema.parse(rawInput);
+    return obsService.saveSettings(input);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.obsTestConnection, async (_event, rawInput: unknown) => {
+    const input = obsConnectionSettingsSchema.parse(rawInput);
+    await obsService.testConnection(input);
+  });
+
   return () => {
     schedulerService.stop();
+    void obsService.stop();
     ipcMain.removeHandler(IPC_CHANNELS.appGetInfo);
     ipcMain.removeHandler(IPC_CHANNELS.profilesList);
     ipcMain.removeHandler(IPC_CHANNELS.profilesSelect);
@@ -205,5 +231,8 @@ export function createAppContext(options: AppContextOptions): () => void {
     ipcMain.removeHandler(IPC_CHANNELS.soundsDelete);
     ipcMain.removeHandler(IPC_CHANNELS.soundsPickFile);
     ipcMain.removeHandler(IPC_CHANNELS.soundsPreviewPlay);
+    ipcMain.removeHandler(IPC_CHANNELS.obsGetSettings);
+    ipcMain.removeHandler(IPC_CHANNELS.obsSaveSettings);
+    ipcMain.removeHandler(IPC_CHANNELS.obsTestConnection);
   };
 }

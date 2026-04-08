@@ -76,6 +76,12 @@ export const soundPlayPayloadSchema = z.object({
   filePath: z.string().min(1),
 });
 
+export const obsConnectionSettingsSchema = z.object({
+  host: z.string().min(1).max(255),
+  port: z.number().int().min(1).max(65535),
+  password: z.string().max(200),
+});
+
 export type SelectProfileInputSchema = z.infer<typeof selectProfileInputSchema>;
 export type CreateProfileInputSchema = z.infer<typeof createProfileInputSchema>;
 export type RenameProfileInputSchema = z.infer<typeof renameProfileInputSchema>;
@@ -89,3 +95,4 @@ export type VoiceSpeakPayloadSchema = z.infer<typeof voiceSpeakPayloadSchema>;
 export type SoundCommandUpsertInputSchema = z.infer<typeof soundCommandUpsertInputSchema>;
 export type SoundCommandDeleteInputSchema = z.infer<typeof soundCommandDeleteInputSchema>;
 export type SoundPlayPayloadSchema = z.infer<typeof soundPlayPayloadSchema>;
+export type ObsConnectionSettingsSchema = z.infer<typeof obsConnectionSettingsSchema>;

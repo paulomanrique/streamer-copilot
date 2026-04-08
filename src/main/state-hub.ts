@@ -1,7 +1,12 @@
 import type { BrowserWindow } from 'electron';
 
 import { IPC_CHANNELS } from '../shared/ipc.js';
-import type { ScheduledStatusItem, SoundPlayPayload, VoiceSpeakPayload } from '../shared/types.js';
+import type {
+  ObsStatsSnapshot,
+  ScheduledStatusItem,
+  SoundPlayPayload,
+  VoiceSpeakPayload,
+} from '../shared/types.js';
 
 // Foundation placeholder for future push-based state sync to renderer.
 export class StateHub {
@@ -29,5 +34,17 @@ export class StateHub {
 
   pushSoundPlay(payload: SoundPlayPayload): void {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.soundsPlay, payload);
+  }
+
+  pushObsStats(payload: ObsStatsSnapshot): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.obsStats, payload);
+  }
+
+  pushObsConnected(): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.obsConnected);
+  }
+
+  pushObsDisconnected(): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.obsDisconnected);
   }
 }

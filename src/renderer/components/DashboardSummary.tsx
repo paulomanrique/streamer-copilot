@@ -1,8 +1,8 @@
+import type { ObsStatsSnapshot } from '../../shared/types.js';
 import {
   DASHBOARD_CONNECTIONS,
   DASHBOARD_EVENTS,
   DASHBOARD_MESSAGES,
-  DASHBOARD_OBS_STATUS,
 } from '../dashboard-mock-data.js';
 import { ChatFeed } from './ChatFeed.js';
 import { EventBanner } from './EventBanner.js';
@@ -12,9 +12,10 @@ import { styles } from './app-styles.js';
 
 interface DashboardSummaryProps {
   activeProfileName: string;
+  obsStats: ObsStatsSnapshot;
 }
 
-export function DashboardSummary({ activeProfileName }: DashboardSummaryProps) {
+export function DashboardSummary({ activeProfileName, obsStats }: DashboardSummaryProps) {
   return (
     <section style={styles.dashboardShell}>
       <div>
@@ -22,21 +23,13 @@ export function DashboardSummary({ activeProfileName }: DashboardSummaryProps) {
         <p style={styles.message}>Active profile: {activeProfileName}</p>
       </div>
 
-      <StatusBar connections={DASHBOARD_CONNECTIONS} obsStatus={DASHBOARD_OBS_STATUS} />
+      <StatusBar connections={DASHBOARD_CONNECTIONS} obsStatus={obsStats} />
 
       <div style={styles.dashboardGrid}>
         <ChatFeed messages={DASHBOARD_MESSAGES} events={DASHBOARD_EVENTS} />
 
         <aside style={styles.sideStack}>
-          <ObsStatsPanel
-            sceneName={DASHBOARD_OBS_STATUS.sceneName}
-            uptimeLabel={DASHBOARD_OBS_STATUS.uptimeLabel}
-            bitrateKbps={6120}
-            fps={60}
-            cpuPercent={32}
-            ramMb={2480}
-            droppedFrames={0}
-          />
+          <ObsStatsPanel stats={obsStats} />
 
           <section style={styles.previewCard}>
             <div style={styles.previewHeader}>

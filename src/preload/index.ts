@@ -5,6 +5,8 @@ import type {
   CloneProfileInput,
   CreateProfileInput,
   DeleteProfileInput,
+  ObsConnectionSettings,
+  ObsStatsSnapshot,
   RenameProfileInput,
   SoundCommandDeleteInput,
   SoundCommandUpsertInput,
@@ -58,6 +60,30 @@ const copilotApi: CopilotApi = {
     ipcRenderer.on(IPC_CHANNELS.soundsPlay, wrappedListener);
     return () => {
       ipcRenderer.removeListener(IPC_CHANNELS.soundsPlay, wrappedListener);
+    };
+  },
+  getObsSettings: () => ipcRenderer.invoke(IPC_CHANNELS.obsGetSettings),
+  saveObsSettings: (input: ObsConnectionSettings) => ipcRenderer.invoke(IPC_CHANNELS.obsSaveSettings, input),
+  testObsConnection: (input: ObsConnectionSettings) => ipcRenderer.invoke(IPC_CHANNELS.obsTestConnection, input),
+  onObsStats: (listener: (payload: ObsStatsSnapshot) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: ObsStatsSnapshot) => listener(payload);
+    ipcRenderer.on(IPC_CHANNELS.obsStats, wrappedListener);
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.obsStats, wrappedListener);
+    };
+  },
+  onObsConnected: (listener: () => void) => {
+    const wrappedListener = () => listener();
+    ipcRenderer.on(IPC_CHANNELS.obsConnected, wrappedListener);
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.obsConnected, wrappedListener);
+    };
+  },
+  onObsDisconnected: (listener: () => void) => {
+    const wrappedListener = () => listener();
+    ipcRenderer.on(IPC_CHANNELS.obsDisconnected, wrappedListener);
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.obsDisconnected, wrappedListener);
     };
   },
 };

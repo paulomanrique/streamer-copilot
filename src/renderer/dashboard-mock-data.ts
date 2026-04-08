@@ -1,6 +1,5 @@
 import type {
   ChatMessage,
-  ObsStatusSnapshot,
   PlatformConnectionStatus,
   StreamEvent,
 } from '../shared/types.js';
@@ -11,12 +10,6 @@ export const DASHBOARD_CONNECTIONS: PlatformConnectionStatus[] = [
   { platform: 'kick', label: 'Kick', connected: true },
   { platform: 'tiktok', label: 'TikTok', connected: false },
 ];
-
-export const DASHBOARD_OBS_STATUS: ObsStatusSnapshot = {
-  connected: true,
-  sceneName: 'Gameplay',
-  uptimeLabel: '01:23:47',
-};
 
 export const DASHBOARD_MESSAGES: ChatMessage[] = [
   {

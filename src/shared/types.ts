@@ -57,6 +57,20 @@ export interface ObsStatusSnapshot {
   uptimeLabel: string;
 }
 
+export interface ObsStatsSnapshot extends ObsStatusSnapshot {
+  bitrateKbps: number;
+  fps: number;
+  cpuPercent: number;
+  ramMb: number;
+  droppedFrames: number;
+}
+
+export interface ObsConnectionSettings {
+  host: string;
+  port: number;
+  password: string;
+}
+
 export interface ScheduledMessage {
   id: string;
   message: string;
