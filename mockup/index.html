@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-BR" class="dark">
+<html lang="en" class="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -80,7 +80,7 @@
       <!-- Go Live button -->
       <button onclick="openModal('modal-live-urls')" class="flex items-center gap-1.5 px-3 py-1.5 rounded bg-red-600 hover:bg-red-500 text-sm font-medium transition-colors">
         <span class="pulse-dot w-2 h-2 rounded-full bg-white"></span>
-        Ao Vivo
+        Go Live
       </button>
     </div>
   </header>
@@ -146,7 +146,7 @@
 
           <!-- Chat messages -->
           <div id="chat-feed" class="flex-1 overflow-y-auto py-1 space-y-0.5">
-            <!-- populated by chat-renderer.js -->
+            <!-- populated by the inline mockup script -->
           </div>
 
           <!-- Chat input -->
@@ -183,29 +183,29 @@
             </div>
 
             <div class="grid grid-cols-4 gap-2">
-              <!-- Row 1: Tempo + dropped frames -->
+              <!-- Row 1: Time + dropped frames -->
               <div class="bg-gray-800/60 rounded-lg p-2.5 text-center">
                 <div class="text-base font-mono font-bold text-violet-400" id="obs-time">00:00:00</div>
                 <div class="text-xs text-gray-500 mt-0.5">Time</div>
               </div>
               <div class="bg-gray-800/60 rounded-lg p-2.5 text-center">
                 <div class="text-base font-mono font-bold text-red-400" id="obs-dropped-net">0</div>
-                <div class="text-xs text-gray-500 mt-0.5 leading-tight">Frames<br>perdidos (rede)</div>
+                <div class="text-xs text-gray-500 mt-0.5 leading-tight">Dropped Frames<br>(network)</div>
               </div>
               <div class="bg-gray-800/60 rounded-lg p-2.5 text-center">
                 <div class="text-base font-mono font-bold text-orange-400" id="obs-dropped-enc">0</div>
-                <div class="text-xs text-gray-500 mt-0.5 leading-tight">Frames<br>perdidos (enc.)</div>
+                <div class="text-xs text-gray-500 mt-0.5 leading-tight">Dropped Frames<br>(encoder)</div>
               </div>
               <div class="bg-gray-800/60 rounded-lg p-2.5 text-center">
                 <div class="text-base font-mono font-bold text-yellow-400" id="obs-dropped-render">0</div>
-                <div class="text-xs text-gray-500 mt-0.5 leading-tight">Frames<br>perdidos (render)</div>
+                <div class="text-xs text-gray-500 mt-0.5 leading-tight">Dropped Frames<br>(render)</div>
               </div>
 
               <!-- Row 2: Connection quality bar -->
               <div class="col-span-4 bg-gray-800/60 rounded-lg px-3 py-2 flex items-center gap-3">
                 <div class="flex items-center gap-1.5 shrink-0">
                   <span class="text-xs text-gray-500">Connection</span>
-                  <span id="obs-conn-quality" class="text-xs font-semibold text-green-400">● Boa</span>
+                  <span id="obs-conn-quality" class="text-xs font-semibold text-green-400">● Good</span>
                 </div>
                 <div class="flex-1 bg-gray-700 rounded-full h-1.5 overflow-hidden">
                   <div id="obs-conn-bar" class="h-full bg-green-500 rounded-full transition-all" style="width: 97%"></div>
@@ -226,7 +226,7 @@
                 <div class="bg-red-500/10 border border-red-500/20 rounded-lg p-2.5 text-center">
                   <div class="flex items-center justify-center gap-1 mb-0.5">
                     <svg class="w-3 h-3 text-red-400" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
-                    <span class="text-xs text-red-400">YT Hor.</span>
+                    <span class="text-xs text-red-400">YT Horizontal</span>
                   </div>
                   <div class="text-base font-mono font-bold text-red-300" id="viewers-youtube">834</div>
                   <div class="text-xs text-gray-500 mt-0.5">viewers</div>
@@ -237,7 +237,7 @@
                 <div class="bg-rose-500/10 border border-rose-500/20 rounded-lg p-2.5 text-center">
                   <div class="flex items-center justify-center gap-1 mb-0.5">
                     <svg class="w-3 h-3 text-rose-400" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
-                    <span class="text-xs text-rose-400">YT Vert.</span>
+                    <span class="text-xs text-rose-400">YT Vertical</span>
                   </div>
                   <div class="text-base font-mono font-bold text-rose-300" id="viewers-youtube-v">291</div>
                   <div class="text-xs text-gray-500 mt-0.5">viewers</div>
@@ -271,29 +271,29 @@
           <!-- Activity Log -->
           <div class="flex flex-col flex-1 overflow-hidden p-4">
             <div class="flex items-center justify-between mb-2 shrink-0">
-              <h2 class="text-sm font-semibold text-gray-200">Atividade Recente</h2>
+              <h2 class="text-sm font-semibold text-gray-200">Activity Log</h2>
               <!-- Filter button -->
               <div class="relative">
                 <button id="activity-filter-btn" onclick="toggleActivityFilterPanel()"
                   class="flex items-center gap-1 px-2 py-1 rounded text-xs text-gray-400 hover:text-gray-200 hover:bg-gray-800 transition-colors">
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z"/></svg>
-                  Filtrar
+                  Filter
                 </button>
                 <!-- Filter dropdown panel -->
                 <div id="activity-filter-panel" class="hidden absolute right-0 top-full mt-1 w-52 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl z-20 p-3">
-                  <p class="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-2">Mostrar no log</p>
+                  <p class="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-2">Show in Log</p>
                   <div class="space-y-1" id="activity-filter-list">
-                    <!-- populated by nav.js -->
+                    <!-- populated by the inline mockup script -->
                   </div>
                   <div class="border-t border-gray-700 mt-2 pt-2 flex gap-2">
-                    <button onclick="setAllActivityFilters(true)"  class="flex-1 text-xs py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 transition-colors">Todos</button>
-                    <button onclick="setAllActivityFilters(false)" class="flex-1 text-xs py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 transition-colors">Nenhum</button>
+                    <button onclick="setAllActivityFilters(true)"  class="flex-1 text-xs py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 transition-colors">All</button>
+                    <button onclick="setAllActivityFilters(false)" class="flex-1 text-xs py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 transition-colors">None</button>
                   </div>
                 </div>
               </div>
             </div>
             <div id="activity-log" class="flex-1 overflow-y-auto text-xs">
-              <!-- populated by chat-renderer.js -->
+              <!-- populated by the inline mockup script -->
             </div>
           </div>
         </div>
@@ -307,11 +307,11 @@
         </div>
         <div class="flex items-center gap-1.5">
           <span class="w-2 h-2 rounded-full bg-red-500 pulse-dot"></span>
-          <span>YT Hor.: <span class="text-gray-300">My Channel</span></span>
+          <span>YT Horizontal: <span class="text-gray-300">My Channel</span></span>
         </div>
         <div class="flex items-center gap-1.5">
           <span class="w-2 h-2 rounded-full bg-rose-400 pulse-dot"></span>
-          <span>YT Vert.: <span class="text-gray-300">My Channel Shorts</span></span>
+          <span>YT Vertical: <span class="text-gray-300">My Channel Shorts</span></span>
         </div>
         <div class="flex items-center gap-1.5">
           <span class="w-2 h-2 rounded-full bg-green-500 pulse-dot"></span>
@@ -319,7 +319,7 @@
         </div>
         <div class="flex items-center gap-1.5">
           <span class="w-2 h-2 rounded-full bg-pink-500"></span>
-          <span>TikTok: <span class="text-gray-300">Em breve</span></span>
+          <span>TikTok: <span class="text-gray-300">Planned</span></span>
         </div>
         <div class="flex items-center gap-1.5 ml-2">
           <span class="w-2 h-2 rounded-full bg-cyan-500"></span>
@@ -355,12 +355,12 @@
             <button data-settings-nav="settings-sounds" onclick="showSettingsSection('settings-sounds')"
               class="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded text-sm transition-colors text-gray-400 hover:text-white">
               <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072M12 6v12m-3.536-9.536a5 5 0 000 7.072M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-              Sons
+              Sound Commands
             </button>
             <button data-settings-nav="settings-voice" onclick="showSettingsSection('settings-voice')"
               class="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded text-sm transition-colors text-gray-400 hover:text-white">
               <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
-              Voz (TTS)
+              Voice (TTS)
             </button>
           </div>
           <div class="px-3 pb-1">
@@ -415,7 +415,7 @@
                     <h3 class="font-semibold">Twitch</h3>
                     <p class="text-sm text-gray-400 mt-0.5">mychannel • <span class="text-green-400">Connected</span></p>
                   </div>
-                  <button class="px-3 py-1.5 rounded bg-red-600/20 hover:bg-red-600/30 text-red-400 text-sm transition-colors">Desconectar</button>
+                    <button class="px-3 py-1.5 rounded bg-red-600/20 hover:bg-red-600/30 text-red-400 text-sm transition-colors">Disconnect</button>
                 </div>
                 <div class="mt-3 flex gap-2 flex-wrap">
                   <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">chat:read</span>
@@ -438,9 +438,9 @@
                     <h3 class="font-semibold">YouTube (Horizontal)</h3>
                     <p class="text-sm text-gray-400 mt-0.5">My Channel • Live ID: <code class="text-red-300">dQw4w9WgXcQ</code> • <span class="text-green-400">Connected</span></p>
                   </div>
-                  <button class="px-3 py-1.5 rounded bg-red-600/20 hover:bg-red-600/30 text-red-400 text-sm transition-colors">Desconectar</button>
+                    <button class="px-3 py-1.5 rounded bg-red-600/20 hover:bg-red-600/30 text-red-400 text-sm transition-colors">Disconnect</button>
                 </div>
-                <p class="text-xs text-gray-500 mt-2">Polling a cada 5s · Quota: 847/10000 unidades hoje</p>
+                <p class="text-xs text-gray-500 mt-2">Polling every 5s · Quota: 847/10000 units today</p>
               </div>
             </div>
           </div>
@@ -457,9 +457,9 @@
                     <h3 class="font-semibold">YouTube (Vertical)</h3>
                     <p class="text-sm text-gray-400 mt-0.5">My Channel Shorts • Live ID: <code class="text-rose-300">AbC123Shorts</code> • <span class="text-green-400">Connected</span></p>
                   </div>
-                  <button class="px-3 py-1.5 rounded bg-red-600/20 hover:bg-red-600/30 text-red-400 text-sm transition-colors">Desconectar</button>
+                    <button class="px-3 py-1.5 rounded bg-red-600/20 hover:bg-red-600/30 text-red-400 text-sm transition-colors">Disconnect</button>
                 </div>
-                <p class="text-xs text-gray-500 mt-2">Polling a cada 5s · Quota: compartilhada com YouTube API</p>
+                <p class="text-xs text-gray-500 mt-2">Polling every 5s · Quota shared with the main YouTube API project</p>
               </div>
             </div>
           </div>
@@ -496,11 +496,11 @@
                 <div class="flex items-center justify-between">
                   <div>
                     <h3 class="font-semibold">TikTok Live</h3>
-                    <p class="text-sm text-gray-400 mt-0.5"><span class="text-pink-400">Planejado (M2+)</span></p>
+                    <p class="text-sm text-gray-400 mt-0.5"><span class="text-pink-400">Planned (M2+)</span></p>
                   </div>
                   <button class="px-3 py-1.5 rounded bg-gray-700 text-gray-500 text-sm cursor-not-allowed" disabled>Em breve</button>
                 </div>
-                <p class="text-xs text-gray-500 mt-2">Reserved mockup channel to prepare UI and flows before real implementation.</p>
+                <p class="text-xs text-gray-500 mt-2">Reserved mockup slot so the multi-live layout is stable before implementation.</p>
               </div>
             </div>
           </div>
@@ -514,14 +514,29 @@
               + New Command
             </button>
           </div>
-          <p class="text-sm text-gray-400 mb-6">Configure comandos de chat que reproduzem sons. Ex: <code class="text-violet-300 text-xs bg-gray-800 px-1 py-0.5 rounded">!gato</code></p>
+          <p class="text-sm text-gray-400 mb-4">Configure chat triggers that play copied audio files. Example: <code class="text-violet-300 text-xs bg-gray-800 px-1 py-0.5 rounded">!cat</code></p>
+
+          <div class="grid grid-cols-3 gap-3 mb-6">
+            <div class="bg-gray-800/40 rounded-xl border border-gray-700 p-4">
+              <p class="text-xs uppercase tracking-wider text-gray-500 mb-2">File Picker</p>
+              <p class="text-sm text-gray-300">Import `.mp3`, `.ogg`, or `.wav` and copy the asset into the app sounds folder.</p>
+            </div>
+            <div class="bg-gray-800/40 rounded-xl border border-gray-700 p-4">
+              <p class="text-xs uppercase tracking-wider text-gray-500 mb-2">Permissions</p>
+              <p class="text-sm text-gray-300">Use compact permission chips to define exactly who can trigger the command.</p>
+            </div>
+            <div class="bg-gray-800/40 rounded-xl border border-gray-700 p-4">
+              <p class="text-xs uppercase tracking-wider text-gray-500 mb-2">Test Action</p>
+              <p class="text-sm text-gray-300">Preview playback from the table before going live.</p>
+            </div>
+          </div>
 
           <div class="bg-gray-800/40 rounded-xl border border-gray-700 overflow-hidden">
             <table class="w-full text-sm">
               <thead>
                 <tr class="border-b border-gray-700 bg-gray-800/60">
                   <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Command</th>
-                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Arquivo</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">File</th>
                   <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Permissions</th>
                   <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Cooldown</th>
                   <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Active</th>
@@ -529,7 +544,7 @@
                 </tr>
               </thead>
               <tbody id="sounds-table-body">
-                <!-- populated by chat-renderer.js -->
+                <!-- populated by the inline mockup script -->
               </tbody>
             </table>
           </div>
@@ -550,7 +565,7 @@
               <thead>
                 <tr class="border-b border-gray-700 bg-gray-800/60">
                   <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Command</th>
-                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Texto Fixo</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Fixed Text</th>
                   <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Language</th>
                   <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Permissions</th>
                   <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Cooldown</th>
@@ -559,7 +574,7 @@
                 </tr>
               </thead>
               <tbody id="voice-table-body">
-                <!-- populated by chat-renderer.js -->
+                <!-- populated by the inline mockup script -->
               </tbody>
             </table>
           </div>
@@ -590,12 +605,12 @@
                 <span class="text-xs text-gray-500">80%</span>
               </div>
               <div>
-                <label class="block text-sm text-gray-400 mb-1.5">Velocidade</label>
+                <label class="block text-sm text-gray-400 mb-1.5">Rate</label>
                 <input type="range" min="50" max="200" value="100" class="w-full accent-violet-500">
                 <span class="text-xs text-gray-500">Normal (1x)</span>
               </div>
               <div>
-                <label class="block text-sm text-gray-400 mb-1.5">Limite de caracteres</label>
+                <label class="block text-sm text-gray-400 mb-1.5">Character limit</label>
                 <input type="number" value="200" class="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
               </div>
             </div>
@@ -616,7 +631,22 @@
               + New Message
             </button>
           </div>
-          <p class="text-sm text-gray-400 mb-6">Messages automatically sent in chat at configured intervals.</p>
+          <p class="text-sm text-gray-400 mb-4">Messages automatically sent in chat at configured intervals.</p>
+
+          <div class="grid grid-cols-3 gap-3 mb-6">
+            <div class="bg-gray-800/40 rounded-xl border border-gray-700 p-4">
+              <p class="text-xs uppercase tracking-wider text-gray-500 mb-2">Interval</p>
+              <p class="text-sm text-gray-300">Send on a fixed cadence in minutes.</p>
+            </div>
+            <div class="bg-gray-800/40 rounded-xl border border-gray-700 p-4">
+              <p class="text-xs uppercase tracking-wider text-gray-500 mb-2">Random Window</p>
+              <p class="text-sm text-gray-300">Add jitter so repeated promos feel less robotic.</p>
+            </div>
+            <div class="bg-gray-800/40 rounded-xl border border-gray-700 p-4">
+              <p class="text-xs uppercase tracking-wider text-gray-500 mb-2">Platforms</p>
+              <p class="text-sm text-gray-300">Choose which connected live outputs receive the message.</p>
+            </div>
+          </div>
 
           <div class="bg-gray-800/40 rounded-xl border border-gray-700 overflow-hidden">
             <table class="w-full text-sm">
@@ -624,6 +654,7 @@
                 <tr class="border-b border-gray-700 bg-gray-800/60">
                   <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Message</th>
                   <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Interval</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Random Window</th>
                   <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Platforms</th>
                   <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Last Sent</th>
                   <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Active</th>
@@ -631,7 +662,7 @@
                 </tr>
               </thead>
               <tbody id="scheduled-table-body">
-                <!-- populated by chat-renderer.js -->
+                <!-- populated by the inline mockup script -->
               </tbody>
             </table>
           </div>
@@ -648,11 +679,11 @@
               <input type="text" value="localhost" class="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
             </div>
             <div>
-              <label class="block text-sm text-gray-400 mb-1.5">Porta</label>
+              <label class="block text-sm text-gray-400 mb-1.5">Port</label>
               <input type="number" value="4455" class="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
             </div>
             <div>
-              <label class="block text-sm text-gray-400 mb-1.5">Senha (opcional)</label>
+              <label class="block text-sm text-gray-400 mb-1.5">Password (optional)</label>
               <input type="password" placeholder="••••••••" class="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
             </div>
             <div class="flex gap-3 pt-2">
@@ -662,9 +693,9 @@
           </div>
 
           <div class="mt-4 p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-xl text-sm">
-            <p class="text-cyan-400 font-medium mb-1">Como ativar no OBS:</p>
+            <p class="text-cyan-400 font-medium mb-1">How to enable in OBS:</p>
             <ol class="text-gray-400 space-y-1 text-xs list-decimal list-inside">
-              <li>Abra o OBS Studio 28+</li>
+              <li>Open OBS Studio 28+</li>
               <li>Go to <strong class="text-gray-300">Tools → WebSocket Server Settings</strong></li>
               <li>Enable <strong class="text-gray-300">"Enable WebSocket server"</strong></li>
               <li>Copy the generated password and paste it above</li>
@@ -681,7 +712,7 @@
             <div class="bg-gray-800/40 rounded-xl border border-gray-700 p-5 space-y-4">
               <div class="flex items-center justify-between">
                 <div>
-                  <p class="text-sm font-medium">Iniciar com o sistema</p>
+                  <p class="text-sm font-medium">Start on login</p>
                   <p class="text-xs text-gray-500 mt-0.5">Open automatically when the computer starts</p>
                 </div>
                 <label class="toggle-switch">
@@ -691,7 +722,7 @@
               <div class="flex items-center justify-between border-t border-gray-700 pt-4">
                 <div>
                   <p class="text-sm font-medium">Minimize to tray</p>
-                  <p class="text-xs text-gray-500 mt-0.5">Ao fechar, manter rodando em segundo plano</p>
+                  <p class="text-xs text-gray-500 mt-0.5">Keep the app running in the background when the window closes</p>
                 </div>
                 <label class="toggle-switch">
                   <input type="checkbox" checked> <span class="toggle-slider"></span>
@@ -796,31 +827,24 @@
       <div class="p-5 space-y-4">
         <div>
           <label class="block text-sm text-gray-400 mb-1.5">Command <span class="text-violet-400">*</span></label>
-          <input type="text" placeholder="!gato" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600 font-mono">
+          <input type="text" placeholder="!cat" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600 font-mono">
         </div>
         <div>
           <label class="block text-sm text-gray-400 mb-1.5">Audio File <span class="text-violet-400">*</span></label>
           <div class="flex gap-2">
-            <input type="text" placeholder="nenhum arquivo selecionado" class="flex-1 bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600" readonly>
-            <button class="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors whitespace-nowrap">Escolher...</button>
+            <input type="text" placeholder="no file selected yet" class="flex-1 bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600" readonly>
+            <button class="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors whitespace-nowrap">Choose file...</button>
           </div>
-          <p class="text-xs text-gray-600 mt-1">Formatos suportados: MP3, OGG, WAV</p>
+          <p class="text-xs text-gray-600 mt-1">Supported formats: MP3, OGG, WAV. The imported file is copied into the profile assets folder.</p>
         </div>
         <div>
           <label class="block text-sm text-gray-400 mb-2">Permissions</label>
-          <div class="grid grid-cols-2 gap-2">
-            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
-              <input type="checkbox" checked class="accent-violet-500"> Todos
-            </label>
-            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
-              <input type="checkbox" class="accent-violet-500"> Seguidores
-            </label>
-            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
-              <input type="checkbox" class="accent-violet-500"> Inscritos
-            </label>
-            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
-              <input type="checkbox" class="accent-violet-500"> Moderadores
-            </label>
+          <div class="flex flex-wrap gap-2">
+            <button class="px-3 py-1.5 rounded-full bg-violet-600 text-white text-xs font-medium">Everyone</button>
+            <button class="px-3 py-1.5 rounded-full bg-gray-800 border border-gray-700 text-gray-300 text-xs">Followers</button>
+            <button class="px-3 py-1.5 rounded-full bg-gray-800 border border-gray-700 text-gray-300 text-xs">Subscribers</button>
+            <button class="px-3 py-1.5 rounded-full bg-gray-800 border border-gray-700 text-gray-300 text-xs">Moderators</button>
+            <button class="px-3 py-1.5 rounded-full bg-gray-800 border border-gray-700 text-gray-300 text-xs">Broadcaster</button>
           </div>
         </div>
         <div class="grid grid-cols-2 gap-3">
@@ -835,7 +859,7 @@
         </div>
       </div>
       <div class="flex gap-3 px-5 py-4 border-t border-gray-700">
-        <button onclick="closeModal('modal-sound')" class="flex-1 px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">Cancelar</button>
+        <button onclick="closeModal('modal-sound')" class="flex-1 px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">Cancel</button>
         <button class="flex-1 px-3 py-2 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">Save</button>
       </div>
     </div>
@@ -855,7 +879,7 @@
           <input type="text" placeholder="!voice" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600 font-mono">
         </div>
         <div>
-          <label class="block text-sm text-gray-400 mb-1">Texto Fixo <span class="text-gray-600">(opcional)</span></label>
+          <label class="block text-sm text-gray-400 mb-1">Fixed Text <span class="text-gray-600">(optional)</span></label>
           <p class="text-xs text-gray-600 mb-1.5">If empty, speaks the text after the command typed in chat.</p>
           <input type="text" placeholder="e.g.: good morning everyone!" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600">
         </div>
@@ -877,11 +901,12 @@
         </div>
         <div>
           <label class="block text-sm text-gray-400 mb-2">Permissions</label>
-          <div class="grid grid-cols-2 gap-2">
-            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer"><input type="checkbox" class="accent-violet-500"> Todos</label>
-            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer"><input type="checkbox" class="accent-violet-500"> Seguidores</label>
-            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer"><input type="checkbox" checked class="accent-violet-500"> Inscritos</label>
-            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer"><input type="checkbox" checked class="accent-violet-500"> Moderadores</label>
+          <div class="flex flex-wrap gap-2">
+            <button class="px-3 py-1.5 rounded-full bg-gray-800 border border-gray-700 text-gray-300 text-xs">Everyone</button>
+            <button class="px-3 py-1.5 rounded-full bg-gray-800 border border-gray-700 text-gray-300 text-xs">Followers</button>
+            <button class="px-3 py-1.5 rounded-full bg-violet-600 text-white text-xs font-medium">Subscribers</button>
+            <button class="px-3 py-1.5 rounded-full bg-violet-600 text-white text-xs font-medium">Moderators</button>
+            <button class="px-3 py-1.5 rounded-full bg-gray-800 border border-gray-700 text-gray-300 text-xs">Broadcaster</button>
           </div>
         </div>
         <div>
@@ -890,7 +915,7 @@
         </div>
       </div>
       <div class="flex gap-3 px-5 py-4 border-t border-gray-700">
-        <button onclick="closeModal('modal-voice')" class="flex-1 px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">Cancelar</button>
+        <button onclick="closeModal('modal-voice')" class="flex-1 px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">Cancel</button>
         <button class="flex-1 px-3 py-2 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">Save</button>
       </div>
     </div>
@@ -901,7 +926,7 @@
     <div class="modal-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
     <div class="relative bg-gray-900 border border-gray-700 rounded-xl w-full max-w-md shadow-2xl">
       <div class="flex items-center justify-between px-5 py-4 border-b border-gray-700">
-        <h3 class="font-semibold">Nova Message Agendada</h3>
+        <h3 class="font-semibold">New Scheduled Message</h3>
         <button onclick="closeModal('modal-scheduled')" class="text-gray-400 hover:text-white">✕</button>
       </div>
       <div class="p-5 space-y-4">
@@ -916,7 +941,7 @@
           </div>
           <div>
             <label class="block text-sm text-gray-400 mb-1">Random Window (min)</label>
-            <p class="text-xs text-gray-600 mb-1">0 = intervalo exato</p>
+            <p class="text-xs text-gray-600 mb-1">0 = exact interval</p>
             <input type="number" value="0" min="0" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
           </div>
         </div>
@@ -924,16 +949,16 @@
           <label class="block text-sm text-gray-400 mb-2">Platforms</label>
           <div class="flex gap-3 flex-wrap">
             <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer"><input type="checkbox" checked class="accent-violet-500"> <span class="text-purple-400">Twitch</span></label>
-            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer"><input type="checkbox" checked class="accent-violet-500"> <span class="text-red-400">YT Hor.</span></label>
-            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer"><input type="checkbox" checked class="accent-violet-500"> <span class="text-rose-400">YT Vert.</span></label>
+            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer"><input type="checkbox" checked class="accent-violet-500"> <span class="text-red-400">YT Horizontal</span></label>
+            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer"><input type="checkbox" checked class="accent-violet-500"> <span class="text-rose-400">YT Vertical</span></label>
             <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer"><input type="checkbox" checked class="accent-violet-500"> <span class="text-green-400">Kick</span></label>
-            <label class="flex items-center gap-2 text-sm text-gray-500 cursor-not-allowed"><input type="checkbox" disabled class="accent-violet-500"> <span class="text-pink-500">TikTok (em breve)</span></label>
+            <label class="flex items-center gap-2 text-sm text-gray-500 cursor-not-allowed"><input type="checkbox" disabled class="accent-violet-500"> <span class="text-pink-500">TikTok (planned)</span></label>
           </div>
           <p class="text-xs text-gray-600 mt-1.5">Message is sent only to connected and live platforms.</p>
         </div>
       </div>
       <div class="flex gap-3 px-5 py-4 border-t border-gray-700">
-        <button onclick="closeModal('modal-scheduled')" class="flex-1 px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">Cancelar</button>
+        <button onclick="closeModal('modal-scheduled')" class="flex-1 px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">Cancel</button>
         <button class="flex-1 px-3 py-2 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">Save</button>
       </div>
     </div>
@@ -942,22 +967,22 @@
   <!-- Context Menu -->
   <div id="chat-context-menu"
     class="hidden fixed z-50 min-w-[180px] bg-gray-900 border border-gray-700 rounded-xl shadow-2xl py-1 text-sm overflow-hidden">
-    <!-- populated by nav.js showContextMenu() -->
+    <!-- populated by the inline mockup script -->
   </div>
 
-  <!-- Modal: Ao Vivo — Live URLs -->
+  <!-- Modal: Go Live — Live URLs -->
   <div id="modal-live-urls" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
     <div class="modal-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
     <div class="relative bg-gray-900 border border-gray-700 rounded-xl w-full max-w-md shadow-2xl">
       <div class="flex items-center justify-between px-5 py-4 border-b border-gray-700">
         <div class="flex items-center gap-2">
           <span class="pulse-dot w-2 h-2 rounded-full bg-red-500"></span>
-          <h3 class="font-semibold">Links das Lives</h3>
+          <h3 class="font-semibold">Live Links</h3>
         </div>
         <button onclick="closeModal('modal-live-urls')" class="text-gray-400 hover:text-white">✕</button>
       </div>
       <div class="p-5 space-y-3">
-        <p class="text-xs text-gray-500 mb-4">Copy links to share your live stream on social media.</p>
+        <p class="text-xs text-gray-500 mb-4">Copy links to share each live output on social media.</p>
 
         <!-- Twitch -->
         <div class="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-2.5 border border-purple-500/30">
@@ -965,8 +990,8 @@
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"/></svg>
           </span>
           <span class="flex-1 text-sm text-gray-300 font-mono truncate">twitch.tv/mychannel</span>
-          <button onclick="navigator.clipboard.writeText('https://twitch.tv/mychannel').then(()=>this.textContent='✓').catch(()=>{}); setTimeout(()=>this.textContent='Copiar',1500)"
-            class="shrink-0 text-xs px-2 py-1 rounded bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 transition-colors">Copiar</button>
+          <button onclick="navigator.clipboard.writeText('https://twitch.tv/mychannel').then(()=>this.textContent='✓').catch(()=>{}); setTimeout(()=>this.textContent='Copy',1500)"
+            class="shrink-0 text-xs px-2 py-1 rounded bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 transition-colors">Copy</button>
         </div>
 
         <!-- YouTube (Horizontal) -->
@@ -975,8 +1000,8 @@
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
           </span>
           <span class="flex-1 text-sm text-gray-300 font-mono truncate">youtube.com/live/dQw4w9WgXcQ (horizontal)</span>
-          <button onclick="navigator.clipboard.writeText('https://youtube.com/live/dQw4w9WgXcQ').then(()=>this.textContent='✓').catch(()=>{}); setTimeout(()=>this.textContent='Copiar',1500)"
-            class="shrink-0 text-xs px-2 py-1 rounded bg-red-600/30 hover:bg-red-600/50 text-red-300 transition-colors">Copiar</button>
+          <button onclick="navigator.clipboard.writeText('https://youtube.com/live/dQw4w9WgXcQ').then(()=>this.textContent='✓').catch(()=>{}); setTimeout(()=>this.textContent='Copy',1500)"
+            class="shrink-0 text-xs px-2 py-1 rounded bg-red-600/30 hover:bg-red-600/50 text-red-300 transition-colors">Copy</button>
         </div>
 
         <!-- YouTube (Vertical) -->
@@ -985,8 +1010,8 @@
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
           </span>
           <span class="flex-1 text-sm text-gray-300 font-mono truncate">youtube.com/live/AbC123Shorts (vertical)</span>
-          <button onclick="navigator.clipboard.writeText('https://youtube.com/live/AbC123Shorts').then(()=>this.textContent='✓').catch(()=>{}); setTimeout(()=>this.textContent='Copiar',1500)"
-            class="shrink-0 text-xs px-2 py-1 rounded bg-rose-600/30 hover:bg-rose-600/50 text-rose-300 transition-colors">Copiar</button>
+          <button onclick="navigator.clipboard.writeText('https://youtube.com/live/AbC123Shorts').then(()=>this.textContent='✓').catch(()=>{}); setTimeout(()=>this.textContent='Copy',1500)"
+            class="shrink-0 text-xs px-2 py-1 rounded bg-rose-600/30 hover:bg-rose-600/50 text-rose-300 transition-colors">Copy</button>
         </div>
 
         <!-- Kick -->
@@ -995,8 +1020,8 @@
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M2 2h4v8l4-4h4l-6 6 6 6h-4l-4-4v4H2V2zm14 0h4v20h-4z"/></svg>
           </span>
           <span class="flex-1 text-sm text-gray-300 font-mono truncate">kick.com/mychannel</span>
-          <button onclick="navigator.clipboard.writeText('https://kick.com/mychannel').then(()=>this.textContent='✓').catch(()=>{}); setTimeout(()=>this.textContent='Copiar',1500)"
-            class="shrink-0 text-xs px-2 py-1 rounded bg-green-600/30 hover:bg-green-600/50 text-green-300 transition-colors">Copiar</button>
+          <button onclick="navigator.clipboard.writeText('https://kick.com/mychannel').then(()=>this.textContent='✓').catch(()=>{}); setTimeout(()=>this.textContent='Copy',1500)"
+            class="shrink-0 text-xs px-2 py-1 rounded bg-green-600/30 hover:bg-green-600/50 text-green-300 transition-colors">Copy</button>
         </div>
 
         <!-- TikTok -->
@@ -1005,16 +1030,16 @@
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.67a8.17 8.17 0 0 0 4.79 1.53V6.75a4.85 4.85 0 0 1-1.02-.06z"/></svg>
           </span>
           <span class="flex-1 text-sm text-gray-300 font-mono truncate">tiktok.com/@mychannel (placeholder)</span>
-          <button onclick="navigator.clipboard.writeText('https://tiktok.com/@mychannel').then(()=>this.textContent='✓').catch(()=>{}); setTimeout(()=>this.textContent='Copiar',1500)"
-            class="shrink-0 text-xs px-2 py-1 rounded bg-pink-600/30 hover:bg-pink-600/50 text-pink-300 transition-colors">Copiar</button>
+          <button onclick="navigator.clipboard.writeText('https://tiktok.com/@mychannel').then(()=>this.textContent='✓').catch(()=>{}); setTimeout(()=>this.textContent='Copy',1500)"
+            class="shrink-0 text-xs px-2 py-1 rounded bg-pink-600/30 hover:bg-pink-600/50 text-pink-300 transition-colors">Copy</button>
         </div>
 
         <!-- Copy all -->
         <button onclick="
           const urls='Twitch: https://twitch.tv/mychannel\nYouTube (horizontal): https://youtube.com/live/dQw4w9WgXcQ\nYouTube (vertical): https://youtube.com/live/AbC123Shorts\nKick: https://kick.com/mychannel\nTikTok (placeholder): https://tiktok.com/@mychannel';
-          navigator.clipboard.writeText(urls).then(()=>{this.textContent='✓ Copiado!';setTimeout(()=>this.textContent='Copiar todos os links',1500)}).catch(()=>{});"
+          navigator.clipboard.writeText(urls).then(()=>{this.textContent='✓ Copied!';setTimeout(()=>this.textContent='Copy all links',1500)}).catch(()=>{});"
           class="w-full py-2 rounded bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 text-sm border border-violet-600/30 transition-colors mt-1">
-          Copiar todos os links
+          Copy all links
         </button>
       </div>
     </div>
@@ -1024,21 +1049,21 @@
   // ===================== MOCK DATA =====================
 
   const MOCK_MESSAGES = [
-    { id: '1',  platform: 'twitch',     author: 'xGamer99',    content: 'fala galera o/o/o/',              badges: ['subscriber'],             isMod: false, isSub: true,  ts: Date.now() - 62000 },
+    { id: '1',  platform: 'twitch',     author: 'xGamer99',    content: 'hey chat o/',                     badges: ['subscriber'],             isMod: false, isSub: true,  ts: Date.now() - 62000 },
     { id: '2',  platform: 'youtube',    author: 'TechWatcher', content: 'this game is incredible',          badges: ['member'],                 isMod: false, isSub: true,  ts: Date.now() - 58000 },
-    { id: '3',  platform: 'kick',       author: 'br_live',     content: '!gato',                            badges: [],                         isMod: false, isSub: false, ts: Date.now() - 54000 },
+    { id: '3',  platform: 'kick',       author: 'br_live',     content: '!cat',                             badges: [],                         isMod: false, isSub: false, ts: Date.now() - 54000 },
     { id: '11', platform: 'tiktok',     author: 'tiktokfan',   content: 'love this content 🔥🔥',            badges: [],                         isMod: false, isSub: false, ts: Date.now() - 51000 },
-    { id: '4',  platform: 'twitch',     author: 'ModPower',    content: 'bem vindos ao stream!',            badges: ['moderator'],              isMod: true,  isSub: false, ts: Date.now() - 47000 },
+    { id: '4',  platform: 'twitch',     author: 'ModPower',    content: 'welcome to the stream!',           badges: ['moderator'],              isMod: true,  isSub: false, ts: Date.now() - 47000 },
     { id: '12', platform: 'youtube-v',  author: 'VertFan',     content: 'watching on mobile, this is great', badges: [],                        isMod: false, isSub: false, ts: Date.now() - 44000 },
-    { id: '5',  platform: 'youtube',    author: 'SuperFan2024',content: '!voice boa tarde a todos',         badges: [],                         isMod: false, isSub: false, ts: Date.now() - 40000 },
+    { id: '5',  platform: 'youtube',    author: 'SuperFan2024',content: '!voice good afternoon everyone',   badges: [],                         isMod: false, isSub: false, ts: Date.now() - 40000 },
     { id: '6',  platform: 'twitch',     author: 'ProStreamer', content: 'KEKW KEKW KEKW',                  badges: ['subscriber', 'moderator'], isMod: true,  isSub: true,  ts: Date.now() - 35000 },
-    { id: '13', platform: 'tiktok',     author: 'tiktok_br',   content: '!gato',                            badges: [],                         isMod: false, isSub: false, ts: Date.now() - 31000 },
-    { id: '7',  platform: 'kick',       author: 'kickfan',     content: 'chegando agora, o que perdeu?',   badges: [],                         isMod: false, isSub: false, ts: Date.now() - 28000 },
-    { id: '14', platform: 'youtube-v',  author: 'MobileViewer',content: 'assistindo no shorts!',            badges: [],                         isMod: false, isSub: false, ts: Date.now() - 24000 },
-    { id: '8',  platform: 'twitch',     author: 'DonorKing',   content: '!cachorro',                        badges: ['subscriber'],             isMod: false, isSub: true,  ts: Date.now() - 20000 },
+    { id: '13', platform: 'tiktok',     author: 'tiktok_br',   content: '!cat',                             badges: [],                         isMod: false, isSub: false, ts: Date.now() - 31000 },
+    { id: '7',  platform: 'kick',       author: 'kickfan',     content: 'just got here, what did I miss?', badges: [],                         isMod: false, isSub: false, ts: Date.now() - 28000 },
+    { id: '14', platform: 'youtube-v',  author: 'MobileViewer',content: 'watching on shorts!',              badges: [],                         isMod: false, isSub: false, ts: Date.now() - 24000 },
+    { id: '8',  platform: 'twitch',     author: 'DonorKing',   content: '!dog',                             badges: ['subscriber'],             isMod: false, isSub: true,  ts: Date.now() - 20000 },
     { id: '9',  platform: 'youtube',    author: 'Lurker123',   content: 'PogChamp',                        badges: [],                         isMod: false, isSub: false, ts: Date.now() - 16000 },
     { id: '10', platform: 'twitch',     author: 'NewFollower', content: 'just followed!',                  badges: [],                         isMod: false, isSub: false, ts: Date.now() - 12000 },
-    { id: '15', platform: 'tiktok',     author: 'tiktoker99',  content: 'manda um oi pro TikTok 👋',        badges: [],                         isMod: false, isSub: false, ts: Date.now() -  8000 },
+    { id: '15', platform: 'tiktok',     author: 'tiktoker99',  content: 'say hi to TikTok 👋',              badges: [],                         isMod: false, isSub: false, ts: Date.now() -  8000 },
   ];
 
   const MOCK_EVENTS = [
@@ -1067,10 +1092,10 @@
   };
 
   const MOCK_SOUND_COMMANDS = [
-    { id: 's1', trigger: '!gato',     file: 'cat.mp3',      permissions: ['everyone'],              cooldown: 10, enabled: true  },
-    { id: 's2', trigger: '!cachorro', file: 'dog.mp3',      permissions: ['subscriber','moderator'],cooldown: 30, enabled: true  },
-    { id: 's3', trigger: '!aplausos', file: 'applause.mp3', permissions: ['moderator'],             cooldown: 60, enabled: true  },
-    { id: 's4', trigger: '!corneta',  file: 'horn.mp3',     permissions: ['everyone'],              cooldown: 15, enabled: false },
+    { id: 's1', trigger: '!cat',      file: 'cat.mp3',      permissions: ['everyone'],              cooldown: 10, enabled: true  },
+    { id: 's2', trigger: '!dog',      file: 'dog.mp3',      permissions: ['subscriber','moderator'],cooldown: 30, enabled: true  },
+    { id: 's3', trigger: '!applause', file: 'applause.mp3', permissions: ['moderator'],             cooldown: 60, enabled: true  },
+    { id: 's4', trigger: '!horn',     file: 'horn.mp3',     permissions: ['everyone'],              cooldown: 15, enabled: false },
   ];
 
   const MOCK_VOICE_COMMANDS = [
@@ -1080,13 +1105,13 @@
 
   const MOCK_SCHEDULED = [
     { id: 'm1', message: 'Remember to follow the channel! 💜',        interval: 15, randomWindow: 5,  platforms: ['twitch','youtube','youtube-v','kick'], enabled: true,  lastSent: Date.now() - 420000 },
-    { id: 'm2', message: 'Visite meu Discord: discord.gg/exemplo',    interval: 30, randomWindow: 0,  platforms: ['twitch'],                               enabled: true,  lastSent: null },
-    { id: 'm3', message: 'Available commands: !gato !cachorro !voice',interval: 20, randomWindow: 10, platforms: ['twitch','youtube','youtube-v','kick'], enabled: false, lastSent: null },
+    { id: 'm2', message: 'Join my Discord: discord.gg/example',       interval: 30, randomWindow: 0,  platforms: ['twitch'],                               enabled: true,  lastSent: null },
+    { id: 'm3', message: 'Available commands: !cat !dog !voice',      interval: 20, randomWindow: 10, platforms: ['twitch','youtube','youtube-v','kick'], enabled: false, lastSent: null },
   ];
 
   const MOCK_ACTIVITY_LOG = [
     { id: 'a1',  ts: Date.now() - 10000,  type: 'cheer',        platform: 'twitch',  author: 'ProStreamer',    amount: 500 },
-    { id: 'a2',  ts: Date.now() - 25000,  type: 'sound',        platform: 'kick',    author: 'br_live',       trigger: '!gato' },
+    { id: 'a2',  ts: Date.now() - 25000,  type: 'sound',        platform: 'kick',    author: 'br_live',       trigger: '!cat' },
     { id: 'a3',  ts: Date.now() - 40000,  type: 'follow',       platform: 'kick',    author: 'NewKickUser' },
     { id: 'a4',  ts: Date.now() - 55000,  type: 'subscription', platform: 'twitch',  author: 'xGamer99',      message: 'Month 3!' },
     { id: 'a5',  ts: Date.now() - 90000,  type: 'superchat',    platform: 'youtube', author: 'TechWatcher',   amount: 10, message: 'Stream top!' },
@@ -1094,9 +1119,9 @@
     { id: 'a7',  ts: Date.now() - 150000, type: 'scheduled',    message: 'Remember to follow the channel! 💜' },
     { id: 'a8',  ts: Date.now() - 180000, type: 'gift',         platform: 'twitch',  author: 'DonorKing',     amount: 5 },
     { id: 'a9',  ts: Date.now() - 240000, type: 'follow',       platform: 'twitch',  author: 'NewFollower' },
-    { id: 'a10', ts: Date.now() - 270000, type: 'sound',        platform: 'twitch',  author: 'DonorKing',     trigger: '!cachorro' },
+    { id: 'a10', ts: Date.now() - 270000, type: 'sound',        platform: 'twitch',  author: 'DonorKing',     trigger: '!dog' },
     { id: 'a11', ts: Date.now() - 300000, type: 'subscription', platform: 'youtube', author: 'SuperFan2024' },
-    { id: 'a12', ts: Date.now() - 360000, type: 'scheduled',    message: 'Visite meu Discord: discord.gg/exemplo' },
+    { id: 'a12', ts: Date.now() - 360000, type: 'scheduled',    message: 'Join my Discord: discord.gg/example' },
     { id: 'a13', ts: Date.now() - 420000, type: 'cheer',        platform: 'twitch',  author: 'xGamer99',      amount: 100 },
     { id: 'a14', ts: Date.now() - 480000, type: 'follow',       platform: 'youtube', author: 'Lurker123' },
   ];
@@ -1105,8 +1130,8 @@
 
   const PLATFORM_COLORS = {
     twitch:      { border: 'border-l-purple-500', bg: 'hover:bg-purple-500/10', badge: 'bg-purple-500/20 text-purple-300', label: 'Twitch' },
-    youtube:     { border: 'border-l-red-500',    bg: 'hover:bg-red-500/10',    badge: 'bg-red-500/20 text-red-300',       label: 'YT Horiz.' },
-    'youtube-v': { border: 'border-l-rose-400',   bg: 'hover:bg-rose-400/10',   badge: 'bg-rose-400/20 text-rose-300',     label: 'YT Vert.' },
+    youtube:     { border: 'border-l-red-500',    bg: 'hover:bg-red-500/10',    badge: 'bg-red-500/20 text-red-300',       label: 'YT Horizontal' },
+    'youtube-v': { border: 'border-l-rose-400',   bg: 'hover:bg-rose-400/10',   badge: 'bg-rose-400/20 text-rose-300',     label: 'YT Vertical' },
     kick:        { border: 'border-l-green-500',  bg: 'hover:bg-green-500/10',  badge: 'bg-green-500/20 text-green-300',   label: 'Kick' },
     tiktok:      { border: 'border-l-pink-500',   bg: 'hover:bg-pink-500/10',   badge: 'bg-pink-500/20 text-pink-300',     label: 'TikTok' },
   };
@@ -1122,38 +1147,38 @@
   const EVENT_ICONS = { subscription: '⭐', superchat: '💰', raid: '⚔️', follow: '💜', cheer: '✨', gift: '🎁' };
 
   const BADGE_ICONS = {
-    moderator:  `<span title="Moderador" class="inline-flex items-center justify-center w-4 h-4 rounded bg-green-600 text-white text-xs">⚔</span>`,
-    subscriber: `<span title="Inscrito"  class="inline-flex items-center justify-center w-4 h-4 rounded bg-violet-600 text-white text-xs">★</span>`,
-    member:     `<span title="Membro"    class="inline-flex items-center justify-center w-4 h-4 rounded bg-red-600 text-white text-xs">★</span>`,
+    moderator:  `<span title="Moderator" class="inline-flex items-center justify-center w-4 h-4 rounded bg-green-600 text-white text-xs">⚔</span>`,
+    subscriber: `<span title="Subscriber"  class="inline-flex items-center justify-center w-4 h-4 rounded bg-violet-600 text-white text-xs">★</span>`,
+    member:     `<span title="Member"    class="inline-flex items-center justify-center w-4 h-4 rounded bg-red-600 text-white text-xs">★</span>`,
   };
 
   const ACTIVITY_CONFIG = {
-    follow:       { icon: '💜', label: 'New follower',         color: 'text-pink-400'   },
-    subscription: { icon: '⭐', label: 'Subscription / Member',    color: 'text-yellow-400' },
-    gift:         { icon: '🎁', label: 'Gifted subscription', color: 'text-orange-400' },
-    superchat:    { icon: '💰', label: 'Super Chat / Bits',      color: 'text-green-400'  },
-    cheer:        { icon: '✨', label: 'Bits (Twitch)',           color: 'text-purple-400' },
-    raid:         { icon: '⚔️', label: 'Raid',         color: 'text-red-400'    },
-    sound:        { icon: '🔊', label: 'Command de som',         color: 'text-violet-400' },
-    scheduled:    { icon: '⏰', label: 'Message agendada',      color: 'text-cyan-400'   },
+    follow:       { icon: '💜', label: 'New follower',          color: 'text-pink-400'   },
+    subscription: { icon: '⭐', label: 'Subscription / Member', color: 'text-yellow-400' },
+    gift:         { icon: '🎁', label: 'Gifted subscription',  color: 'text-orange-400' },
+    superchat:    { icon: '💰', label: 'Super Chat / Bits',    color: 'text-green-400'  },
+    cheer:        { icon: '✨', label: 'Bits (Twitch)',        color: 'text-purple-400' },
+    raid:         { icon: '⚔️', label: 'Raid',                 color: 'text-red-400'    },
+    sound:        { icon: '🔊', label: 'Sound command',        color: 'text-violet-400' },
+    scheduled:    { icon: '⏰', label: 'Scheduled message',    color: 'text-cyan-400'   },
   };
 
   const activityFilter  = Object.fromEntries(Object.keys(ACTIVITY_CONFIG).map(k => [k, true]));
   const platformFilter  = { twitch: true, youtube: true, 'youtube-v': true, kick: true, tiktok: true };
   let chatFeedMode = 'all';
   const MOCK_PROFILES = [
-    { id: 'p1', name: 'Principal', directory: '/Users/paulo/StreamerCopilot/profiles/principal', lastUsed: Date.now() - 600000 },
+    { id: 'p1', name: 'Main', directory: '/Users/paulo/StreamerCopilot/profiles/main', lastUsed: Date.now() - 600000 },
     { id: 'p2', name: 'Shorts',    directory: '/Users/paulo/StreamerCopilot/profiles/shorts',    lastUsed: Date.now() - 3600000 },
   ];
   let currentProfileId = MOCK_PROFILES[0].id;
   const SKIP_PROFILE_SELECTOR_KEY = 'streamerCopilot.skipProfileSelector';
 
   function formatTime(ts) {
-    return new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    return new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   }
 
   function formatDateTime(ts) {
-    return new Date(ts).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    return new Date(ts).toLocaleString('en-US', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
   }
 
   function getProfileById(id) {
@@ -1183,11 +1208,11 @@
     const p    = PLATFORM_COLORS[evt.platform];
     const icon = EVENT_ICONS[evt.type] || '📢';
     const labels = {
-      subscription: `<strong>${evt.author}</strong> se inscreveu!`,
-      superchat:    `<strong>${evt.author}</strong> enviou Super Chat de R$${(evt.amount||0).toFixed(2)}`,
-      raid:         `<strong>${evt.author}</strong> fez raid com ${evt.amount||0} viewers!`,
+      subscription: `<strong>${evt.author}</strong> subscribed!`,
+      superchat:    `<strong>${evt.author}</strong> sent a Super Chat of $${(evt.amount||0).toFixed(2)}`,
+      raid:         `<strong>${evt.author}</strong> raided with ${evt.amount||0} viewers!`,
       follow:       `<strong>${evt.author}</strong> started following`,
-      cheer:        `<strong>${evt.author}</strong> deu ${evt.amount||0} bits!`,
+      cheer:        `<strong>${evt.author}</strong> cheered ${evt.amount||0} bits!`,
       gift:         `<strong>${evt.author}</strong> gifted a subscription`,
     };
     return `<div class="mx-3 my-1 px-3 py-2 rounded-lg border ${p.border.replace('border-l-','border-')} bg-gradient-to-r from-gray-800 to-gray-800/50">
@@ -1207,11 +1232,11 @@
     const pLabel = p ? `<span class="inline-flex items-center gap-0.5 ${p.badge} px-1 rounded text-[10px]">${PLATFORM_ICONS[log.platform]}${p.label}</span> ` : '';
     switch (log.type) {
       case 'follow':       return `${pLabel}<strong class="text-gray-200">${log.author}</strong> started following`;
-      case 'subscription': return `${pLabel}<strong class="text-gray-200">${log.author}</strong> se inscreveu${log.message ? ` — "${log.message}"` : ''}`;
-      case 'gift':         return `${pLabel}<strong class="text-gray-200">${log.author}</strong> presenteou ${log.amount||1} subscription(s)`;
-      case 'superchat':    return `${pLabel}<strong class="text-gray-200">${log.author}</strong> enviou R$${(log.amount||0).toFixed(2)}${log.message ? ` — "${log.message}"` : ''}`;
-      case 'cheer':        return `${pLabel}<strong class="text-gray-200">${log.author}</strong> deu ${log.amount||0} bits`;
-      case 'raid':         return `${pLabel}<strong class="text-gray-200">${log.author}</strong> fez raid com ${log.amount||0} viewers`;
+      case 'subscription': return `${pLabel}<strong class="text-gray-200">${log.author}</strong> subscribed${log.message ? ` — "${log.message}"` : ''}`;
+      case 'gift':         return `${pLabel}<strong class="text-gray-200">${log.author}</strong> gifted ${log.amount||1} subscription(s)`;
+      case 'superchat':    return `${pLabel}<strong class="text-gray-200">${log.author}</strong> sent $${(log.amount||0).toFixed(2)}${log.message ? ` — "${log.message}"` : ''}`;
+      case 'cheer':        return `${pLabel}<strong class="text-gray-200">${log.author}</strong> cheered ${log.amount||0} bits`;
+      case 'raid':         return `${pLabel}<strong class="text-gray-200">${log.author}</strong> raided with ${log.amount||0} viewers`;
       case 'sound':        return `${pLabel}Command <span class="font-mono text-violet-300">${log.trigger}</span> por <strong class="text-gray-200">${log.author}</strong>`;
       case 'scheduled':    return `<span class="text-gray-400 italic">"${log.message}"</span>`;
       default:             return log.text || log.type;
@@ -1233,7 +1258,7 @@
     const filtered = MOCK_ACTIVITY_LOG.filter(item => activityFilter[item.type] !== false);
     el.innerHTML = filtered.length
       ? filtered.map(renderActivityLog).join('')
-      : '<p class="text-gray-600 text-xs text-center py-4">Nenhum tipo de evento habilitado.</p>';
+      : '<p class="text-gray-600 text-xs text-center py-4">No event types are enabled.</p>';
   }
 
   function toggleActivityFilter(type, enabled) {
@@ -1304,7 +1329,7 @@
     const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
     set('obs-scene',  s.scene);
     set('obs-time',   s.streamTime);
-    set('obs-status', s.streaming ? '🔴 LIVE' : '⚫ Offline');
+    set('obs-status', s.streaming ? '🔴 LIVE' : '⚫ OFFLINE');
 
     // Viewer counts
     const fmtNum = n => n >= 1000 ? `${(n/1000).toFixed(1)}k` : String(n);
@@ -1320,7 +1345,7 @@
     const connPct   = s.outputTotalFrames > 0 ? (1 - s.outputSkippedFrames / s.outputTotalFrames) * 100 : 100;
     const connColor = connPct >= 95 ? 'green' : connPct >= 80 ? 'yellow' : 'red';
     set('obs-conn-pct',     `${connPct.toFixed(1)}%`);
-    set('obs-conn-quality', connPct >= 95 ? '● Boa' : connPct >= 80 ? '● Regular' : '● Ruim');
+    set('obs-conn-quality', connPct >= 95 ? '● Good' : connPct >= 80 ? '● Fair' : '● Poor');
     const bar = document.getElementById('obs-conn-bar');
     if (bar) { bar.style.width = `${connPct.toFixed(1)}%`; bar.style.background = connColor === 'green' ? '#22c55e' : connColor === 'yellow' ? '#eab308' : '#ef4444'; }
     const qualEl = document.getElementById('obs-conn-quality');
@@ -1346,7 +1371,7 @@
         <td class="px-4 py-3 text-gray-400 text-sm">${cmd.cooldown}s</td>
         <td class="px-4 py-3"><label class="toggle-switch"><input type="checkbox" ${cmd.enabled?'checked':''} onchange="void 0"><span class="toggle-slider"></span></label></td>
         <td class="px-4 py-3"><div class="flex gap-2">
-          <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-violet-600 text-gray-300 hover:text-white transition-colors" onclick="void 0">▶ Testar</button>
+          <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-violet-600 text-gray-300 hover:text-white transition-colors" onclick="void 0">▶ Test</button>
           <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors" onclick="openModal('modal-sound')">✏️</button>
           <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-red-700 text-gray-300 hover:text-white transition-colors">🗑️</button>
         </div></td>
@@ -1359,7 +1384,7 @@
     tbody.innerHTML = MOCK_VOICE_COMMANDS.map(cmd => `
       <tr class="border-b border-gray-800 hover:bg-gray-800/50">
         <td class="px-4 py-3 font-mono text-violet-300">${cmd.trigger}</td>
-        <td class="px-4 py-3 text-gray-300 text-sm">${cmd.template || '<span class="text-gray-500 italic">texto livre do chat</span>'}</td>
+        <td class="px-4 py-3 text-gray-300 text-sm">${cmd.template || '<span class="text-gray-500 italic">free text after the trigger</span>'}</td>
         <td class="px-4 py-3 text-gray-300 text-sm">${cmd.language}</td>
         <td class="px-4 py-3"><div class="flex gap-1 flex-wrap">${cmd.permissions.map(p=>`<span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">${p}</span>`).join('')}</div></td>
         <td class="px-4 py-3 text-gray-400 text-sm">${cmd.cooldown}s</td>
@@ -1377,7 +1402,8 @@
     tbody.innerHTML = MOCK_SCHEDULED.map(msg => `
       <tr class="border-b border-gray-800 hover:bg-gray-800/50">
         <td class="px-4 py-3 text-gray-300 text-sm max-w-xs truncate">${msg.message}</td>
-        <td class="px-4 py-3 text-gray-400 text-sm">${msg.interval}min ${msg.randomWindow>0?`<span class="text-gray-500 text-xs">(±${msg.randomWindow}min)</span>`:''}</td>
+        <td class="px-4 py-3 text-gray-400 text-sm">${msg.interval} min</td>
+        <td class="px-4 py-3 text-gray-400 text-sm">${msg.randomWindow > 0 ? `±${msg.randomWindow} min` : 'Exact'}</td>
         <td class="px-4 py-3"><div class="flex gap-1 flex-wrap">${msg.platforms.map(p=>`<span class="text-xs px-2 py-0.5 rounded-full ${PLATFORM_COLORS[p].badge}">${p}</span>`).join('')}</div></td>
         <td class="px-4 py-3 text-gray-500 text-xs">${msg.lastSent ? formatTime(msg.lastSent) : '—'}</td>
         <td class="px-4 py-3"><label class="toggle-switch"><input type="checkbox" ${msg.enabled?'checked':''} onchange="void 0"><span class="toggle-slider"></span></label></td>
@@ -1412,7 +1438,7 @@
         <td class="px-4 py-3 text-gray-200">
           <div class="flex items-center gap-2">
             <span class="font-medium">${profile.name}</span>
-            ${profile.id === currentProfileId ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-violet-600/30 text-violet-300">ativo</span>' : ''}
+            ${profile.id === currentProfileId ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-violet-600/30 text-violet-300">active</span>' : ''}
           </div>
         </td>
         <td class="px-4 py-3 text-xs text-gray-400 font-mono max-w-[420px]">
@@ -1421,7 +1447,7 @@
         <td class="px-4 py-3 text-xs text-gray-500">${formatDateTime(profile.lastUsed)}</td>
         <td class="px-4 py-3">
           <div class="flex flex-wrap gap-2">
-            <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-violet-600 text-gray-300 hover:text-white transition-colors whitespace-nowrap" onclick="selectProfile('${profile.id}')">Usar</button>
+            <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-violet-600 text-gray-300 hover:text-white transition-colors whitespace-nowrap" onclick="selectProfile('${profile.id}')">Use</button>
             <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors whitespace-nowrap" onclick="renameProfile('${profile.id}')">Rename</button>
             <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors whitespace-nowrap" onclick="cloneProfile('${profile.id}')">Clone</button>
             <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-red-700 text-gray-300 hover:text-white transition-colors whitespace-nowrap" onclick="deleteProfile('${profile.id}')">Delete</button>
@@ -1541,11 +1567,11 @@
 
   const CONTEXT_MENU_ACTIONS = {
     twitch: [
-      { id: 'vip',    label: 'Adicionar VIP' },
-      { id: 'unvip',  label: 'Remover VIP' },
+      { id: 'vip',    label: 'Add VIP' },
+      { id: 'unvip',  label: 'Remove VIP' },
       { separator: true },
-      { id: 'mod',    label: 'Adicionar Moderador' },
-      { id: 'unmod',  label: 'Remover Moderador' },
+      { id: 'mod',    label: 'Add Moderator' },
+      { id: 'unmod',  label: 'Remove Moderator' },
       { separator: true },
       { id: 'to1',    label: 'Timeout — 1 minute' },
       { id: 'to10',   label: 'Timeout — 10 minutes' },
