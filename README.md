@@ -2,6 +2,11 @@
 
 Desktop app for streamers — unified chat, sound/voice commands, scheduled messages, and OBS stats. Supports Twitch, YouTube, and Kick simultaneously.
 
+## Current Status
+
+- **Phase 1**: Interactive HTML mockup in `mockup/index.html`
+- **M0 Foundations**: Electron + Vite + React + TypeScript scaffold with basic IPC and profile selection
+
 ## Features (MVP)
 
 - **Unified Chat**: Real-time chat from Twitch, YouTube, and Kick in a single feed
@@ -25,6 +30,7 @@ npm run build     # production build
 npm run package   # create installers
 npm test          # unit tests
 npm run test:e2e  # e2e tests
+npm run rebuild:native  # rebuild native modules (better-sqlite3) for Electron
 ```
 
 ## Platforms
