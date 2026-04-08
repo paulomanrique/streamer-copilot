@@ -1,0 +1,35 @@
+appId: com.paulomanrique.streamer-copilot
+productName: Streamer Copilot
+directories:
+  output: release
+files:
+  - dist/**/*
+  - package.json
+asar: true
+npmRebuild: false
+compression: maximum
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+mac:
+  category: public.app-category.utilities
+  target:
+    - target: dmg
+      arch: universal
+    - target: zip
+      arch: universal
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+        - ia32
+        - arm64
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+        - arm64
+    - target: deb
+      arch:
+        - x64
+        - arm64
