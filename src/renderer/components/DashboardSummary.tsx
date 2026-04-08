@@ -1,3 +1,12 @@
+import {
+  DASHBOARD_CONNECTIONS,
+  DASHBOARD_EVENTS,
+  DASHBOARD_MESSAGES,
+  DASHBOARD_OBS_STATUS,
+} from '../dashboard-mock-data.js';
+import { ChatFeed } from './ChatFeed.js';
+import { EventBanner } from './EventBanner.js';
+import { StatusBar } from './StatusBar.js';
 import { styles } from './app-styles.js';
 
 interface DashboardSummaryProps {
@@ -6,10 +15,35 @@ interface DashboardSummaryProps {
 
 export function DashboardSummary({ activeProfileName }: DashboardSummaryProps) {
   return (
-    <section style={styles.block}>
-      <h2 style={styles.subtitle}>Summary</h2>
-      <p style={styles.message}>Active profile: {activeProfileName}</p>
-      <p style={styles.message}>Main panel is being prepared for Phase 1 mockup integration.</p>
+    <section style={styles.dashboardShell}>
+      <div>
+        <h2 style={styles.subtitle}>Summary</h2>
+        <p style={styles.message}>Active profile: {activeProfileName}</p>
+      </div>
+
+      <StatusBar connections={DASHBOARD_CONNECTIONS} obsStatus={DASHBOARD_OBS_STATUS} />
+
+      <div style={styles.dashboardGrid}>
+        <ChatFeed messages={DASHBOARD_MESSAGES} events={DASHBOARD_EVENTS} />
+
+        <aside style={styles.sideStack}>
+          <section style={styles.previewCard}>
+            <div style={styles.previewHeader}>
+              <div>
+                <h3 style={styles.sectionTitle}>Priority Events</h3>
+                <p style={styles.helper}>Shared event card component for raids, cheers, and paid highlights.</p>
+              </div>
+              <span style={styles.selectionPill}>Live</span>
+            </div>
+
+            <div style={styles.settingsGrid}>
+              {DASHBOARD_EVENTS.map((event) => (
+                <EventBanner key={event.id} event={event} />
+              ))}
+            </div>
+          </section>
+        </aside>
+      </div>
     </section>
   );
 }

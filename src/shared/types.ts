@@ -20,6 +20,43 @@ export interface LanguageOption {
   nativeLabel: string;
 }
 
+export type PlatformId = 'twitch' | 'youtube' | 'kick' | 'tiktok';
+
+export type ChatBadge = 'moderator' | 'subscriber' | 'member';
+
+export interface ChatMessage {
+  id: string;
+  platform: PlatformId;
+  author: string;
+  content: string;
+  badges: ChatBadge[];
+  timestampLabel: string;
+}
+
+export type StreamEventType = 'subscription' | 'superchat' | 'raid' | 'cheer';
+
+export interface StreamEvent {
+  id: string;
+  platform: PlatformId;
+  type: StreamEventType;
+  author: string;
+  amount?: number;
+  message?: string;
+  timestampLabel: string;
+}
+
+export interface PlatformConnectionStatus {
+  platform: PlatformId;
+  label: string;
+  connected: boolean;
+}
+
+export interface ObsStatusSnapshot {
+  connected: boolean;
+  sceneName: string;
+  uptimeLabel: string;
+}
+
 export interface ProfileSummary {
   id: string;
   name: string;
