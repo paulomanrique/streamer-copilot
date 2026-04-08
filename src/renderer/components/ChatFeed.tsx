@@ -5,6 +5,14 @@ import { EventBanner } from './EventBanner.js';
 
 type FeedMode = 'all' | 'superchat';
 
+interface ContextMenuState {
+  visible: boolean;
+  x: number;
+  y: number;
+  platform: string;
+  author: string;
+}
+
 interface ChatFeedProps {
   messages: ChatMessage[];
   events: StreamEvent[];
@@ -44,12 +52,55 @@ const PLATFORM_META = {
 } as const;
 
 const PLATFORM_BUTTONS = [
-  { id: 'twitch', title: 'Twitch' },
-  { id: 'youtube', title: 'YouTube Horizontal' },
+  { id: 'twitch',    title: 'Twitch' },
+  { id: 'youtube',   title: 'YouTube Horizontal' },
   { id: 'youtube-v', title: 'YouTube Vertical' },
-  { id: 'kick', title: 'Kick' },
-  { id: 'tiktok', title: 'TikTok' },
+  { id: 'kick',      title: 'Kick' },
+  { id: 'tiktok',    title: 'TikTok' },
 ] as const;
+
+type ContextMenuAction = { separator: true } | { id: string; label: string; danger?: boolean };
+
+const CONTEXT_MENU_ACTIONS: Record<string, ContextMenuAction[]> = {
+  twitch: [
+    { id: 'vip',    label: 'Add VIP' },
+    { id: 'unvip',  label: 'Remove VIP' },
+    { separator: true },
+    { id: 'mod',    label: 'Add Moderator' },
+    { id: 'unmod',  label: 'Remove Moderator' },
+    { separator: true },
+    { id: 'to1',    label: 'Timeout — 1 minute' },
+    { id: 'to10',   label: 'Timeout — 10 minutes' },
+    { id: 'to60',   label: 'Timeout — 1 hour' },
+    { id: 'to1440', label: 'Timeout — 24 hours' },
+    { separator: true },
+    { id: 'ban',    label: 'Ban user', danger: true },
+  ],
+  youtube: [
+    { id: 'hide',   label: 'Hide user on channel' },
+    { id: 'block',  label: 'Block user', danger: true },
+    { separator: true },
+    { id: 'report', label: 'Report message', danger: true },
+  ],
+  'youtube-v': [
+    { id: 'hide',   label: 'Hide user on channel' },
+    { id: 'block',  label: 'Block user', danger: true },
+    { separator: true },
+    { id: 'report', label: 'Report message', danger: true },
+  ],
+  kick: [
+    { id: 'mute',  label: 'Mute user' },
+    { separator: true },
+    { id: 'to5',   label: 'Timeout — 5 minutes' },
+    { id: 'to30',  label: 'Timeout — 30 minutes' },
+    { separator: true },
+    { id: 'ban',   label: 'Ban user', danger: true },
+  ],
+  tiktok: [
+    { id: 'mute',   label: 'Mute user' },
+    { id: 'report', label: 'Report comment', danger: true },
+  ],
+};
 
 function platformKey(platform: string): keyof typeof PLATFORM_META {
   if (platform === 'youtube-v') return 'youtube-v';
@@ -58,96 +109,145 @@ function platformKey(platform: string): keyof typeof PLATFORM_META {
 }
 
 export function ChatFeed({ messages, events }: ChatFeedProps) {
-  const feedRef = useRef<HTMLDivElement | null>(null);
-  const [feedMode, setFeedMode] = useState<FeedMode>('all');
+  const feedRef  = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const menuRef  = useRef<HTMLDivElement | null>(null);
+
+  const [feedMode,       setFeedMode]       = useState<FeedMode>('all');
   const [platformFilter, setPlatformFilter] = useState<Record<string, boolean>>({
-    twitch: true,
-    youtube: true,
-    'youtube-v': true,
-    kick: true,
-    tiktok: true,
+    twitch: true, youtube: true, 'youtube-v': true, kick: true, tiktok: true,
+  });
+  const [inputValue,    setInputValue]    = useState('');
+  const [inputPlatform, setInputPlatform] = useState('twitch');
+  const [highlighted,   setHighlighted]   = useState<string | null>(null);
+  const [ctxMenu, setCtxMenu] = useState<ContextMenuState>({
+    visible: false, x: 0, y: 0, platform: '', author: '',
   });
 
+  // ── filtering ──────────────────────────────────────────────────────
   const allowedEventTypes = feedMode === 'superchat' ? new Set(['superchat']) : new Set(['raid', 'superchat']);
   const visibleMessages = feedMode === 'superchat'
     ? []
-    : messages.filter((message) => platformFilter[platformKey(message.platform)] !== false);
+    : messages.filter((m) => platformFilter[platformKey(m.platform)] !== false);
   const visibleEvents = events.filter(
-    (event) => allowedEventTypes.has(event.type) && platformFilter[platformKey(event.platform)] !== false,
+    (e) => allowedEventTypes.has(e.type) && platformFilter[platformKey(e.platform)] !== false,
   );
 
   const items = [
-    ...visibleMessages.map((message) => ({ kind: 'message' as const, id: message.id, time: message.timestampLabel, message })),
-    ...visibleEvents.map((event) => ({ kind: 'event' as const, id: event.id, time: event.timestampLabel, event })),
-  ].sort((left, right) => left.time.localeCompare(right.time));
+    ...visibleMessages.map((m) => ({ kind: 'message' as const, id: m.id, time: m.timestampLabel, message: m })),
+    ...visibleEvents.map((e)  => ({ kind: 'event'   as const, id: e.id, time: e.timestampLabel, event: e })),
+  ].sort((a, b) => a.time.localeCompare(b.time));
 
+  // ── auto-scroll ────────────────────────────────────────────────────
   useEffect(() => {
     if (!feedRef.current) return;
     feedRef.current.scrollTop = feedRef.current.scrollHeight;
   }, [items]);
 
+  // ── close context menu on outside click / Escape ───────────────────
+  useEffect(() => {
+    if (!ctxMenu.visible) return;
+    const onDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) hideMenu();
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') hideMenu(); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [ctxMenu.visible]);
+
+  // ── adjust menu position after render ──────────────────────────────
+  useEffect(() => {
+    if (!ctxMenu.visible || !menuRef.current) return;
+    const r = menuRef.current.getBoundingClientRect();
+    let { x, y } = ctxMenu;
+    if (r.right  > window.innerWidth)  x = x - r.width;
+    if (r.bottom > window.innerHeight) y = y - r.height;
+    if (x !== ctxMenu.x || y !== ctxMenu.y) setCtxMenu((c) => ({ ...c, x, y }));
+  }, [ctxMenu]);
+
+  const hideMenu = () => setCtxMenu((c) => ({ ...c, visible: false }));
+
+  const replyTo = (platform: string, author: string) => {
+    setInputPlatform(platform);
+    setInputValue(`@${author} `);
+    hideMenu();
+    requestAnimationFrame(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+        const len = inputRef.current.value.length;
+        inputRef.current.setSelectionRange(len, len);
+      }
+    });
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, platform: string, author: string) => {
+    e.preventDefault();
+    setCtxMenu({ visible: true, x: e.clientX, y: e.clientY, platform, author });
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && inputValue.trim()) setInputValue('');
+  };
+
   return (
     <div className="flex flex-col w-[60%] border-r border-gray-800">
+      {/* ── header ─────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800 shrink-0">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-gray-200">Unified Chat</h2>
           <div className="inline-flex items-center bg-gray-800 border border-gray-700 rounded-lg p-0.5 text-xs">
-            <button
-              type="button"
-              onClick={() => setFeedMode('all')}
-              className={feedMode === 'all' ? 'px-2 py-1 rounded bg-violet-600 text-white transition-colors' : 'px-2 py-1 rounded text-gray-400 hover:text-white transition-colors'}
-            >
+            <button type="button" onClick={() => setFeedMode('all')}
+              className={feedMode === 'all' ? 'px-2 py-1 rounded bg-violet-600 text-white' : 'px-2 py-1 rounded text-gray-400 hover:text-white'}>
               All Chats
             </button>
-            <button
-              type="button"
-              onClick={() => setFeedMode('superchat')}
-              className={feedMode === 'superchat' ? 'px-2 py-1 rounded bg-violet-600 text-white transition-colors' : 'px-2 py-1 rounded text-gray-400 hover:text-white transition-colors'}
-            >
+            <button type="button" onClick={() => setFeedMode('superchat')}
+              className={feedMode === 'superchat' ? 'px-2 py-1 rounded bg-violet-600 text-white' : 'px-2 py-1 rounded text-gray-400 hover:text-white'}>
               Super Chats Only
             </button>
           </div>
         </div>
-        <div className="flex items-center gap-1.5 text-xs">
+
+        <div className="flex items-center gap-1.5">
           {PLATFORM_BUTTONS.map(({ id, title }) => {
             const meta = PLATFORM_META[platformKey(id)];
-            const enabled = platformFilter[id] !== false;
+            const on = platformFilter[id] !== false;
             return (
-              <button
-                key={id}
-                type="button"
-                title={title}
-                aria-label={title}
-                onClick={() =>
-                  setPlatformFilter((current) => ({
-                    ...current,
-                    [id]: !current[id],
-                  }))
-                }
-                className={`flex items-center justify-center w-8 h-8 rounded transition-all ${enabled ? `${meta.bg} ${meta.text} hover:opacity-90` : 'grayscale opacity-40 bg-gray-700/30 text-gray-500'}`}
-              >
-                <svg className="w-3.5 h-3.5" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor">
-                  <path d={meta.icon} />
-                </svg>
+              <button key={id} type="button" title={title} aria-label={title}
+                onClick={() => setPlatformFilter((c) => ({ ...c, [id]: !c[id] }))}
+                className={`flex items-center justify-center w-8 h-8 rounded transition-all ${on ? `${meta.bg} ${meta.text} hover:opacity-90` : 'grayscale opacity-40 bg-gray-700/30 text-gray-500'}`}>
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d={meta.icon} /></svg>
               </button>
             );
           })}
         </div>
       </div>
 
-      <div ref={feedRef} id="chat-feed" className="flex-1 overflow-y-auto py-1 space-y-0.5">
+      {/* ── messages ───────────────────────────────────────────────── */}
+      <div ref={feedRef} className="flex-1 overflow-y-auto py-1 space-y-0.5">
         {items.map((item) =>
           item.kind === 'event' ? (
             <EventBanner key={item.id} event={item.event} />
           ) : (
-            <ChatMessageRow key={item.id} message={item.message} />
+            <ChatMessageRow
+              key={item.id}
+              message={item.message}
+              highlighted={highlighted === item.message.author}
+              onDoubleClick={() => replyTo(item.message.platform, item.message.author)}
+              onContextMenu={(e) => handleContextMenu(e, item.message.platform, item.message.author)}
+            />
           ),
         )}
       </div>
 
+      {/* ── input ──────────────────────────────────────────────────── */}
       <div className="px-3 py-2 border-t border-gray-800 shrink-0">
         <div className="flex gap-2">
-          <select className="bg-gray-800 border border-gray-700 rounded text-xs text-gray-300 px-2 py-1.5 focus:outline-none focus:border-violet-500">
+          <select
+            value={inputPlatform}
+            onChange={(e) => setInputPlatform(e.target.value)}
+            className="bg-gray-800 border border-gray-700 rounded text-xs text-gray-300 px-2 py-1.5 focus:outline-none focus:border-violet-500"
+          >
             <option value="twitch">Twitch</option>
             <option value="youtube">YouTube (Horizontal)</option>
             <option value="youtube-v">YouTube (Vertical)</option>
@@ -155,47 +255,111 @@ export function ChatFeed({ messages, events }: ChatFeedProps) {
             <option value="tiktok">TikTok</option>
           </select>
           <input
+            ref={inputRef}
             type="text"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleKeyDown}
             placeholder="Send message... (Press Enter)"
             className="flex-1 bg-gray-800 border border-gray-700 rounded text-sm text-gray-300 px-3 py-1.5 focus:outline-none focus:border-violet-500 placeholder-gray-600"
           />
-          <button type="button" className="px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">
+          <button type="button" onClick={() => setInputValue('')}
+            className="px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">
             Send
           </button>
         </div>
       </div>
+
+      {/* ── context menu ───────────────────────────────────────────── */}
+      {ctxMenu.visible ? (
+        <div
+          ref={menuRef}
+          className="fixed z-50 min-w-[180px] bg-gray-900 border border-gray-700 rounded-xl shadow-2xl py-1 text-sm overflow-hidden"
+          style={{ left: ctxMenu.x, top: ctxMenu.y }}
+        >
+          {/* Header */}
+          <div className="px-3 py-1.5 border-b border-gray-700 mb-1">
+            <span className="text-xs text-gray-500">@{ctxMenu.author}</span>
+          </div>
+
+          {/* Highlight */}
+          <button type="button"
+            className="w-full text-left px-3 py-1.5 text-sm hover:bg-yellow-500/20 text-yellow-300 flex items-center gap-2"
+            onClick={() => { setHighlighted((h) => h === ctxMenu.author ? null : ctxMenu.author); hideMenu(); }}>
+            <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.95a1 1 0 00.95.69h4.153c.969 0 1.371 1.24.588 1.81l-3.36 2.44a1 1 0 00-.364 1.118l1.285 3.95c.3.922-.755 1.688-1.54 1.118l-3.359-2.44a1 1 0 00-1.176 0l-3.36 2.44c-.783.57-1.838-.196-1.539-1.118l1.285-3.95a1 1 0 00-.364-1.118l-3.36-2.44c-.782-.57-.38-1.81.588-1.81h4.154a1 1 0 00.95-.69l1.286-3.95z"/>
+            </svg>
+            Highlight
+          </button>
+
+          <div className="border-t border-gray-700 my-1" />
+
+          {/* Reply */}
+          <button type="button"
+            className="w-full text-left px-3 py-1.5 text-sm hover:bg-violet-600/30 text-gray-200 flex items-center gap-2"
+            onClick={() => replyTo(ctxMenu.platform, ctxMenu.author)}>
+            <svg className="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/>
+            </svg>
+            Reply
+          </button>
+
+          <div className="border-t border-gray-700 my-1" />
+
+          {/* Platform actions */}
+          {(CONTEXT_MENU_ACTIONS[ctxMenu.platform] ?? []).map((action, i) => {
+            if ('separator' in action) return <div key={i} className="border-t border-gray-700/60 my-1" />;
+            return (
+              <button key={action.id} type="button"
+                className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 ${action.danger ? 'text-red-400 hover:bg-red-600/20' : 'text-gray-300'}`}
+                onClick={hideMenu}>
+                {action.label}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function ChatMessageRow({ message }: { message: ChatMessage }) {
+interface ChatMessageRowProps {
+  message: ChatMessage;
+  highlighted: boolean;
+  onDoubleClick: () => void;
+  onContextMenu: (e: React.MouseEvent) => void;
+}
+
+function ChatMessageRow({ message, highlighted, onDoubleClick, onContextMenu }: ChatMessageRowProps) {
   const meta = PLATFORM_META[platformKey(message.platform)];
   const isCommand = message.content.startsWith('!');
   const isSub = message.badges.includes('subscriber') || message.badges.includes('member');
   const isMod = message.badges.includes('moderator');
+
   return (
     <div
-      className={`chat-message flex gap-2 px-3 py-1.5 border-l-2 hover:bg-white/[0.02] ${meta.border} transition-all duration-75 cursor-default select-text`}
+      className={`chat-message flex gap-2 px-3 py-1.5 border-l-2 cursor-default select-text transition-all duration-75
+        ${meta.border}
+        ${highlighted ? 'ring-1 ring-yellow-400/70 bg-yellow-500/10' : 'hover:bg-white/[0.02]'}
+        ${isCommand ? 'bg-violet-500/5' : ''}`}
       data-platform={platformKey(message.platform)}
       data-author={message.author}
+      onDoubleClick={onDoubleClick}
+      onContextMenu={onContextMenu}
     >
       <span className="text-gray-600 text-xs mt-0.5 shrink-0 font-mono w-[54px] text-right">{message.timestampLabel}</span>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1 flex-wrap">
-          {/* Platform icon badge */}
           <span className={`inline-flex items-center justify-center w-5 h-5 rounded ${meta.bg}`}>
-            <svg className={`w-3 h-3 ${meta.text}`} viewBox="0 0 24 24" fill="currentColor">
-              <path d={meta.icon} />
-            </svg>
+            <svg className={`w-3 h-3 ${meta.text}`} viewBox="0 0 24 24" fill="currentColor"><path d={meta.icon} /></svg>
           </span>
-          {/* Subscriber star badge */}
           {isSub ? <span className="text-yellow-400 text-xs leading-none">★</span> : null}
-          {/* Author name */}
           <span className={`font-semibold text-sm ${meta.text}`}>{message.author}</span>
-          {/* MOD badge */}
           {isMod ? <span className="text-xs text-emerald-400 font-semibold">MOD</span> : null}
         </div>
-        <p className={`text-sm mt-0.5 break-words leading-snug ${isCommand ? 'text-violet-300 font-mono' : 'text-gray-300'}`}>{message.content}</p>
+        <p className={`text-sm mt-0.5 break-words leading-snug ${isCommand ? 'text-violet-300 font-mono' : 'text-gray-300'}`}>
+          {message.content}
+        </p>
       </div>
     </div>
   );
