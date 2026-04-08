@@ -8,9 +8,9 @@ import { DashboardSummary } from './components/DashboardSummary.js';
 import { ProfileSelectorModal } from './components/ProfileSelectorModal.js';
 import { SectionTabs } from './components/SectionTabs.js';
 import type { AppSection } from './components/SectionTabs.js';
-import { SettingsProfilesPanel } from './components/SettingsProfilesPanel.js';
 import { StatusMessages } from './components/StatusMessages.js';
 import { ToastStack, type ToastItem } from './components/ToastStack.js';
+import { SettingsWorkspace } from './pages/SettingsWorkspace.js';
 import { styles } from './components/app-styles.js';
 
 const SKIP_PROFILE_SELECTOR_KEY = 'streamerCopilot.skipProfileSelector';
@@ -191,7 +191,7 @@ export default function App() {
         {currentSection === 'dashboard' ? <DashboardSummary activeProfileName={activeProfileName} /> : null}
 
         {currentSection === 'settings' ? (
-          <SettingsProfilesPanel
+          <SettingsWorkspace
             activeProfileId={activeProfileId}
             activeProfileName={activeProfileName}
             profiles={profiles}
