@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 
 import type { GeneralSettings } from '../../shared/types.js';
-import { styles } from '../components/app-styles.js';
-import { SettingsPageShell, SettingsSurface, SettingsToggleRow } from '../components/SettingsScaffold.js';
 
 interface GeneralSettingsPageProps {
   settings: GeneralSettings;
@@ -27,7 +25,6 @@ export function GeneralSettingsPage({ settings, onSave }: GeneralSettingsPagePro
     setIsBusy(true);
     setError(null);
     setStatusMessage(null);
-
     try {
       await onSave(draft);
       setStatusMessage('General settings saved');
@@ -39,52 +36,90 @@ export function GeneralSettingsPage({ settings, onSave }: GeneralSettingsPagePro
   };
 
   return (
-    <SettingsPageShell title="General Settings" description="Application behavior.">
-      <div style={styles.settingsColumn}>
-        <SettingsSurface>
-          <SettingsToggleRow
+    <div className="p-6 max-w-lg">
+      <h2 className="text-lg font-semibold mb-1">General Settings</h2>
+      <p className="text-sm text-gray-400 mb-6">Application behavior.</p>
+
+      <div className="space-y-4">
+        <div className="bg-gray-800/40 rounded-xl border border-gray-700 p-5 space-y-4">
+          <ToggleRow
             title="Start on login"
-            description="Open automatically when the computer starts."
+            description="Open automatically when the computer starts"
             checked={draft.startOnLogin}
             onChange={(checked) => updateDraft({ startOnLogin: checked })}
-            bordered={false}
           />
-          <SettingsToggleRow
+          <ToggleRow
+            bordered
             title="Minimize to tray"
-            description="Keep the app running in the background when the window closes."
+            description="Keep the app running in the background when the window closes"
             checked={draft.minimizeToTray}
             onChange={(checked) => updateDraft({ minimizeToTray: checked })}
           />
-          <SettingsToggleRow
+          <ToggleRow
+            bordered
             title="Event notifications"
-            description="System notifications for raids, subscriptions, and other stream events."
+            description="System notifications for raids and subscriptions"
             checked={draft.eventNotifications}
             onChange={(checked) => updateDraft({ eventNotifications: checked })}
           />
-        </SettingsSurface>
-
-        <SettingsSurface>
-          <h3 style={styles.settingsSubsectionTitle}>Diagnostic Log</h3>
-          <div style={styles.buttonRow}>
-            <select defaultValue="info" style={{ ...styles.select, flex: 1 }}>
-              <option value="info">Info</option>
-              <option value="debug">Debug</option>
-              <option value="warn">Warn</option>
-            </select>
-            <button type="button" style={styles.secondaryButton}>Open Logs Folder</button>
-          </div>
-        </SettingsSurface>
-
-        <div style={styles.settingsFooterRow}>
-          <button type="button" style={styles.primaryButton} disabled={isBusy} onClick={() => void saveSettings()}>
-            Save settings
-          </button>
-          {statusMessage ? <p style={styles.message}>{statusMessage}</p> : null}
-          {error ? <p style={styles.error}>{error}</p> : null}
         </div>
 
-        <p style={styles.settingsVersionText}>Streamer Copilot v0.1.0 · Electron 35</p>
+        <div className="bg-gray-800/40 rounded-xl border border-gray-700 p-5">
+          <h3 className="text-sm font-medium mb-3">Diagnostic Log</h3>
+          <div className="flex gap-2">
+            <select defaultValue="Info" className="flex-1 bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
+              <option>Info</option>
+              <option>Debug</option>
+              <option>Warn</option>
+            </select>
+            <button type="button" className="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">
+              Open Logs Folder
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            disabled={isBusy}
+            onClick={() => void saveSettings()}
+            className="px-3 py-2 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors disabled:opacity-60"
+          >
+            Save settings
+          </button>
+          {statusMessage ? <p className="text-sm text-gray-400">{statusMessage}</p> : null}
+          {error ? <p className="text-sm text-red-300">{error}</p> : null}
+        </div>
+
+        <div className="text-center text-xs text-gray-600 pt-2">Streamer Copilot v0.1.0 · Electron 35</div>
       </div>
-    </SettingsPageShell>
+    </div>
+  );
+}
+
+function ToggleRow({
+  title,
+  description,
+  checked,
+  onChange,
+  bordered = false,
+}: {
+  title: string;
+  description: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  bordered?: boolean;
+}) {
+  return (
+    <div className={`flex items-center justify-between ${bordered ? 'border-t border-gray-700 pt-4' : ''}`}>
+      <div>
+        <p className="text-sm font-medium">{title}</p>
+        <p className="text-xs text-gray-500 mt-0.5">{description}</p>
+      </div>
+      <label className="toggle-switch">
+        <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+        <span className="toggle-slider" />
+      </label>
+    </div>
   );
 }

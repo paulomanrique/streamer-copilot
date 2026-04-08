@@ -1,5 +1,4 @@
 import type { ProfileSummary } from '../../shared/types.js';
-import { styles } from './app-styles.js';
 
 interface ProfileSelectorModalProps {
   open: boolean;
@@ -27,20 +26,20 @@ export function ProfileSelectorModal({
   const hasProfiles = profiles.length > 0;
 
   return (
-    <div style={styles.modalOverlay}>
-      <section style={styles.modalCard}>
-        <div style={styles.settingsColumn}>
-          <div>
-            <h2 style={styles.modalTitle}>Select Profile</h2>
-          </div>
-
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" />
+      <div className="relative bg-gray-900 border border-gray-700 rounded-xl w-full max-w-xl shadow-2xl">
+        <div className="px-5 py-4 border-b border-gray-700">
+          <h3 className="font-semibold">Select Profile</h3>
+        </div>
+        <div className="p-5 space-y-4">
           {hasProfiles ? (
-            <label style={styles.label}>
-              Profile
+            <div>
+              <label className="block text-sm text-gray-400 mb-1.5">Profile</label>
               <select
                 value={selectorProfileId}
-                style={styles.select}
                 onChange={(event) => onChangeProfileId(event.target.value)}
+                className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
               >
                 {profiles.map((profile) => (
                   <option key={profile.id} value={profile.id}>
@@ -48,40 +47,38 @@ export function ProfileSelectorModal({
                   </option>
                 ))}
               </select>
-            </label>
+            </div>
           ) : (
-            <p style={styles.message}>No profiles exist yet. Create your first profile to continue.</p>
+            <p className="text-sm text-gray-400">No profiles exist yet. Create your first profile to continue.</p>
           )}
 
           {hasProfiles ? (
-            <>
-              <label style={styles.checkboxLabel}>
-                <input
-                  type="checkbox"
-                  checked={skipPromptAgain}
-                  onChange={(event) => onChangeSkipPromptAgain(event.target.checked)}
-                />
-                Do not ask me again
-              </label>
-
-              <div style={styles.modalActions}>
-                <button type="button" style={styles.secondaryButton} onClick={onCreateProfile}>
-                  Create profile
-                </button>
-                <button type="button" style={styles.primaryButton} onClick={onConfirm}>
-                  Continue with profile
-                </button>
-              </div>
-            </>
-          ) : (
-            <div style={styles.modalActions}>
-              <button type="button" style={styles.primaryButton} onClick={onCreateProfile}>
-                Create first profile
-              </button>
-            </div>
-          )}
+            <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={skipPromptAgain}
+                onChange={(event) => onChangeSkipPromptAgain(event.target.checked)}
+                className="accent-violet-500"
+              />
+              Do not ask me again
+            </label>
+          ) : null}
         </div>
-      </section>
+        <div className="flex justify-end gap-3 px-5 py-4 border-t border-gray-700">
+          {hasProfiles ? (
+            <button type="button" onClick={onCreateProfile} className="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">
+              Create profile
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={hasProfiles ? onConfirm : onCreateProfile}
+            className="px-3 py-2 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors"
+          >
+            {hasProfiles ? 'Continue with profile' : 'Create first profile'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

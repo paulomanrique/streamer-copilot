@@ -1,5 +1,3 @@
-import { styles } from './app-styles.js';
-
 interface ProfileActionsProps {
   onCreate: () => void;
   onRename: () => void;
@@ -9,17 +7,17 @@ interface ProfileActionsProps {
 
 export function ProfileActions({ onCreate, onRename, onClone, onDelete }: ProfileActionsProps) {
   return (
-    <div style={styles.actionsRowCompact}>
-      <button type="button" style={styles.secondaryButton} onClick={onCreate}>
+    <div className="flex flex-wrap gap-2">
+      <button type="button" onClick={onCreate} className="px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">
         New
       </button>
-      <button type="button" style={styles.secondaryButton} onClick={onRename}>
+      <button type="button" onClick={onRename} className="px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">
         Rename
       </button>
-      <button type="button" style={styles.secondaryButton} onClick={onClone}>
+      <button type="button" onClick={onClone} className="px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">
         Clone
       </button>
-      <button type="button" style={styles.dangerButton} onClick={onDelete}>
+      <button type="button" onClick={onDelete} className="px-3 py-1.5 rounded bg-red-600/20 hover:bg-red-600/30 text-red-400 text-sm transition-colors">
         Delete
       </button>
     </div>

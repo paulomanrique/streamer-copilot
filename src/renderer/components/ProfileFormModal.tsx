@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
 
-import { styles } from './app-styles.js';
-
 type ProfileFormMode = 'create' | 'rename' | 'clone';
 
 interface ProfileFormModalProps {
@@ -63,50 +61,56 @@ export function ProfileFormModal({
   };
 
   return (
-    <div style={styles.modalOverlay}>
-      <section style={styles.modalCard}>
-        <div style={styles.settingsColumn}>
-          <h2 style={styles.modalTitle}>{TITLES[mode]}</h2>
-
-          <label style={styles.label}>
-            Profile name
+    <div className="fixed inset-0 z-[75] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" />
+      <div className="relative bg-gray-900 border border-gray-700 rounded-xl w-full max-w-xl shadow-2xl">
+        <div className="px-5 py-4 border-b border-gray-700">
+          <h3 className="font-semibold">{TITLES[mode]}</h3>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="block text-sm text-gray-400 mb-1.5">Profile name</label>
             <input
               type="text"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              style={styles.searchInput}
+              className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
               autoFocus
             />
-          </label>
+          </div>
 
           {requireDirectory ? (
-            <label style={styles.label}>
-              Directory
-              <div style={styles.buttonRow}>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1.5">Directory</label>
+              <div className="flex gap-2">
                 <input
                   type="text"
                   value={selectedDirectory}
                   readOnly
                   onChange={(event) => onChangeSelectedDirectory(event.target.value)}
-                  style={{ ...styles.searchInput, flex: 1 }}
+                  className="flex-1 bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
                 />
-                <button type="button" style={styles.secondaryButton} onClick={() => void onPickDirectory()}>
+                <button type="button" onClick={() => void onPickDirectory()} className="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">
                   Choose
                 </button>
               </div>
-            </label>
+            </div>
           ) : null}
-
-          <div style={styles.modalActions}>
-            <button type="button" style={styles.secondaryButton} onClick={onClose}>
-              Cancel
-            </button>
-            <button type="button" style={styles.primaryButton} disabled={!canSubmit || isSubmitting} onClick={() => void submit()}>
-              {SUBMIT_LABELS[mode]}
-            </button>
-          </div>
         </div>
-      </section>
+        <div className="flex justify-end gap-3 px-5 py-4 border-t border-gray-700">
+          <button type="button" onClick={onClose} className="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={!canSubmit || isSubmitting}
+            onClick={() => void submit()}
+            className="px-3 py-2 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors disabled:opacity-60"
+          >
+            {SUBMIT_LABELS[mode]}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
