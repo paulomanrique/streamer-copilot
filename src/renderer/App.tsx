@@ -1,13 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import type { AppInfo } from '../shared/types.js';
+import { readSkipPromptPreference, shouldPromptProfileSelector } from './profile-startup.js';
 import { useAppStore } from './store.js';
+
+const SKIP_PROFILE_SELECTOR_KEY = 'streamerCopilot.skipProfileSelector';
 
 export default function App() {
   const { profiles, activeProfileId, setProfiles } = useAppStore();
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isProfileSelectorOpen, setIsProfileSelectorOpen] = useState(false);
+  const [selectorProfileId, setSelectorProfileId] = useState('');
+  const [skipPromptAgain, setSkipPromptAgain] = useState(false);
 
   const activeProfile = useMemo(
     () => profiles.find((profile) => profile.id === activeProfileId) ?? null,
@@ -20,6 +26,15 @@ export default function App() {
         const [info, snapshot] = await Promise.all([window.copilot.getAppInfo(), window.copilot.listProfiles()]);
         setAppInfo(info);
         setProfiles(snapshot);
+        setSelectorProfileId(snapshot.activeProfileId);
+        const skipPreference = readSkipPromptPreference(localStorage.getItem(SKIP_PROFILE_SELECTOR_KEY));
+        setSkipPromptAgain(skipPreference);
+        setIsProfileSelectorOpen(
+          shouldPromptProfileSelector({
+            forceOpen: false,
+            skipPromptPreference: skipPreference,
+          }),
+        );
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : 'Falha ao carregar dados iniciais');
       } finally {
@@ -34,10 +49,32 @@ export default function App() {
     try {
       const snapshot = await window.copilot.selectProfile({ profileId });
       setProfiles(snapshot);
+      setSelectorProfileId(snapshot.activeProfileId);
       setError(null);
+      return snapshot;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Falha ao selecionar perfil');
+      return null;
     }
+  };
+
+  const openProfileSelector = () => {
+    setSelectorProfileId(activeProfileId);
+    setSkipPromptAgain(readSkipPromptPreference(localStorage.getItem(SKIP_PROFILE_SELECTOR_KEY)));
+    setIsProfileSelectorOpen(true);
+  };
+
+  const confirmProfileSelector = async () => {
+    const targetProfileId = selectorProfileId || activeProfileId;
+    if (!targetProfileId) return;
+
+    const selected = await onSelectProfile(targetProfileId);
+    if (!selected) return;
+
+    if (skipPromptAgain) localStorage.setItem(SKIP_PROFILE_SELECTOR_KEY, '1');
+    else localStorage.removeItem(SKIP_PROFILE_SELECTOR_KEY);
+
+    setIsProfileSelectorOpen(false);
   };
 
   return (
@@ -55,7 +92,12 @@ export default function App() {
         {error ? <p style={styles.error}>{error}</p> : null}
 
         <div style={styles.block}>
-          <h2 style={styles.subtitle}>Perfis</h2>
+          <div style={styles.subtitleRow}>
+            <h2 style={styles.subtitle}>Perfis</h2>
+            <button type="button" style={styles.secondaryButton} onClick={openProfileSelector}>
+              Trocar Perfil
+            </button>
+          </div>
           <p style={styles.message}>Perfil ativo: {activeProfile?.name ?? '—'}</p>
 
           <div style={styles.list}>
@@ -73,6 +115,44 @@ export default function App() {
           </div>
         </div>
       </section>
+
+      {isProfileSelectorOpen ? (
+        <div style={styles.modalOverlay}>
+          <section style={styles.modalCard}>
+            <h2 style={styles.modalTitle}>Selecionar Perfil</h2>
+
+            <label style={styles.label}>
+              Perfil
+              <select
+                value={selectorProfileId}
+                style={styles.select}
+                onChange={(event) => setSelectorProfileId(event.target.value)}
+              >
+                {profiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label style={styles.checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={skipPromptAgain}
+                onChange={(event) => setSkipPromptAgain(event.target.checked)}
+              />
+              Não me pergunte novamente
+            </label>
+
+            <div style={styles.modalActions}>
+              <button type="button" style={styles.primaryButton} onClick={() => void confirmProfileSelector()}>
+                Entrar com perfil
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -113,6 +193,12 @@ const styles: Record<string, React.CSSProperties> = {
   subtitle: {
     margin: 0,
     fontSize: '18px',
+  },
+  subtitleRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '12px',
   },
   message: {
     margin: '8px 0 0',
@@ -155,5 +241,73 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#9ca3af',
     fontSize: '12px',
     wordBreak: 'break-all',
+  },
+  secondaryButton: {
+    background: '#1f2937',
+    border: '1px solid #374151',
+    color: '#e5e7eb',
+    borderRadius: '8px',
+    padding: '8px 10px',
+    cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: 600,
+  },
+  modalOverlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.65)',
+    display: 'grid',
+    placeItems: 'center',
+    padding: '24px',
+  },
+  modalCard: {
+    width: 'min(520px, 100%)',
+    background: '#111827',
+    border: '1px solid #374151',
+    borderRadius: '12px',
+    padding: '20px',
+  },
+  modalTitle: {
+    margin: 0,
+    fontSize: '22px',
+    fontWeight: 700,
+  },
+  label: {
+    marginTop: '16px',
+    display: 'grid',
+    gap: '8px',
+    color: '#d1d5db',
+    fontSize: '14px',
+  },
+  select: {
+    background: '#1f2937',
+    border: '1px solid #4b5563',
+    color: '#e5e7eb',
+    borderRadius: '8px',
+    padding: '10px 12px',
+    fontSize: '14px',
+  },
+  checkboxLabel: {
+    marginTop: '16px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    color: '#d1d5db',
+    fontSize: '14px',
+  },
+  modalActions: {
+    marginTop: '20px',
+    display: 'flex',
+    justifyContent: 'flex-end',
+  },
+  primaryButton: {
+    background: '#7c3aed',
+    border: '1px solid #8b5cf6',
+    color: '#ffffff',
+    borderRadius: '8px',
+    padding: '10px 14px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: 600,
   },
 };
