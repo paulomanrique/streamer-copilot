@@ -1067,11 +1067,11 @@
     set('obs-status', s.streaming ? '🔴 AO VIVO' : '⚫ Offline');
 
     // Viewer counts
-    const fmt = n => n >= 1000 ? `${(n/1000).toFixed(1)}k` : String(n);
-    set('viewers-twitch',  fmt(ps.twitch.viewers));
-    set('viewers-youtube', fmt(ps.youtube.viewers));
-    set('likes-youtube',   fmt(ps.youtube.likes));
-    set('viewers-kick',    fmt(ps.kick.viewers));
+    const fmtNum = n => n >= 1000 ? `${(n/1000).toFixed(1)}k` : String(n);
+    set('viewers-twitch',  fmtNum(ps.twitch.viewers));
+    set('viewers-youtube', fmtNum(ps.youtube.viewers));
+    set('likes-youtube',   fmtNum(ps.youtube.likes));
+    set('viewers-kick',    fmtNum(ps.kick.viewers));
 
     const connPct   = s.outputTotalFrames > 0 ? (1 - s.outputSkippedFrames / s.outputTotalFrames) * 100 : 100;
     const connColor = connPct >= 95 ? 'green' : connPct >= 80 ? 'yellow' : 'red';
