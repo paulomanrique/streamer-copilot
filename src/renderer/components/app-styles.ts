@@ -2,17 +2,20 @@ import type { CSSProperties } from 'react';
 
 export const styles: Record<string, CSSProperties> = {
   page: {
-    minHeight: '100vh',
+    height: '100vh',
+    overflow: 'hidden',
     margin: 0,
     background: '#030712',
     color: '#e5e7eb',
-    display: 'block',
+    display: 'flex',
+    flexDirection: 'column',
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     padding: 0,
   },
   card: {
     width: '100vw',
-    minHeight: '100vh',
+    flex: 1,
+    minHeight: 0,
     background: '#030712',
     display: 'flex',
     flexDirection: 'column',
@@ -392,9 +395,9 @@ export const styles: Record<string, CSSProperties> = {
   },
   obsStatValuePrimary: {
     color: '#a78bfa',
-    fontSize: '20px',
+    fontSize: '16px',
     fontWeight: 700,
-    lineHeight: 1.1,
+    lineHeight: 1.2,
   },
   obsStatSuffix: {
     color: '#6b7280',
@@ -450,9 +453,9 @@ export const styles: Record<string, CSSProperties> = {
     fontWeight: 700,
   },
   viewerCardValue: {
-    fontSize: '20px',
+    fontSize: '16px',
     fontWeight: 700,
-    lineHeight: 1.1,
+    lineHeight: 1.2,
   },
   viewerCardMeta: {
     color: '#9ca3af',
@@ -483,21 +486,21 @@ export const styles: Record<string, CSSProperties> = {
   },
   statValueGood: {
     color: '#4ade80',
-    fontSize: '22px',
+    fontSize: '16px',
     fontWeight: 700,
-    lineHeight: 1.1,
+    lineHeight: 1.2,
   },
   statValueWarn: {
     color: '#facc15',
-    fontSize: '22px',
+    fontSize: '16px',
     fontWeight: 700,
-    lineHeight: 1.1,
+    lineHeight: 1.2,
   },
   statValueBad: {
     color: '#f87171',
-    fontSize: '22px',
+    fontSize: '16px',
     fontWeight: 700,
-    lineHeight: 1.1,
+    lineHeight: 1.2,
   },
   platformCard: {
     padding: '14px',
@@ -828,9 +831,10 @@ export const styles: Record<string, CSSProperties> = {
     padding: '12px 16px 16px',
   },
   settingsWorkspaceShell: {
-    height: '100%',
-    display: 'flex',
+    flex: 1,
     minHeight: 0,
+    display: 'flex',
+    overflow: 'hidden',
   },
   settingsSidebar: {
     width: '224px',

@@ -69,6 +69,7 @@ export interface ObsStatsSnapshot extends ObsStatusSnapshot {
   cpuPercent: number;
   ramMb: number;
   droppedFrames: number;
+  droppedFramesRender: number;
 }
 
 export interface ObsConnectionSettings {

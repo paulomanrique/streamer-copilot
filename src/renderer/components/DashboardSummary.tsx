@@ -46,7 +46,7 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
         </aside>
       </div>
 
-      <StatusBar connections={DASHBOARD_CONNECTIONS} obsStatus={obsStats} />
+      <StatusBar connections={DASHBOARD_CONNECTIONS} obsStatus={obsStats} activeProfileName={activeProfileName} />
     </section>
   );
 }

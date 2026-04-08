@@ -11,6 +11,7 @@ const DEFAULT_OBS_STATS: ObsStatsSnapshot = {
   cpuPercent: 0,
   ramMb: 0,
   droppedFrames: 0,
+  droppedFramesRender: 0,
 };
 
 interface AppStore extends ProfilesSnapshot {

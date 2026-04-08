@@ -165,6 +165,7 @@ export class ObsService {
         cpuPercent: Math.round(this.readNumber(stats.cpuUsage)),
         ramMb: Math.round(this.readNumber(stats.memoryUsage)),
         droppedFrames: Math.round(this.readNumber(streamStatus.outputSkippedFrames)),
+        droppedFramesRender: Math.round(this.readNumber(stats.renderSkippedFrames)),
       });
     } catch {
       this.handleDisconnected();
@@ -182,6 +183,7 @@ export class ObsService {
       cpuPercent: 0,
       ramMb: 0,
       droppedFrames: 0,
+      droppedFramesRender: 0,
     };
   }
 
