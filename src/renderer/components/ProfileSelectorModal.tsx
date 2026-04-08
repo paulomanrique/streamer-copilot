@@ -8,6 +8,7 @@ interface ProfileSelectorModalProps {
   skipPromptAgain: boolean;
   onChangeProfileId: (profileId: string) => void;
   onChangeSkipPromptAgain: (checked: boolean) => void;
+  onCreateProfile: () => void;
   onConfirm: () => void;
 }
 
@@ -18,6 +19,7 @@ export function ProfileSelectorModal({
   skipPromptAgain,
   onChangeProfileId,
   onChangeSkipPromptAgain,
+  onCreateProfile,
   onConfirm,
 }: ProfileSelectorModalProps) {
   if (!open) return null;
@@ -27,20 +29,26 @@ export function ProfileSelectorModal({
       <section style={styles.modalCard}>
         <h2 style={styles.modalTitle}>Select Profile</h2>
 
-        <label style={styles.label}>
-          Profile
-          <select
-            value={selectorProfileId}
-            style={styles.select}
-            onChange={(event) => onChangeProfileId(event.target.value)}
-          >
-            {profiles.map((profile) => (
-              <option key={profile.id} value={profile.id}>
-                {profile.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {profiles.length > 0 ? (
+          <label style={styles.label}>
+            Profile
+            <select
+              value={selectorProfileId}
+              style={styles.select}
+              onChange={(event) => onChangeProfileId(event.target.value)}
+            >
+              {profiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <div style={styles.settingsSection}>
+            <p style={styles.message}>No profiles exist yet. Create your first profile to continue.</p>
+          </div>
+        )}
 
         <label style={styles.checkboxLabel}>
           <input
@@ -52,7 +60,15 @@ export function ProfileSelectorModal({
         </label>
 
         <div style={styles.modalActions}>
-          <button type="button" style={styles.primaryButton} onClick={onConfirm}>
+          <button type="button" style={styles.secondaryButton} onClick={onCreateProfile}>
+            Create profile
+          </button>
+          <button
+            type="button"
+            style={styles.primaryButton}
+            disabled={profiles.length === 0 || !selectorProfileId}
+            onClick={onConfirm}
+          >
             Continue with profile
           </button>
         </div>

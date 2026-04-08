@@ -78,7 +78,7 @@ export default function App() {
         setSkipPromptAgain(skipPreference);
         setIsProfileSelectorOpen(
           shouldPromptProfileSelector({
-            forceOpen: false,
+            forceOpen: snapshot.profiles.length === 0,
             skipPromptPreference: skipPreference,
           }),
         );
@@ -212,6 +212,7 @@ export default function App() {
     try {
       const snapshot = await window.copilot.createProfile({ name: name.trim(), directory });
       applyProfilesSnapshot(snapshot);
+      setSelectorProfileId(snapshot.activeProfileId);
       setError(null);
     } catch (cause) {
       pushError(cause instanceof Error ? cause.message : 'Failed to create profile');
@@ -270,7 +271,7 @@ export default function App() {
   };
 
   const openProfileSelector = () => {
-    setSelectorProfileId(activeProfileId);
+    setSelectorProfileId(activeProfileId || profiles[0]?.id || '');
     setSkipPromptAgain(readSkipPromptPreference(localStorage.getItem(SKIP_PROFILE_SELECTOR_KEY)));
     setIsProfileSelectorOpen(true);
   };
@@ -353,6 +354,7 @@ export default function App() {
         skipPromptAgain={skipPromptAgain}
         onChangeProfileId={setSelectorProfileId}
         onChangeSkipPromptAgain={setSkipPromptAgain}
+        onCreateProfile={() => void createProfile()}
         onConfirm={() => void confirmProfileSelector()}
       />
 
