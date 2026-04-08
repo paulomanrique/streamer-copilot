@@ -6,6 +6,9 @@ import type {
   CreateProfileInput,
   DeleteProfileInput,
   RenameProfileInput,
+  ScheduledMessageDeleteInput,
+  ScheduledMessageUpsertInput,
+  ScheduledStatusItem,
   SelectProfileInput,
 } from '../shared/types.js';
 
@@ -18,6 +21,16 @@ const copilotApi: CopilotApi = {
   cloneProfile: (input: CloneProfileInput) => ipcRenderer.invoke(IPC_CHANNELS.profilesClone, input),
   deleteProfile: (input: DeleteProfileInput) => ipcRenderer.invoke(IPC_CHANNELS.profilesDelete, input),
   pickProfileDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.profilesPickDirectory),
+  listScheduledMessages: () => ipcRenderer.invoke(IPC_CHANNELS.scheduledList),
+  upsertScheduledMessage: (input: ScheduledMessageUpsertInput) => ipcRenderer.invoke(IPC_CHANNELS.scheduledUpsert, input),
+  deleteScheduledMessage: (input: ScheduledMessageDeleteInput) => ipcRenderer.invoke(IPC_CHANNELS.scheduledDelete, input),
+  onScheduledStatus: (listener: (items: ScheduledStatusItem[]) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, items: ScheduledStatusItem[]) => listener(items);
+    ipcRenderer.on(IPC_CHANNELS.scheduledStatus, wrappedListener);
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.scheduledStatus, wrappedListener);
+    };
+  },
 };
 
 contextBridge.exposeInMainWorld('copilot', copilotApi);

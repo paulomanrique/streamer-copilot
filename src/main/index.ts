@@ -59,6 +59,8 @@ app.whenReady().then(async () => {
 
   teardownContext = createAppContext({
     appVersion: app.getVersion(),
+    databaseHandle: databaseHandle,
+    stateHub,
     userDataPath: app.getPath('userData'),
   });
 

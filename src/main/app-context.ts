@@ -1,6 +1,9 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron';
 import type { OpenDialogOptions } from 'electron';
 
+import type { DatabaseHandle } from '../db/database.js';
+import { ScheduledMessageRepository } from '../modules/scheduled/scheduled-repository.js';
+import { SchedulerService } from '../modules/scheduled/scheduler-service.js';
 import { ProfileStore } from '../modules/settings/profile-store.js';
 import { APP_NAME } from '../shared/constants.js';
 import { IPC_CHANNELS } from '../shared/ipc.js';
@@ -9,17 +12,29 @@ import {
   createProfileInputSchema,
   deleteProfileInputSchema,
   renameProfileInputSchema,
+  scheduledMessageDeleteInputSchema,
+  scheduledMessageUpsertInputSchema,
   selectProfileInputSchema,
 } from '../shared/schemas.js';
 import type { AppInfo } from '../shared/types.js';
+import { StateHub } from './state-hub.js';
 
 interface AppContextOptions {
   appVersion: string;
+  databaseHandle: DatabaseHandle;
+  stateHub: StateHub;
   userDataPath: string;
 }
 
 export function createAppContext(options: AppContextOptions): () => void {
   const profileStore = new ProfileStore(options.userDataPath);
+  const scheduledRepository = new ScheduledMessageRepository(options.databaseHandle.db);
+  const schedulerService = new SchedulerService({
+    repository: scheduledRepository,
+    onStatus: (items) => options.stateHub.pushScheduledStatus(items),
+  });
+
+  schedulerService.start();
 
   ipcMain.handle(IPC_CHANNELS.appGetInfo, async (): Promise<AppInfo> => ({
     appName: APP_NAME,
@@ -69,7 +84,20 @@ export function createAppContext(options: AppContextOptions): () => void {
     return result.filePaths[0];
   });
 
+  ipcMain.handle(IPC_CHANNELS.scheduledList, async () => schedulerService.list());
+
+  ipcMain.handle(IPC_CHANNELS.scheduledUpsert, async (_event, rawInput: unknown) => {
+    const input = scheduledMessageUpsertInputSchema.parse(rawInput);
+    return schedulerService.upsert(input);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.scheduledDelete, async (_event, rawInput: unknown) => {
+    const input = scheduledMessageDeleteInputSchema.parse(rawInput);
+    return schedulerService.delete(input.id);
+  });
+
   return () => {
+    schedulerService.stop();
     ipcMain.removeHandler(IPC_CHANNELS.appGetInfo);
     ipcMain.removeHandler(IPC_CHANNELS.profilesList);
     ipcMain.removeHandler(IPC_CHANNELS.profilesSelect);
@@ -78,5 +106,8 @@ export function createAppContext(options: AppContextOptions): () => void {
     ipcMain.removeHandler(IPC_CHANNELS.profilesClone);
     ipcMain.removeHandler(IPC_CHANNELS.profilesDelete);
     ipcMain.removeHandler(IPC_CHANNELS.profilesPickDirectory);
+    ipcMain.removeHandler(IPC_CHANNELS.scheduledList);
+    ipcMain.removeHandler(IPC_CHANNELS.scheduledUpsert);
+    ipcMain.removeHandler(IPC_CHANNELS.scheduledDelete);
   };
 }

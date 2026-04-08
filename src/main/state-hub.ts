@@ -1,5 +1,8 @@
 import type { BrowserWindow } from 'electron';
 
+import { IPC_CHANNELS } from '../shared/ipc.js';
+import type { ScheduledStatusItem } from '../shared/types.js';
+
 // Foundation placeholder for future push-based state sync to renderer.
 export class StateHub {
   private rendererWindow: BrowserWindow | null = null;
@@ -14,5 +17,9 @@ export class StateHub {
 
   hasWindow(): boolean {
     return this.rendererWindow !== null;
+  }
+
+  pushScheduledStatus(items: ScheduledStatusItem[]): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.scheduledStatus, items);
   }
 }

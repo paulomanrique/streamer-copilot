@@ -57,6 +57,35 @@ export interface ObsStatusSnapshot {
   uptimeLabel: string;
 }
 
+export interface ScheduledMessage {
+  id: string;
+  message: string;
+  intervalSeconds: number;
+  randomWindowSeconds: number;
+  targetPlatforms: PlatformId[];
+  enabled: boolean;
+  lastSentAt: string | null;
+}
+
+export interface ScheduledMessageUpsertInput {
+  id?: string;
+  message: string;
+  intervalSeconds: number;
+  randomWindowSeconds: number;
+  targetPlatforms: PlatformId[];
+  enabled: boolean;
+}
+
+export interface ScheduledMessageDeleteInput {
+  id: string;
+}
+
+export interface ScheduledStatusItem {
+  id: string;
+  nextFireAt: string | null;
+  enabled: boolean;
+}
+
 export interface ProfileSummary {
   id: string;
   name: string;
