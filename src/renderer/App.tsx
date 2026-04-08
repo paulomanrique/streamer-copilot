@@ -5,6 +5,7 @@ import { readSkipPromptPreference, shouldPromptProfileSelector } from './profile
 import { useAppStore } from './store.js';
 import { AppHeader } from './components/AppHeader.js';
 import { DashboardSummary } from './components/DashboardSummary.js';
+import { ProfileFormModal } from './components/ProfileFormModal.js';
 import { ProfileSelectorModal } from './components/ProfileSelectorModal.js';
 import { SectionTabs } from './components/SectionTabs.js';
 import type { AppSection } from './components/SectionTabs.js';
@@ -20,6 +21,8 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   minimizeToTray: true,
   eventNotifications: true,
 };
+
+type ProfileFormMode = 'create' | 'rename' | 'clone';
 
 export default function App() {
   const {
@@ -38,6 +41,10 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isProfileSelectorOpen, setIsProfileSelectorOpen] = useState(false);
+  const [isProfileFormOpen, setIsProfileFormOpen] = useState(false);
+  const [profileFormMode, setProfileFormMode] = useState<ProfileFormMode>('create');
+  const [profileFormName, setProfileFormName] = useState('');
+  const [profileFormDirectory, setProfileFormDirectory] = useState('');
   const [selectorProfileId, setSelectorProfileId] = useState('');
   const [skipPromptAgain, setSkipPromptAgain] = useState(false);
   const [currentSection, setCurrentSection] = useState<AppSection>('dashboard');
@@ -203,44 +210,38 @@ export default function App() {
     setSelectorProfileId(snapshot.activeProfileId);
   };
 
-  const createProfile = async () => {
-    const name = prompt('New profile name:');
-    if (!name?.trim()) return;
-    const directory = await window.copilot.pickProfileDirectory();
-    if (!directory) return;
-
+  const createProfile = async (name: string, directory: string) => {
     try {
       const snapshot = await window.copilot.createProfile({ name: name.trim(), directory });
       applyProfilesSnapshot(snapshot);
       setSelectorProfileId(snapshot.activeProfileId);
+      setIsProfileFormOpen(false);
+      setProfileFormDirectory('');
+      setProfileFormName('');
       setError(null);
     } catch (cause) {
       pushError(cause instanceof Error ? cause.message : 'Failed to create profile');
+      throw cause;
     }
   };
 
-  const renameActiveProfile = async () => {
+  const renameActiveProfile = async (name: string) => {
     if (!activeProfileId) return;
-    const current = profiles.find((profile) => profile.id === activeProfileId);
-    const name = prompt('New profile name:', current?.name ?? '');
-    if (!name?.trim()) return;
 
     try {
       const snapshot = await window.copilot.renameProfile({ profileId: activeProfileId, name: name.trim() });
       applyProfilesSnapshot(snapshot);
+      setIsProfileFormOpen(false);
+      setProfileFormName('');
       setError(null);
     } catch (cause) {
       pushError(cause instanceof Error ? cause.message : 'Failed to rename profile');
+      throw cause;
     }
   };
 
-  const cloneActiveProfile = async () => {
+  const cloneActiveProfile = async (name: string, directory: string) => {
     if (!activeProfileId) return;
-    const current = profiles.find((profile) => profile.id === activeProfileId);
-    const name = prompt('Cloned profile name:', `${current?.name ?? 'Profile'} (copy)`);
-    if (!name?.trim()) return;
-    const directory = await window.copilot.pickProfileDirectory();
-    if (!directory) return;
 
     try {
       const snapshot = await window.copilot.cloneProfile({
@@ -249,9 +250,13 @@ export default function App() {
         directory,
       });
       applyProfilesSnapshot(snapshot);
+      setIsProfileFormOpen(false);
+      setProfileFormDirectory('');
+      setProfileFormName('');
       setError(null);
     } catch (cause) {
       pushError(cause instanceof Error ? cause.message : 'Failed to clone profile');
+      throw cause;
     }
   };
 
@@ -274,6 +279,49 @@ export default function App() {
     setSelectorProfileId(activeProfileId || profiles[0]?.id || '');
     setSkipPromptAgain(readSkipPromptPreference(localStorage.getItem(SKIP_PROFILE_SELECTOR_KEY)));
     setIsProfileSelectorOpen(true);
+  };
+
+  const openCreateProfileModal = () => {
+    setProfileFormMode('create');
+    setProfileFormName('');
+    setProfileFormDirectory('');
+    setIsProfileFormOpen(true);
+  };
+
+  const openRenameProfileModal = () => {
+    if (!activeProfile) return;
+    setProfileFormMode('rename');
+    setProfileFormName(activeProfile.name);
+    setProfileFormDirectory('');
+    setIsProfileFormOpen(true);
+  };
+
+  const openCloneProfileModal = () => {
+    if (!activeProfile) return;
+    setProfileFormMode('clone');
+    setProfileFormName(`${activeProfile.name} copy`);
+    setProfileFormDirectory('');
+    setIsProfileFormOpen(true);
+  };
+
+  const pickProfileDirectory = async () => {
+    const directory = await window.copilot.pickProfileDirectory();
+    if (!directory) return;
+    setProfileFormDirectory(directory);
+  };
+
+  const submitProfileForm = async (name: string) => {
+    if (profileFormMode === 'create') {
+      await createProfile(name, profileFormDirectory);
+      return;
+    }
+
+    if (profileFormMode === 'rename') {
+      await renameActiveProfile(name);
+      return;
+    }
+
+    await cloneActiveProfile(name, profileFormDirectory);
   };
 
   const confirmProfileSelector = async () => {
@@ -327,9 +375,9 @@ export default function App() {
             activeProfileId={activeProfileId}
             activeProfileName={activeProfileName}
             profiles={profiles}
-            onCreateProfile={() => void createProfile()}
-            onRenameProfile={() => void renameActiveProfile()}
-            onCloneProfile={() => void cloneActiveProfile()}
+            onCreateProfile={openCreateProfileModal}
+            onRenameProfile={openRenameProfileModal}
+            onCloneProfile={openCloneProfileModal}
             onDeleteProfile={() => void deleteActiveProfile()}
             onSelectProfile={(profileId) => void onSelectProfile(profileId)}
             generalSettings={generalSettings}
@@ -354,8 +402,20 @@ export default function App() {
         skipPromptAgain={skipPromptAgain}
         onChangeProfileId={setSelectorProfileId}
         onChangeSkipPromptAgain={setSkipPromptAgain}
-        onCreateProfile={() => void createProfile()}
+        onCreateProfile={openCreateProfileModal}
         onConfirm={() => void confirmProfileSelector()}
+      />
+
+      <ProfileFormModal
+        open={isProfileFormOpen}
+        mode={profileFormMode}
+        initialName={profileFormName}
+        requireDirectory={profileFormMode !== 'rename'}
+        selectedDirectory={profileFormDirectory}
+        onChangeSelectedDirectory={setProfileFormDirectory}
+        onPickDirectory={pickProfileDirectory}
+        onClose={() => setIsProfileFormOpen(false)}
+        onSubmit={submitProfileForm}
       />
 
       <ToastStack toasts={toasts} />
