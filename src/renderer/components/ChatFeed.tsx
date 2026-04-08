@@ -171,24 +171,31 @@ export function ChatFeed({ messages, events }: ChatFeedProps) {
 function ChatMessageRow({ message }: { message: ChatMessage }) {
   const meta = PLATFORM_META[platformKey(message.platform)];
   const isCommand = message.content.startsWith('!');
+  const isSub = message.badges.includes('subscriber') || message.badges.includes('member');
+  const isMod = message.badges.includes('moderator');
   return (
     <div
-      className={`chat-message flex gap-2 px-3 py-1.5 border-l-2 hover:border-l-[3px] ${meta.border} ${meta.bg} transition-all duration-75 cursor-default select-text ${isCommand ? 'bg-violet-500/5' : ''}`}
+      className={`chat-message flex gap-2 px-3 py-1.5 border-l-2 hover:bg-white/[0.02] ${meta.border} transition-all duration-75 cursor-default select-text`}
       data-platform={platformKey(message.platform)}
       data-author={message.author}
     >
-      <span className="text-gray-600 text-xs mt-0.5 shrink-0 font-mono">{message.timestampLabel}</span>
+      <span className="text-gray-600 text-xs mt-0.5 shrink-0 font-mono w-[54px] text-right">{message.timestampLabel}</span>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1 flex-wrap">
-          <span className={`inline-flex items-center justify-center text-xs w-5 h-5 rounded ${meta.bg}`}>
+          {/* Platform icon badge */}
+          <span className={`inline-flex items-center justify-center w-5 h-5 rounded ${meta.bg}`}>
             <svg className={`w-3 h-3 ${meta.text}`} viewBox="0 0 24 24" fill="currentColor">
               <path d={meta.icon} />
             </svg>
           </span>
-          <span className="font-semibold text-sm text-gray-200">{message.author}</span>
-          {message.badges.includes('moderator') ? <span className="text-xs text-green-500">MOD</span> : null}
+          {/* Subscriber star badge */}
+          {isSub ? <span className="text-yellow-400 text-xs leading-none">★</span> : null}
+          {/* Author name */}
+          <span className={`font-semibold text-sm ${meta.text}`}>{message.author}</span>
+          {/* MOD badge */}
+          {isMod ? <span className="text-xs text-emerald-400 font-semibold">MOD</span> : null}
         </div>
-        <p className={`text-sm text-gray-300 mt-0.5 break-words ${isCommand ? 'text-violet-300 font-mono' : ''}`}>{message.content}</p>
+        <p className={`text-sm mt-0.5 break-words leading-snug ${isCommand ? 'text-violet-300 font-mono' : 'text-gray-300'}`}>{message.content}</p>
       </div>
     </div>
   );
