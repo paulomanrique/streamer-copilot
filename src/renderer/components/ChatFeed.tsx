@@ -55,11 +55,32 @@ export function ChatFeed({ messages, events }: ChatFeedProps) {
   return (
     <section style={styles.feedCard}>
       <div style={styles.feedHeader}>
-        <div>
-          <h3 style={styles.sectionTitle}>Chat Feed</h3>
-          <p style={styles.helper}>Platform-colored messages with inline event banners and hover pause.</p>
+        <div style={styles.feedTitleRow}>
+          <h3 style={styles.sectionTitle}>Unified Chat</h3>
+          <div style={styles.chatModeToggle}>
+            <button type="button" style={styles.chatModeButtonActive}>
+              All Chats
+            </button>
+            <button type="button" style={styles.chatModeButton}>
+              Super Chats Only
+            </button>
+          </div>
         </div>
-        <span style={styles.selectionPill}>{visibleItems.length} items</span>
+        <div style={styles.platformFilterRow}>
+          {Object.entries(PLATFORM_ACCENTS).map(([platform, color]) => (
+            <span
+              key={platform}
+              style={{
+                ...styles.platformFilterDot,
+                background: `${color}33`,
+                color,
+                borderColor: `${color}55`,
+              }}
+            >
+              {platform === 'youtube' ? 'YTH' : platform === 'tiktok' ? 'TT' : platform.slice(0, 2).toUpperCase()}
+            </span>
+          ))}
+        </div>
       </div>
 
       <div
@@ -89,13 +110,13 @@ function ChatMessageCard({ message }: ChatMessageCardProps) {
     <article
       style={{
         ...styles.chatItem,
-        borderLeft: `3px solid ${PLATFORM_ACCENTS[message.platform]}`,
+        borderLeft: `2px solid ${PLATFORM_ACCENTS[message.platform]}`,
       }}
     >
       <div style={styles.chatMeta}>
-        <span>{message.timestampLabel}</span>
         <strong>{message.author}</strong>
-        <span>{message.platform}</span>
+        <span style={{ color: PLATFORM_ACCENTS[message.platform], textTransform: 'capitalize' }}>{message.platform}</span>
+        <span>{message.timestampLabel}</span>
         {message.badges.map((badge) => (
           <span key={badge} style={styles.selectionPill}>
             {BADGE_LABELS[badge]}

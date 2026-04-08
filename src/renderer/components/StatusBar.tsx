@@ -8,21 +8,21 @@ interface StatusBarProps {
 
 export function StatusBar({ connections, obsStatus }: StatusBarProps) {
   return (
-    <section style={styles.statusBar}>
+    <footer style={styles.statusBar}>
       {connections.map((connection) => (
-        <span key={connection.platform} style={styles.statusPill}>
-          <span style={connection.connected ? styles.statusDotOn : styles.statusDotOff} />
-          {connection.label}
+        <span key={connection.platform} style={styles.statusLine}>
+          <span style={{ color: connection.connected ? '#e5e7eb' : '#6b7280' }}>{connection.label}</span>
+          <span style={styles.statusDivider}>•</span>
         </span>
       ))}
 
-      <span style={styles.statusPill}>
-        <span style={obsStatus.connected ? styles.statusDotOn : styles.statusDotOff} />
+      <span style={styles.statusLine}>
         OBS {obsStatus.connected ? 'connected' : 'offline'}
+        <span style={styles.statusDivider}>•</span>
       </span>
-
-      <span style={styles.statusPill}>Scene {obsStatus.sceneName}</span>
-      <span style={styles.statusPill}>Uptime {obsStatus.uptimeLabel}</span>
-    </section>
+      <span style={styles.statusLine}>Scene: {obsStatus.sceneName}</span>
+      <span style={styles.statusLine}>Profile: live</span>
+      <span style={styles.statusLine}>{obsStatus.uptimeLabel}</span>
+    </footer>
   );
 }

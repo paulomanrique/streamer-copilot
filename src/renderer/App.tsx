@@ -7,7 +7,6 @@ import { AppHeader } from './components/AppHeader.js';
 import { DashboardSummary } from './components/DashboardSummary.js';
 import { ProfileFormModal } from './components/ProfileFormModal.js';
 import { ProfileSelectorModal } from './components/ProfileSelectorModal.js';
-import { SectionTabs } from './components/SectionTabs.js';
 import type { AppSection } from './components/SectionTabs.js';
 import { StatusMessages } from './components/StatusMessages.js';
 import { ToastStack, type ToastItem } from './components/ToastStack.js';
@@ -353,11 +352,14 @@ export default function App() {
   return (
     <main style={styles.page}>
       <section style={styles.card}>
-        <AppHeader appInfo={appInfo} onOpenProfileSelector={openProfileSelector} />
+        <AppHeader
+          appInfo={appInfo}
+          currentSection={currentSection}
+          onChangeSection={setCurrentSection}
+          onOpenProfileSelector={openProfileSelector}
+        />
 
         <StatusMessages isLoading={isLoading} error={error} />
-
-        <SectionTabs currentSection={currentSection} onChangeSection={setCurrentSection} />
 
         {currentSection === 'dashboard' ? (
           <DashboardSummary

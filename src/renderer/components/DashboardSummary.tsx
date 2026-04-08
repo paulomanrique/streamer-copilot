@@ -23,29 +23,21 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
 
   return (
     <section style={styles.dashboardShell}>
-      <div>
-        <h2 style={styles.subtitle}>Summary</h2>
-        <p style={styles.message}>Active profile: {activeProfileName}</p>
-      </div>
-
-      <StatusBar connections={DASHBOARD_CONNECTIONS} obsStatus={obsStats} />
-
       <div style={styles.dashboardGrid}>
         <ChatFeed messages={visibleMessages} events={visibleEvents} />
 
         <aside style={styles.sideStack}>
           <ObsStatsPanel stats={obsStats} />
 
-          <section style={styles.previewCard}>
-            <div style={styles.previewHeader}>
+          <section style={styles.activityCard}>
+            <div style={styles.activityHeader}>
               <div>
-                <h3 style={styles.sectionTitle}>Priority Events</h3>
-                <p style={styles.helper}>Shared event card component for raids, cheers, and paid highlights.</p>
+                <h3 style={styles.sectionTitle}>Activity Log</h3>
+                <p style={styles.helper}>Active profile: {activeProfileName}</p>
               </div>
-              <span style={styles.selectionPill}>Live</span>
             </div>
 
-            <div style={styles.settingsGrid}>
+            <div style={styles.activityList}>
               {visibleEvents.map((event) => (
                 <EventBanner key={event.id} event={event} />
               ))}
@@ -53,6 +45,8 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
           </section>
         </aside>
       </div>
+
+      <StatusBar connections={DASHBOARD_CONNECTIONS} obsStatus={obsStats} />
     </section>
   );
 }
