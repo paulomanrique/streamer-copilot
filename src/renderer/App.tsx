@@ -3,6 +3,14 @@ import { useEffect, useMemo, useState } from 'react';
 import type { AppInfo, ProfilesSnapshot } from '../shared/types.js';
 import { readSkipPromptPreference, shouldPromptProfileSelector } from './profile-startup.js';
 import { useAppStore } from './store.js';
+import { AppHeader } from './components/AppHeader.js';
+import { DashboardSummary } from './components/DashboardSummary.js';
+import { ProfileSelectorModal } from './components/ProfileSelectorModal.js';
+import { SectionTabs } from './components/SectionTabs.js';
+import type { AppSection } from './components/SectionTabs.js';
+import { SettingsProfilesPanel } from './components/SettingsProfilesPanel.js';
+import { StatusMessages } from './components/StatusMessages.js';
+import { styles } from './components/app-styles.js';
 
 const SKIP_PROFILE_SELECTOR_KEY = 'streamerCopilot.skipProfileSelector';
 
@@ -14,6 +22,7 @@ export default function App() {
   const [isProfileSelectorOpen, setIsProfileSelectorOpen] = useState(false);
   const [selectorProfileId, setSelectorProfileId] = useState('');
   const [skipPromptAgain, setSkipPromptAgain] = useState(false);
+  const [currentSection, setCurrentSection] = useState<AppSection>('dashboard');
 
   const activeProfile = useMemo(
     () => profiles.find((profile) => profile.id === activeProfileId) ?? null,
@@ -148,267 +157,42 @@ export default function App() {
     setIsProfileSelectorOpen(false);
   };
 
+  const activeProfileName = activeProfile?.name ?? '—';
+
   return (
     <main style={styles.page}>
       <section style={styles.card}>
-        <h1 style={styles.title}>Streamer Copilot - M0 Foundations</h1>
+        <AppHeader appInfo={appInfo} onOpenProfileSelector={openProfileSelector} />
 
-        {appInfo && (
-          <p style={styles.meta}>
-            {appInfo.appName} v{appInfo.appVersion} • Electron {appInfo.electronVersion} • Node {appInfo.nodeVersion}
-          </p>
-        )}
+        <StatusMessages isLoading={isLoading} error={error} />
 
-        {isLoading ? <p style={styles.message}>Carregando...</p> : null}
-        {error ? <p style={styles.error}>{error}</p> : null}
+        <SectionTabs currentSection={currentSection} onChangeSection={setCurrentSection} />
 
-        <div style={styles.block}>
-          <div style={styles.subtitleRow}>
-            <h2 style={styles.subtitle}>Perfis</h2>
-            <button type="button" style={styles.secondaryButton} onClick={openProfileSelector}>
-              Trocar Perfil
-            </button>
-          </div>
-          <div style={styles.actionsRow}>
-            <button type="button" style={styles.secondaryButton} onClick={() => void createProfile()}>
-              Novo
-            </button>
-            <button type="button" style={styles.secondaryButton} onClick={() => void renameActiveProfile()}>
-              Renomear
-            </button>
-            <button type="button" style={styles.secondaryButton} onClick={() => void cloneActiveProfile()}>
-              Clonar
-            </button>
-            <button type="button" style={styles.dangerButton} onClick={() => void deleteActiveProfile()}>
-              Apagar
-            </button>
-          </div>
-          <p style={styles.message}>Perfil ativo: {activeProfile?.name ?? '—'}</p>
+        {currentSection === 'dashboard' ? <DashboardSummary activeProfileName={activeProfileName} /> : null}
 
-          <div style={styles.list}>
-            {profiles.map((profile) => (
-              <button
-                key={profile.id}
-                type="button"
-                style={profile.id === activeProfileId ? styles.profileButtonActive : styles.profileButton}
-                onClick={() => void onSelectProfile(profile.id)}
-              >
-                <span>{profile.name}</span>
-                <span style={styles.path}>{profile.directory}</span>
-              </button>
-            ))}
-          </div>
-        </div>
+        {currentSection === 'settings' ? (
+          <SettingsProfilesPanel
+            activeProfileId={activeProfileId}
+            activeProfileName={activeProfileName}
+            profiles={profiles}
+            onCreateProfile={() => void createProfile()}
+            onRenameProfile={() => void renameActiveProfile()}
+            onCloneProfile={() => void cloneActiveProfile()}
+            onDeleteProfile={() => void deleteActiveProfile()}
+            onSelectProfile={(profileId) => void onSelectProfile(profileId)}
+          />
+        ) : null}
       </section>
 
-      {isProfileSelectorOpen ? (
-        <div style={styles.modalOverlay}>
-          <section style={styles.modalCard}>
-            <h2 style={styles.modalTitle}>Selecionar Perfil</h2>
-
-            <label style={styles.label}>
-              Perfil
-              <select
-                value={selectorProfileId}
-                style={styles.select}
-                onChange={(event) => setSelectorProfileId(event.target.value)}
-              >
-                {profiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>
-                    {profile.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label style={styles.checkboxLabel}>
-              <input
-                type="checkbox"
-                checked={skipPromptAgain}
-                onChange={(event) => setSkipPromptAgain(event.target.checked)}
-              />
-              Não me pergunte novamente
-            </label>
-
-            <div style={styles.modalActions}>
-              <button type="button" style={styles.primaryButton} onClick={() => void confirmProfileSelector()}>
-                Entrar com perfil
-              </button>
-            </div>
-          </section>
-        </div>
-      ) : null}
+      <ProfileSelectorModal
+        open={isProfileSelectorOpen}
+        profiles={profiles}
+        selectorProfileId={selectorProfileId}
+        skipPromptAgain={skipPromptAgain}
+        onChangeProfileId={setSelectorProfileId}
+        onChangeSkipPromptAgain={setSkipPromptAgain}
+        onConfirm={() => void confirmProfileSelector()}
+      />
     </main>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: '100vh',
-    margin: 0,
-    background: '#0b1020',
-    color: '#e5e7eb',
-    display: 'grid',
-    placeItems: 'center',
-    fontFamily: 'Inter, Segoe UI, sans-serif',
-    padding: '24px',
-  },
-  card: {
-    width: 'min(860px, 100%)',
-    background: '#111827',
-    border: '1px solid #1f2937',
-    borderRadius: '12px',
-    padding: '24px',
-  },
-  title: {
-    margin: 0,
-    fontSize: '24px',
-    fontWeight: 700,
-  },
-  meta: {
-    margin: '8px 0 0',
-    color: '#9ca3af',
-    fontSize: '14px',
-  },
-  block: {
-    marginTop: '24px',
-    borderTop: '1px solid #1f2937',
-    paddingTop: '16px',
-  },
-  subtitle: {
-    margin: 0,
-    fontSize: '18px',
-  },
-  subtitleRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: '12px',
-  },
-  message: {
-    margin: '8px 0 0',
-    color: '#9ca3af',
-    fontSize: '14px',
-  },
-  error: {
-    margin: '12px 0 0',
-    color: '#fca5a5',
-    fontSize: '14px',
-  },
-  list: {
-    marginTop: '12px',
-    display: 'grid',
-    gap: '8px',
-  },
-  profileButton: {
-    background: '#111827',
-    border: '1px solid #374151',
-    color: '#e5e7eb',
-    padding: '12px',
-    borderRadius: '10px',
-    textAlign: 'left',
-    display: 'grid',
-    gap: '4px',
-    cursor: 'pointer',
-  },
-  profileButtonActive: {
-    background: '#1e1b4b',
-    border: '1px solid #8b5cf6',
-    color: '#e5e7eb',
-    padding: '12px',
-    borderRadius: '10px',
-    textAlign: 'left',
-    display: 'grid',
-    gap: '4px',
-    cursor: 'pointer',
-  },
-  path: {
-    color: '#9ca3af',
-    fontSize: '12px',
-    wordBreak: 'break-all',
-  },
-  secondaryButton: {
-    background: '#1f2937',
-    border: '1px solid #374151',
-    color: '#e5e7eb',
-    borderRadius: '8px',
-    padding: '8px 10px',
-    cursor: 'pointer',
-    fontSize: '13px',
-    fontWeight: 600,
-  },
-  actionsRow: {
-    marginTop: '12px',
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '8px',
-  },
-  dangerButton: {
-    background: '#3f1d2e',
-    border: '1px solid #7f1d1d',
-    color: '#fecaca',
-    borderRadius: '8px',
-    padding: '8px 10px',
-    cursor: 'pointer',
-    fontSize: '13px',
-    fontWeight: 600,
-  },
-  modalOverlay: {
-    position: 'fixed',
-    inset: 0,
-    background: 'rgba(0,0,0,0.65)',
-    display: 'grid',
-    placeItems: 'center',
-    padding: '24px',
-  },
-  modalCard: {
-    width: 'min(520px, 100%)',
-    background: '#111827',
-    border: '1px solid #374151',
-    borderRadius: '12px',
-    padding: '20px',
-  },
-  modalTitle: {
-    margin: 0,
-    fontSize: '22px',
-    fontWeight: 700,
-  },
-  label: {
-    marginTop: '16px',
-    display: 'grid',
-    gap: '8px',
-    color: '#d1d5db',
-    fontSize: '14px',
-  },
-  select: {
-    background: '#1f2937',
-    border: '1px solid #4b5563',
-    color: '#e5e7eb',
-    borderRadius: '8px',
-    padding: '10px 12px',
-    fontSize: '14px',
-  },
-  checkboxLabel: {
-    marginTop: '16px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    color: '#d1d5db',
-    fontSize: '14px',
-  },
-  modalActions: {
-    marginTop: '20px',
-    display: 'flex',
-    justifyContent: 'flex-end',
-  },
-  primaryButton: {
-    background: '#7c3aed',
-    border: '1px solid #8b5cf6',
-    color: '#ffffff',
-    borderRadius: '8px',
-    padding: '10px 14px',
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: 600,
-  },
-};
