@@ -9,6 +9,7 @@ import { createAppContext } from './app-context.js';
 import { AppSettingsRepository } from '../modules/settings/app-settings-repository.js';
 import { GeneralSettingsStore } from '../modules/settings/general-settings-store.js';
 import { StateHub } from './state-hub.js';
+import { startAutoUpdater } from './updater.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,6 +21,7 @@ const RENDERER_INDEX_PATH = path.join(DIST_ROOT, 'renderer', 'index.html');
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let teardownContext: (() => void) | null = null;
+let stopAutoUpdater: (() => void) | null = null;
 let databaseHandle: DatabaseHandle | null = null;
 let generalSettingsStore: GeneralSettingsStore | null = null;
 let isQuitting = false;
@@ -82,6 +84,16 @@ app.whenReady().then(async () => {
   });
 
   await createMainWindow();
+  stopAutoUpdater = startAutoUpdater({
+    getWindow: () => mainWindow,
+    onLog: (level, message, metadata) => {
+      const payload = metadata ? JSON.stringify(metadata) : '';
+      const formatted = payload ? `${message} ${payload}` : message;
+      if (level === 'error') console.error(formatted);
+      else if (level === 'warn') console.warn(formatted);
+      else console.info(formatted);
+    },
+  });
 
   app.on('activate', async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -100,6 +112,8 @@ app.on('before-quit', () => {
   isQuitting = true;
   teardownContext?.();
   teardownContext = null;
+  stopAutoUpdater?.();
+  stopAutoUpdater = null;
   databaseHandle?.close();
   databaseHandle = null;
 });

@@ -9,6 +9,10 @@ asar: true
 npmRebuild: false
 compression: maximum
 artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+publish:
+  provider: github
+  owner: paulomanrique
+  repo: streamer-copilot
 mac:
   category: public.app-category.utilities
   target:

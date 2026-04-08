@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "better-sqlite3": "^12.4.1",
+    "electron-updater": "^6.8.3",
     "googleapis": "^171.4.0",
     "obs-websocket-js": "^5.0.8",
     "pusher-js": "^8.5.0",
@@ -47,8 +48,8 @@
     "autoprefixer": "^10.4.27",
     "concurrently": "^9.2.1",
     "cross-env": "^10.0.0",
-    "electron-builder": "^26.0.12",
     "electron": "^35.0.0",
+    "electron-builder": "^26.0.12",
     "nodemon": "^3.1.10",
     "postcss": "^8.5.9",
     "tailwindcss": "^3.4.17",
