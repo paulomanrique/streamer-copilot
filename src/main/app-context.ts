@@ -44,7 +44,7 @@ import {
   voiceCommandUpsertInputSchema,
   voiceSpeakPayloadSchema,
 } from '../shared/schemas.js';
-import type { AppInfo } from '../shared/types.js';
+import type { AppInfo, PlatformId } from '../shared/types.js';
 import { StateHub } from './state-hub.js';
 
 interface AppContextOptions {
@@ -67,6 +67,9 @@ export function createAppContext(options: AppContextOptions): () => void {
   const schedulerService = new SchedulerService({
     repository: scheduledRepository,
     onStatus: (items) => options.stateHub.pushScheduledStatus(items),
+    onDueMessage: (message) => {
+      void dispatchScheduledMessage(message.message, message.targetPlatforms);
+    },
   });
   const soundService = new SoundService({
     repository: soundRepository,
@@ -370,6 +373,24 @@ export function createAppContext(options: AppContextOptions): () => void {
     }
 
     options.stateHub.pushVoiceSpeak({ text, lang: 'en-US' });
+  }
+
+  async function dispatchScheduledMessage(content: string, platforms: PlatformId[]): Promise<void> {
+    const results = await Promise.allSettled(
+      platforms.map(async (platform) => {
+        await chatService.sendMessage(platform, content);
+        logService.info('scheduled', 'Scheduled message dispatched', { platform, content });
+      }),
+    );
+
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') return;
+      logService.warn('scheduled', 'Scheduled message skipped', {
+        platform: platforms[index],
+        content,
+        error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+      });
+    });
   }
 
   function readCsvEnv(value: string | undefined): string[] | undefined {
