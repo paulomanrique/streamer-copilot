@@ -1,5 +1,8 @@
 import { app, dialog, type BrowserWindow } from 'electron';
-import { autoUpdater, type UpdateDownloadedEvent } from 'electron-updater';
+import electronUpdater from 'electron-updater';
+import type { UpdateDownloadedEvent } from 'electron-updater';
+
+const { autoUpdater } = electronUpdater;
 
 interface AutoUpdaterOptions {
   checkIntervalMs?: number;
