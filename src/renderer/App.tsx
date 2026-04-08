@@ -11,6 +11,7 @@ import type { AppSection } from './components/SectionTabs.js';
 import { StatusMessages } from './components/StatusMessages.js';
 import { ToastStack, type ToastItem } from './components/ToastStack.js';
 import { SettingsWorkspace } from './pages/SettingsWorkspace.js';
+import { EventLogPage } from './pages/EventLog.js';
 import { styles } from './components/app-styles.js';
 
 const SKIP_PROFILE_SELECTOR_KEY = 'streamerCopilot.skipProfileSelector';
@@ -298,6 +299,8 @@ export default function App() {
             obsStats={obsStats}
           />
         ) : null}
+
+        {currentSection === 'activity' ? <EventLogPage /> : null}
 
         {currentSection === 'settings' ? (
           <SettingsWorkspace

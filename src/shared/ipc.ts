@@ -4,6 +4,8 @@ import type {
   CloneProfileInput,
   CreateProfileInput,
   DeleteProfileInput,
+  EventLogEntry,
+  EventLogFilters,
   ObsConnectionSettings,
   ObsStatsSnapshot,
   ProfilesSnapshot,
@@ -59,6 +61,7 @@ export const IPC_CHANNELS = {
   chatGetRecent: 'chat:get-recent',
   chatMessage: 'chat:message',
   chatEvent: 'chat:event',
+  logsList: 'logs:list',
 } as const;
 
 export interface RecentChatSnapshot {
@@ -100,4 +103,5 @@ export interface CopilotApi {
   getRecentChat: () => Promise<RecentChatSnapshot>;
   onChatMessage: (listener: (payload: ChatMessage) => void) => () => void;
   onChatEvent: (listener: (payload: StreamEvent) => void) => () => void;
+  listEventLogs: (filters?: EventLogFilters) => Promise<EventLogEntry[]>;
 }

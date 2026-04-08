@@ -9,6 +9,8 @@ import type { OpenDialogOptions } from 'electron';
 
 import type { DatabaseHandle } from '../db/database.js';
 import { ChatService } from '../modules/chat/chat-service.js';
+import { LogRepository } from '../modules/logs/log-repository.js';
+import { LogService } from '../modules/logs/log-service.js';
 import { ObsService } from '../modules/obs/obs-service.js';
 import { ObsSettingsStore } from '../modules/obs/obs-settings-store.js';
 import { ScheduledMessageRepository } from '../modules/scheduled/scheduled-repository.js';
@@ -25,6 +27,7 @@ import {
   cloneProfileInputSchema,
   createProfileInputSchema,
   deleteProfileInputSchema,
+  eventLogFiltersSchema,
   obsConnectionSettingsSchema,
   renameProfileInputSchema,
   rendererVoiceCapabilitiesSchema,
@@ -53,6 +56,8 @@ export function createAppContext(options: AppContextOptions): () => void {
   const profileStore = new ProfileStore(options.userDataPath);
   const appSettingsRepository = new AppSettingsRepository(options.databaseHandle.db);
   const obsSettingsStore = new ObsSettingsStore(appSettingsRepository);
+  const logRepository = new LogRepository(options.databaseHandle.db);
+  const logService = new LogService(logRepository);
   const scheduledRepository = new ScheduledMessageRepository(options.databaseHandle.db);
   const soundRepository = new SoundCommandRepository(options.databaseHandle.db);
   const voiceRepository = new VoiceCommandRepository(options.databaseHandle.db);
@@ -84,8 +89,14 @@ export function createAppContext(options: AppContextOptions): () => void {
   });
   const obsService = new ObsService({
     settingsStore: obsSettingsStore,
-    onConnected: () => options.stateHub.pushObsConnected(),
-    onDisconnected: () => options.stateHub.pushObsDisconnected(),
+    onConnected: () => {
+      logService.info('obs', 'OBS connection established');
+      options.stateHub.pushObsConnected();
+    },
+    onDisconnected: () => {
+      logService.warn('obs', 'OBS connection lost');
+      options.stateHub.pushObsDisconnected();
+    },
     onStats: (stats) => options.stateHub.pushObsStats(stats),
   });
   const soundsDirectory = path.join(options.userDataPath, 'sounds');
@@ -93,6 +104,9 @@ export function createAppContext(options: AppContextOptions): () => void {
   schedulerService.start();
   void chatService.connectAll();
   obsService.start();
+  logService.info('app', 'Application context initialized', {
+    userDataPath: options.userDataPath,
+  });
 
   ipcMain.handle(IPC_CHANNELS.appGetInfo, async (): Promise<AppInfo> => ({
     appName: APP_NAME,
@@ -106,27 +120,41 @@ export function createAppContext(options: AppContextOptions): () => void {
 
   ipcMain.handle(IPC_CHANNELS.profilesSelect, async (_event, rawInput: unknown) => {
     const input = selectProfileInputSchema.parse(rawInput);
-    return profileStore.select(input.profileId);
+    const snapshot = await profileStore.select(input.profileId);
+    logService.info('profiles', 'Profile selected', { profileId: input.profileId });
+    return snapshot;
   });
 
   ipcMain.handle(IPC_CHANNELS.profilesCreate, async (_event, rawInput: unknown) => {
     const input = createProfileInputSchema.parse(rawInput);
-    return profileStore.create(input.name, input.directory);
+    const snapshot = await profileStore.create(input.name, input.directory);
+    logService.info('profiles', 'Profile created', { name: input.name, directory: input.directory });
+    return snapshot;
   });
 
   ipcMain.handle(IPC_CHANNELS.profilesRename, async (_event, rawInput: unknown) => {
     const input = renameProfileInputSchema.parse(rawInput);
-    return profileStore.rename(input.profileId, input.name);
+    const snapshot = await profileStore.rename(input.profileId, input.name);
+    logService.info('profiles', 'Profile renamed', { profileId: input.profileId, name: input.name });
+    return snapshot;
   });
 
   ipcMain.handle(IPC_CHANNELS.profilesClone, async (_event, rawInput: unknown) => {
     const input = cloneProfileInputSchema.parse(rawInput);
-    return profileStore.clone(input.profileId, input.name, input.directory);
+    const snapshot = await profileStore.clone(input.profileId, input.name, input.directory);
+    logService.info('profiles', 'Profile cloned', {
+      profileId: input.profileId,
+      name: input.name,
+      directory: input.directory,
+    });
+    return snapshot;
   });
 
   ipcMain.handle(IPC_CHANNELS.profilesDelete, async (_event, rawInput: unknown) => {
     const input = deleteProfileInputSchema.parse(rawInput);
-    return profileStore.delete(input.profileId);
+    const snapshot = await profileStore.delete(input.profileId);
+    logService.warn('profiles', 'Profile deleted', { profileId: input.profileId });
+    return snapshot;
   });
 
   ipcMain.handle(IPC_CHANNELS.profilesPickDirectory, async (event) => {
@@ -146,24 +174,32 @@ export function createAppContext(options: AppContextOptions): () => void {
 
   ipcMain.handle(IPC_CHANNELS.scheduledUpsert, async (_event, rawInput: unknown) => {
     const input = scheduledMessageUpsertInputSchema.parse(rawInput);
-    return schedulerService.upsert(input);
+    const items = schedulerService.upsert(input);
+    logService.info('scheduled', 'Scheduled message saved', { id: input.id ?? null, message: input.message });
+    return items;
   });
 
   ipcMain.handle(IPC_CHANNELS.scheduledDelete, async (_event, rawInput: unknown) => {
     const input = scheduledMessageDeleteInputSchema.parse(rawInput);
-    return schedulerService.delete(input.id);
+    const items = schedulerService.delete(input.id);
+    logService.warn('scheduled', 'Scheduled message deleted', { id: input.id });
+    return items;
   });
 
   ipcMain.handle(IPC_CHANNELS.voiceList, async () => voiceService.list());
 
   ipcMain.handle(IPC_CHANNELS.voiceUpsert, async (_event, rawInput: unknown) => {
     const input = voiceCommandUpsertInputSchema.parse(rawInput);
-    return voiceService.upsert(input);
+    const items = voiceService.upsert(input);
+    logService.info('voice', 'Voice command saved', { trigger: input.trigger, id: input.id ?? null });
+    return items;
   });
 
   ipcMain.handle(IPC_CHANNELS.voiceDelete, async (_event, rawInput: unknown) => {
     const input = voiceCommandDeleteInputSchema.parse(rawInput);
-    return voiceService.delete(input.id);
+    const items = voiceService.delete(input.id);
+    logService.warn('voice', 'Voice command deleted', { id: input.id });
+    return items;
   });
 
   ipcMain.handle(IPC_CHANNELS.voicePreviewSpeak, async (_event, rawInput: unknown) => {
@@ -180,12 +216,16 @@ export function createAppContext(options: AppContextOptions): () => void {
 
   ipcMain.handle(IPC_CHANNELS.soundsUpsert, async (_event, rawInput: unknown) => {
     const input = soundCommandUpsertInputSchema.parse(rawInput);
-    return soundService.upsert(input);
+    const items = soundService.upsert(input);
+    logService.info('sounds', 'Sound command saved', { trigger: input.trigger, id: input.id ?? null });
+    return items;
   });
 
   ipcMain.handle(IPC_CHANNELS.soundsDelete, async (_event, rawInput: unknown) => {
     const input = soundCommandDeleteInputSchema.parse(rawInput);
-    return soundService.delete(input.id);
+    const items = soundService.delete(input.id);
+    logService.warn('sounds', 'Sound command deleted', { id: input.id });
+    return items;
   });
 
   ipcMain.handle(IPC_CHANNELS.soundsPickFile, async (event) => {
@@ -212,6 +252,7 @@ export function createAppContext(options: AppContextOptions): () => void {
 
     await fs.mkdir(soundsDirectory, { recursive: true });
     await fs.copyFile(sourcePath, destinationPath);
+    logService.info('sounds', 'Sound file imported', { sourcePath, destinationPath });
 
     return destinationPath;
   });
@@ -225,15 +266,22 @@ export function createAppContext(options: AppContextOptions): () => void {
 
   ipcMain.handle(IPC_CHANNELS.obsSaveSettings, async (_event, rawInput: unknown) => {
     const input = obsConnectionSettingsSchema.parse(rawInput);
-    return obsService.saveSettings(input);
+    const saved = await obsService.saveSettings(input);
+    logService.info('obs', 'OBS settings saved', { host: saved.host, port: saved.port });
+    return saved;
   });
 
   ipcMain.handle(IPC_CHANNELS.obsTestConnection, async (_event, rawInput: unknown) => {
     const input = obsConnectionSettingsSchema.parse(rawInput);
     await obsService.testConnection(input);
+    logService.info('obs', 'OBS connection test succeeded', { host: input.host, port: input.port });
   });
 
   ipcMain.handle(IPC_CHANNELS.chatGetRecent, async () => chatService.getRecent());
+  ipcMain.handle(IPC_CHANNELS.logsList, async (_event, rawInput: unknown) => {
+    const filters = eventLogFiltersSchema.parse(rawInput);
+    return logService.list(filters);
+  });
 
   return () => {
     schedulerService.stop();
@@ -264,6 +312,7 @@ export function createAppContext(options: AppContextOptions): () => void {
     ipcMain.removeHandler(IPC_CHANNELS.obsSaveSettings);
     ipcMain.removeHandler(IPC_CHANNELS.obsTestConnection);
     ipcMain.removeHandler(IPC_CHANNELS.chatGetRecent);
+    ipcMain.removeHandler(IPC_CHANNELS.logsList);
   };
 
   async function speakWithOsFallback(text: string): Promise<void> {

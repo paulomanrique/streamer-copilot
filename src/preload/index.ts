@@ -6,6 +6,8 @@ import type {
   CloneProfileInput,
   CreateProfileInput,
   DeleteProfileInput,
+  EventLogEntry,
+  EventLogFilters,
   ObsConnectionSettings,
   ObsStatsSnapshot,
   RenameProfileInput,
@@ -106,6 +108,7 @@ const copilotApi: CopilotApi = {
       ipcRenderer.removeListener(IPC_CHANNELS.chatEvent, wrappedListener);
     };
   },
+  listEventLogs: (filters?: EventLogFilters) => ipcRenderer.invoke(IPC_CHANNELS.logsList, filters) as Promise<EventLogEntry[]>,
 };
 
 contextBridge.exposeInMainWorld('copilot', copilotApi);

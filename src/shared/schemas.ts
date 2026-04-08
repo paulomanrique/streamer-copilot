@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 const platformIdSchema = z.enum(['twitch', 'youtube', 'kick', 'tiktok']);
 const permissionLevelSchema = z.enum(['everyone', 'follower', 'subscriber', 'moderator', 'broadcaster']);
+const eventLogLevelSchema = z.enum(['info', 'warn', 'error']);
 
 export const selectProfileInputSchema = z.object({
   profileId: z.string().min(1),
@@ -86,6 +87,14 @@ export const obsConnectionSettingsSchema = z.object({
   password: z.string().max(200),
 });
 
+export const eventLogFiltersSchema = z
+  .object({
+    level: z.union([eventLogLevelSchema, z.literal('all')]).optional(),
+    category: z.string().max(80).optional(),
+    query: z.string().max(200).optional(),
+  })
+  .optional();
+
 export type SelectProfileInputSchema = z.infer<typeof selectProfileInputSchema>;
 export type CreateProfileInputSchema = z.infer<typeof createProfileInputSchema>;
 export type RenameProfileInputSchema = z.infer<typeof renameProfileInputSchema>;
@@ -101,3 +110,4 @@ export type SoundCommandUpsertInputSchema = z.infer<typeof soundCommandUpsertInp
 export type SoundCommandDeleteInputSchema = z.infer<typeof soundCommandDeleteInputSchema>;
 export type SoundPlayPayloadSchema = z.infer<typeof soundPlayPayloadSchema>;
 export type ObsConnectionSettingsSchema = z.infer<typeof obsConnectionSettingsSchema>;
+export type EventLogFiltersSchema = z.infer<typeof eventLogFiltersSchema>;

@@ -71,6 +71,23 @@ export interface ObsConnectionSettings {
   password: string;
 }
 
+export type EventLogLevel = 'info' | 'warn' | 'error';
+
+export interface EventLogEntry {
+  id: number;
+  level: EventLogLevel;
+  category: string;
+  message: string;
+  metadataJson: string | null;
+  createdAt: string;
+}
+
+export interface EventLogFilters {
+  level?: EventLogLevel | 'all';
+  category?: string;
+  query?: string;
+}
+
 export interface ScheduledMessage {
   id: string;
   message: string;
