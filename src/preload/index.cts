@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
-import { IPC_CHANNELS, type CopilotApi, type RecentChatSnapshot } from '../shared/ipc.js';
+import type { CopilotApi, RecentChatSnapshot } from '../shared/ipc.js';
 import type {
   ChatMessage,
   CloneProfileInput,
@@ -25,6 +25,45 @@ import type {
   VoiceCommandUpsertInput,
   VoiceSpeakPayload,
 } from '../shared/types.js';
+
+const IPC_CHANNELS = {
+  appGetInfo: 'app:get-info',
+  profilesList: 'profiles:list',
+  profilesSelect: 'profiles:select',
+  profilesCreate: 'profiles:create',
+  profilesRename: 'profiles:rename',
+  profilesClone: 'profiles:clone',
+  profilesDelete: 'profiles:delete',
+  profilesPickDirectory: 'profiles:pick-directory',
+  generalGetSettings: 'general:get-settings',
+  generalSaveSettings: 'general:save-settings',
+  scheduledList: 'scheduled:list',
+  scheduledUpsert: 'scheduled:upsert',
+  scheduledDelete: 'scheduled:delete',
+  scheduledStatus: 'scheduled:status',
+  voiceList: 'voice:list',
+  voiceUpsert: 'voice:upsert',
+  voiceDelete: 'voice:delete',
+  voicePreviewSpeak: 'voice:preview-speak',
+  voiceSpeak: 'voice:speak',
+  voiceSetRendererCapabilities: 'voice:set-renderer-capabilities',
+  soundsList: 'sounds:list',
+  soundsUpsert: 'sounds:upsert',
+  soundsDelete: 'sounds:delete',
+  soundsPickFile: 'sounds:pick-file',
+  soundsPreviewPlay: 'sounds:preview-play',
+  soundsPlay: 'sounds:play',
+  obsGetSettings: 'obs:get-settings',
+  obsSaveSettings: 'obs:save-settings',
+  obsTestConnection: 'obs:test-connection',
+  obsStats: 'obs:stats',
+  obsConnected: 'obs:connected',
+  obsDisconnected: 'obs:disconnected',
+  chatGetRecent: 'chat:get-recent',
+  chatMessage: 'chat:message',
+  chatEvent: 'chat:event',
+  logsList: 'logs:list',
+} as const;
 
 const copilotApi: CopilotApi = {
   getAppInfo: () => ipcRenderer.invoke(IPC_CHANNELS.appGetInfo),
