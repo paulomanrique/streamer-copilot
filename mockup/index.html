@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Streamer Copilot</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            violet: {
+              950: '#1e0a3c',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 2px; }
+    ::-webkit-scrollbar-thumb:hover { background: #7c3aed; }
+
+    /* Toggle switch */
+    .toggle-switch { position: relative; display: inline-block; width: 36px; height: 20px; }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute; cursor: pointer; inset: 0;
+      background: #374151; border-radius: 20px; transition: .2s;
+    }
+    .toggle-slider:before {
+      content: ''; position: absolute;
+      width: 14px; height: 14px; left: 3px; bottom: 3px;
+      background: white; border-radius: 50%; transition: .2s;
+    }
+    input:checked + .toggle-slider { background: #7c3aed; }
+    input:checked + .toggle-slider:before { transform: translateX(16px); }
+
+    /* Animated status dot */
+    @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .pulse-dot { animation: pulse-dot 2s infinite; }
+
+    /* Chat feed auto-scroll */
+    #chat-feed { scroll-behavior: smooth; }
+  </style>
+</head>
+<body class="bg-gray-950 text-gray-100 h-screen overflow-hidden flex flex-col">
+
+  <!-- ===================== TOP BAR ===================== -->
+  <header class="flex items-center gap-4 px-4 h-12 bg-gray-900 border-b border-gray-800 shrink-0 z-10">
+    <!-- Logo -->
+    <div class="flex items-center gap-2 mr-2">
+      <div class="w-7 h-7 rounded-lg bg-violet-600 flex items-center justify-center text-sm font-bold">SC</div>
+      <span class="font-semibold text-sm hidden sm:block">Streamer Copilot</span>
+    </div>
+
+    <!-- Main nav -->
+    <nav class="flex gap-1">
+      <button data-nav="dashboard" onclick="showSection('dashboard')"
+        class="flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition-colors bg-violet-600 text-white">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"/></svg>
+        Dashboard
+      </button>
+      <button data-nav="settings" onclick="showSection('settings')"
+        class="flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition-colors text-gray-400 hover:text-white">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
+        Configurações
+      </button>
+    </nav>
+
+    <div class="ml-auto flex items-center gap-3">
+      <!-- Go Live button -->
+      <button class="flex items-center gap-1.5 px-3 py-1.5 rounded bg-red-600 hover:bg-red-500 text-sm font-medium transition-colors">
+        <span class="pulse-dot w-2 h-2 rounded-full bg-white"></span>
+        Ao Vivo
+      </button>
+    </div>
+  </header>
+
+  <!-- ===================== MAIN CONTENT ===================== -->
+  <main class="flex-1 overflow-hidden">
+
+    <!-- ========== DASHBOARD ========== -->
+    <section id="dashboard" class="main-section h-full flex flex-col">
+      <div class="flex-1 flex overflow-hidden">
+
+        <!-- Left: Unified Chat Feed (60%) -->
+        <div class="flex flex-col w-[60%] border-r border-gray-800">
+          <!-- Chat header -->
+          <div class="flex items-center justify-between px-4 py-2 border-b border-gray-800 shrink-0">
+            <div class="flex items-center gap-2">
+              <h2 class="text-sm font-semibold text-gray-200">Chat Unificado</h2>
+              <span class="text-xs text-gray-500">3 plataformas • 127 viewers</span>
+            </div>
+            <div class="flex items-center gap-3 text-xs">
+              <!-- Platform filter toggles -->
+              <button class="flex items-center gap-1.5 px-2 py-1 rounded bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 transition-colors">
+                <span class="w-2 h-2 rounded-full bg-purple-500"></span> Twitch
+              </button>
+              <button class="flex items-center gap-1.5 px-2 py-1 rounded bg-red-500/20 text-red-300 hover:bg-red-500/30 transition-colors">
+                <span class="w-2 h-2 rounded-full bg-red-500"></span> YouTube
+              </button>
+              <button class="flex items-center gap-1.5 px-2 py-1 rounded bg-green-500/20 text-green-300 hover:bg-green-500/30 transition-colors">
+                <span class="w-2 h-2 rounded-full bg-green-500"></span> Kick
+              </button>
+            </div>
+          </div>
+
+          <!-- Chat messages -->
+          <div id="chat-feed" class="flex-1 overflow-y-auto py-1 space-y-0.5">
+            <!-- populated by chat-renderer.js -->
+          </div>
+
+          <!-- Chat input (for scheduled/test messages) -->
+          <div class="px-3 py-2 border-t border-gray-800 shrink-0">
+            <div class="flex gap-2">
+              <select class="bg-gray-800 border border-gray-700 rounded text-xs text-gray-300 px-2 py-1.5">
+                <option>Twitch</option>
+                <option>YouTube</option>
+                <option>Kick</option>
+                <option>Todos</option>
+              </select>
+              <input type="text" placeholder="Enviar mensagem..." class="flex-1 bg-gray-800 border border-gray-700 rounded text-sm text-gray-300 px-3 py-1.5 focus:outline-none focus:border-violet-500 placeholder-gray-600">
+              <button class="px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">
+                Enviar
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: OBS Stats + Activity Log (40%) -->
+        <div class="flex flex-col w-[40%] overflow-hidden">
+
+          <!-- OBS Stats Panel -->
+          <div class="border-b border-gray-800 p-4 shrink-0">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2">
+                <h2 class="text-sm font-semibold text-gray-200">OBS Studio</h2>
+                <span id="obs-status" class="text-xs text-red-400 font-medium">🔴 AO VIVO</span>
+              </div>
+              <span class="text-xs text-gray-500">Cena: <span id="obs-scene" class="text-gray-300">Gameplay</span></span>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2">
+              <div class="bg-gray-800/60 rounded-lg p-2.5 text-center">
+                <div class="text-lg font-mono font-bold text-violet-400" id="obs-time">00:00:00</div>
+                <div class="text-xs text-gray-500 mt-0.5">Tempo</div>
+              </div>
+              <div class="bg-gray-800/60 rounded-lg p-2.5 text-center">
+                <div class="text-lg font-mono font-bold text-green-400" id="obs-bitrate">0 Mbps</div>
+                <div class="text-xs text-gray-500 mt-0.5">Bitrate</div>
+              </div>
+              <div class="bg-gray-800/60 rounded-lg p-2.5 text-center">
+                <div class="text-lg font-mono font-bold text-blue-400" id="obs-fps">0 FPS</div>
+                <div class="text-xs text-gray-500 mt-0.5">FPS</div>
+              </div>
+              <div class="bg-gray-800/60 rounded-lg p-2.5 text-center">
+                <div class="text-base font-mono font-bold text-yellow-400" id="obs-cpu">0%</div>
+                <div class="text-xs text-gray-500 mt-0.5">CPU</div>
+              </div>
+              <div class="bg-gray-800/60 rounded-lg p-2.5 text-center">
+                <div class="text-base font-mono font-bold text-orange-400" id="obs-memory">0 GB</div>
+                <div class="text-xs text-gray-500 mt-0.5">RAM</div>
+              </div>
+              <div class="bg-gray-800/60 rounded-lg p-2.5 text-center">
+                <div class="text-base font-mono font-bold text-red-400" id="obs-dropped">0</div>
+                <div class="text-xs text-gray-500 mt-0.5">Frames Perdidos</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Activity Log -->
+          <div class="flex flex-col flex-1 overflow-hidden p-4">
+            <h2 class="text-sm font-semibold text-gray-200 mb-2 shrink-0">Atividade Recente</h2>
+            <div id="activity-log" class="flex-1 overflow-y-auto text-xs space-y-0.5">
+              <!-- populated by chat-renderer.js -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Status Bar -->
+      <footer class="h-8 bg-gray-900 border-t border-gray-800 flex items-center px-4 gap-4 shrink-0 text-xs text-gray-500">
+        <div class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-purple-500 pulse-dot"></span>
+          <span>Twitch: <span class="text-gray-300">meucanal</span></span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-red-500 pulse-dot"></span>
+          <span>YouTube: <span class="text-gray-300">Meu Canal</span></span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-green-500 pulse-dot"></span>
+          <span>Kick: <span class="text-gray-300">meucanal</span></span>
+        </div>
+        <div class="flex items-center gap-1.5 ml-2">
+          <span class="w-2 h-2 rounded-full bg-cyan-500"></span>
+          <span>OBS: <span class="text-gray-300">Conectado</span></span>
+        </div>
+        <div class="ml-auto">v0.1.0-mockup</div>
+      </footer>
+    </section>
+
+    <!-- ========== SETTINGS ========== -->
+    <section id="settings" class="main-section hidden h-full flex">
+
+      <!-- Settings Sidebar -->
+      <aside class="w-56 bg-gray-900 border-r border-gray-800 flex flex-col shrink-0">
+        <div class="px-4 py-3 border-b border-gray-800">
+          <h2 class="text-sm font-semibold text-gray-300">Configurações</h2>
+        </div>
+        <nav class="flex-1 overflow-y-auto py-2">
+          <div class="px-3 pb-1">
+            <p class="text-xs text-gray-600 uppercase tracking-wider px-2 py-1">Plataformas</p>
+            <button data-settings-nav="settings-platforms" onclick="showSettingsSection('settings-platforms')"
+              class="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded text-sm transition-colors text-gray-400 hover:text-white">
+              <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+              Conexões
+            </button>
+          </div>
+          <div class="px-3 pb-1">
+            <p class="text-xs text-gray-600 uppercase tracking-wider px-2 py-1">Comandos</p>
+            <button data-settings-nav="settings-sounds" onclick="showSettingsSection('settings-sounds')"
+              class="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded text-sm transition-colors text-gray-400 hover:text-white">
+              <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072M12 6v12m-3.536-9.536a5 5 0 000 7.072M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              Sons
+            </button>
+            <button data-settings-nav="settings-voice" onclick="showSettingsSection('settings-voice')"
+              class="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded text-sm transition-colors text-gray-400 hover:text-white">
+              <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
+              Voz (TTS)
+            </button>
+          </div>
+          <div class="px-3 pb-1">
+            <p class="text-xs text-gray-600 uppercase tracking-wider px-2 py-1">Automações</p>
+            <button data-settings-nav="settings-scheduled" onclick="showSettingsSection('settings-scheduled')"
+              class="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded text-sm transition-colors text-gray-400 hover:text-white">
+              <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              Mensagens Agendadas
+            </button>
+          </div>
+          <div class="px-3 pb-1">
+            <p class="text-xs text-gray-600 uppercase tracking-wider px-2 py-1">Integrações</p>
+            <button data-settings-nav="settings-obs" onclick="showSettingsSection('settings-obs')"
+              class="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded text-sm transition-colors text-gray-400 hover:text-white">
+              <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke-width="2"/></svg>
+              OBS Studio
+            </button>
+          </div>
+          <div class="px-3 pb-1">
+            <p class="text-xs text-gray-600 uppercase tracking-wider px-2 py-1">App</p>
+            <button data-settings-nav="settings-general" onclick="showSettingsSection('settings-general')"
+              class="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded text-sm transition-colors text-gray-400 hover:text-white">
+              <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
+              Geral
+            </button>
+          </div>
+        </nav>
+      </aside>
+
+      <!-- Settings Content -->
+      <div class="flex-1 overflow-y-auto">
+
+        <!-- ---- Platforms ---- -->
+        <div id="settings-platforms" class="settings-section p-6 max-w-2xl">
+          <h2 class="text-lg font-semibold mb-1">Conexões de Plataforma</h2>
+          <p class="text-sm text-gray-400 mb-6">Conecte suas contas para receber chat e enviar mensagens em tempo real.</p>
+
+          <!-- Twitch -->
+          <div class="bg-gray-800/60 rounded-xl p-5 mb-4 border border-gray-700">
+            <div class="flex items-start gap-4">
+              <div class="w-10 h-10 rounded-lg bg-purple-600/20 flex items-center justify-center text-purple-400">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"/></svg>
+              </div>
+              <div class="flex-1">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <h3 class="font-semibold">Twitch</h3>
+                    <p class="text-sm text-gray-400 mt-0.5">meucanal • <span class="text-green-400">Conectado</span></p>
+                  </div>
+                  <button class="px-3 py-1.5 rounded bg-red-600/20 hover:bg-red-600/30 text-red-400 text-sm transition-colors">Desconectar</button>
+                </div>
+                <div class="mt-3 flex gap-2 flex-wrap">
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">chat:read</span>
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">chat:edit</span>
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">channel:read:subscriptions</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- YouTube -->
+          <div class="bg-gray-800/60 rounded-xl p-5 mb-4 border border-gray-700">
+            <div class="flex items-start gap-4">
+              <div class="w-10 h-10 rounded-lg bg-red-600/20 flex items-center justify-center text-red-400">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
+              </div>
+              <div class="flex-1">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <h3 class="font-semibold">YouTube</h3>
+                    <p class="text-sm text-gray-400 mt-0.5">Meu Canal • <span class="text-green-400">Conectado</span></p>
+                  </div>
+                  <button class="px-3 py-1.5 rounded bg-red-600/20 hover:bg-red-600/30 text-red-400 text-sm transition-colors">Desconectar</button>
+                </div>
+                <p class="text-xs text-gray-500 mt-2">Polling a cada 5s · Quota: 847/10000 unidades hoje</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Kick -->
+          <div class="bg-gray-800/60 rounded-xl p-5 border border-gray-700">
+            <div class="flex items-start gap-4">
+              <div class="w-10 h-10 rounded-lg bg-green-600/20 flex items-center justify-center text-green-400">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M2 2h4v8l4-4h4l-6 6 6 6h-4l-4-4v4H2V2zm14 0h4v20h-4z"/></svg>
+              </div>
+              <div class="flex-1">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <h3 class="font-semibold">Kick</h3>
+                    <p class="text-sm text-gray-400 mt-0.5"><span class="text-yellow-400">Não conectado</span></p>
+                  </div>
+                  <button class="px-3 py-1.5 rounded bg-green-600/20 hover:bg-green-600/30 text-green-400 text-sm transition-colors">Conectar</button>
+                </div>
+                <div class="mt-3">
+                  <input type="text" placeholder="Nome do canal no Kick (ex: meucanal)" class="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-500">
+                  <p class="text-xs text-gray-600 mt-1">O Kick não requer autenticação para leitura de chat público.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ---- Sound Commands ---- -->
+        <div id="settings-sounds" class="settings-section hidden p-6">
+          <div class="flex items-center justify-between mb-1">
+            <h2 class="text-lg font-semibold">Comandos de Som</h2>
+            <button onclick="openModal('modal-sound')" class="flex items-center gap-1.5 px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">
+              + Novo Comando
+            </button>
+          </div>
+          <p class="text-sm text-gray-400 mb-6">Configure comandos de chat que reproduzem sons. Ex: <code class="text-violet-300 text-xs bg-gray-800 px-1 py-0.5 rounded">!gato</code></p>
+
+          <div class="bg-gray-800/40 rounded-xl border border-gray-700 overflow-hidden">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="border-b border-gray-700 bg-gray-800/60">
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Comando</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Arquivo</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Permissões</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Cooldown</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Ativo</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="sounds-table-body">
+                <!-- populated by chat-renderer.js -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ---- Voice Commands ---- -->
+        <div id="settings-voice" class="settings-section hidden p-6">
+          <div class="flex items-center justify-between mb-1">
+            <h2 class="text-lg font-semibold">Comandos de Voz (TTS)</h2>
+            <button onclick="openModal('modal-voice')" class="flex items-center gap-1.5 px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">
+              + Novo Comando
+            </button>
+          </div>
+          <p class="text-sm text-gray-400 mb-6">Use TTS para falar mensagens do chat em voz alta. Ex: <code class="text-violet-300 text-xs bg-gray-800 px-1 py-0.5 rounded">!voice bom dia</code></p>
+
+          <div class="bg-gray-800/40 rounded-xl border border-gray-700 overflow-hidden mb-6">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="border-b border-gray-700 bg-gray-800/60">
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Comando</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Texto Fixo</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Idioma</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Permissões</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Cooldown</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Ativo</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="voice-table-body">
+                <!-- populated by chat-renderer.js -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- TTS Settings -->
+          <div class="bg-gray-800/40 rounded-xl border border-gray-700 p-5">
+            <h3 class="font-semibold mb-4">Configurações de TTS</h3>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm text-gray-400 mb-1.5">Idioma padrão</label>
+                <select class="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
+                  <option value="pt-BR">Português (Brasil)</option>
+                  <option value="en-US">English (US)</option>
+                  <option value="es-ES">Español (España)</option>
+                  <option value="es-MX">Español (México)</option>
+                  <option value="fr-FR">Français</option>
+                  <option value="de-DE">Deutsch</option>
+                  <option value="ja-JP">日本語</option>
+                  <option value="ko-KR">한국어</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm text-gray-400 mb-1.5">Volume</label>
+                <input type="range" min="0" max="100" value="80" class="w-full accent-violet-500">
+                <span class="text-xs text-gray-500">80%</span>
+              </div>
+              <div>
+                <label class="block text-sm text-gray-400 mb-1.5">Velocidade</label>
+                <input type="range" min="50" max="200" value="100" class="w-full accent-violet-500">
+                <span class="text-xs text-gray-500">Normal (1x)</span>
+              </div>
+              <div>
+                <label class="block text-sm text-gray-400 mb-1.5">Limite de caracteres</label>
+                <input type="number" value="200" class="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
+              </div>
+            </div>
+            <div class="mt-4 flex items-center justify-between">
+              <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                <input type="checkbox" checked class="accent-violet-500"> Anunciar nome do usuário
+              </label>
+              <button class="px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">Salvar</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ---- Scheduled Messages ---- -->
+        <div id="settings-scheduled" class="settings-section hidden p-6">
+          <div class="flex items-center justify-between mb-1">
+            <h2 class="text-lg font-semibold">Mensagens Agendadas</h2>
+            <button onclick="openModal('modal-scheduled')" class="flex items-center gap-1.5 px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">
+              + Nova Mensagem
+            </button>
+          </div>
+          <p class="text-sm text-gray-400 mb-6">Mensagens enviadas automaticamente no chat em intervalos configurados.</p>
+
+          <div class="bg-gray-800/40 rounded-xl border border-gray-700 overflow-hidden">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="border-b border-gray-700 bg-gray-800/60">
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Mensagem</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Intervalo</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Plataformas</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Último Envio</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Ativo</th>
+                  <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="scheduled-table-body">
+                <!-- populated by chat-renderer.js -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ---- OBS Settings ---- -->
+        <div id="settings-obs" class="settings-section hidden p-6 max-w-lg">
+          <h2 class="text-lg font-semibold mb-1">OBS Studio</h2>
+          <p class="text-sm text-gray-400 mb-6">Conecte ao OBS via WebSocket para exibir estatísticas de transmissão em tempo real.</p>
+
+          <div class="bg-gray-800/40 rounded-xl border border-gray-700 p-5 space-y-4">
+            <div>
+              <label class="block text-sm text-gray-400 mb-1.5">Host</label>
+              <input type="text" value="localhost" class="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
+            </div>
+            <div>
+              <label class="block text-sm text-gray-400 mb-1.5">Porta</label>
+              <input type="number" value="4455" class="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
+            </div>
+            <div>
+              <label class="block text-sm text-gray-400 mb-1.5">Senha (opcional)</label>
+              <input type="password" placeholder="••••••••" class="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
+            </div>
+            <div class="flex gap-3 pt-2">
+              <button class="flex-1 px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">Testar Conexão</button>
+              <button class="flex-1 px-3 py-2 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">Salvar</button>
+            </div>
+          </div>
+
+          <div class="mt-4 p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-xl text-sm">
+            <p class="text-cyan-400 font-medium mb-1">Como ativar no OBS:</p>
+            <ol class="text-gray-400 space-y-1 text-xs list-decimal list-inside">
+              <li>Abra o OBS Studio 28+</li>
+              <li>Vá em <strong class="text-gray-300">Ferramentas → Configurações do Servidor WebSocket</strong></li>
+              <li>Ative <strong class="text-gray-300">"Ativar servidor WebSocket"</strong></li>
+              <li>Copie a senha gerada e cole acima</li>
+            </ol>
+          </div>
+        </div>
+
+        <!-- ---- General Settings ---- -->
+        <div id="settings-general" class="settings-section hidden p-6 max-w-lg">
+          <h2 class="text-lg font-semibold mb-1">Configurações Gerais</h2>
+          <p class="text-sm text-gray-400 mb-6">Comportamento do aplicativo.</p>
+
+          <div class="space-y-4">
+            <div class="bg-gray-800/40 rounded-xl border border-gray-700 p-5 space-y-4">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-sm font-medium">Iniciar com o sistema</p>
+                  <p class="text-xs text-gray-500 mt-0.5">Abrir automaticamente ao ligar o computador</p>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox"> <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="flex items-center justify-between border-t border-gray-700 pt-4">
+                <div>
+                  <p class="text-sm font-medium">Minimizar para a bandeja</p>
+                  <p class="text-xs text-gray-500 mt-0.5">Ao fechar, manter rodando em segundo plano</p>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" checked> <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="flex items-center justify-between border-t border-gray-700 pt-4">
+                <div>
+                  <p class="text-sm font-medium">Notificações de eventos</p>
+                  <p class="text-xs text-gray-500 mt-0.5">Notificações do sistema para raids e inscrições</p>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" checked> <span class="toggle-slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <div class="bg-gray-800/40 rounded-xl border border-gray-700 p-5">
+              <h3 class="text-sm font-medium mb-3">Log de Diagnóstico</h3>
+              <div class="flex gap-2">
+                <select class="flex-1 bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
+                  <option>Info</option>
+                  <option>Debug</option>
+                  <option>Warn</option>
+                </select>
+                <button class="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">Abrir Pasta de Logs</button>
+              </div>
+            </div>
+
+            <div class="text-center text-xs text-gray-600 pt-2">
+              Streamer Copilot v0.1.0 · Electron 35
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===================== MODALS ===================== -->
+
+  <!-- Modal: Add/Edit Sound Command -->
+  <div id="modal-sound" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="modal-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+    <div class="relative bg-gray-900 border border-gray-700 rounded-xl w-full max-w-md shadow-2xl">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-gray-700">
+        <h3 class="font-semibold">Novo Comando de Som</h3>
+        <button onclick="closeModal('modal-sound')" class="text-gray-400 hover:text-white">✕</button>
+      </div>
+      <div class="p-5 space-y-4">
+        <div>
+          <label class="block text-sm text-gray-400 mb-1.5">Comando <span class="text-violet-400">*</span></label>
+          <input type="text" placeholder="!gato" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600 font-mono">
+        </div>
+        <div>
+          <label class="block text-sm text-gray-400 mb-1.5">Arquivo de Áudio <span class="text-violet-400">*</span></label>
+          <div class="flex gap-2">
+            <input type="text" placeholder="nenhum arquivo selecionado" class="flex-1 bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600" readonly>
+            <button class="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors whitespace-nowrap">Escolher...</button>
+          </div>
+          <p class="text-xs text-gray-600 mt-1">Formatos suportados: MP3, OGG, WAV</p>
+        </div>
+        <div>
+          <label class="block text-sm text-gray-400 mb-2">Permissões</label>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+              <input type="checkbox" checked class="accent-violet-500"> Todos
+            </label>
+            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+              <input type="checkbox" class="accent-violet-500"> Seguidores
+            </label>
+            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+              <input type="checkbox" class="accent-violet-500"> Inscritos
+            </label>
+            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+              <input type="checkbox" class="accent-violet-500"> Moderadores
+            </label>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm text-gray-400 mb-1.5">Cooldown Global (s)</label>
+            <input type="number" value="10" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
+          </div>
+          <div>
+            <label class="block text-sm text-gray-400 mb-1.5">Cooldown por Usuário (s)</label>
+            <input type="number" value="30" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
+          </div>
+        </div>
+      </div>
+      <div class="flex gap-3 px-5 py-4 border-t border-gray-700">
+        <button onclick="closeModal('modal-sound')" class="flex-1 px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">Cancelar</button>
+        <button class="flex-1 px-3 py-2 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Add/Edit Voice Command -->
+  <div id="modal-voice" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="modal-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+    <div class="relative bg-gray-900 border border-gray-700 rounded-xl w-full max-w-md shadow-2xl">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-gray-700">
+        <h3 class="font-semibold">Novo Comando de Voz</h3>
+        <button onclick="closeModal('modal-voice')" class="text-gray-400 hover:text-white">✕</button>
+      </div>
+      <div class="p-5 space-y-4">
+        <div>
+          <label class="block text-sm text-gray-400 mb-1.5">Comando <span class="text-violet-400">*</span></label>
+          <input type="text" placeholder="!voice" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600 font-mono">
+        </div>
+        <div>
+          <label class="block text-sm text-gray-400 mb-1">Texto Fixo <span class="text-gray-600">(opcional)</span></label>
+          <p class="text-xs text-gray-600 mb-1.5">Se vazio, fala o texto após o comando digitado no chat.</p>
+          <input type="text" placeholder="ex: bom dia a todos!" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600">
+        </div>
+        <div>
+          <label class="block text-sm text-gray-400 mb-1.5">Idioma</label>
+          <select class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
+            <option value="pt-BR">Português (Brasil)</option>
+            <option value="en-US">English (US)</option>
+            <option value="es-ES">Español</option>
+            <option value="fr-FR">Français</option>
+            <option value="de-DE">Deutsch</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm text-gray-400 mb-2">Permissões</label>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer"><input type="checkbox" class="accent-violet-500"> Todos</label>
+            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer"><input type="checkbox" class="accent-violet-500"> Seguidores</label>
+            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer"><input type="checkbox" checked class="accent-violet-500"> Inscritos</label>
+            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer"><input type="checkbox" checked class="accent-violet-500"> Moderadores</label>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm text-gray-400 mb-1.5">Cooldown por Usuário (s)</label>
+          <input type="number" value="5" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
+        </div>
+      </div>
+      <div class="flex gap-3 px-5 py-4 border-t border-gray-700">
+        <button onclick="closeModal('modal-voice')" class="flex-1 px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">Cancelar</button>
+        <button class="flex-1 px-3 py-2 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Add/Edit Scheduled Message -->
+  <div id="modal-scheduled" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="modal-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+    <div class="relative bg-gray-900 border border-gray-700 rounded-xl w-full max-w-md shadow-2xl">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-gray-700">
+        <h3 class="font-semibold">Nova Mensagem Agendada</h3>
+        <button onclick="closeModal('modal-scheduled')" class="text-gray-400 hover:text-white">✕</button>
+      </div>
+      <div class="p-5 space-y-4">
+        <div>
+          <label class="block text-sm text-gray-400 mb-1.5">Mensagem <span class="text-violet-400">*</span></label>
+          <textarea rows="3" placeholder="Lembre-se de seguir o canal! 💜" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600 resize-none"></textarea>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm text-gray-400 mb-1.5">Intervalo (min) <span class="text-violet-400">*</span></label>
+            <input type="number" value="15" min="1" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
+          </div>
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">Janela Aleatória (min)</label>
+            <p class="text-xs text-gray-600 mb-1">0 = intervalo exato</p>
+            <input type="number" value="0" min="0" class="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm text-gray-400 mb-2">Plataformas</label>
+          <div class="flex gap-3">
+            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer"><input type="checkbox" checked class="accent-violet-500"> <span class="text-purple-400">Twitch</span></label>
+            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer"><input type="checkbox" checked class="accent-violet-500"> <span class="text-red-400">YouTube</span></label>
+            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer"><input type="checkbox" checked class="accent-violet-500"> <span class="text-green-400">Kick</span></label>
+          </div>
+          <p class="text-xs text-gray-600 mt-1.5">A mensagem só é enviada nas plataformas conectadas e ao vivo.</p>
+        </div>
+      </div>
+      <div class="flex gap-3 px-5 py-4 border-t border-gray-700">
+        <button onclick="closeModal('modal-scheduled')" class="flex-1 px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">Cancelar</button>
+        <button class="flex-1 px-3 py-2 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/mock-data.js"></script>
+  <script src="js/chat-renderer.js"></script>
+  <script src="js/nav.js"></script>
+
+</body>
+</html>
