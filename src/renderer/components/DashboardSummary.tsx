@@ -12,10 +12,15 @@ import { styles } from './app-styles.js';
 
 interface DashboardSummaryProps {
   activeProfileName: string;
+  chatEvents: typeof DASHBOARD_EVENTS;
+  chatMessages: typeof DASHBOARD_MESSAGES;
   obsStats: ObsStatsSnapshot;
 }
 
-export function DashboardSummary({ activeProfileName, obsStats }: DashboardSummaryProps) {
+export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, obsStats }: DashboardSummaryProps) {
+  const visibleMessages = chatMessages.length > 0 ? chatMessages : DASHBOARD_MESSAGES;
+  const visibleEvents = chatEvents.length > 0 ? chatEvents : DASHBOARD_EVENTS;
+
   return (
     <section style={styles.dashboardShell}>
       <div>
@@ -26,7 +31,7 @@ export function DashboardSummary({ activeProfileName, obsStats }: DashboardSumma
       <StatusBar connections={DASHBOARD_CONNECTIONS} obsStatus={obsStats} />
 
       <div style={styles.dashboardGrid}>
-        <ChatFeed messages={DASHBOARD_MESSAGES} events={DASHBOARD_EVENTS} />
+        <ChatFeed messages={visibleMessages} events={visibleEvents} />
 
         <aside style={styles.sideStack}>
           <ObsStatsPanel stats={obsStats} />
@@ -41,7 +46,7 @@ export function DashboardSummary({ activeProfileName, obsStats }: DashboardSumma
             </div>
 
             <div style={styles.settingsGrid}>
-              {DASHBOARD_EVENTS.map((event) => (
+              {visibleEvents.map((event) => (
                 <EventBanner key={event.id} event={event} />
               ))}
             </div>

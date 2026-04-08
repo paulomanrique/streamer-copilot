@@ -6,6 +6,7 @@ import { BrowserWindow, dialog, ipcMain } from 'electron';
 import type { OpenDialogOptions } from 'electron';
 
 import type { DatabaseHandle } from '../db/database.js';
+import { ChatService } from '../modules/chat/chat-service.js';
 import { ObsService } from '../modules/obs/obs-service.js';
 import { ObsSettingsStore } from '../modules/obs/obs-settings-store.js';
 import { ScheduledMessageRepository } from '../modules/scheduled/scheduled-repository.js';
@@ -63,6 +64,12 @@ export function createAppContext(options: AppContextOptions): () => void {
     repository: voiceRepository,
     onSpeak: (payload) => options.stateHub.pushVoiceSpeak(payload),
   });
+  const chatService = new ChatService({
+    soundService,
+    voiceService,
+    onMessage: (message) => options.stateHub.pushChatMessage(message),
+    onEvent: (event) => options.stateHub.pushChatEvent(event),
+  });
   const obsService = new ObsService({
     settingsStore: obsSettingsStore,
     onConnected: () => options.stateHub.pushObsConnected(),
@@ -72,6 +79,7 @@ export function createAppContext(options: AppContextOptions): () => void {
   const soundsDirectory = path.join(options.userDataPath, 'sounds');
 
   schedulerService.start();
+  void chatService.connectAll();
   obsService.start();
 
   ipcMain.handle(IPC_CHANNELS.appGetInfo, async (): Promise<AppInfo> => ({
@@ -208,8 +216,11 @@ export function createAppContext(options: AppContextOptions): () => void {
     await obsService.testConnection(input);
   });
 
+  ipcMain.handle(IPC_CHANNELS.chatGetRecent, async () => chatService.getRecent());
+
   return () => {
     schedulerService.stop();
+    void chatService.disconnectAll();
     void obsService.stop();
     ipcMain.removeHandler(IPC_CHANNELS.appGetInfo);
     ipcMain.removeHandler(IPC_CHANNELS.profilesList);
@@ -234,5 +245,6 @@ export function createAppContext(options: AppContextOptions): () => void {
     ipcMain.removeHandler(IPC_CHANNELS.obsGetSettings);
     ipcMain.removeHandler(IPC_CHANNELS.obsSaveSettings);
     ipcMain.removeHandler(IPC_CHANNELS.obsTestConnection);
+    ipcMain.removeHandler(IPC_CHANNELS.chatGetRecent);
   };
 }

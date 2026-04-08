@@ -1,7 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
-import { IPC_CHANNELS, type CopilotApi } from '../shared/ipc.js';
+import { IPC_CHANNELS, type CopilotApi, type RecentChatSnapshot } from '../shared/ipc.js';
 import type {
+  ChatMessage,
   CloneProfileInput,
   CreateProfileInput,
   DeleteProfileInput,
@@ -11,6 +12,7 @@ import type {
   SoundCommandDeleteInput,
   SoundCommandUpsertInput,
   SoundPlayPayload,
+  StreamEvent,
   ScheduledMessageDeleteInput,
   ScheduledMessageUpsertInput,
   ScheduledStatusItem,
@@ -84,6 +86,21 @@ const copilotApi: CopilotApi = {
     ipcRenderer.on(IPC_CHANNELS.obsDisconnected, wrappedListener);
     return () => {
       ipcRenderer.removeListener(IPC_CHANNELS.obsDisconnected, wrappedListener);
+    };
+  },
+  getRecentChat: () => ipcRenderer.invoke(IPC_CHANNELS.chatGetRecent) as Promise<RecentChatSnapshot>,
+  onChatMessage: (listener: (payload: ChatMessage) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: ChatMessage) => listener(payload);
+    ipcRenderer.on(IPC_CHANNELS.chatMessage, wrappedListener);
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.chatMessage, wrappedListener);
+    };
+  },
+  onChatEvent: (listener: (payload: StreamEvent) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: StreamEvent) => listener(payload);
+    ipcRenderer.on(IPC_CHANNELS.chatEvent, wrappedListener);
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.chatEvent, wrappedListener);
     };
   },
 };

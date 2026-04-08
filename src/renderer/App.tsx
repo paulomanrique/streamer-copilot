@@ -16,7 +16,18 @@ import { styles } from './components/app-styles.js';
 const SKIP_PROFILE_SELECTOR_KEY = 'streamerCopilot.skipProfileSelector';
 
 export default function App() {
-  const { profiles, activeProfileId, obsStats, setProfiles, setObsStats } = useAppStore();
+  const {
+    profiles,
+    activeProfileId,
+    chatMessages,
+    chatEvents,
+    obsStats,
+    setProfiles,
+    setObsStats,
+    setChatSnapshot,
+    appendChatMessage,
+    appendChatEvent,
+  } = useAppStore();
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,9 +56,14 @@ export default function App() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [info, snapshot] = await Promise.all([window.copilot.getAppInfo(), window.copilot.listProfiles()]);
+        const [info, snapshot, recentChat] = await Promise.all([
+          window.copilot.getAppInfo(),
+          window.copilot.listProfiles(),
+          window.copilot.getRecentChat(),
+        ]);
         setAppInfo(info);
         setProfiles(snapshot);
+        setChatSnapshot(recentChat);
         setSelectorProfileId(snapshot.activeProfileId);
         const skipPreference = readSkipPromptPreference(localStorage.getItem(SKIP_PROFILE_SELECTOR_KEY));
         setSkipPromptAgain(skipPreference);
@@ -65,7 +81,7 @@ export default function App() {
     };
 
     void load();
-  }, [setProfiles]);
+  }, [setChatSnapshot, setProfiles]);
 
   useEffect(() => {
     if (toasts.length === 0) return undefined;
@@ -138,6 +154,20 @@ export default function App() {
       disconnectDisconnected();
     };
   }, [setObsStats]);
+
+  useEffect(() => {
+    const disconnectMessage = window.copilot.onChatMessage((message) => {
+      appendChatMessage(message);
+    });
+    const disconnectEvent = window.copilot.onChatEvent((event) => {
+      appendChatEvent(event);
+    });
+
+    return () => {
+      disconnectMessage();
+      disconnectEvent();
+    };
+  }, [appendChatEvent, appendChatMessage]);
 
   const onSelectProfile = async (profileId: string) => {
     try {
@@ -254,7 +284,12 @@ export default function App() {
         <SectionTabs currentSection={currentSection} onChangeSection={setCurrentSection} />
 
         {currentSection === 'dashboard' ? (
-          <DashboardSummary activeProfileName={activeProfileName} obsStats={obsStats} />
+          <DashboardSummary
+            activeProfileName={activeProfileName}
+            chatEvents={chatEvents}
+            chatMessages={chatMessages}
+            obsStats={obsStats}
+          />
         ) : null}
 
         {currentSection === 'settings' ? (

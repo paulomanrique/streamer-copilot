@@ -2,9 +2,11 @@ import type { BrowserWindow } from 'electron';
 
 import { IPC_CHANNELS } from '../shared/ipc.js';
 import type {
+  ChatMessage,
   ObsStatsSnapshot,
   ScheduledStatusItem,
   SoundPlayPayload,
+  StreamEvent,
   VoiceSpeakPayload,
 } from '../shared/types.js';
 
@@ -46,5 +48,13 @@ export class StateHub {
 
   pushObsDisconnected(): void {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.obsDisconnected);
+  }
+
+  pushChatMessage(payload: ChatMessage): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.chatMessage, payload);
+  }
+
+  pushChatEvent(payload: StreamEvent): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.chatEvent, payload);
   }
 }

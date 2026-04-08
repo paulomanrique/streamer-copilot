@@ -1,5 +1,6 @@
 import type {
   AppInfo,
+  ChatMessage,
   CloneProfileInput,
   CreateProfileInput,
   DeleteProfileInput,
@@ -11,6 +12,7 @@ import type {
   SoundCommandDeleteInput,
   SoundCommandUpsertInput,
   SoundPlayPayload,
+  StreamEvent,
   ScheduledMessage,
   ScheduledMessageDeleteInput,
   ScheduledMessageUpsertInput,
@@ -52,7 +54,15 @@ export const IPC_CHANNELS = {
   obsStats: 'obs:stats',
   obsConnected: 'obs:connected',
   obsDisconnected: 'obs:disconnected',
+  chatGetRecent: 'chat:get-recent',
+  chatMessage: 'chat:message',
+  chatEvent: 'chat:event',
 } as const;
+
+export interface RecentChatSnapshot {
+  messages: ChatMessage[];
+  events: StreamEvent[];
+}
 
 export interface CopilotApi {
   getAppInfo: () => Promise<AppInfo>;
@@ -84,4 +94,7 @@ export interface CopilotApi {
   onObsStats: (listener: (payload: ObsStatsSnapshot) => void) => () => void;
   onObsConnected: (listener: () => void) => () => void;
   onObsDisconnected: (listener: () => void) => () => void;
+  getRecentChat: () => Promise<RecentChatSnapshot>;
+  onChatMessage: (listener: (payload: ChatMessage) => void) => () => void;
+  onChatEvent: (listener: (payload: StreamEvent) => void) => () => void;
 }
