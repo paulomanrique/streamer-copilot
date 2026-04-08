@@ -1166,9 +1166,10 @@
   function initChatFeed() {
     const feed = document.getElementById('chat-feed');
     if (!feed) return;
+    const allowedEventTypes = new Set(['raid', 'superchat']);
     const items = [
       ...MOCK_MESSAGES.map(m => ({ ...m, _type: 'msg' })),
-      ...MOCK_EVENTS.map(e => ({ ...e, _type: 'evt' })),
+      ...MOCK_EVENTS.filter(e => allowedEventTypes.has(e.type)).map(e => ({ ...e, _type: 'evt' })),
     ].sort((a, b) => a.ts - b.ts);
     feed.innerHTML = items.map(item => item._type === 'msg' ? renderMessage(item) : renderEvent(item)).join('');
     feed.scrollTop = feed.scrollHeight;
