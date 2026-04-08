@@ -6,6 +6,20 @@ export interface AppInfo {
   nodeVersion: string;
 }
 
+export type PermissionLevel = 'everyone' | 'follower' | 'subscriber' | 'moderator' | 'broadcaster';
+
+export interface CommandPermission {
+  allowedLevels: PermissionLevel[];
+  cooldownSeconds: number;
+  userCooldownSeconds: number;
+}
+
+export interface LanguageOption {
+  code: string;
+  label: string;
+  nativeLabel: string;
+}
+
 export interface ProfileSummary {
   id: string;
   name: string;

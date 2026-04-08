@@ -1,4 +1,6 @@
 import type { ProfileSummary } from '../../shared/types.js';
+import type { PermissionLevel } from '../../shared/types.js';
+import { CommandComponentsPreview } from './CommandComponentsPreview.js';
 import { ProfileActions } from './ProfileActions.js';
 import { ProfileList } from './ProfileList.js';
 import { styles } from './app-styles.js';
@@ -12,6 +14,10 @@ interface SettingsProfilesPanelProps {
   onCloneProfile: () => void;
   onDeleteProfile: () => void;
   onSelectProfile: (profileId: string) => void;
+  languageCode: string;
+  permissionLevels: PermissionLevel[];
+  onChangeLanguageCode: (code: string) => void;
+  onChangePermissionLevels: (levels: PermissionLevel[]) => void;
 }
 
 export function SettingsProfilesPanel({
@@ -23,6 +29,10 @@ export function SettingsProfilesPanel({
   onCloneProfile,
   onDeleteProfile,
   onSelectProfile,
+  languageCode,
+  permissionLevels,
+  onChangeLanguageCode,
+  onChangePermissionLevels,
 }: SettingsProfilesPanelProps) {
   return (
     <section style={styles.block}>
@@ -41,6 +51,13 @@ export function SettingsProfilesPanel({
 
         <ProfileList profiles={profiles} activeProfileId={activeProfileId} onSelectProfile={onSelectProfile} />
       </div>
+
+      <CommandComponentsPreview
+        languageCode={languageCode}
+        permissionLevels={permissionLevels}
+        onChangeLanguageCode={onChangeLanguageCode}
+        onChangePermissionLevels={onChangePermissionLevels}
+      />
     </section>
   );
 }

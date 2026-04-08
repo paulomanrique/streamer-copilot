@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { AppInfo, ProfilesSnapshot } from '../shared/types.js';
+import type { AppInfo, PermissionLevel, ProfilesSnapshot } from '../shared/types.js';
 import { readSkipPromptPreference, shouldPromptProfileSelector } from './profile-startup.js';
 import { useAppStore } from './store.js';
 import { AppHeader } from './components/AppHeader.js';
@@ -23,6 +23,8 @@ export default function App() {
   const [selectorProfileId, setSelectorProfileId] = useState('');
   const [skipPromptAgain, setSkipPromptAgain] = useState(false);
   const [currentSection, setCurrentSection] = useState<AppSection>('dashboard');
+  const [languageCode, setLanguageCode] = useState('en-US');
+  const [permissionLevels, setPermissionLevels] = useState<PermissionLevel[]>(['everyone', 'moderator']);
 
   const activeProfile = useMemo(
     () => profiles.find((profile) => profile.id === activeProfileId) ?? null,
@@ -180,6 +182,10 @@ export default function App() {
             onCloneProfile={() => void cloneActiveProfile()}
             onDeleteProfile={() => void deleteActiveProfile()}
             onSelectProfile={(profileId) => void onSelectProfile(profileId)}
+            languageCode={languageCode}
+            permissionLevels={permissionLevels}
+            onChangeLanguageCode={setLanguageCode}
+            onChangePermissionLevels={setPermissionLevels}
           />
         ) : null}
       </section>

@@ -163,7 +163,7 @@
                 class="flex-1 bg-gray-800 border border-gray-700 rounded text-sm text-gray-300 px-3 py-1.5 focus:outline-none focus:border-violet-500 placeholder-gray-600">
               <button onclick="document.getElementById('chat-input').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))"
                 class="px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">
-                Enviar
+                Send
               </button>
             </div>
           </div>
@@ -177,16 +177,16 @@
             <div class="flex items-center justify-between mb-3">
               <div class="flex items-center gap-2">
                 <h2 class="text-sm font-semibold text-gray-200">OBS Studio</h2>
-                <span id="obs-status" class="text-xs text-red-400 font-medium">🔴 AO VIVO</span>
+                <span id="obs-status" class="text-xs text-red-400 font-medium">🔴 LIVE</span>
               </div>
-              <span class="text-xs text-gray-500">Cena: <span id="obs-scene" class="text-gray-300">Gameplay</span></span>
+              <span class="text-xs text-gray-500">Scene: <span id="obs-scene" class="text-gray-300">Gameplay</span></span>
             </div>
 
             <div class="grid grid-cols-4 gap-2">
               <!-- Row 1: Tempo + dropped frames -->
               <div class="bg-gray-800/60 rounded-lg p-2.5 text-center">
                 <div class="text-base font-mono font-bold text-violet-400" id="obs-time">00:00:00</div>
-                <div class="text-xs text-gray-500 mt-0.5">Tempo</div>
+                <div class="text-xs text-gray-500 mt-0.5">Time</div>
               </div>
               <div class="bg-gray-800/60 rounded-lg p-2.5 text-center">
                 <div class="text-base font-mono font-bold text-red-400" id="obs-dropped-net">0</div>
@@ -1304,7 +1304,7 @@
     const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
     set('obs-scene',  s.scene);
     set('obs-time',   s.streamTime);
-    set('obs-status', s.streaming ? '🔴 AO VIVO' : '⚫ Offline');
+    set('obs-status', s.streaming ? '🔴 LIVE' : '⚫ Offline');
 
     // Viewer counts
     const fmtNum = n => n >= 1000 ? `${(n/1000).toFixed(1)}k` : String(n);
@@ -1547,10 +1547,10 @@
       { id: 'mod',    label: 'Adicionar Moderador' },
       { id: 'unmod',  label: 'Remover Moderador' },
       { separator: true },
-      { id: 'to1',    label: 'Timeout — 1 minuto' },
-      { id: 'to10',   label: 'Timeout — 10 minutos' },
-      { id: 'to60',   label: 'Timeout — 1 hora' },
-      { id: 'to1440', label: 'Timeout — 24 horas' },
+      { id: 'to1',    label: 'Timeout — 1 minute' },
+      { id: 'to10',   label: 'Timeout — 10 minutes' },
+      { id: 'to60',   label: 'Timeout — 1 hour' },
+      { id: 'to1440', label: 'Timeout — 24 hours' },
       { separator: true },
       { id: 'ban',    label: 'Ban user', danger: true },
     ],
@@ -1569,8 +1569,8 @@
     kick: [
       { id: 'mute',  label: 'Mute user' },
       { separator: true },
-      { id: 'to5',   label: 'Timeout — 5 minutos' },
-      { id: 'to30',  label: 'Timeout — 30 minutos' },
+      { id: 'to5',   label: 'Timeout — 5 minutes' },
+      { id: 'to30',  label: 'Timeout — 30 minutes' },
       { separator: true },
       { id: 'ban',   label: 'Ban user', danger: true },
     ],
@@ -1597,7 +1597,7 @@
       <button class="w-full text-left px-3 py-1.5 text-sm hover:bg-violet-600/30 text-gray-200 flex items-center gap-2"
         onclick="replyToUser('${platform}','${author}');hideContextMenu()">
         <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
-        Responder
+        Reply
       </button>
       <div class="border-t border-gray-700 my-1"></div>
       ${actions.map(a => a.separator
