@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 
 import type { ObsConnectionSettings, ObsStatsSnapshot } from '../../shared/types.js';
-import { SettingsPageShell, SettingsSurface } from '../components/SettingsScaffold.js';
-import { styles } from '../components/app-styles.js';
 
 const DEFAULT_SETTINGS: ObsConnectionSettings = {
   host: '127.0.0.1',
@@ -65,75 +63,80 @@ export function ObsSettingsPage({ obsStats }: ObsSettingsPageProps) {
   };
 
   return (
-    <SettingsPageShell
-      title="OBS Studio"
-      description="Connect to OBS via WebSocket to display live stream statistics in real time."
-      maxWidth="720px"
-    >
-      <div style={styles.settingsColumn}>
-        <SettingsSurface>
-          <label style={styles.label}>
-            Host
-            <input
-              type="text"
-              value={settings.host}
-              onChange={(event) => setSettings((current) => ({ ...current, host: event.target.value }))}
-              style={styles.searchInput}
-            />
-          </label>
+    <div className="p-6 max-w-lg">
+      <h2 className="text-lg font-semibold mb-1">OBS Studio</h2>
+      <p className="text-sm text-gray-400 mb-6">Connect to OBS via WebSocket to display live stream statistics in real time.</p>
 
-          <label style={styles.label}>
-            Port
-            <input
-              type="number"
-              min="1"
-              max="65535"
-              value={settings.port}
-              onChange={(event) =>
-                setSettings((current) => ({
-                  ...current,
-                  port: Number(event.target.value) || DEFAULT_SETTINGS.port,
-                }))
-              }
-              style={styles.searchInput}
-            />
-          </label>
-
-          <label style={styles.label}>
-            Password (optional)
-            <input
-              type="password"
-              value={settings.password}
-              onChange={(event) => setSettings((current) => ({ ...current, password: event.target.value }))}
-              style={styles.searchInput}
-            />
-          </label>
-
-          <div style={styles.settingsFooterRow}>
-            <button type="button" style={styles.secondaryButton} disabled={isBusy} onClick={() => void testConnection()}>
-              Test connection
-            </button>
-            <button type="button" style={styles.primaryButton} disabled={isBusy} onClick={() => void saveSettings()}>
-              Save
-            </button>
-            <span style={styles.selectionPill}>{obsStats.connected ? 'Connected' : 'Offline'}</span>
-          </div>
-
-          {statusMessage ? <p style={styles.message}>{statusMessage}</p> : null}
-          {error ? <p style={styles.error}>{error}</p> : null}
-        </SettingsSurface>
-
-        <SettingsSurface>
-          <h3 style={styles.settingsSubsectionTitle}>How to enable in OBS</h3>
-          <ol style={styles.settingsOrderedList}>
-            <li>Open OBS Studio 28+.</li>
-            <li>Go to Tools → WebSocket Server Settings.</li>
-            <li>Enable “Enable WebSocket server”.</li>
-            <li>Copy the generated password and paste it above.</li>
-          </ol>
-          <p style={styles.settingsSecondaryText}>Current scene: {obsStats.sceneName} · Uptime: {obsStats.uptimeLabel}</p>
-        </SettingsSurface>
+      <div className="bg-gray-800/40 rounded-xl border border-gray-700 p-5 space-y-4">
+        <div>
+          <label className="block text-sm text-gray-400 mb-1.5">Host</label>
+          <input
+            type="text"
+            value={settings.host}
+            onChange={(event) => setSettings((current) => ({ ...current, host: event.target.value }))}
+            className="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm text-gray-400 mb-1.5">Port</label>
+          <input
+            type="number"
+            min="1"
+            max="65535"
+            value={settings.port}
+            onChange={(event) =>
+              setSettings((current) => ({
+                ...current,
+                port: Number(event.target.value) || DEFAULT_SETTINGS.port,
+              }))}
+            className="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm text-gray-400 mb-1.5">Password (optional)</label>
+          <input
+            type="password"
+            value={settings.password}
+            onChange={(event) => setSettings((current) => ({ ...current, password: event.target.value }))}
+            placeholder="••••••••"
+            className="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
+          />
+        </div>
+        <div className="flex gap-3 pt-2">
+          <button
+            type="button"
+            disabled={isBusy}
+            onClick={() => void testConnection()}
+            className="flex-1 px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors disabled:opacity-60"
+          >
+            Test Connection
+          </button>
+          <button
+            type="button"
+            disabled={isBusy}
+            onClick={() => void saveSettings()}
+            className="flex-1 px-3 py-2 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors disabled:opacity-60"
+          >
+            Save
+          </button>
+        </div>
+        {statusMessage ? <p className="text-sm text-gray-400">{statusMessage}</p> : null}
+        {error ? <p className="text-sm text-red-300">{error}</p> : null}
       </div>
-    </SettingsPageShell>
+
+      <div className="mt-4 p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-xl text-sm">
+        <p className="text-cyan-400 font-medium mb-1">How to enable in OBS:</p>
+        <ol className="text-gray-400 space-y-1 text-xs list-decimal list-inside">
+          <li>Open OBS Studio 28+</li>
+          <li>Go to <strong className="text-gray-300">Tools → WebSocket Server Settings</strong></li>
+          <li>Enable <strong className="text-gray-300">"Enable WebSocket server"</strong></li>
+          <li>Copy the generated password and paste it above</li>
+        </ol>
+        <p className="text-xs text-cyan-200/80 mt-3">
+          Current scene: <span className="text-cyan-100">{obsStats.sceneName}</span> · Uptime:{' '}
+          <span className="text-cyan-100">{obsStats.uptimeLabel}</span>
+        </p>
+      </div>
+    </div>
   );
 }

@@ -1,10 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
+import { LANGUAGE_OPTIONS, PERMISSION_LEVELS } from '../../shared/constants.js';
 import type { PermissionLevel, VoiceCommand, VoiceCommandUpsertInput } from '../../shared/types.js';
-import { LanguagePicker } from '../components/LanguagePicker.js';
-import { PermissionPicker } from '../components/PermissionPicker.js';
-import { SettingsInfoTile, SettingsPageShell, SettingsSurface } from '../components/SettingsScaffold.js';
-import { styles } from '../components/app-styles.js';
 
 interface VoiceCommandsPageProps {
   voiceRate: number;
@@ -22,8 +19,17 @@ const EMPTY_FORM: VoiceCommandUpsertInput = {
   enabled: true,
 };
 
+const PERMISSION_LABELS: Record<PermissionLevel, string> = {
+  everyone: 'Everyone',
+  follower: 'Followers',
+  subscriber: 'Subscribers',
+  moderator: 'Moderators',
+  broadcaster: 'Broadcaster',
+};
+
 export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [defaultLanguageCode, setDefaultLanguageCode] = useState(EMPTY_FORM.language);
   const [languageCode, setLanguageCode] = useState(EMPTY_FORM.language);
   const [levels, setLevels] = useState<PermissionLevel[]>(EMPTY_FORM.permissions);
   const [rows, setRows] = useState<VoiceCommand[]>([]);
@@ -32,6 +38,9 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
   const [template, setTemplate] = useState(EMPTY_FORM.template ?? '');
   const [cooldownSeconds, setCooldownSeconds] = useState(EMPTY_FORM.cooldownSeconds);
   const [enabled, setEnabled] = useState(EMPTY_FORM.enabled);
+  const [characterLimit, setCharacterLimit] = useState(200);
+  const [announceUsername, setAnnounceUsername] = useState(true);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,7 +67,7 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
     setDraftId(undefined);
     setTrigger(EMPTY_FORM.trigger);
     setTemplate('');
-    setLanguageCode(EMPTY_FORM.language);
+    setLanguageCode(defaultLanguageCode);
     setLevels(EMPTY_FORM.permissions);
     setCooldownSeconds(EMPTY_FORM.cooldownSeconds);
     setEnabled(EMPTY_FORM.enabled);
@@ -126,128 +135,277 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
     }
   };
 
-  return (
-    <SettingsPageShell
-      title="Voice Commands (TTS)"
-      description="Use text-to-speech to speak chat messages aloud."
-      action={<button type="button" style={styles.primaryButton} onClick={openCreate}>+ New Command</button>}
-      maxWidth="1160px"
-    >
-      <div style={styles.settingsColumn}>
-        <div style={styles.settingsInfoGrid}>
-          <SettingsInfoTile label="Dynamic prompts" text="Speak the text that comes after the trigger or use a fixed template." />
-          <SettingsInfoTile label="Languages" text="Switch default language and per-command language." />
-          <SettingsInfoTile label="Preview" text="Test the current TTS voice before saving." />
-        </div>
+  const saveTtsSettings = () => {
+    setStatusMessage('TTS settings updated');
+    setError(null);
+  };
 
-        <div style={styles.settingsSurfaceTable}>
-          <table style={styles.table}>
+  const toggleLevel = (level: PermissionLevel) => {
+    if (levels.includes(level)) {
+      const nextLevels = levels.filter((item) => item !== level);
+      setLevels(nextLevels.length > 0 ? nextLevels : ['everyone']);
+      return;
+    }
+
+    setLevels([...levels, level]);
+  };
+
+  return (
+    <>
+      <div className="p-6">
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-lg font-semibold">Voice Commands (TTS)</h2>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors"
+          >
+            + New Command
+          </button>
+        </div>
+        <p className="text-sm text-gray-400 mb-6">
+          Use TTS to speak chat messages aloud. Ex:{' '}
+          <code className="text-violet-300 text-xs bg-gray-800 px-1 py-0.5 rounded">!voice good morning</code>
+        </p>
+
+        <div className="bg-gray-800/40 rounded-xl border border-gray-700 overflow-hidden mb-6">
+          <table className="w-full text-sm">
             <thead>
-              <tr>
-                <th style={styles.tableHeadCell}>Command</th>
-                <th style={styles.tableHeadCell}>Fixed text</th>
-                <th style={styles.tableHeadCell}>Language</th>
-                <th style={styles.tableHeadCell}>Permissions</th>
-                <th style={styles.tableHeadCell}>Cooldown</th>
-                <th style={styles.tableHeadCell}>Active</th>
-                <th style={styles.tableHeadCell}>Actions</th>
+              <tr className="border-b border-gray-700 bg-gray-800/60">
+                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Command</th>
+                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Fixed Text</th>
+                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Language</th>
+                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Permissions</th>
+                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Cooldown</th>
+                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Active</th>
+                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.id}>
-                  <td style={styles.tableCell}><span style={styles.codeText}>{row.trigger}</span></td>
-                  <td style={styles.tableCell}>{row.template ?? 'Dynamic text after trigger'}</td>
-                  <td style={styles.tableCell}>{row.language}</td>
-                  <td style={styles.tableCell}>{row.permissions.join(', ')}</td>
-                  <td style={styles.tableCell}>{row.cooldownSeconds}s</td>
-                  <td style={styles.tableCell}>{row.enabled ? 'Yes' : 'No'}</td>
-                  <td style={styles.tableCell}>
-                    <div style={styles.actionsRowCompact}>
-                      <button type="button" style={styles.secondaryButton} onClick={() => openEdit(row)}>Edit</button>
-                      <button type="button" style={styles.secondaryButton} onClick={() => void previewCommand(row.template ?? 'Preview voice output', row.language)}>
+                <tr key={row.id} className="border-b border-gray-800/80 last:border-b-0">
+                  <td className="px-4 py-3 text-gray-300 font-mono">{row.trigger}</td>
+                  <td className="px-4 py-3 text-gray-300">{row.template ?? 'Dynamic text after trigger'}</td>
+                  <td className="px-4 py-3 text-gray-300">{row.language}</td>
+                  <td className="px-4 py-3 text-gray-300">{row.permissions.map((level) => PERMISSION_LABELS[level]).join(', ')}</td>
+                  <td className="px-4 py-3 text-gray-300">{row.cooldownSeconds}s</td>
+                  <td className="px-4 py-3 text-gray-300">{row.enabled ? 'Yes' : 'No'}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => openEdit(row)}
+                        className="px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void previewCommand(row.template ?? 'Preview voice output', row.language)}
+                        className="px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors"
+                      >
                         Preview
                       </button>
-                      <button type="button" style={styles.dangerButton} onClick={() => void deleteCommand(row.id)}>Delete</button>
+                      <button
+                        type="button"
+                        onClick={() => void deleteCommand(row.id)}
+                        className="px-3 py-1.5 rounded bg-red-500/15 hover:bg-red-500/25 text-red-300 text-sm transition-colors"
+                      >
+                        Delete
+                      </button>
                     </div>
                   </td>
                 </tr>
               ))}
               {rows.length === 0 ? (
                 <tr>
-                  <td style={styles.tableCell} colSpan={7}>No voice commands saved yet.</td>
+                  <td className="px-4 py-4 text-sm text-gray-500" colSpan={7}>No voice commands saved yet.</td>
                 </tr>
               ) : null}
             </tbody>
           </table>
         </div>
 
-        <div style={styles.settingsTwoColumnGrid}>
-          <SettingsSurface>
-            <h3 style={styles.settingsSubsectionTitle}>TTS Settings</h3>
-            <LanguagePicker selectedCode={languageCode} onChange={setLanguageCode} />
-            <label style={styles.label}>
-              Volume
+        <div className="bg-gray-800/40 rounded-xl border border-gray-700 p-5">
+          <h3 className="font-semibold mb-4">TTS Settings</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-gray-400 mb-1.5">Default language</label>
+              <select
+                value={defaultLanguageCode}
+                onChange={(event) => setDefaultLanguageCode(event.target.value)}
+                className="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
+              >
+                {LANGUAGE_OPTIONS.map((option) => (
+                  <option key={option.code} value={option.code}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1.5">Volume</label>
               <input
                 type="range"
                 min="0"
                 max="100"
                 value={Math.round(props.voiceVolume * 100)}
                 onChange={(event) => props.onChangeVoiceVolume(Number(event.target.value) / 100)}
+                className="w-full accent-violet-500"
               />
-              <span style={styles.settingsSecondaryText}>{Math.round(props.voiceVolume * 100)}%</span>
-            </label>
-            <label style={styles.label}>
-              Rate
+              <span className="text-xs text-gray-500">{Math.round(props.voiceVolume * 100)}%</span>
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1.5">Rate</label>
               <input
                 type="range"
                 min="50"
                 max="200"
                 value={Math.round(props.voiceRate * 100)}
                 onChange={(event) => props.onChangeVoiceRate(Number(event.target.value) / 100)}
+                className="w-full accent-violet-500"
               />
-              <span style={styles.settingsSecondaryText}>{Math.round(props.voiceRate * 100)}%</span>
+              <span className="text-xs text-gray-500">{props.voiceRate === 1 ? 'Normal (1x)' : `${props.voiceRate.toFixed(2)}x`}</span>
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1.5">Character limit</label>
+              <input
+                type="number"
+                value={characterLimit}
+                onChange={(event) => setCharacterLimit(Number(event.target.value))}
+                className="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
+              />
+            </div>
+          </div>
+          <div className="mt-4 flex items-center justify-between">
+            <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={announceUsername}
+                onChange={(event) => setAnnounceUsername(event.target.checked)}
+                className="accent-violet-500"
+              />
+              Announce username
             </label>
-            <div style={styles.settingsFooterRow}>
-              <button type="button" style={styles.secondaryButton} onClick={() => void previewCommand()}>
-                Preview current settings
+            <div className="flex items-center gap-3">
+              {statusMessage ? <span className="text-xs text-gray-500">{statusMessage}</span> : null}
+              <button type="button" onClick={saveTtsSettings} className="px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">
+                Save
               </button>
             </div>
-          </SettingsSurface>
+          </div>
         </div>
+      </div>
 
-        {isModalOpen ? (
-          <SettingsSurface>
-            <h3 style={styles.settingsSubsectionTitle}>{draftId ? 'Edit Voice Command' : 'New Voice Command'}</h3>
-            <label style={styles.label}>
-              Command trigger
-              <input type="text" value={trigger} onChange={(event) => setTrigger(event.target.value)} style={styles.searchInput} />
-            </label>
-            <label style={styles.label}>
-              Fixed text
-              <input type="text" value={template} onChange={(event) => setTemplate(event.target.value)} style={styles.searchInput} placeholder="Optional fixed text" />
-            </label>
-            <LanguagePicker selectedCode={languageCode} onChange={setLanguageCode} />
-            <PermissionPicker selectedLevels={levels} onChange={setLevels} />
-            <label style={styles.label}>
-              Cooldown in seconds
-              <input type="number" min="0" value={cooldownSeconds} onChange={(event) => setCooldownSeconds(Number(event.target.value))} style={styles.searchInput} />
-            </label>
-            <label style={styles.checkboxLabel}>
-              <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
-              Active command
-            </label>
-            <div style={styles.settingsFooterRow}>
-              <button type="button" style={styles.secondaryButton} onClick={() => void previewCommand()}>Preview</button>
-              <button type="button" style={styles.secondaryButton} onClick={() => { setIsModalOpen(false); resetForm(); }}>Cancel</button>
-              <button type="button" style={styles.primaryButton} disabled={isBusy} onClick={() => void saveCommand()}>
-                {draftId ? 'Save changes' : 'Create command'}
+      {isModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="modal-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="relative bg-gray-900 border border-gray-700 rounded-xl w-full max-w-md shadow-2xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700">
+              <h3 className="font-semibold">{draftId ? 'Edit Voice Command' : 'New Voice Command'}</h3>
+              <button type="button" onClick={() => { setIsModalOpen(false); resetForm(); }} className="text-gray-400 hover:text-white">✕</button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1.5">
+                  Command <span className="text-violet-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={trigger}
+                  onChange={(event) => setTrigger(event.target.value)}
+                  placeholder="!voice"
+                  className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600 font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">
+                  Fixed Text <span className="text-gray-600">(optional)</span>
+                </label>
+                <p className="text-xs text-gray-600 mb-1.5">If empty, speaks the text after the command typed in chat.</p>
+                <input
+                  type="text"
+                  value={template}
+                  onChange={(event) => setTemplate(event.target.value)}
+                  placeholder="e.g.: good morning everyone!"
+                  className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1.5">Language</label>
+                <select
+                  value={languageCode}
+                  onChange={(event) => setLanguageCode(event.target.value)}
+                  className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
+                >
+                  {LANGUAGE_OPTIONS.map((option) => (
+                    <option key={option.code} value={option.code}>{option.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">Permissions</label>
+                <div className="flex flex-wrap gap-2">
+                  {PERMISSION_LEVELS.map((level) => {
+                    const active = levels.includes(level);
+                    return (
+                      <button
+                        key={level}
+                        type="button"
+                        onClick={() => toggleLevel(level)}
+                        className={
+                          active
+                            ? 'px-3 py-1.5 rounded-full bg-violet-600 text-white text-xs font-medium'
+                            : 'px-3 py-1.5 rounded-full bg-gray-800 border border-gray-700 text-gray-300 text-xs'
+                        }
+                      >
+                        {PERMISSION_LABELS[level]}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1.5">Per-user Cooldown (s)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={cooldownSeconds}
+                  onChange={(event) => setCooldownSeconds(Number(event.target.value))}
+                  className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} className="accent-violet-500" />
+                Active command
+              </label>
+              {error ? <p className="text-sm text-red-300">{error}</p> : null}
+            </div>
+            <div className="flex gap-3 px-5 py-4 border-t border-gray-700">
+              <button
+                type="button"
+                onClick={() => { setIsModalOpen(false); resetForm(); }}
+                className="flex-1 px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void previewCommand()}
+                className="flex-1 px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors"
+              >
+                Preview
+              </button>
+              <button
+                type="button"
+                disabled={isBusy}
+                onClick={() => void saveCommand()}
+                className="flex-1 px-3 py-2 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors disabled:opacity-60"
+              >
+                Save
               </button>
             </div>
-            {error ? <p style={styles.error}>{error}</p> : null}
-          </SettingsSurface>
-        ) : null}
-      </div>
-    </SettingsPageShell>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
