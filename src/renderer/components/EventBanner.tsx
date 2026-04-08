@@ -32,15 +32,11 @@ interface EventBannerProps {
 
 export function EventBanner({ event, variant = 'chat' }: EventBannerProps) {
   if (variant === 'activity') {
-    const platform = PLATFORM_CLASSES[event.platform] ?? PLATFORM_CLASSES.twitch;
     return (
       <div className="flex items-start gap-2 text-xs py-1.5 border-b border-gray-800/60 last:border-0">
         <span className="shrink-0 mt-0.5">{EVENT_ICONS[event.type]}</span>
         <span className="text-gray-600 shrink-0 font-mono">{event.timestampLabel}</span>
         <span className={`${ACTIVITY_CLASSES[event.type]} leading-relaxed min-w-0`}>
-          <span className={`inline-flex items-center gap-0.5 ${platform.badge} px-1 rounded text-[10px] mr-1`}>
-            {platform.label}
-          </span>
           {buildEventTitle(event)}
           {event.message ? ` - "${event.message}"` : ''}
         </span>
