@@ -722,7 +722,7 @@
         </div>
 
         <!-- ---- Profiles ---- -->
-        <div id="settings-profiles" class="settings-section hidden p-6 max-w-3xl">
+        <div id="settings-profiles" class="settings-section hidden p-6">
           <div class="flex items-center justify-between mb-1">
             <h2 class="text-lg font-semibold">Perfis</h2>
             <button onclick="createProfile()" class="flex items-center gap-1.5 px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">
@@ -733,8 +733,8 @@
             Cada perfil usa um diretório próprio e salva as configurações em arquivos <code class="text-violet-300 text-xs bg-gray-800 px-1 py-0.5 rounded">.json</code>.
           </p>
 
-          <div class="bg-gray-800/40 rounded-xl border border-gray-700 overflow-hidden">
-            <table class="w-full text-sm">
+          <div class="bg-gray-800/40 rounded-xl border border-gray-700 overflow-x-auto">
+            <table class="w-full min-w-[1080px] text-sm">
               <thead>
                 <tr class="border-b border-gray-700 bg-gray-800/60">
                   <th class="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Perfil</th>
@@ -1423,14 +1423,16 @@
             ${profile.id === currentProfileId ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-violet-600/30 text-violet-300">ativo</span>' : ''}
           </div>
         </td>
-        <td class="px-4 py-3 text-xs text-gray-400 font-mono">${profile.directory}</td>
+        <td class="px-4 py-3 text-xs text-gray-400 font-mono max-w-[420px]">
+          <span class="block truncate" title="${profile.directory}">${profile.directory}</span>
+        </td>
         <td class="px-4 py-3 text-xs text-gray-500">${formatDateTime(profile.lastUsed)}</td>
         <td class="px-4 py-3">
-          <div class="flex gap-2">
-            <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-violet-600 text-gray-300 hover:text-white transition-colors" onclick="selectProfile('${profile.id}')">Usar</button>
-            <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors" onclick="renameProfile('${profile.id}')">Renomear</button>
-            <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors" onclick="cloneProfile('${profile.id}')">Clonar</button>
-            <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-red-700 text-gray-300 hover:text-white transition-colors" onclick="deleteProfile('${profile.id}')">Apagar</button>
+          <div class="flex flex-wrap gap-2">
+            <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-violet-600 text-gray-300 hover:text-white transition-colors whitespace-nowrap" onclick="selectProfile('${profile.id}')">Usar</button>
+            <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors whitespace-nowrap" onclick="renameProfile('${profile.id}')">Renomear</button>
+            <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors whitespace-nowrap" onclick="cloneProfile('${profile.id}')">Clonar</button>
+            <button class="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-red-700 text-gray-300 hover:text-white transition-colors whitespace-nowrap" onclick="deleteProfile('${profile.id}')">Apagar</button>
           </div>
         </td>
       </tr>`).join('');
