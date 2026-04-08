@@ -156,8 +156,14 @@ function ensureTray(): void {
 }
 
 async function applyGeneralSettings(settings: import('../shared/types.js').GeneralSettings): Promise<void> {
-  if (process.platform === 'darwin' || process.platform === 'win32') {
-    app.setLoginItemSettings({ openAtLogin: settings.startOnLogin });
+  if ((process.platform === 'darwin' || process.platform === 'win32') && app.isPackaged) {
+    try {
+      app.setLoginItemSettings({ openAtLogin: settings.startOnLogin });
+    } catch (error) {
+      console.warn(
+        `Failed to update login item settings: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   if (process.platform === 'linux' && generalSettingsStore) {
