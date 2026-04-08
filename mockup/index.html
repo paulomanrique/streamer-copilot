@@ -98,7 +98,16 @@
           <div class="flex items-center justify-between px-4 py-2 border-b border-gray-800 shrink-0">
             <div class="flex items-center gap-2">
               <h2 class="text-sm font-semibold text-gray-200">Chat Unificado</h2>
-              <span class="text-xs text-gray-500">5 fontes • 4.6k viewers</span>
+              <div class="inline-flex items-center bg-gray-800 border border-gray-700 rounded-lg p-0.5 text-xs">
+                <button id="chat-mode-all" onclick="setChatFeedMode('all')"
+                  class="px-2 py-1 rounded bg-violet-600 text-white transition-colors">
+                  All Chats
+                </button>
+                <button id="chat-mode-superchat" onclick="setChatFeedMode('superchat')"
+                  class="px-2 py-1 rounded text-gray-400 hover:text-white transition-colors">
+                  Super Chats Only
+                </button>
+              </div>
             </div>
             <div class="flex items-center gap-1.5 text-xs">
               <!-- Platform filter toggles -->
@@ -1056,6 +1065,7 @@
 
   const activityFilter  = Object.fromEntries(Object.keys(ACTIVITY_CONFIG).map(k => [k, true]));
   const platformFilter  = { twitch: true, youtube: true, 'youtube-v': true, kick: true, tiktok: true };
+  let chatFeedMode = 'all';
 
   function formatTime(ts) {
     return new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -1166,13 +1176,37 @@
   function initChatFeed() {
     const feed = document.getElementById('chat-feed');
     if (!feed) return;
-    const allowedEventTypes = new Set(['raid', 'superchat']);
+    const allowedEventTypes = chatFeedMode === 'superchat'
+      ? new Set(['superchat'])
+      : new Set(['raid', 'superchat']);
+    const messages = chatFeedMode === 'superchat' ? [] : MOCK_MESSAGES;
     const items = [
-      ...MOCK_MESSAGES.map(m => ({ ...m, _type: 'msg' })),
+      ...messages.map(m => ({ ...m, _type: 'msg' })),
       ...MOCK_EVENTS.filter(e => allowedEventTypes.has(e.type)).map(e => ({ ...e, _type: 'evt' })),
     ].sort((a, b) => a.ts - b.ts);
     feed.innerHTML = items.map(item => item._type === 'msg' ? renderMessage(item) : renderEvent(item)).join('');
+    applyPlatformFilter();
     feed.scrollTop = feed.scrollHeight;
+  }
+
+  function setChatFeedMode(mode) {
+    chatFeedMode = mode;
+    const allBtn = document.getElementById('chat-mode-all');
+    const superBtn = document.getElementById('chat-mode-superchat');
+    if (allBtn && superBtn) {
+      const active = 'bg-violet-600 text-white';
+      const inactive = 'text-gray-400 hover:text-white';
+      allBtn.classList.remove('bg-violet-600', 'text-white', 'text-gray-400', 'hover:text-white');
+      superBtn.classList.remove('bg-violet-600', 'text-white', 'text-gray-400', 'hover:text-white');
+      if (mode === 'superchat') {
+        allBtn.classList.add(...inactive.split(' '));
+        superBtn.classList.add(...active.split(' '));
+      } else {
+        allBtn.classList.add(...active.split(' '));
+        superBtn.classList.add(...inactive.split(' '));
+      }
+    }
+    initChatFeed();
   }
 
   function initObsStats() {
@@ -1429,7 +1463,7 @@
   document.addEventListener('DOMContentLoaded', () => {
     showSection('dashboard');
     showSettingsSection('settings-platforms');
-    initChatFeed();
+    setChatFeedMode('all');
     applyActivityFilter();
     initObsStats();
     initSoundCommands();
