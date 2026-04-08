@@ -51,8 +51,44 @@ document.addEventListener('click', (e) => {
   }
 });
 
+// Close activity filter panel on outside click
+document.addEventListener('click', (e) => {
+  const panel = document.getElementById('activity-filter-panel');
+  const btn   = document.getElementById('activity-filter-btn');
+  if (panel && !panel.classList.contains('hidden') && !panel.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
+    panel.classList.add('hidden');
+  }
+});
+
+function toggleActivityFilterPanel() {
+  document.getElementById('activity-filter-panel').classList.toggle('hidden');
+}
+
+function buildActivityFilterList() {
+  const list = document.getElementById('activity-filter-list');
+  if (!list || typeof ACTIVITY_CONFIG === 'undefined') return;
+  list.innerHTML = Object.entries(ACTIVITY_CONFIG).map(([type, cfg]) => `
+    <label class="flex items-center gap-2 cursor-pointer py-0.5 group">
+      <input type="checkbox" checked
+        class="accent-violet-500 cursor-pointer"
+        onchange="toggleActivityFilter('${type}', this.checked)"
+        id="filter-${type}">
+      <span class="text-sm">${cfg.icon}</span>
+      <span class="text-xs text-gray-300 group-hover:text-white transition-colors">${cfg.label}</span>
+    </label>`).join('');
+}
+
+function setAllActivityFilters(enabled) {
+  Object.keys(ACTIVITY_CONFIG).forEach(type => {
+    const cb = document.getElementById(`filter-${type}`);
+    if (cb) cb.checked = enabled;
+    toggleActivityFilter(type, enabled);
+  });
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
   showSection('dashboard');
   showSettingsSection('settings-platforms');
+  buildActivityFilterList();
 });

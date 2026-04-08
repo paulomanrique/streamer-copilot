@@ -81,9 +81,18 @@ const MOCK_SCHEDULED = [
 ];
 
 const MOCK_ACTIVITY_LOG = [
-  { id: 'a1', ts: Date.now() - 25000, type: 'sound', text: '!gato disparado por br_live' },
-  { id: 'a2', ts: Date.now() - 40000, type: 'voice', text: 'TTS: "boa tarde a todos" (SuperFan2024)' },
-  { id: 'a3', ts: Date.now() - 120000, type: 'scheduled', text: 'Mensagem agendada enviada: "Lembre-se de seguir..."' },
-  { id: 'a4', ts: Date.now() - 180000, type: 'event', text: 'Raid de OtherStreamer (45 viewers)' },
-  { id: 'a5', ts: Date.now() - 300000, type: 'sound', text: '!cachorro disparado por DonorKing' },
+  { id: 'a1',  ts: Date.now() - 10000,  type: 'cheer',        platform: 'twitch',  author: 'ProStreamer',    amount: 500 },
+  { id: 'a2',  ts: Date.now() - 25000,  type: 'sound',        platform: 'kick',    author: 'br_live',       trigger: '!gato' },
+  { id: 'a3',  ts: Date.now() - 40000,  type: 'follow',       platform: 'kick',    author: 'NewKickUser' },
+  { id: 'a4',  ts: Date.now() - 55000,  type: 'subscription', platform: 'twitch',  author: 'xGamer99',      message: 'Mês 3!' },
+  { id: 'a5',  ts: Date.now() - 90000,  type: 'superchat',    platform: 'youtube', author: 'TechWatcher',   amount: 10, message: 'Stream top!' },
+  { id: 'a6',  ts: Date.now() - 120000, type: 'raid',         platform: 'twitch',  author: 'OtherStreamer', amount: 45 },
+  { id: 'a7',  ts: Date.now() - 150000, type: 'scheduled',    message: 'Lembre-se de seguir o canal! 💜' },
+  { id: 'a8',  ts: Date.now() - 180000, type: 'gift',         platform: 'twitch',  author: 'DonorKing',     amount: 5 },
+  { id: 'a9',  ts: Date.now() - 240000, type: 'follow',       platform: 'twitch',  author: 'NewFollower' },
+  { id: 'a10', ts: Date.now() - 270000, type: 'sound',        platform: 'twitch',  author: 'DonorKing',     trigger: '!cachorro' },
+  { id: 'a11', ts: Date.now() - 300000, type: 'subscription', platform: 'youtube', author: 'SuperFan2024' },
+  { id: 'a12', ts: Date.now() - 360000, type: 'scheduled',    message: 'Visite meu Discord: discord.gg/exemplo' },
+  { id: 'a13', ts: Date.now() - 420000, type: 'cheer',        platform: 'twitch',  author: 'xGamer99',      amount: 100 },
+  { id: 'a14', ts: Date.now() - 480000, type: 'follow',       platform: 'youtube', author: 'Lurker123' },
 ];

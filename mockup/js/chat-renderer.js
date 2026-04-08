@@ -14,6 +14,29 @@ const EVENT_ICONS = {
   subscription: '⭐', superchat: '💰', raid: '⚔️', follow: '💜', cheer: '✨', gift: '🎁',
 };
 
+// Activity log filter state — all enabled by default
+const activityFilter = {
+  follow:       true,
+  subscription: true,
+  gift:         true,
+  superchat:    true,
+  cheer:        true,
+  raid:         true,
+  sound:        true,
+  scheduled:    true,
+};
+
+const ACTIVITY_CONFIG = {
+  follow:       { icon: '💜', label: 'Novo seguidor',        color: 'text-pink-400' },
+  subscription: { icon: '⭐', label: 'Inscrição / Membro',   color: 'text-yellow-400' },
+  gift:         { icon: '🎁', label: 'Inscrição presenteada', color: 'text-orange-400' },
+  superchat:    { icon: '💰', label: 'Super Chat / Bits',     color: 'text-green-400' },
+  cheer:        { icon: '✨', label: 'Bits (Twitch)',          color: 'text-purple-400' },
+  raid:         { icon: '⚔️', label: 'Raid / Invasão',        color: 'text-red-400' },
+  sound:        { icon: '🔊', label: 'Comando de som',        color: 'text-violet-400' },
+  scheduled:    { icon: '⏰', label: 'Mensagem agendada',     color: 'text-cyan-400' },
+};
+
 const BADGE_ICONS = {
   moderator: `<span title="Moderador" class="inline-flex items-center justify-center w-4 h-4 rounded bg-green-600 text-white text-xs">⚔</span>`,
   subscriber: `<span title="Inscrito" class="inline-flex items-center justify-center w-4 h-4 rounded bg-violet-600 text-white text-xs">★</span>`,
@@ -71,14 +94,45 @@ function renderEvent(evt) {
     </div>`;
 }
 
+function buildActivityText(log) {
+  const p = log.platform ? PLATFORM_COLORS[log.platform] : null;
+  const pLabel = p ? `<span class="inline-flex items-center gap-0.5 ${p.badge} px-1 rounded text-[10px]">${PLATFORM_ICONS[log.platform]}${p.label}</span> ` : '';
+
+  switch (log.type) {
+    case 'follow':       return `${pLabel}<strong class="text-gray-200">${log.author}</strong> começou a seguir`;
+    case 'subscription': return `${pLabel}<strong class="text-gray-200">${log.author}</strong> se inscreveu${log.message ? ` — "${log.message}"` : ''}`;
+    case 'gift':         return `${pLabel}<strong class="text-gray-200">${log.author}</strong> presenteou ${log.amount || 1} inscrição(ões)`;
+    case 'superchat':    return `${pLabel}<strong class="text-gray-200">${log.author}</strong> enviou R$${(log.amount||0).toFixed(2)}${log.message ? ` — "${log.message}"` : ''}`;
+    case 'cheer':        return `${pLabel}<strong class="text-gray-200">${log.author}</strong> deu ${log.amount || 0} bits`;
+    case 'raid':         return `${pLabel}<strong class="text-gray-200">${log.author}</strong> fez raid com ${log.amount || 0} viewers`;
+    case 'sound':        return `${pLabel}Comando <span class="font-mono text-violet-300">${log.trigger}</span> por <strong class="text-gray-200">${log.author}</strong>`;
+    case 'scheduled':    return `<span class="text-gray-400 italic truncate">"${log.message}"</span>`;
+    default:             return log.text || log.type;
+  }
+}
+
 function renderActivityLog(log) {
-  const icons = { sound: '🔊', voice: '🗣️', scheduled: '⏰', event: '📢' };
+  const cfg = ACTIVITY_CONFIG[log.type] || { icon: '•', color: 'text-gray-400' };
   return `
-    <div class="flex items-start gap-2 text-xs py-1 border-b border-gray-800">
-      <span>${icons[log.type] || '•'}</span>
-      <span class="text-gray-400 shrink-0">${formatTime(log.ts)}</span>
-      <span class="text-gray-300">${log.text}</span>
+    <div class="flex items-start gap-2 text-xs py-1.5 border-b border-gray-800/60 last:border-0">
+      <span class="shrink-0 mt-0.5">${cfg.icon}</span>
+      <span class="text-gray-600 shrink-0 font-mono">${formatTime(log.ts)}</span>
+      <span class="${cfg.color} leading-relaxed min-w-0">${buildActivityText(log)}</span>
     </div>`;
+}
+
+function applyActivityFilter() {
+  const log = document.getElementById('activity-log');
+  if (!log) return;
+  const filtered = MOCK_ACTIVITY_LOG.filter(item => activityFilter[item.type] !== false);
+  log.innerHTML = filtered.length
+    ? filtered.map(renderActivityLog).join('')
+    : '<p class="text-gray-600 text-xs text-center py-4">Nenhum tipo de evento habilitado.</p>';
+}
+
+function toggleActivityFilter(type, enabled) {
+  activityFilter[type] = enabled;
+  applyActivityFilter();
 }
 
 function initChatFeed() {
@@ -99,9 +153,7 @@ function initChatFeed() {
 }
 
 function initActivityLog() {
-  const log = document.getElementById('activity-log');
-  if (!log) return;
-  log.innerHTML = MOCK_ACTIVITY_LOG.map(renderActivityLog).join('');
+  applyActivityFilter();
 }
 
 function initObsStats() {
