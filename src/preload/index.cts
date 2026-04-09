@@ -13,6 +13,15 @@ import type {
   ObsConnectionSettings,
   ObsStatsSnapshot,
   ProfilesSnapshot,
+  Raffle,
+  RaffleControlActionInput,
+  RaffleCreateInput,
+  RaffleDeleteInput,
+  RaffleEntry,
+  RaffleOverlayInfo,
+  RaffleRoundResult,
+  RaffleSnapshot,
+  RaffleUpdateInput,
   RenameProfileInput,
   RendererVoiceCapabilities,
   ScheduledAvailableTargets,
@@ -55,6 +64,17 @@ const IPC_CHANNELS = {
   scheduledDelete: 'scheduled:delete',
   scheduledGetAvailableTargets: 'scheduled:get-available-targets',
   scheduledStatus: 'scheduled:status',
+  rafflesList: 'raffles:list',
+  rafflesCreate: 'raffles:create',
+  rafflesUpdate: 'raffles:update',
+  rafflesDelete: 'raffles:delete',
+  rafflesGetActive: 'raffles:get-active',
+  rafflesGetSnapshot: 'raffles:get-snapshot',
+  rafflesControl: 'raffles:control',
+  rafflesOverlayInfo: 'raffles:overlay-info',
+  rafflesState: 'raffles:state',
+  rafflesEntry: 'raffles:entry',
+  rafflesResult: 'raffles:result',
   textList: 'text:list',
   textUpsert: 'text:upsert',
   textDelete: 'text:delete',
@@ -120,6 +140,29 @@ const copilotApi: CopilotApi = {
     const wrappedListener = (_event: Electron.IpcRendererEvent, items: ScheduledStatusItem[]) => listener(items);
     ipcRenderer.on(IPC_CHANNELS.scheduledStatus, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.scheduledStatus, wrappedListener); };
+  },
+  listRaffles: () => ipcRenderer.invoke(IPC_CHANNELS.rafflesList) as Promise<Raffle[]>,
+  createRaffle: (input: RaffleCreateInput) => ipcRenderer.invoke(IPC_CHANNELS.rafflesCreate, input),
+  updateRaffle: (input: RaffleUpdateInput) => ipcRenderer.invoke(IPC_CHANNELS.rafflesUpdate, input),
+  deleteRaffle: (input: RaffleDeleteInput) => ipcRenderer.invoke(IPC_CHANNELS.rafflesDelete, input),
+  getActiveRaffle: () => ipcRenderer.invoke(IPC_CHANNELS.rafflesGetActive) as Promise<Raffle | null>,
+  getRaffleSnapshot: (raffleId: string) => ipcRenderer.invoke(IPC_CHANNELS.rafflesGetSnapshot, raffleId) as Promise<RaffleSnapshot>,
+  controlRaffle: (input: RaffleControlActionInput) => ipcRenderer.invoke(IPC_CHANNELS.rafflesControl, input) as Promise<RaffleSnapshot>,
+  getRaffleOverlayInfo: (raffleId: string) => ipcRenderer.invoke(IPC_CHANNELS.rafflesOverlayInfo, raffleId) as Promise<RaffleOverlayInfo>,
+  onRaffleState: (listener: (payload: RaffleSnapshot | null) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: RaffleSnapshot | null) => listener(payload);
+    ipcRenderer.on(IPC_CHANNELS.rafflesState, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.rafflesState, wrappedListener); };
+  },
+  onRaffleEntry: (listener: (payload: RaffleEntry) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: RaffleEntry) => listener(payload);
+    ipcRenderer.on(IPC_CHANNELS.rafflesEntry, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.rafflesEntry, wrappedListener); };
+  },
+  onRaffleResult: (listener: (payload: RaffleRoundResult) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: RaffleRoundResult) => listener(payload);
+    ipcRenderer.on(IPC_CHANNELS.rafflesResult, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.rafflesResult, wrappedListener); };
   },
   listTextCommands: () => ipcRenderer.invoke(IPC_CHANNELS.textList) as Promise<TextCommand[]>,
   upsertTextCommand: (input: TextCommandUpsertInput) => ipcRenderer.invoke(IPC_CHANNELS.textUpsert, input),

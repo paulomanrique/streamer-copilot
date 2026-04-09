@@ -6,12 +6,13 @@ import { PlatformsSettingsPage } from './PlatformsSettings.js';
 import { SettingsProfilesPanel } from '../components/SettingsProfilesPanel.js';
 import { GeneralSettingsPage } from './GeneralSettings.js';
 import { ObsSettingsPage } from './ObsSettings.js';
+import { RafflesPage } from './Raffles.js';
 import { ScheduledMessagesPage } from './ScheduledMessages.js';
 import { SoundCommandsPage } from './SoundCommands.js';
 import { TextCommandsPage } from './TextCommands.js';
 import { VoiceCommandsPage } from './VoiceCommands.js';
 
-type SettingsView = 'general' | 'profiles' | 'platforms' | 'obs' | 'sound' | 'text' | 'voice' | 'scheduled';
+type SettingsView = 'general' | 'profiles' | 'platforms' | 'obs' | 'sound' | 'text' | 'voice' | 'scheduled' | 'raffles';
 
 interface SettingsWorkspaceProps {
   activeProfileId: string;
@@ -88,6 +89,16 @@ const SETTINGS_GROUPS: Array<{
   {
     label: 'Automations',
     items: [
+      {
+        id: 'raffles',
+        label: 'Raffles',
+        icon: (
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3l7 4v5c0 5-3 8-7 9-4-1-7-4-7-9V7l7-4z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 11l2 2 4-4" />
+          </svg>
+        ),
+      },
       {
         id: 'scheduled',
         label: 'Scheduled Messages',
@@ -205,6 +216,7 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
           />
         ) : null}
         {currentView === 'scheduled' ? <ScheduledMessagesPage /> : null}
+        {currentView === 'raffles' ? <RafflesPage /> : null}
       </div>
     </section>
   );

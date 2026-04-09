@@ -1,9 +1,11 @@
 import { z } from 'zod';
 
-const platformIdSchema = z.enum(['twitch', 'youtube', 'kick', 'tiktok']);
+const platformIdSchema = z.enum(['twitch', 'youtube', 'youtube-v', 'kick', 'tiktok']);
 const scheduledTargetPlatformSchema = z.enum(['twitch', 'youtube']);
 const permissionLevelSchema = z.enum(['everyone', 'follower', 'subscriber', 'moderator', 'broadcaster']);
 const eventLogLevelSchema = z.enum(['info', 'warn', 'error']);
+const raffleModeSchema = z.enum(['single-winner', 'survivor-final']);
+const raffleControlActionSchema = z.enum(['open_entries', 'close_entries', 'spin', 'finalize', 'cancel', 'reset']);
 
 export const selectProfileInputSchema = z.object({
   profileId: z.string().min(1),
@@ -46,6 +48,30 @@ export const scheduledMessageUpsertInputSchema = z.object({
 
 export const scheduledMessageDeleteInputSchema = z.object({
   id: z.string().min(1),
+});
+
+export const raffleCreateInputSchema = z.object({
+  title: z.string().min(1).max(120),
+  entryCommand: z.string().min(1).max(80),
+  mode: raffleModeSchema,
+  entryDeadlineAt: z.string().datetime().nullable(),
+  acceptedPlatforms: z.array(platformIdSchema).min(1),
+  staffTriggerCommand: z.string().min(1).max(80),
+  winnerAnnouncementTemplate: z.string().min(1).max(500),
+  enabled: z.boolean(),
+});
+
+export const raffleUpdateInputSchema = raffleCreateInputSchema.extend({
+  id: z.string().min(1),
+});
+
+export const raffleDeleteInputSchema = z.object({
+  id: z.string().min(1),
+});
+
+export const raffleControlActionInputSchema = z.object({
+  raffleId: z.string().min(1),
+  action: raffleControlActionSchema,
 });
 
 export const voiceCommandUpsertInputSchema = z.object({
@@ -150,6 +176,10 @@ export type DeleteProfileInputSchema = z.infer<typeof deleteProfileInputSchema>;
 export type GeneralSettingsSchema = z.infer<typeof generalSettingsSchema>;
 export type ScheduledMessageUpsertInputSchema = z.infer<typeof scheduledMessageUpsertInputSchema>;
 export type ScheduledMessageDeleteInputSchema = z.infer<typeof scheduledMessageDeleteInputSchema>;
+export type RaffleCreateInputSchema = z.infer<typeof raffleCreateInputSchema>;
+export type RaffleUpdateInputSchema = z.infer<typeof raffleUpdateInputSchema>;
+export type RaffleDeleteInputSchema = z.infer<typeof raffleDeleteInputSchema>;
+export type RaffleControlActionInputSchema = z.infer<typeof raffleControlActionInputSchema>;
 export type VoiceCommandUpsertInputSchema = z.infer<typeof voiceCommandUpsertInputSchema>;
 export type VoiceCommandDeleteInputSchema = z.infer<typeof voiceCommandDeleteInputSchema>;
 export type VoiceSpeakPayloadSchema = z.infer<typeof voiceSpeakPayloadSchema>;

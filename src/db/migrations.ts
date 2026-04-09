@@ -91,4 +91,70 @@ export const MIGRATIONS: SqlMigration[] = [
       );
     `,
   },
+  {
+    version: 6,
+    name: 'create_raffles',
+    sql: `
+      CREATE TABLE IF NOT EXISTS raffles (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        entry_command TEXT NOT NULL,
+        mode TEXT NOT NULL,
+        status TEXT NOT NULL,
+        entry_deadline_at TEXT,
+        accepted_platforms_json TEXT NOT NULL,
+        staff_trigger_command TEXT NOT NULL,
+        winner_announcement_template TEXT NOT NULL,
+        winner_entry_id TEXT,
+        top2_entry_ids_json TEXT NOT NULL DEFAULT '[]',
+        last_spin_at TEXT,
+        current_round INTEGER NOT NULL DEFAULT 0,
+        overlay_session_id TEXT,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS raffle_entries (
+        id TEXT PRIMARY KEY,
+        raffle_id TEXT NOT NULL,
+        platform TEXT NOT NULL,
+        user_key TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        source_message_id TEXT,
+        entered_at TEXT NOT NULL DEFAULT (datetime('now')),
+        is_eliminated INTEGER NOT NULL DEFAULT 0,
+        elimination_order INTEGER,
+        is_winner INTEGER NOT NULL DEFAULT 0,
+        FOREIGN KEY (raffle_id) REFERENCES raffles(id) ON DELETE CASCADE
+      );
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_raffle_entries_unique_user
+      ON raffle_entries (raffle_id, user_key);
+
+      CREATE INDEX IF NOT EXISTS idx_raffle_entries_active
+      ON raffle_entries (raffle_id, is_eliminated);
+
+      CREATE INDEX IF NOT EXISTS idx_raffle_entries_entered_at
+      ON raffle_entries (raffle_id, entered_at);
+
+      CREATE TABLE IF NOT EXISTS raffle_rounds (
+        id TEXT PRIMARY KEY,
+        raffle_id TEXT NOT NULL,
+        round_number INTEGER NOT NULL,
+        action_type TEXT NOT NULL,
+        selected_entry_id TEXT NOT NULL,
+        selected_entry_name TEXT NOT NULL,
+        result_type TEXT NOT NULL,
+        participant_count_before INTEGER NOT NULL,
+        participant_count_after INTEGER NOT NULL,
+        animation_seed_json TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (raffle_id) REFERENCES raffles(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_raffle_rounds_raffle
+      ON raffle_rounds (raffle_id, round_number);
+    `,
+  },
 ];

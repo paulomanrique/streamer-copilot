@@ -244,6 +244,126 @@ export interface SoundPlayPayload {
   filePath: string;
 }
 
+export type RaffleMode = 'single-winner' | 'survivor-final';
+export type RaffleStatus = 'draft' | 'collecting' | 'ready_to_spin' | 'spinning' | 'paused_top2' | 'completed' | 'cancelled';
+export type RaffleControlAction = 'open_entries' | 'close_entries' | 'spin' | 'finalize' | 'cancel' | 'reset';
+export type RaffleRoundActionType = 'spin' | 'finalize';
+export type RaffleRoundResultType = 'winner' | 'eliminated';
+
+export interface Raffle {
+  id: string;
+  title: string;
+  entryCommand: string;
+  mode: RaffleMode;
+  status: RaffleStatus;
+  entryDeadlineAt: string | null;
+  acceptedPlatforms: PlatformId[];
+  staffTriggerCommand: string;
+  winnerAnnouncementTemplate: string;
+  winnerEntryId: string | null;
+  top2EntryIds: string[];
+  entriesCount: number;
+  activeEntriesCount: number;
+  lastSpinAt: string | null;
+  currentRound: number;
+  overlaySessionId: string | null;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RaffleEntry {
+  id: string;
+  raffleId: string;
+  platform: PlatformId;
+  userKey: string;
+  displayName: string;
+  sourceMessageId: string | null;
+  enteredAt: string;
+  isEliminated: boolean;
+  eliminationOrder: number | null;
+  isWinner: boolean;
+}
+
+export interface RaffleAnimationConfig {
+  targetEntryId: string | null;
+  targetRotationDeg: number;
+  durationMs: number;
+  startedAt: string | null;
+}
+
+export interface RaffleOverlayState {
+  raffleId: string;
+  title: string;
+  mode: RaffleMode;
+  status: RaffleStatus;
+  sessionId: string | null;
+  totalEntries: number;
+  activeEntries: Array<{
+    id: string;
+    label: string;
+  }>;
+  highlightedEntryId: string | null;
+  highlightedEntryLabel: string | null;
+  top2EntryIds: string[];
+  top2Labels: string[];
+  round: number;
+  animation: RaffleAnimationConfig;
+  updatedAt: string;
+}
+
+export interface RaffleRoundResult {
+  id: string;
+  raffleId: string;
+  roundNumber: number;
+  actionType: RaffleRoundActionType;
+  selectedEntryId: string;
+  selectedEntryName: string;
+  resultType: RaffleRoundResultType;
+  participantCountBefore: number;
+  participantCountAfter: number;
+  animationSeedJson: string | null;
+  createdAt: string;
+}
+
+export interface RaffleCreateInput {
+  title: string;
+  entryCommand: string;
+  mode: RaffleMode;
+  entryDeadlineAt: string | null;
+  acceptedPlatforms: PlatformId[];
+  staffTriggerCommand: string;
+  winnerAnnouncementTemplate: string;
+  enabled: boolean;
+}
+
+export interface RaffleUpdateInput extends RaffleCreateInput {
+  id: string;
+}
+
+export interface RaffleDeleteInput {
+  id: string;
+}
+
+export interface RaffleControlActionInput {
+  raffleId: string;
+  action: RaffleControlAction;
+}
+
+export interface RaffleOverlayInfo {
+  raffleId: string;
+  overlayUrl: string;
+  stateUrl: string;
+}
+
+export interface RaffleSnapshot {
+  raffle: Raffle;
+  entries: RaffleEntry[];
+  activeEntries: RaffleEntry[];
+  overlay: RaffleOverlayState | null;
+  history: RaffleRoundResult[];
+}
+
 export type TwitchConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
 export interface TwitchCredentials {

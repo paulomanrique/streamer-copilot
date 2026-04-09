@@ -13,6 +13,7 @@ Desktop Electron app for stream automation: unified chat, sound and voice comman
 - Unified chat feed for Twitch, YouTube, and Kick
 - Sound commands with permissions and cooldowns
 - Voice commands with language selection and TTS playback
+- Raffles with chat entry commands, staff triggers, and OBS wheel overlay
 - Scheduled messages with interval and random window
 - OBS WebSocket stats panel
 - Profile selector and profile-scoped JSON storage
@@ -51,6 +52,15 @@ npm run package:linux
 ## Mockup
 
 Open `mockup/index.html` directly in a browser.
+
+## Raffle Overlay
+
+- Create a raffle from `Settings -> Raffles`
+- Use `Open entries` to start collecting chat signups
+- Add an OBS `Browser Source` and paste the overlay URL shown in the raffle page
+- The app serves the wheel overlay on `127.0.0.1` and updates it live while the raffle runs
+- `single-winner` picks one winner in a single spin
+- `survivor-final` eliminates one entrant per spin until the top 2, then requires a final trigger
 
 ## Environment
 

@@ -14,6 +14,10 @@ import { LogRepository } from '../modules/logs/log-repository.js';
 import { LogService } from '../modules/logs/log-service.js';
 import { ObsService } from '../modules/obs/obs-service.js';
 import { ObsSettingsStore } from '../modules/obs/obs-settings-store.js';
+import { RaffleDeadlineRunner } from '../modules/raffles/raffle-deadline-runner.js';
+import { RaffleOverlayServer } from '../modules/raffles/raffle-overlay-server.js';
+import { RaffleRepository } from '../modules/raffles/raffle-repository.js';
+import { RaffleService } from '../modules/raffles/raffle-service.js';
 import { ScheduledMessageRepository } from '../modules/scheduled/scheduled-repository.js';
 import { SchedulerService, type ScheduledRunState } from '../modules/scheduled/scheduler-service.js';
 import { AppSettingsRepository } from '../modules/settings/app-settings-repository.js';
@@ -41,6 +45,10 @@ import {
   eventLogFiltersSchema,
   generalSettingsSchema,
   obsConnectionSettingsSchema,
+  raffleControlActionInputSchema,
+  raffleCreateInputSchema,
+  raffleDeleteInputSchema,
+  raffleUpdateInputSchema,
   renameProfileInputSchema,
   rendererVoiceCapabilitiesSchema,
   soundCommandDeleteInputSchema,
@@ -58,7 +66,7 @@ import {
   youtubeConnectSchema,
   youtubeSettingsSchema,
 } from '../shared/schemas.js';
-import type { AppInfo, PlatformId, TwitchConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../shared/types.js';
+import type { AppInfo, PlatformId, Raffle, TwitchConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../shared/types.js';
 
 const TWITCH_CLIENT_ID = 'vtwg8tzuv1nlip4qh9n6sxx2p76g0s';
 const TWITCH_REDIRECT_PORT = 32999;
@@ -81,6 +89,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const obsSettingsStore = new ObsSettingsStore(appSettingsRepository);
   const logRepository = new LogRepository(options.databaseHandle.db);
   const logService = new LogService(logRepository);
+  const raffleRepository = new RaffleRepository(options.databaseHandle.db);
   const scheduledRepository = new ScheduledMessageRepository(options.databaseHandle.db);
   const soundRepository = new SoundCommandRepository(options.databaseHandle.db);
   const textRepository = new TextCommandRepository(options.databaseHandle.db);
@@ -141,6 +150,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   // Ordered list of platform IDs for YouTube streams (first = horizontal, second = vertical)
   const YT_PLATFORMS: Array<'youtube' | 'youtube-v'> = ['youtube', 'youtube-v'];
   const SCHEDULED_SUPPORTED_TARGETS: PlatformId[] = ['twitch', 'youtube'];
+  let raffleService: RaffleService;
 
   const getYoutubeStreams = (): YouTubeStreamInfo[] => {
     const totalStreams = youtubeScrapers.size;
@@ -417,8 +427,50 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     } else stopTwitchStatsPoll();
   };
 
+  const raffleOverlayServer = new RaffleOverlayServer({
+    getOverlayState: (raffleId) => {
+      try {
+        return raffleService.getSnapshot(raffleId).overlay;
+      } catch {
+        return null;
+      }
+    },
+  });
+
+  raffleService = new RaffleService({
+    repository: raffleRepository,
+    getOverlayInfo: (raffleId) => raffleOverlayServer.getOverlayInfo(raffleId),
+    onState: (payload) => options.stateHub.pushRaffleState(payload),
+    onEntry: (payload) => options.stateHub.pushRaffleEntry(payload),
+    onResult: (payload) => options.stateHub.pushRaffleResult(payload),
+    onAnnounceWinner: async (raffle, winner) => {
+      const content = formatWinnerAnnouncement(raffle, winner.displayName);
+      for (const target of resolveRaffleAnnouncementTargets(raffle.acceptedPlatforms)) {
+        try {
+          await chatService.sendMessage(target, content);
+          await pushLocalOutboundMessage(target, content);
+        } catch (cause) {
+          logService.warn('raffles', 'Failed to send winner announcement', {
+            raffleId: raffle.id,
+            platform: target,
+            error: cause instanceof Error ? cause.message : String(cause),
+          });
+        }
+      }
+    },
+    onLog: (level, message, metadata) => {
+      if (level === 'error') logService.error('raffles', message, metadata);
+      else if (level === 'warn') logService.warn('raffles', message, metadata);
+      else logService.info('raffles', message, metadata);
+    },
+  });
+
+  const raffleDeadlineRunner = new RaffleDeadlineRunner({
+    onTick: () => raffleService.syncDeadlines(),
+  });
+
   const chatService = new ChatService({
-    soundService, textService, voiceService,
+    raffleService, soundService, textService, voiceService,
     onMessage: (message) => options.stateHub.pushChatMessage(message),
     onEvent: (event) => options.stateHub.pushChatEvent(event),
   });
@@ -473,6 +525,15 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     supported: [...SCHEDULED_SUPPORTED_TARGETS],
     connected: getConnectedScheduledTargets(),
   }));
+
+  ipcMain.handle(IPC_CHANNELS.rafflesList, async () => raffleService.list());
+  ipcMain.handle(IPC_CHANNELS.rafflesCreate, async (_, raw) => raffleService.create(raffleCreateInputSchema.parse(raw)));
+  ipcMain.handle(IPC_CHANNELS.rafflesUpdate, async (_, raw) => raffleService.update(raffleUpdateInputSchema.parse(raw)));
+  ipcMain.handle(IPC_CHANNELS.rafflesDelete, async (_, raw) => raffleService.delete(raffleDeleteInputSchema.parse(raw).id));
+  ipcMain.handle(IPC_CHANNELS.rafflesGetActive, async () => raffleService.getActive());
+  ipcMain.handle(IPC_CHANNELS.rafflesGetSnapshot, async (_, raw) => raffleService.getSnapshot(String(raw ?? '')));
+  ipcMain.handle(IPC_CHANNELS.rafflesControl, async (_, raw) => raffleService.control(raffleControlActionInputSchema.parse(raw)));
+  ipcMain.handle(IPC_CHANNELS.rafflesOverlayInfo, async (_, raw) => raffleService.getOverlayInfo(String(raw ?? '')));
 
   ipcMain.handle(IPC_CHANNELS.textList, async () => textService.list());
   ipcMain.handle(IPC_CHANNELS.textUpsert, async (_, raw) => textService.upsert(textCommandUpsertInputSchema.parse(raw)));
@@ -641,15 +702,19 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   })();
 
   startYoutubeMonitor();
+  void raffleOverlayServer.start();
+  raffleDeadlineRunner.start();
   schedulerService.start();
   obsService.start();
 
   return async () => {
     isShuttingDown = true;
+    raffleDeadlineRunner.stop();
+    raffleService.dispose();
     schedulerService.stop();
     stopTwitchStatsPoll();
     if (youtubeMonitorTimer) clearInterval(youtubeMonitorTimer);
-    await Promise.allSettled([chatService.disconnectAll(), obsService.stop()]);
+    await Promise.allSettled([chatService.disconnectAll(), obsService.stop(), raffleOverlayServer.stop()]);
     Object.values(IPC_CHANNELS).forEach(c => ipcMain.removeHandler(c));
   };
 
@@ -678,6 +743,12 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     });
   }
 
+  function formatWinnerAnnouncement(raffle: Raffle, winnerName: string): string {
+    return raffle.winnerAnnouncementTemplate
+      .replaceAll('{winner}', winnerName)
+      .replaceAll('{title}', raffle.title);
+  }
+
   function getConnectedYoutubePlatforms(): Array<'youtube' | 'youtube-v'> {
     const connected = new Set<'youtube' | 'youtube-v'>();
     for (const data of youtubeStreamData.values()) {
@@ -691,6 +762,22 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     if (twitchStatus === 'connected') connected.push('twitch');
     if (getConnectedYoutubePlatforms().length > 0) connected.push('youtube');
     return connected;
+  }
+
+  function resolveRaffleAnnouncementTargets(requestedTargets: PlatformId[]): PlatformId[] {
+    const resolved = new Set<PlatformId>();
+    for (const target of requestedTargets) {
+      if (target === 'youtube' || target === 'youtube-v') {
+        for (const ytTarget of getConnectedYoutubePlatforms()) resolved.add(ytTarget);
+        continue;
+      }
+      if (target === 'twitch' && twitchStatus === 'connected') {
+        resolved.add('twitch');
+        continue;
+      }
+      if (target === 'kick') resolved.add('kick');
+    }
+    return Array.from(resolved);
   }
 
   function resolveDispatchTargets(requestedTargets: PlatformId[]): PlatformId[] {

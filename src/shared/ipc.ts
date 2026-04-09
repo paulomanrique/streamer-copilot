@@ -12,6 +12,15 @@ import type {
   ObsStatsSnapshot,
   PlatformId,
   ProfilesSnapshot,
+  Raffle,
+  RaffleControlActionInput,
+  RaffleDeleteInput,
+  RaffleEntry,
+  RaffleOverlayInfo,
+  RaffleRoundResult,
+  RaffleSnapshot,
+  RaffleCreateInput,
+  RaffleUpdateInput,
   RenameProfileInput,
   RendererVoiceCapabilities,
   SoundCommand,
@@ -53,6 +62,17 @@ export const IPC_CHANNELS = {
   scheduledDelete: 'scheduled:delete',
   scheduledGetAvailableTargets: 'scheduled:get-available-targets',
   scheduledStatus: 'scheduled:status',
+  rafflesList: 'raffles:list',
+  rafflesCreate: 'raffles:create',
+  rafflesUpdate: 'raffles:update',
+  rafflesDelete: 'raffles:delete',
+  rafflesGetActive: 'raffles:get-active',
+  rafflesGetSnapshot: 'raffles:get-snapshot',
+  rafflesControl: 'raffles:control',
+  rafflesOverlayInfo: 'raffles:overlay-info',
+  rafflesState: 'raffles:state',
+  rafflesEntry: 'raffles:entry',
+  rafflesResult: 'raffles:result',
   textList: 'text:list',
   textUpsert: 'text:upsert',
   textDelete: 'text:delete',
@@ -120,6 +140,17 @@ export interface CopilotApi {
   deleteScheduledMessage: (input: ScheduledMessageDeleteInput) => Promise<ScheduledMessage[]>;
   getScheduledAvailableTargets: () => Promise<ScheduledAvailableTargets>;
   onScheduledStatus: (listener: (items: ScheduledStatusItem[]) => void) => () => void;
+  listRaffles: () => Promise<Raffle[]>;
+  createRaffle: (input: RaffleCreateInput) => Promise<Raffle[]>;
+  updateRaffle: (input: RaffleUpdateInput) => Promise<Raffle[]>;
+  deleteRaffle: (input: RaffleDeleteInput) => Promise<Raffle[]>;
+  getActiveRaffle: () => Promise<Raffle | null>;
+  getRaffleSnapshot: (raffleId: string) => Promise<RaffleSnapshot>;
+  controlRaffle: (input: RaffleControlActionInput) => Promise<RaffleSnapshot>;
+  getRaffleOverlayInfo: (raffleId: string) => Promise<RaffleOverlayInfo>;
+  onRaffleState: (listener: (payload: RaffleSnapshot | null) => void) => () => void;
+  onRaffleEntry: (listener: (payload: RaffleEntry) => void) => () => void;
+  onRaffleResult: (listener: (payload: RaffleRoundResult) => void) => () => void;
   listTextCommands: () => Promise<TextCommand[]>;
   upsertTextCommand: (input: TextCommandUpsertInput) => Promise<TextCommand[]>;
   deleteTextCommand: (input: TextCommandDeleteInput) => Promise<TextCommand[]>;

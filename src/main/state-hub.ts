@@ -4,6 +4,9 @@ import { IPC_CHANNELS } from '../shared/ipc.js';
 import type {
   ChatMessage,
   ObsStatsSnapshot,
+  RaffleEntry,
+  RaffleRoundResult,
+  RaffleSnapshot,
   ScheduledStatusItem,
   SoundPlayPayload,
   StreamEvent,
@@ -31,6 +34,18 @@ export class StateHub {
 
   pushScheduledStatus(items: ScheduledStatusItem[]): void {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.scheduledStatus, items);
+  }
+
+  pushRaffleState(payload: RaffleSnapshot | null): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.rafflesState, payload);
+  }
+
+  pushRaffleEntry(payload: RaffleEntry): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.rafflesEntry, payload);
+  }
+
+  pushRaffleResult(payload: RaffleRoundResult): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.rafflesResult, payload);
   }
 
   pushVoiceSpeak(payload: VoiceSpeakPayload): void {

@@ -2,11 +2,13 @@ import type { RecentChatSnapshot } from '../../shared/ipc.js';
 import type { ChatMessage, PlatformId, StreamEvent } from '../../shared/types.js';
 import type { PlatformChatAdapter } from '../../platforms/base.js';
 import { CommandDispatcher } from '../commands/command-dispatcher.js';
+import { RaffleService } from '../raffles/raffle-service.js';
 import { SoundService } from '../sounds/sound-service.js';
 import { TextService } from '../text/text-service.js';
 import { VoiceService } from '../voice/voice-service.js';
 
 interface ChatServiceOptions {
+  raffleService: RaffleService;
   soundService: SoundService;
   textService: TextService;
   voiceService: VoiceService;
@@ -27,6 +29,7 @@ export class ChatService {
     this.dispatcher.register(options.soundService);
     this.dispatcher.register(options.textService);
     this.dispatcher.register(options.voiceService);
+    this.dispatcher.register(options.raffleService);
   }
 
   registerAdapter(adapter: PlatformChatAdapter): void {
