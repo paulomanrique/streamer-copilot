@@ -150,7 +150,7 @@ function escapeHtml(value: string): string {
 
 const overlayCss = `
 :root {
-  --bg: rgba(10, 13, 24, 0.15);
+  --bg: #ffffff;
   --card: rgba(6, 10, 18, 0.76);
   --line: rgba(255, 255, 255, 0.18);
   --text: #f8fafc;
@@ -169,7 +169,7 @@ html, body {
   min-height: 100%;
   font-family: "Space Grotesk", sans-serif;
   color: var(--text);
-  background: transparent;
+  background: var(--bg);
 }
 
 body {
