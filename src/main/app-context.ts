@@ -112,6 +112,7 @@ export function createAppContext(options: AppContextOptions): () => void {
     },
   });
   let rendererSpeechSynthesisAvailable = process.platform !== 'linux';
+  let isShuttingDown = false;
   const voiceService = new VoiceService({
     repository: voiceRepository,
     onSpeak: (payload) => {
@@ -419,8 +420,14 @@ export function createAppContext(options: AppContextOptions): () => void {
 
   const obsService = new ObsService({
     settingsStore: obsSettingsStore,
-    onConnected: () => { logService.info('obs', 'OBS connected'); options.stateHub.pushObsConnected(); },
-    onDisconnected: () => { logService.warn('obs', 'OBS disconnected'); options.stateHub.pushObsDisconnected(); },
+    onConnected: () => {
+      if (!isShuttingDown) logService.info('obs', 'OBS connected');
+      options.stateHub.pushObsConnected();
+    },
+    onDisconnected: () => {
+      if (!isShuttingDown) logService.warn('obs', 'OBS disconnected');
+      options.stateHub.pushObsDisconnected();
+    },
     onStats: (stats) => options.stateHub.pushObsStats(stats),
   });
 
@@ -633,6 +640,7 @@ export function createAppContext(options: AppContextOptions): () => void {
   obsService.start();
 
   return () => {
+    isShuttingDown = true;
     schedulerService.stop(); stopTwitchStatsPoll(); if (youtubeMonitorTimer) clearInterval(youtubeMonitorTimer);
     void chatService.disconnectAll(); void obsService.stop();
     Object.values(IPC_CHANNELS).forEach(c => ipcMain.removeHandler(c));

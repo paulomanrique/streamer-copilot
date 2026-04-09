@@ -21,6 +21,14 @@ export class LogService {
   }
 
   log(level: EventLogLevel, category: string, message: string, metadata?: unknown): void {
-    this.repository.insert(level, category, message, metadata);
+    try {
+      this.repository.insert(level, category, message, metadata);
+    } catch (cause) {
+      const payload = metadata === undefined ? '' : ` ${JSON.stringify(metadata)}`;
+      const formatted = `[log-fallback] ${level} ${category}: ${message}${payload}`;
+      if (level === 'error') console.error(formatted, cause);
+      else if (level === 'warn') console.warn(formatted, cause);
+      else console.info(formatted, cause);
+    }
   }
 }
