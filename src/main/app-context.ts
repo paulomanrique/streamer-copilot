@@ -100,6 +100,7 @@ export function createAppContext(options: AppContextOptions): () => void {
     onRespond: async (payload) => {
       try {
         await chatService.sendMessage(payload.platform, payload.content);
+        await pushLocalOutboundMessage(payload.platform, payload.content);
         logService.info('text-command', 'Sent response', { platform: payload.platform, content: payload.content });
       } catch (cause) {
         logService.error('text-command', 'Failed to send response', {
@@ -471,9 +472,7 @@ export function createAppContext(options: AppContextOptions): () => void {
   ipcMain.handle(IPC_CHANNELS.chatSendMessage, async (_, raw) => {
     const i = chatSendMessageSchema.parse(raw);
     await chatService.sendMessage(i.platform, i.content);
-    const store = await getTwitchCredentialsStore();
-    const creds = store ? await store.load() : null;
-    if (creds) options.stateHub.pushChatMessage({ id: `sent-${Date.now()}`, platform: i.platform, author: creds.username, content: i.content, badges: [], timestampLabel: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()) });
+    await pushLocalOutboundMessage(i.platform, i.content);
   });
   ipcMain.handle(IPC_CHANNELS.logsList, async (_, raw) => logService.list(eventLogFiltersSchema.parse(raw)));
 
@@ -620,6 +619,24 @@ export function createAppContext(options: AppContextOptions): () => void {
     else if (process.platform === 'linux') await execFile('espeak', [text]);
     else if (process.platform === 'win32') await execFile('powershell', ['-NoProfile', '-Command', `Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; $s.Speak('${text.replace(/'/g, "''")}')`]);
     else options.stateHub.pushVoiceSpeak({ text, lang: 'en-US' });
+  }
+
+  async function pushLocalOutboundMessage(platform: PlatformId, content: string): Promise<void> {
+    let author = 'Streamer Copilot';
+    if (platform === 'twitch') {
+      const store = await getTwitchCredentialsStore();
+      const creds = store ? await store.load() : null;
+      if (creds?.username) author = creds.username;
+    }
+
+    options.stateHub.pushChatMessage({
+      id: `sent-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      platform,
+      author,
+      content,
+      badges: [],
+      timestampLabel: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()),
+    });
   }
 
   function getConnectedYoutubePlatforms(): Array<'youtube' | 'youtube-v'> {
