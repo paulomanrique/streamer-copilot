@@ -87,6 +87,7 @@ const IPC_CHANNELS = {
   youtubeOpenLogin: 'youtube:open-login',
   youtubeGetSettings: 'youtube:get-settings',
   youtubeSaveSettings: 'youtube:save-settings',
+  youtubeCheckLive: 'youtube:check-live',
 } as const;
 
 const copilotApi: CopilotApi = {
