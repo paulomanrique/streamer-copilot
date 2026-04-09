@@ -127,26 +127,32 @@ export function createAppContext(options: AppContextOptions): () => void {
 
   const checkYouTubeLive = async (handle: string): Promise<string | null> => {
     try {
-      const url = handle.startsWith('UC')
+      const base = handle.match(/^UC[A-Za-z0-9_-]{22}$/)
         ? `https://www.youtube.com/channel/${handle}/live`
-        : `https://www.youtube.com/${handle.startsWith('@') ? '' : '@'}${handle}/live`;
+        : `https://www.youtube.com/${handle.startsWith('@') ? handle : `@${handle}`}/live`;
 
-      const res = await fetch(url, {
-        redirect: 'follow',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        },
-      });
+      const headers = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Cookie': 'CONSENT=YES+1; SOCS=CAI',
+      };
+
+      const res = await fetch(base, { redirect: 'follow', headers });
+
+      // Primary: YouTube HTTP-redirects /live → /watch?v=ID when the channel is live
+      const finalUrl = res.url;
+      const redirectMatch = finalUrl.match(/[?&]v=([A-Za-z0-9_-]{11})/);
+      if (redirectMatch) return redirectMatch[1];
+
+      // Fallback: parse the HTML for a canonical watch URL or ytInitialData
       const html = await res.text();
+      const canonical = html.match(/"canonicalBaseUrl"\s*:\s*"[^"]*\/watch\?v=([A-Za-z0-9_-]{11})"/);
+      if (canonical) return canonical[1];
+      const watchLink = html.match(/href="\/watch\?v=([A-Za-z0-9_-]{11})[^"]*"[^>]*>[^<]*[Ll]ive/);
+      if (watchLink) return watchLink[1];
 
-      // Must be an active live broadcast
-      const isLive = html.includes('"liveBroadcastContent":"live"') || html.includes('"isLive":true');
-      if (!isLive) return null;
-
-      const match = html.match(/"videoId":"([0-9A-Za-z_-]{11})"/);
-      return match ? match[1] : null;
+      return null;
     } catch { return null; }
   };
 
