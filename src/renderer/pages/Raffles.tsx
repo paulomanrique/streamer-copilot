@@ -91,6 +91,23 @@ function createFormState(raffle: Raffle | null, platformOptions: PlatformOption[
   };
 }
 
+function canRunAction(status: Raffle['status'], action: RaffleControlAction): boolean {
+  switch (action) {
+    case 'open_entries':
+      return status === 'draft';
+    case 'close_entries':
+      return status === 'collecting';
+    case 'spin':
+      return status === 'ready_to_spin';
+    case 'finalize':
+      return status === 'paused_top2';
+    case 'cancel':
+      return ['draft', 'collecting', 'ready_to_spin', 'spinning', 'paused_top2'].includes(status);
+    case 'reset':
+      return status === 'completed' || status === 'cancelled';
+  }
+}
+
 async function getConfiguredPlatformOptions(): Promise<PlatformOption[]> {
   const [twitchCreds, youtubeSettings] = await Promise.all([
     window.copilot.twitchGetCredentials(),
@@ -144,6 +161,7 @@ export function RafflesPage() {
   const topTwoEntries = visibleSnapshot
     ? visibleSnapshot.entries.filter((entry) => visibleSnapshot.raffle.top2EntryIds.includes(entry.id))
     : [];
+  const currentStatus = visibleSnapshot?.raffle.status ?? selectedRaffle?.status ?? 'draft';
 
   useEffect(() => {
     void load();
@@ -328,6 +346,7 @@ export function RafflesPage() {
 
   async function runAction(action: RaffleControlAction): Promise<void> {
     if (!selectedRaffle) return;
+    if (!canRunAction(selectedRaffle.status, action)) return;
     setIsBusy(true);
     setError(null);
     try {
@@ -470,12 +489,12 @@ export function RafflesPage() {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <button type="button" disabled={isBusy} onClick={() => void runAction('open_entries')} className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-emerald-600 text-gray-300 hover:text-white transition-colors">Open</button>
-                  <button type="button" disabled={isBusy} onClick={() => void runAction('close_entries')} className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-sky-600 text-gray-300 hover:text-white transition-colors">Close</button>
-                  <button type="button" disabled={isBusy} onClick={() => void runAction('spin')} className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-violet-600 text-gray-300 hover:text-white transition-colors">Spin</button>
-                  <button type="button" disabled={isBusy} onClick={() => void runAction('finalize')} className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-fuchsia-600 text-gray-300 hover:text-white transition-colors">Finalize</button>
-                  <button type="button" disabled={isBusy} onClick={() => void runAction('cancel')} className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-red-700 text-gray-300 hover:text-white transition-colors">Cancel</button>
-                  <button type="button" disabled={isBusy} onClick={() => void runAction('reset')} className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors">Reset</button>
+                  <button type="button" disabled={isBusy || !canRunAction(currentStatus, 'open_entries')} onClick={() => void runAction('open_entries')} className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-emerald-600 text-gray-300 hover:text-white transition-colors disabled:opacity-40 disabled:hover:bg-gray-700 disabled:hover:text-gray-300">Open</button>
+                  <button type="button" disabled={isBusy || !canRunAction(currentStatus, 'close_entries')} onClick={() => void runAction('close_entries')} className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-sky-600 text-gray-300 hover:text-white transition-colors disabled:opacity-40 disabled:hover:bg-gray-700 disabled:hover:text-gray-300">Close</button>
+                  <button type="button" disabled={isBusy || !canRunAction(currentStatus, 'spin')} onClick={() => void runAction('spin')} className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-violet-600 text-gray-300 hover:text-white transition-colors disabled:opacity-40 disabled:hover:bg-gray-700 disabled:hover:text-gray-300">Spin</button>
+                  <button type="button" disabled={isBusy || !canRunAction(currentStatus, 'finalize')} onClick={() => void runAction('finalize')} className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-fuchsia-600 text-gray-300 hover:text-white transition-colors disabled:opacity-40 disabled:hover:bg-gray-700 disabled:hover:text-gray-300">Finalize</button>
+                  <button type="button" disabled={isBusy || !canRunAction(currentStatus, 'cancel')} onClick={() => void runAction('cancel')} className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-red-700 text-gray-300 hover:text-white transition-colors disabled:opacity-40 disabled:hover:bg-gray-700 disabled:hover:text-gray-300">Cancel</button>
+                  <button type="button" disabled={isBusy || !canRunAction(currentStatus, 'reset')} onClick={() => void runAction('reset')} className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors disabled:opacity-40 disabled:hover:bg-gray-700">Reset</button>
                 </div>
               </div>
 

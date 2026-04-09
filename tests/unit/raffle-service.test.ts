@@ -249,4 +249,47 @@ describe('RaffleService', () => {
 
     expect(() => service.control({ raffleId: raffle.id, action: 'spin' })).toThrow('Spin can only run when the raffle is ready');
   });
+
+  it('reset restores enrolled users after a completed raffle', async () => {
+    vi.useFakeTimers();
+    const service = new RaffleService({
+      repository,
+      getOverlayInfo: (raffleId) => ({ raffleId, overlayUrl: 'http://overlay', stateUrl: 'http://overlay/state' }),
+      onState: vi.fn(),
+      onEntry: vi.fn(),
+      onResult: vi.fn(),
+      onAnnounceWinner: vi.fn(async () => {}),
+      now: () => new Date('2026-04-09T10:00:00.000Z').getTime(),
+      random: () => 0,
+    });
+
+    service.create({
+      title: 'Reset after completion',
+      entryCommand: '!join',
+      mode: 'single-winner',
+      entryDeadlineAt: null,
+      acceptedPlatforms: ['twitch'],
+      staffTriggerCommand: '!roll',
+      winnerAnnouncementTemplate: 'Congrats {winner}',
+      enabled: true,
+    });
+    const raffle = service.list()[0];
+    service.control({ raffleId: raffle.id, action: 'open_entries' });
+    service.handle(createMessage({ id: 'msg-a', author: 'alice' }), 'everyone');
+    service.handle(createMessage({ id: 'msg-b', author: 'bob' }), 'everyone');
+    service.control({ raffleId: raffle.id, action: 'close_entries' });
+    service.control({ raffleId: raffle.id, action: 'spin' });
+    await vi.advanceTimersByTimeAsync(6_300);
+
+    let snapshot = service.getSnapshot(raffle.id);
+    expect(snapshot.raffle.status).toBe('completed');
+
+    service.control({ raffleId: raffle.id, action: 'reset' });
+    snapshot = service.getSnapshot(raffle.id);
+    expect(snapshot.raffle.status).toBe('draft');
+    expect(snapshot.entries).toHaveLength(2);
+    expect(snapshot.entries.every((entry) => !entry.isWinner && !entry.isEliminated)).toBe(true);
+    expect(snapshot.history).toHaveLength(0);
+    vi.useRealTimers();
+  });
 });

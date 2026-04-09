@@ -373,8 +373,18 @@ export class RaffleRepository {
 
   reset(raffleId: string): void {
     const tx = this.db.transaction((id: string) => {
-      this.db.prepare('DELETE FROM raffle_entries WHERE raffle_id = ?').run(id);
       this.db.prepare('DELETE FROM raffle_rounds WHERE raffle_id = ?').run(id);
+      this.db
+        .prepare(
+          `
+            UPDATE raffle_entries
+            SET is_eliminated = 0,
+                elimination_order = NULL,
+                is_winner = 0
+            WHERE raffle_id = ?
+          `,
+        )
+        .run(id);
       this.db
         .prepare(
           `

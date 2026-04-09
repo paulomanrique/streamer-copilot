@@ -12,6 +12,7 @@ interface DatabaseLike {
   exec: (sql: string) => void;
   prepare: (sql: string) => StatementLike;
   pragma: (sql: string) => void;
+  transaction: <TArgs extends unknown[]>(fn: (...args: TArgs) => void) => (...args: TArgs) => void;
   close: () => void;
 }
 
@@ -32,6 +33,18 @@ export function createTestDatabase(): DatabaseLike {
     },
     pragma: (sql) => {
       db.exec(`PRAGMA ${sql};`);
+    },
+    transaction: (fn) => {
+      return (...args) => {
+        db.exec('BEGIN');
+        try {
+          fn(...args);
+          db.exec('COMMIT');
+        } catch (error) {
+          db.exec('ROLLBACK');
+          throw error;
+        }
+      };
     },
     close: () => {
       db.close();
