@@ -153,12 +153,13 @@ export class ProfileStore {
         throw new Error('Invalid profile state');
       }
 
-      const normalized = await this.normalizeState(parsed);
-      await this.writeState(normalized);
-      return normalized;
-    } catch {
+      return this.normalizeState(parsed);
+    } catch (err) {
+      const isNotFound = (err as NodeJS.ErrnoException).code === 'ENOENT';
       const initial = this.createInitialState();
-      await this.writeState(initial);
+      if (isNotFound) {
+        await this.writeState(initial);
+      }
       return initial;
     }
   }
@@ -174,50 +175,13 @@ export class ProfileStore {
     };
   }
 
-  private async normalizeState(state: ProfileState): Promise<ProfileState> {
+  private normalizeState(state: ProfileState): ProfileState {
     const profiles = Array.isArray(state.profiles) ? state.profiles : [];
     const activeProfileId = profiles.some((profile) => profile.id === state.activeProfileId)
       ? state.activeProfileId
       : (profiles[0]?.id ?? '');
 
-    const normalizedState: ProfileState = {
-      activeProfileId,
-      profiles,
-    };
-
-    if (await this.isLegacyAutoCreatedDefaultProfile(normalizedState)) {
-      return this.createInitialState();
-    }
-
-    return normalizedState;
-  }
-
-  private async isLegacyAutoCreatedDefaultProfile(state: ProfileState): Promise<boolean> {
-    if (state.profiles.length !== 1) return false;
-
-    const [profile] = state.profiles;
-    const legacyDirectory = path.join(this.userDataPath, 'profiles', 'principal');
-    if (profile.name !== 'Principal') return false;
-    if (path.resolve(profile.directory) !== path.resolve(legacyDirectory)) return false;
-
-    const expectedFiles = [
-      { fileName: PROFILE_CONFIG_FILES.settings, defaultContent: EMPTY_OBJECT },
-      { fileName: PROFILE_CONFIG_FILES.soundCommands, defaultContent: EMPTY_ARRAY },
-      { fileName: PROFILE_CONFIG_FILES.voiceCommands, defaultContent: EMPTY_ARRAY },
-      { fileName: PROFILE_CONFIG_FILES.scheduled, defaultContent: EMPTY_ARRAY },
-    ];
-
-    for (const file of expectedFiles) {
-      const filePath = path.join(profile.directory, file.fileName);
-      try {
-        const content = await fs.readFile(filePath, 'utf-8');
-        if (content !== file.defaultContent) return false;
-      } catch {
-        return false;
-      }
-    }
-
-    return true;
+    return { activeProfileId, profiles };
   }
 
   private async ensureProfileFiles(state: ProfileState): Promise<void> {
