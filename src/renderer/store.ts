@@ -21,7 +21,7 @@ interface AppStore extends ProfilesSnapshot {
   twitchStatus: TwitchConnectionStatus;
   twitchChannel: string | null;
   twitchLiveStats: TwitchLiveStats | null;
-  youtubeStatus: boolean;
+  youtubeStatus: number;
   setProfiles: (snapshot: ProfilesSnapshot) => void;
   setObsStats: (stats: ObsStatsSnapshot | ((current: ObsStatsSnapshot) => ObsStatsSnapshot)) => void;
   setChatSnapshot: (snapshot: { messages: ChatMessage[]; events: StreamEvent[] }) => void;
@@ -30,7 +30,7 @@ interface AppStore extends ProfilesSnapshot {
   setTwitchStatus: (status: TwitchConnectionStatus) => void;
   setTwitchChannel: (channel: string | null) => void;
   setTwitchLiveStats: (stats: TwitchLiveStats) => void;
-  setYoutubeStatus: (status: boolean) => void;
+  setYoutubeStatus: (status: number) => void;
 }
 
 export const useAppStore = create<AppStore>((set) => ({
@@ -42,7 +42,7 @@ export const useAppStore = create<AppStore>((set) => ({
   twitchStatus: 'disconnected',
   twitchChannel: null,
   twitchLiveStats: null,
-  youtubeStatus: false,
+  youtubeStatus: 0,
   setProfiles: (snapshot) =>
     set({
       activeProfileId: snapshot.activeProfileId,

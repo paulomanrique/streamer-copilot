@@ -171,7 +171,7 @@ const copilotApi: CopilotApi = {
   twitchStartOAuth: () => ipcRenderer.invoke(IPC_CHANNELS.twitchStartOAuth) as Promise<{ username: string; accessToken: string }>,
   youtubeConnect: (input) => ipcRenderer.invoke(IPC_CHANNELS.youtubeConnect, input),
   youtubeDisconnect: () => ipcRenderer.invoke(IPC_CHANNELS.youtubeDisconnect),
-  youtubeGetStatus: () => ipcRenderer.invoke(IPC_CHANNELS.youtubeGetStatus) as Promise<boolean>,
+  youtubeGetStatus: () => ipcRenderer.invoke(IPC_CHANNELS.youtubeGetStatus) as Promise<number>,
   youtubeOpenLogin: () => ipcRenderer.invoke(IPC_CHANNELS.youtubeOpenLogin),
   youtubeGetSettings: () => ipcRenderer.invoke(IPC_CHANNELS.youtubeGetSettings),
   youtubeSaveSettings: (settings) => ipcRenderer.invoke(IPC_CHANNELS.youtubeSaveSettings, settings),
@@ -186,9 +186,9 @@ const copilotApi: CopilotApi = {
     ipcRenderer.on(IPC_CHANNELS.twitchLiveStats, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.twitchLiveStats, wrappedListener); };
   },
-  onYoutubeStatus: (listener: (connected: boolean) => void) => {
-    const wrappedListener = (_event: Electron.IpcRendererEvent, status: boolean) => listener(status);
-    ipcRenderer.on(IPC_CHANNELS.youtubeGetStatus, wrappedListener); // Use channel from main process
+  onYoutubeStatus: (listener: (streamCount: number) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, streamCount: number) => listener(streamCount);
+    ipcRenderer.on(IPC_CHANNELS.youtubeGetStatus, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.youtubeGetStatus, wrappedListener); };
   },
 };

@@ -5,7 +5,7 @@ interface ObsStatsPanelProps {
   stats: ObsStatsSnapshot;
   twitchLiveStats: TwitchLiveStats | null;
   twitchConnected: boolean;
-  youtubeConnected: boolean;
+  youtubeConnected: number;
 }
 
 
@@ -97,7 +97,7 @@ export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtube
           <span className="text-xs font-mono text-gray-300">{connectionPct.toFixed(1)}%</span>
         </div>
 
-        {(twitchConnected || youtubeConnected) && (
+        {(twitchConnected || youtubeConnected > 0) && (
           <div className="col-span-4 grid grid-cols-2 gap-2">
             {twitchConnected && (
               <ViewerCard
@@ -110,13 +110,24 @@ export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtube
                 followers={twitchLiveStats ? fmtNum(twitchLiveStats.followerCount) : undefined}
               />
             )}
-            {youtubeConnected && (
+            {youtubeConnected >= 1 && (
               <ViewerCard
-                label="YouTube"
+                label="YouTube H"
                 icon={ICONS.youtube}
                 classes="bg-red-500/10 border-red-500/20 text-red-300"
                 metaClass="text-red-400"
                 value="—"
+                isLive
+              />
+            )}
+            {youtubeConnected >= 2 && (
+              <ViewerCard
+                label="YouTube V"
+                icon={ICONS.youtube}
+                classes="bg-rose-400/10 border-rose-400/20 text-rose-300"
+                metaClass="text-rose-400"
+                value="—"
+                isLive
               />
             )}
           </div>

@@ -139,13 +139,13 @@ export interface CopilotApi {
   twitchGetStatus: () => Promise<TwitchConnectionStatus>;
   onTwitchStatus: (listener: (status: TwitchConnectionStatus) => void) => () => void;
   onTwitchLiveStats: (listener: (stats: TwitchLiveStats) => void) => () => void;
-  onYoutubeStatus: (listener: (connected: boolean) => void) => () => void;
+  onYoutubeStatus: (listener: (streamCount: number) => void) => () => void;
   twitchGetUserAvatars: (logins: string[]) => Promise<Record<string, string>>;
   twitchGetBadgeUrls: (badgeIds: string[]) => Promise<Record<string, string>>;
   twitchStartOAuth: () => Promise<{ username: string; accessToken: string }>;
   youtubeConnect: (input: { videoId: string }) => Promise<void>;
   youtubeDisconnect: () => Promise<void>;
-  youtubeGetStatus: () => Promise<boolean>;
+  youtubeGetStatus: () => Promise<number>;
   youtubeOpenLogin: () => Promise<void>;
   youtubeGetSettings: () => Promise<import('./types.js').YouTubeSettings>;
   youtubeSaveSettings: (settings: import('./types.js').YouTubeSettings) => Promise<void>;

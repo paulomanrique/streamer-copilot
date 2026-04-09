@@ -68,7 +68,7 @@ export class StateHub {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.twitchLiveStats, stats);
   }
 
-  pushYoutubeStatus(connected: boolean): void {
-    this.rendererWindow?.webContents.send(IPC_CHANNELS.youtubeGetStatus, connected);
+  pushYoutubeStatus(streamCount: number): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.youtubeGetStatus, streamCount);
   }
 }

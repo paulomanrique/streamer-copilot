@@ -14,7 +14,7 @@ interface DashboardSummaryProps {
   twitchStatus: TwitchConnectionStatus;
   twitchChannel: string | null;
   twitchLiveStats: TwitchLiveStats | null;
-  youtubeStatus: boolean;
+  youtubeStatus: number;
 }
 
 export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, obsStats, twitchStatus, twitchChannel, twitchLiveStats, youtubeStatus }: DashboardSummaryProps) {
@@ -45,7 +45,8 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
   const connectedPlatforms = useMemo(() => {
     const list: import('../../shared/types.js').PlatformId[] = [];
     if (twitchStatus === 'connected') list.push('twitch');
-    if (youtubeStatus) list.push('youtube');
+    if (youtubeStatus >= 1) list.push('youtube');
+    if (youtubeStatus >= 2) list.push('youtube-v');
     return list;
   }, [twitchStatus, youtubeStatus]);
 

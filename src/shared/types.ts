@@ -26,7 +26,7 @@ export interface LanguageOption {
   nativeLabel: string;
 }
 
-export type PlatformId = 'twitch' | 'youtube' | 'kick' | 'tiktok';
+export type PlatformId = 'twitch' | 'youtube' | 'youtube-v' | 'kick' | 'tiktok';
 
 export type ChatBadge = 'moderator' | 'subscriber' | 'member' | 'vip' | 'broadcaster' | (string & {});
 export interface ChatMessage {

@@ -42,7 +42,7 @@ export function PlatformsSettingsPage() {
   const [isEditingChannel, setIsEditingChannel] = useState(false);
 
   // YouTube state
-  const [ytConnected, setYtConnected] = useState(false);
+  const [ytConnected, setYtConnected] = useState(0);
   const [ytSettings, setYtSettings] = useState<YouTubeSettings>({ channels: [], autoConnect: true });
   const [newChannelHandle, setNewChannelHandle] = useState('');
 
@@ -302,15 +302,15 @@ export function PlatformsSettingsPage() {
               <div>
                 <p className="text-sm font-medium">YouTube Auto-Monitor</p>
                 <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className={`w-1.5 h-1.5 rounded-full ${ytConnected ? 'bg-green-400' : 'bg-gray-500'}`} />
-                  <span className={`text-xs ${ytConnected ? 'text-green-400' : 'text-gray-400'}`}>
-                    {ytConnected ? 'Scraper Active' : 'Monitoring for Lives'}
+                  <span className={`w-1.5 h-1.5 rounded-full ${ytConnected > 0 ? 'bg-green-400' : 'bg-gray-500'}`} />
+                  <span className={`text-xs ${ytConnected > 0 ? 'text-green-400' : 'text-gray-400'}`}>
+                    {ytConnected > 0 ? `${ytConnected} Scraper${ytConnected > 1 ? 's' : ''} Active` : 'Monitoring for Lives'}
                   </span>
                 </div>
               </div>
             </div>
-            {ytConnected && (
-              <button type="button" onClick={disconnectYoutube} className="text-xs px-2 py-1 rounded bg-red-900/30 text-red-400 hover:bg-red-900/50">Stop Scraper</button>
+            {ytConnected > 0 && (
+              <button type="button" onClick={disconnectYoutube} className="text-xs px-2 py-1 rounded bg-red-900/30 text-red-400 hover:bg-red-900/50">Stop Scrapers</button>
             )}
           </div>
 

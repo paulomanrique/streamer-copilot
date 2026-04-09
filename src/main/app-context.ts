@@ -107,9 +107,12 @@ export function createAppContext(options: AppContextOptions): () => void {
   let twitchStatsTimer: ReturnType<typeof setInterval> | null = null;
   const userAvatarCache = new Map<string, string>();
   const badgeCache = new Map<string, string>();
-  let youtubeScraper: YouTubeScraper | null = null;
+  const youtubeScrapers = new Map<string, YouTubeScraper>();
   let youtubeMonitorTimer: ReturnType<typeof setInterval> | null = null;
-  let lastDetectedVideoId: string | null = null;
+  let lastDetectedVideoIds: Set<string> = new Set();
+
+  // Ordered list of platform IDs for YouTube streams (first = horizontal, second = vertical)
+  const YT_PLATFORMS: Array<'youtube' | 'youtube-v'> = ['youtube', 'youtube-v'];
 
   const getTwitchCredentialsStore = async (): Promise<TwitchCredentialsStore | null> => {
     const snapshot = await profileStore.list();
@@ -189,30 +192,48 @@ export function createAppContext(options: AppContextOptions): () => void {
     const settings = await store.load();
     if (!settings.autoConnect || settings.channels.length === 0) return;
 
+    // Collect all live videoIds across all enabled channels
+    const allLiveIds: string[] = [];
     for (const channel of settings.channels) {
       if (!channel.enabled) continue;
-      const videoIds = await checkYouTubeLive(channel.handle);
-      const videoId = videoIds[0] ?? null;
-      if (videoId && videoId !== lastDetectedVideoId) {
-        logService.info('youtube', `Auto-detected live for ${channel.handle}: ${videoIds.join(', ')}`);
-        lastDetectedVideoId = videoId;
-        if (youtubeScraper) youtubeScraper.stop();
-        youtubeScraper = new YouTubeScraper({
-          videoId,
-          onMessage: (message) => {
-            (chatService as any).handleMessage({
-              id: `yt-auto-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-              timestampLabel: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()),
-              ...message,
-            });
-          },
-          onLog: (msg) => logService.info('youtube', msg),
-        });
-        await youtubeScraper.start();
-        options.stateHub.pushYoutubeStatus(true);
-        break;
+      const ids = await checkYouTubeLive(channel.handle);
+      for (const id of ids) if (!allLiveIds.includes(id)) allLiveIds.push(id);
+    }
+
+    // Stop scrapers for streams that are no longer live
+    for (const [videoId, scraper] of youtubeScrapers) {
+      if (!allLiveIds.includes(videoId)) {
+        scraper.stop();
+        youtubeScrapers.delete(videoId);
+        logService.info('youtube', `Stopped scraper for ${videoId} (no longer live)`);
       }
     }
+
+    // Start scrapers for newly detected streams (up to 2)
+    const fmt = new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' });
+    for (let i = 0; i < Math.min(allLiveIds.length, YT_PLATFORMS.length); i++) {
+      const videoId = allLiveIds[i];
+      if (youtubeScrapers.has(videoId)) continue;
+      const platform = YT_PLATFORMS[i];
+      logService.info('youtube', `Auto-detected live (${platform}): ${videoId}`);
+      const scraper = new YouTubeScraper({
+        videoId,
+        onMessage: (message) => {
+          (chatService as any).handleMessage({
+            id: `yt-auto-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            timestampLabel: fmt.format(new Date()),
+            ...message,
+            platform,
+          });
+        },
+        onLog: (msg) => logService.info('youtube', msg),
+      });
+      youtubeScrapers.set(videoId, scraper);
+      await scraper.start();
+    }
+
+    lastDetectedVideoIds = new Set(allLiveIds);
+    options.stateHub.pushYoutubeStatus(youtubeScrapers.size);
   };
 
   const startYoutubeMonitor = () => {
@@ -459,12 +480,27 @@ export function createAppContext(options: AppContextOptions): () => void {
   ipcMain.handle(IPC_CHANNELS.youtubeGetSettings, async () => { const s = await getYoutubeSettingsStore(); return s ? s.load() : { channels: [], autoConnect: true }; });
   ipcMain.handle(IPC_CHANNELS.youtubeSaveSettings, async (_, raw) => { const s = await getYoutubeSettingsStore(); if (s) { await s.save(youtubeSettingsSchema.parse(raw)); startYoutubeMonitor(); } });
   ipcMain.handle(IPC_CHANNELS.youtubeConnect, async (_, raw) => {
-    const i = youtubeConnectSchema.parse(raw); if (youtubeScraper) youtubeScraper.stop();
-    youtubeScraper = new YouTubeScraper({ videoId: i.videoId, onMessage: (m) => (chatService as any).handleMessage({ id: `yt-${Date.now()}`, timestampLabel: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()), ...m }), onLog: (msg) => logService.info('youtube', msg) });
-    await youtubeScraper.start(); options.stateHub.pushYoutubeStatus(true);
+    const i = youtubeConnectSchema.parse(raw);
+    const fmt = new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' });
+    if (!youtubeScrapers.has(i.videoId)) {
+      const idx = youtubeScrapers.size;
+      const platform = YT_PLATFORMS[idx] ?? 'youtube-v';
+      const scraper = new YouTubeScraper({
+        videoId: i.videoId,
+        onMessage: (m) => (chatService as any).handleMessage({ id: `yt-${Date.now()}`, timestampLabel: fmt.format(new Date()), ...m, platform }),
+        onLog: (msg) => logService.info('youtube', msg),
+      });
+      youtubeScrapers.set(i.videoId, scraper);
+      await scraper.start();
+    }
+    options.stateHub.pushYoutubeStatus(youtubeScrapers.size);
   });
-  ipcMain.handle(IPC_CHANNELS.youtubeDisconnect, async () => { if (youtubeScraper) { youtubeScraper.stop(); youtubeScraper = null; } options.stateHub.pushYoutubeStatus(false); });
-  ipcMain.handle(IPC_CHANNELS.youtubeGetStatus, async () => youtubeScraper !== null);
+  ipcMain.handle(IPC_CHANNELS.youtubeDisconnect, async () => {
+    for (const scraper of youtubeScrapers.values()) scraper.stop();
+    youtubeScrapers.clear();
+    options.stateHub.pushYoutubeStatus(0);
+  });
+  ipcMain.handle(IPC_CHANNELS.youtubeGetStatus, async () => youtubeScrapers.size);
   ipcMain.handle(IPC_CHANNELS.youtubeOpenLogin, async (e) => {
     const win = new BrowserWindow({ width: 600, height: 800, parent: BrowserWindow.fromWebContents(e.sender)!, modal: true, title: 'YouTube Login', autoHideMenuBar: true });
     win.webContents.on('did-navigate', (_, u) => { const t = new URL(u); if (t.hostname.includes('youtube.com') && t.pathname === '/' && !u.includes('signin')) setTimeout(() => { if (!win.isDestroyed()) win.close(); }, 1500); });
