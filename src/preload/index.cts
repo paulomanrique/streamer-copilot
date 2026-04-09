@@ -174,6 +174,7 @@ const copilotApi: CopilotApi = {
   youtubeOpenLogin: () => ipcRenderer.invoke(IPC_CHANNELS.youtubeOpenLogin),
   youtubeGetSettings: () => ipcRenderer.invoke(IPC_CHANNELS.youtubeGetSettings),
   youtubeSaveSettings: (settings) => ipcRenderer.invoke(IPC_CHANNELS.youtubeSaveSettings, settings),
+  youtubeCheckLive: (handle) => ipcRenderer.invoke(IPC_CHANNELS.youtubeCheckLive, handle) as Promise<{ videoId: string | null }>,
   onTwitchStatus: (listener: (status: TwitchConnectionStatus) => void) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, status: TwitchConnectionStatus) => listener(status);
     ipcRenderer.on(IPC_CHANNELS.twitchStatus, wrappedListener);

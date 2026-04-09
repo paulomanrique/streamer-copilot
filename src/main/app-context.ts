@@ -436,6 +436,32 @@ export function createAppContext(options: AppContextOptions): () => void {
     win.webContents.on('did-navigate', (_, u) => { const t = new URL(u); if (t.hostname.includes('youtube.com') && t.pathname === '/' && !u.includes('signin')) setTimeout(() => { if (!win.isDestroyed()) win.close(); }, 1500); });
     await win.loadURL('https://accounts.google.com/ServiceLogin?service=youtube&continue=https://www.youtube.com/signin?action_handle_signin=true');
   });
+  ipcMain.handle(IPC_CHANNELS.youtubeCheckLive, async (_, handle: unknown) => {
+    const videoId = await checkYouTubeLive(String(handle ?? ''));
+    return { videoId };
+  });
+
+  // Auto-reconnect Twitch from saved credentials on startup
+  void (async () => {
+    const store = await getTwitchCredentialsStore();
+    if (!store) return;
+    const creds = await store.load();
+    if (!creds) return;
+    try {
+      const token = creds.oauthToken.replace(/^oauth:/, '');
+      await loadTwitchBadges(creds.channel, token);
+      await chatService.replaceAdapter(createTwitchChatAdapter({
+        channels: [creds.channel],
+        username: creds.username,
+        password: creds.oauthToken,
+        onStatusChange: setTwitchStatus,
+        resolveBadgeUrls,
+      }));
+      logService.info('twitch', 'Auto-reconnected from saved credentials', { channel: creds.channel });
+    } catch (cause) {
+      logService.warn('twitch', 'Auto-reconnect failed', { error: cause instanceof Error ? cause.message : String(cause) });
+    }
+  })();
 
   startYoutubeMonitor();
   obsService.start();

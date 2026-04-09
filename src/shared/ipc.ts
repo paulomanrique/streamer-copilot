@@ -86,6 +86,7 @@ export const IPC_CHANNELS = {
   youtubeOpenLogin: 'youtube:open-login',
   youtubeGetSettings: 'youtube:get-settings',
   youtubeSaveSettings: 'youtube:save-settings',
+  youtubeCheckLive: 'youtube:check-live',
 } as const;
 
 export interface RecentChatSnapshot {
@@ -148,4 +149,5 @@ export interface CopilotApi {
   youtubeOpenLogin: () => Promise<void>;
   youtubeGetSettings: () => Promise<import('./types.js').YouTubeSettings>;
   youtubeSaveSettings: (settings: import('./types.js').YouTubeSettings) => Promise<void>;
+  youtubeCheckLive: (handle: string) => Promise<{ videoId: string | null }>;
 }

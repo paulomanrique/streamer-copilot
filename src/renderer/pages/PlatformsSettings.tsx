@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import type { TwitchConnectionStatus, TwitchCredentials, YouTubeSettings, YouTubeChannelConfig } from '../../shared/types.js';
+import type { TwitchConnectionStatus, TwitchCredentials, YouTubeSettings } from '../../shared/types.js';
+
+interface LiveCheckResult {
+  handle: string;
+  videoId: string | null;
+}
 
 const STATUS_LABEL: Record<TwitchConnectionStatus, string> = {
   disconnected: 'Disconnected',
@@ -43,6 +48,8 @@ export function PlatformsSettingsPage() {
 
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [checkingHandle, setCheckingHandle] = useState<string | null>(null);
+  const [liveCheckResult, setLiveCheckResult] = useState<LiveCheckResult | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -171,7 +178,18 @@ export function PlatformsSettingsPage() {
     await window.copilot.youtubeDisconnect();
   };
 
+  const checkChannelLive = async (handle: string) => {
+    setCheckingHandle(handle);
+    try {
+      const result = await window.copilot.youtubeCheckLive(handle);
+      setLiveCheckResult({ handle, videoId: result.videoId });
+    } finally {
+      setCheckingHandle(null);
+    }
+  };
+
   return (
+    <>
     <div className="p-6 max-w-lg">
       <h2 className="text-lg font-semibold mb-1">Platforms</h2>
       <p className="text-sm text-gray-400 mb-6">Connect your streaming accounts to enable chat integration.</p>
@@ -316,9 +334,29 @@ export function PlatformsSettingsPage() {
                     <input type="checkbox" checked={c.enabled} onChange={() => toggleYouTubeChannel(c.id)} className="accent-red-500" />
                     <span className={`text-xs font-mono ${c.enabled ? 'text-gray-200' : 'text-gray-500'}`}>{c.handle}</span>
                   </div>
-                  <button type="button" onClick={() => removeYouTubeChannel(c.id)} className="text-gray-500 hover:text-red-400">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      disabled={checkingHandle === c.handle}
+                      onClick={() => void checkChannelLive(c.handle)}
+                      className="text-[10px] px-2 py-0.5 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-40 flex items-center gap-1"
+                    >
+                      {checkingHandle === c.handle ? (
+                        <svg className="w-2.5 h-2.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                        </svg>
+                      ) : (
+                        <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                      )}
+                      Check
+                    </button>
+                    <button type="button" onClick={() => removeYouTubeChannel(c.id)} className="text-gray-500 hover:text-red-400">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                  </div>
                 </div>
               ))}
               {ytSettings.channels.length === 0 && (
@@ -357,5 +395,37 @@ export function PlatformsSettingsPage() {
 
       </div>
     </div>
+
+    {/* Live check modal */}
+    {liveCheckResult && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setLiveCheckResult(null)}>
+        <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl p-6 w-80 text-center" onClick={(e) => e.stopPropagation()}>
+          {liveCheckResult.videoId ? (
+            <>
+              <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-3">
+                <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/>
+                </svg>
+              </div>
+              <p className="text-sm font-semibold text-green-400 mb-1">Live detected!</p>
+              <p className="text-xs text-gray-400 mb-1">{liveCheckResult.handle}</p>
+              <p className="text-[10px] font-mono text-gray-500 bg-gray-800 rounded px-2 py-1 inline-block">{liveCheckResult.videoId}</p>
+            </>
+          ) : (
+            <>
+              <div className="w-10 h-10 rounded-full bg-gray-700/50 flex items-center justify-center mx-auto mb-3">
+                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </div>
+              <p className="text-sm font-semibold text-gray-300 mb-1">No live found</p>
+              <p className="text-xs text-gray-500">{liveCheckResult.handle} doesn't appear to be streaming right now.</p>
+            </>
+          )}
+          <button type="button" onClick={() => setLiveCheckResult(null)} className="mt-4 px-4 py-1.5 rounded bg-gray-700 text-xs text-gray-300 hover:bg-gray-600">Close</button>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
