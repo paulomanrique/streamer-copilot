@@ -127,12 +127,24 @@ export function createAppContext(options: AppContextOptions): () => void {
 
   const checkYouTubeLive = async (handle: string): Promise<string | null> => {
     try {
-      const url = handle.startsWith('UC') 
+      const url = handle.startsWith('UC')
         ? `https://www.youtube.com/channel/${handle}/live`
         : `https://www.youtube.com/${handle.startsWith('@') ? '' : '@'}${handle}/live`;
-      
-      const res = await fetch(url, { redirect: 'follow' });
+
+      const res = await fetch(url, {
+        redirect: 'follow',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+      });
       const html = await res.text();
+
+      // Must be an active live broadcast
+      const isLive = html.includes('"liveBroadcastContent":"live"') || html.includes('"isLive":true');
+      if (!isLive) return null;
+
       const match = html.match(/"videoId":"([0-9A-Za-z_-]{11})"/);
       return match ? match[1] : null;
     } catch { return null; }
@@ -347,6 +359,8 @@ export function createAppContext(options: AppContextOptions): () => void {
     const c = twitchCredentialsSchema.parse(raw);
     const s = await getTwitchCredentialsStore(); if (!s) throw new Error('No profile');
     await s.save(c); setTwitchStatus('connecting');
+    // Pre-load badges so first messages have badge images
+    await loadTwitchBadges(c.channel, c.oauthToken.replace(/^oauth:/, ''));
     await chatService.replaceAdapter(createTwitchChatAdapter({ channels: [c.channel], username: c.username, password: c.oauthToken, onStatusChange: setTwitchStatus, resolveBadgeUrls }));
   });
   ipcMain.handle(IPC_CHANNELS.twitchDisconnect, async () => { await chatService.removeAdapter('twitch'); setTwitchStatus('disconnected'); const s = await getTwitchCredentialsStore(); if (s) await s.clear(); });
