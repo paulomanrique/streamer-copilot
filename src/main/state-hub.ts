@@ -7,6 +7,8 @@ import type {
   ScheduledStatusItem,
   SoundPlayPayload,
   StreamEvent,
+  TwitchConnectionStatus,
+  TwitchLiveStats,
   VoiceSpeakPayload,
 } from '../shared/types.js';
 
@@ -56,5 +58,17 @@ export class StateHub {
 
   pushChatEvent(payload: StreamEvent): void {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.chatEvent, payload);
+  }
+
+  pushTwitchStatus(status: TwitchConnectionStatus): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.twitchStatus, status);
+  }
+
+  pushTwitchLiveStats(stats: TwitchLiveStats): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.twitchLiveStats, stats);
+  }
+
+  pushYoutubeStatus(connected: boolean): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.youtubeGetStatus, connected);
   }
 }

@@ -28,8 +28,7 @@ export interface LanguageOption {
 
 export type PlatformId = 'twitch' | 'youtube' | 'kick' | 'tiktok';
 
-export type ChatBadge = 'moderator' | 'subscriber' | 'member';
-
+export type ChatBadge = 'moderator' | 'subscriber' | 'member' | 'vip' | 'broadcaster' | (string & {});
 export interface ChatMessage {
   id: string;
   platform: PlatformId;
@@ -37,6 +36,20 @@ export interface ChatMessage {
   content: string;
   badges: ChatBadge[];
   timestampLabel: string;
+  color?: string;
+  avatarUrl?: string;
+}
+
+export interface TwitchLiveStats {
+  viewerCount: number;
+  followerCount: number;
+  isLive: boolean;
+  hypeTrain?: {
+    level: number;
+    progress: number;
+    goal: number;
+    expiry: string; // ISO timestamp
+  } | null;
 }
 
 export type StreamEventType = 'subscription' | 'superchat' | 'raid' | 'cheer' | 'follow' | 'gift';
@@ -181,6 +194,26 @@ export interface SoundCommandDeleteInput {
 
 export interface SoundPlayPayload {
   filePath: string;
+}
+
+export type TwitchConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+
+export interface TwitchCredentials {
+  channel: string;
+  username: string;
+  oauthToken: string;
+}
+
+export interface YouTubeChannelConfig {
+  id: string; // Internal ID
+  handle: string; // @handle or channel ID
+  name?: string;
+  enabled: boolean;
+}
+
+export interface YouTubeSettings {
+  channels: YouTubeChannelConfig[];
+  autoConnect: boolean;
 }
 
 export interface ProfileSummary {

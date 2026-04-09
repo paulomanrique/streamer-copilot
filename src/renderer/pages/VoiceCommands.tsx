@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
-import { LANGUAGE_OPTIONS, PERMISSION_LEVELS } from '../../shared/constants.js';
-import type { PermissionLevel, VoiceCommand, VoiceCommandUpsertInput } from '../../shared/types.js';
+import type { VoiceCommand } from '../../shared/types.js';
 
 interface VoiceCommandsPageProps {
   voiceRate: number;
@@ -10,410 +9,304 @@ interface VoiceCommandsPageProps {
   onChangeVoiceVolume: (value: number) => void;
 }
 
-const EMPTY_FORM: VoiceCommandUpsertInput = {
-  trigger: '!say',
-  template: null,
-  language: 'en-US',
-  permissions: ['everyone'],
-  cooldownSeconds: 0,
-  enabled: true,
-};
-
-const PERMISSION_LABELS: Record<PermissionLevel, string> = {
-  everyone: 'Everyone',
-  follower: 'Followers',
-  subscriber: 'Subscribers',
-  moderator: 'Moderators',
-  broadcaster: 'Broadcaster',
-};
-
 export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [defaultLanguageCode, setDefaultLanguageCode] = useState(EMPTY_FORM.language);
-  const [languageCode, setLanguageCode] = useState(EMPTY_FORM.language);
-  const [levels, setLevels] = useState<PermissionLevel[]>(EMPTY_FORM.permissions);
-  const [rows, setRows] = useState<VoiceCommand[]>([]);
-  const [draftId, setDraftId] = useState<string | undefined>(undefined);
-  const [trigger, setTrigger] = useState(EMPTY_FORM.trigger);
-  const [template, setTemplate] = useState(EMPTY_FORM.template ?? '');
-  const [cooldownSeconds, setCooldownSeconds] = useState(EMPTY_FORM.cooldownSeconds);
-  const [enabled, setEnabled] = useState(EMPTY_FORM.enabled);
+  const triggerInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Existing singleton command
+  const [commandId, setCommandId] = useState<string | undefined>(undefined);
+
+  // Form state
+  const [enabled, setEnabled] = useState(true);
+  const [trigger, setTrigger] = useState('!voice');
+  const [selectedVoiceName, setSelectedVoiceName] = useState('');
   const [characterLimit, setCharacterLimit] = useState(200);
   const [announceUsername, setAnnounceUsername] = useState(true);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  // Voices from Web Speech API
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+
+  // Validation
+  const [soundTriggers, setSoundTriggers] = useState<Set<string>>(new Set());
+  const [triggerError, setTriggerError] = useState<string | null>(null);
+
+  const [previewText, setPreviewText] = useState('');
+
+  // UI state
   const [isBusy, setIsBusy] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const previewText = useMemo(() => {
-    const trimmedTemplate = template.trim();
-    if (trimmedTemplate) return trimmedTemplate;
-    return 'Preview voice output';
-  }, [template]);
-
+  // ── Load voices from Web Speech API ──────────────────────────────────
   useEffect(() => {
-    const load = async () => {
+    const load = () => {
+      const list = window.speechSynthesis.getVoices();
+      if (list.length > 0) setVoices(list);
+    };
+    load();
+    window.speechSynthesis.addEventListener('voiceschanged', load);
+    return () => window.speechSynthesis.removeEventListener('voiceschanged', load);
+  }, []);
+
+  // ── Load singleton command ────────────────────────────────────────────
+  useEffect(() => {
+    const loadCommands = async () => {
       try {
         const commands = await window.copilot.listVoiceCommands();
-        setRows(commands);
+        if (commands.length > 0) {
+          const cmd = commands[0];
+          setCommandId(cmd.id);
+          setEnabled(cmd.enabled);
+          setTrigger(cmd.trigger);
+          setSelectedVoiceName(cmd.language);
+        }
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : 'Failed to load voice commands');
+        setError(cause instanceof Error ? cause.message : 'Failed to load voice command');
       }
     };
 
-    void load();
+    void loadCommands();
   }, []);
 
-  const resetForm = () => {
-    setDraftId(undefined);
-    setTrigger(EMPTY_FORM.trigger);
-    setTemplate('');
-    setLanguageCode(defaultLanguageCode);
-    setLevels(EMPTY_FORM.permissions);
-    setCooldownSeconds(EMPTY_FORM.cooldownSeconds);
-    setEnabled(EMPTY_FORM.enabled);
-    setError(null);
+  // ── Load sound command triggers for validation ────────────────────────
+  useEffect(() => {
+    const loadSoundTriggers = async () => {
+      try {
+        const sounds = await window.copilot.listSoundCommands();
+        setSoundTriggers(new Set(sounds.map((s) => s.trigger.toLowerCase())));
+      } catch {
+        // non-critical
+      }
+    };
+
+    void loadSoundTriggers();
+  }, []);
+
+  // Auto-select first voice if none selected yet and voices loaded
+  useEffect(() => {
+    if (selectedVoiceName === '' && voices.length > 0) {
+      const defaultVoice = voices.find((v) => v.default) ?? voices[0];
+      setSelectedVoiceName(defaultVoice.name);
+    }
+  }, [voices, selectedVoiceName]);
+
+  // ── Validation ───────────────────────────────────────────────────────
+  const validateTrigger = (value: string): string | null => {
+    if (!value.startsWith('!')) return 'Command must start with !';
+    if (value.trim().length < 2) return 'Command must have at least one character after !';
+    if (soundTriggers.has(value.toLowerCase())) return 'Already used by a Sound Command';
+    return null;
   };
 
-  const openCreate = () => {
-    resetForm();
-    setIsModalOpen(true);
+  const handleTriggerChange = (value: string) => {
+    setTrigger(value);
+    setTriggerError(validateTrigger(value));
+    setStatusMessage(null);
   };
 
-  const openEdit = (command: VoiceCommand) => {
-    setDraftId(command.id);
-    setTrigger(command.trigger);
-    setTemplate(command.template ?? '');
-    setLanguageCode(command.language);
-    setLevels(command.permissions);
-    setCooldownSeconds(command.cooldownSeconds);
-    setEnabled(command.enabled);
-    setError(null);
-    setIsModalOpen(true);
-  };
+  // ── Save ─────────────────────────────────────────────────────────────
+  const save = async () => {
+    const validationError = validateTrigger(trigger);
+    if (validationError) {
+      setTriggerError(validationError);
+      triggerInputRef.current?.focus();
+      return;
+    }
 
-  const saveCommand = async () => {
     setIsBusy(true);
+    setError(null);
+    setStatusMessage(null);
 
     try {
       const commands = await window.copilot.upsertVoiceCommand({
-        id: draftId,
+        id: commandId,
         trigger: trigger.trim(),
-        template: template.trim() || null,
-        language: languageCode,
-        permissions: levels,
-        cooldownSeconds,
+        template: null,
+        language: selectedVoiceName,
+        permissions: ['everyone'],
+        cooldownSeconds: 0,
         enabled,
       });
-      setRows(commands);
-      setIsModalOpen(false);
-      resetForm();
+
+      const saved = commands[0] as VoiceCommand | undefined;
+      if (saved) setCommandId(saved.id);
+
+      props.onChangeVoiceRate(props.voiceRate);
+      props.onChangeVoiceVolume(props.voiceVolume);
+      setStatusMessage('Saved');
+      setTimeout(() => setStatusMessage(null), 2000);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Failed to save voice command');
+      setError(cause instanceof Error ? cause.message : 'Failed to save');
     } finally {
       setIsBusy(false);
     }
   };
 
-  const deleteCommand = async (id: string) => {
+  // ── Preview ──────────────────────────────────────────────────────────
+  const preview = async () => {
+    const text = previewText.trim() || 'Hello, I am your stream copilot!';
     try {
-      const commands = await window.copilot.deleteVoiceCommand({ id });
-      setRows(commands);
-      if (draftId === id) {
-        setIsModalOpen(false);
-        resetForm();
-      }
+      await window.copilot.previewVoiceSpeak({ text, lang: selectedVoiceName });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Failed to delete voice command');
+      setError(cause instanceof Error ? cause.message : 'Preview failed');
     }
   };
 
-  const previewCommand = async (text = previewText, lang = languageCode) => {
-    try {
-      await window.copilot.previewVoiceSpeak({ text, lang });
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Failed to preview voice command');
-    }
-  };
-
-  const saveTtsSettings = () => {
-    setStatusMessage('TTS settings updated');
-    setError(null);
-  };
-
-  const toggleLevel = (level: PermissionLevel) => {
-    if (levels.includes(level)) {
-      const nextLevels = levels.filter((item) => item !== level);
-      setLevels(nextLevels.length > 0 ? nextLevels : ['everyone']);
-      return;
-    }
-
-    setLevels([...levels, level]);
-  };
+  // ── Voices grouped by language ────────────────────────────────────────
+  const voicesByLang = voices.reduce<Record<string, SpeechSynthesisVoice[]>>((acc, voice) => {
+    const lang = voice.lang || 'Other';
+    (acc[lang] ??= []).push(voice);
+    return acc;
+  }, {});
+  const sortedLangs = Object.keys(voicesByLang).sort((a, b) => a.localeCompare(b));
 
   return (
-    <>
-      <div className="p-6">
-        <div className="flex items-center justify-between mb-1">
-          <h2 className="text-lg font-semibold">Voice Commands (TTS)</h2>
+    <div className="p-6 max-w-lg">
+      <h2 className="text-lg font-semibold mb-1">Voice (TTS)</h2>
+      <p className="text-sm text-gray-400 mb-6">
+        Speak chat messages aloud via a trigger command. Example:{' '}
+        <code className="text-violet-300 text-xs bg-gray-800 px-1 py-0.5 rounded">!voice good morning</code>
+      </p>
+
+      <div className="bg-gray-800/40 rounded-xl border border-gray-700 divide-y divide-gray-700">
+
+        {/* Enable toggle */}
+        <div className="flex items-center justify-between px-5 py-4">
+          <div>
+            <p className="text-sm font-medium">Enable TTS</p>
+            <p className="text-xs text-gray-500 mt-0.5">Respond to the trigger command in chat</p>
+          </div>
+          <label className="toggle-switch">
+            <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+            <span className="toggle-slider" />
+          </label>
+        </div>
+
+        {/* Command trigger */}
+        <div className="px-5 py-4">
+          <label className="block text-sm text-gray-400 mb-1.5">
+            Command <span className="text-violet-400">*</span>
+          </label>
+          <input
+            ref={triggerInputRef}
+            type="text"
+            value={trigger}
+            onChange={(e) => handleTriggerChange(e.target.value)}
+            placeholder="!voice"
+            className={`w-full bg-gray-700 border rounded text-sm text-gray-200 px-3 py-2 focus:outline-none font-mono ${
+              triggerError ? 'border-red-500 focus:border-red-400' : 'border-gray-600 focus:border-violet-500'
+            }`}
+          />
+          {triggerError ? (
+            <p className="mt-1.5 text-xs text-red-400">{triggerError}</p>
+          ) : (
+            <p className="mt-1.5 text-xs text-gray-600">Text typed after the command is spoken aloud.</p>
+          )}
+        </div>
+
+        {/* Voice select */}
+        <div className="px-5 py-4">
+          <label className="block text-sm text-gray-400 mb-1.5">Voice</label>
+          {voices.length === 0 ? (
+            <p className="text-xs text-gray-500 italic">Loading voices…</p>
+          ) : (
+            <select
+              value={selectedVoiceName}
+              onChange={(e) => setSelectedVoiceName(e.target.value)}
+              className="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-200 px-3 py-2 focus:outline-none focus:border-violet-500"
+            >
+              {sortedLangs.map((lang) => (
+                <optgroup key={lang} label={lang}>
+                  {voicesByLang[lang].map((voice) => (
+                    <option key={voice.name} value={voice.name}>
+                      {voice.name}{voice.default ? ' ★' : ''}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          )}
+        </div>
+
+        {/* Rate & Volume */}
+        <div className="px-5 py-4 grid grid-cols-2 gap-x-6 gap-y-1">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-sm text-gray-400">Rate</span>
+            <span className="text-xs text-gray-500 tabular-nums">
+              {props.voiceRate === 1 ? 'Normal (1×)' : `${props.voiceRate.toFixed(2)}×`}
+            </span>
+          </div>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-sm text-gray-400">Volume</span>
+            <span className="text-xs text-gray-500 tabular-nums">{Math.round(props.voiceVolume * 100)}%</span>
+          </div>
+          <input
+            type="range" min="50" max="200"
+            value={Math.round(props.voiceRate * 100)}
+            onChange={(e) => props.onChangeVoiceRate(Number(e.target.value) / 100)}
+            className="w-full accent-violet-500"
+          />
+          <input
+            type="range" min="0" max="100"
+            value={Math.round(props.voiceVolume * 100)}
+            onChange={(e) => props.onChangeVoiceVolume(Number(e.target.value) / 100)}
+            className="w-full accent-violet-500"
+          />
+        </div>
+
+        {/* Extra options */}
+        <div className="px-5 py-4 flex items-center gap-6">
+          <div className="flex items-center gap-2.5">
+            <label className="text-sm text-gray-400 whitespace-nowrap">Char limit</label>
+            <input
+              type="number" min="10" max="500"
+              value={characterLimit}
+              onChange={(e) => setCharacterLimit(Number(e.target.value))}
+              className="w-20 bg-gray-700 border border-gray-600 rounded text-sm text-gray-200 px-2 py-1.5 focus:outline-none focus:border-violet-500 text-center"
+            />
+          </div>
+          <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={announceUsername}
+              onChange={(e) => setAnnounceUsername(e.target.checked)}
+              className="accent-violet-500"
+            />
+            Announce username
+          </label>
+        </div>
+
+        {/* Preview + Save */}
+        <div className="px-5 py-4 flex items-center gap-2">
+          <input
+            type="text"
+            value={previewText}
+            onChange={(e) => setPreviewText(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') void preview(); }}
+            placeholder="Type something to preview…"
+            className="flex-1 bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600"
+          />
           <button
             type="button"
-            onClick={openCreate}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors"
+            onClick={() => void preview()}
+            className="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors flex items-center gap-1.5 shrink-0 border border-gray-600"
           >
-            + New Command
+            <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+            Preview
           </button>
-        </div>
-        <p className="text-sm text-gray-400 mb-6">
-          Use TTS to speak chat messages aloud. Ex:{' '}
-          <code className="text-violet-300 text-xs bg-gray-800 px-1 py-0.5 rounded">!voice good morning</code>
-        </p>
-
-        <div className="bg-gray-800/40 rounded-xl border border-gray-700 overflow-hidden mb-6">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-700 bg-gray-800/60">
-                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Command</th>
-                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Fixed Text</th>
-                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Language</th>
-                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Permissions</th>
-                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Cooldown</th>
-                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Active</th>
-                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.id} className="border-b border-gray-800 hover:bg-gray-800/50">
-                  <td className="px-4 py-3 font-mono text-violet-300">{row.trigger}</td>
-                  <td className="px-4 py-3 text-gray-300 text-sm">
-                    {row.template ?? <span className="text-gray-500 italic">free text after the trigger</span>}
-                  </td>
-                  <td className="px-4 py-3 text-gray-300 text-sm">{row.language}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-1 flex-wrap">
-                      {row.permissions.map((level) => (
-                        <span key={level} className="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">
-                          {level}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-gray-400 text-sm">{row.cooldownSeconds}s</td>
-                  <td className="px-4 py-3">
-                    <label className="toggle-switch">
-                      <input type="checkbox" checked={row.enabled} readOnly />
-                      <span className="toggle-slider" />
-                    </label>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => openEdit(row)}
-                        className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
-                      >
-                        ✏️
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void deleteCommand(row.id)}
-                        className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-red-700 text-gray-300 hover:text-white transition-colors"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {rows.length === 0 ? (
-                <tr>
-                  <td className="px-4 py-4 text-sm text-gray-500" colSpan={7}>No voice commands saved yet.</td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="bg-gray-800/40 rounded-xl border border-gray-700 p-5">
-          <h3 className="font-semibold mb-4">TTS Settings</h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm text-gray-400 mb-1.5">Default language</label>
-              <select
-                value={defaultLanguageCode}
-                onChange={(event) => setDefaultLanguageCode(event.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
-              >
-                {LANGUAGE_OPTIONS.map((option) => (
-                  <option key={option.code} value={option.code}>{option.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm text-gray-400 mb-1.5">Volume</label>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={Math.round(props.voiceVolume * 100)}
-                onChange={(event) => props.onChangeVoiceVolume(Number(event.target.value) / 100)}
-                className="w-full accent-violet-500"
-              />
-              <span className="text-xs text-gray-500">{Math.round(props.voiceVolume * 100)}%</span>
-            </div>
-            <div>
-              <label className="block text-sm text-gray-400 mb-1.5">Rate</label>
-              <input
-                type="range"
-                min="50"
-                max="200"
-                value={Math.round(props.voiceRate * 100)}
-                onChange={(event) => props.onChangeVoiceRate(Number(event.target.value) / 100)}
-                className="w-full accent-violet-500"
-              />
-              <span className="text-xs text-gray-500">{props.voiceRate === 1 ? 'Normal (1x)' : `${props.voiceRate.toFixed(2)}x`}</span>
-            </div>
-            <div>
-              <label className="block text-sm text-gray-400 mb-1.5">Character limit</label>
-              <input
-                type="number"
-                value={characterLimit}
-                onChange={(event) => setCharacterLimit(Number(event.target.value))}
-                className="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
-              />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center justify-between">
-            <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={announceUsername}
-                onChange={(event) => setAnnounceUsername(event.target.checked)}
-                className="accent-violet-500"
-              />
-              Announce username
-            </label>
-            <div className="flex items-center gap-3">
-              {statusMessage ? <span className="text-xs text-gray-500">{statusMessage}</span> : null}
-              <button type="button" onClick={saveTtsSettings} className="px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">
-                Save
-              </button>
-            </div>
-          </div>
+          <button
+            type="button"
+            disabled={isBusy || !!triggerError}
+            onClick={() => void save()}
+            className="px-4 py-2 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors disabled:opacity-50 shrink-0"
+          >
+            {statusMessage ?? 'Save'}
+          </button>
         </div>
       </div>
 
-      {isModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="modal-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="relative bg-gray-900 border border-gray-700 rounded-xl w-full max-w-md shadow-2xl">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700">
-              <h3 className="font-semibold">{draftId ? 'Edit Voice Command' : 'New Voice Command'}</h3>
-              <button type="button" onClick={() => { setIsModalOpen(false); resetForm(); }} className="text-gray-400 hover:text-white">✕</button>
-            </div>
-            <div className="p-5 space-y-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1.5">
-                  Command <span className="text-violet-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={trigger}
-                  onChange={(event) => setTrigger(event.target.value)}
-                  placeholder="!voice"
-                  className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600 font-mono"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">
-                  Fixed Text <span className="text-gray-600">(optional)</span>
-                </label>
-                <p className="text-xs text-gray-600 mb-1.5">If empty, speaks the text after the command typed in chat.</p>
-                <input
-                  type="text"
-                  value={template}
-                  onChange={(event) => setTemplate(event.target.value)}
-                  placeholder="e.g.: good morning everyone!"
-                  className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1.5">Language</label>
-                <select
-                  value={languageCode}
-                  onChange={(event) => setLanguageCode(event.target.value)}
-                  className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
-                >
-                  {LANGUAGE_OPTIONS.map((option) => (
-                    <option key={option.code} value={option.code}>{option.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-2">Permissions</label>
-                <div className="flex flex-wrap gap-2">
-                  {PERMISSION_LEVELS.map((level) => {
-                    const active = levels.includes(level);
-                    return (
-                      <button
-                        key={level}
-                        type="button"
-                        onClick={() => toggleLevel(level)}
-                        className={
-                          active
-                            ? 'px-3 py-1.5 rounded-full bg-violet-600 text-white text-xs font-medium'
-                            : 'px-3 py-1.5 rounded-full bg-gray-800 border border-gray-700 text-gray-300 text-xs'
-                        }
-                      >
-                        {PERMISSION_LABELS[level]}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1.5">Per-user Cooldown (s)</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={cooldownSeconds}
-                  onChange={(event) => setCooldownSeconds(Number(event.target.value))}
-                  className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
-                />
-              </div>
-              <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
-                <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} className="accent-violet-500" />
-                Active command
-              </label>
-              {error ? <p className="text-sm text-red-300">{error}</p> : null}
-            </div>
-            <div className="flex gap-3 px-5 py-4 border-t border-gray-700">
-              <button
-                type="button"
-                onClick={() => { setIsModalOpen(false); resetForm(); }}
-                className="flex-1 px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => void previewCommand()}
-                className="flex-1 px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors"
-              >
-                Preview
-              </button>
-              <button
-                type="button"
-                disabled={isBusy}
-                onClick={() => void saveCommand()}
-                className="flex-1 px-3 py-2 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors disabled:opacity-60"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </>
+      {error ? <p className="mt-3 text-xs text-red-400">{error}</p> : null}
+    </div>
   );
 }

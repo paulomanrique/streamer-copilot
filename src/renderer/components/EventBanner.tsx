@@ -105,24 +105,36 @@ function getBorderColor(platform: string): string {
 
 function buildEventAction(event: StreamEvent): string {
   switch (event.type) {
-    case 'subscription': return 'subscribed!';
+    case 'subscription':
+      return (event.amount ?? 1) > 1
+        ? `resubscribed for ${event.amount} months!`
+        : 'subscribed!';
     case 'superchat': return `sent $${(event.amount ?? 0).toFixed(2)}`;
     case 'raid': return `raided with ${event.amount ?? 0} viewers`;
     case 'follow': return 'started following';
     case 'cheer': return `cheered ${event.amount ?? 0} bits`;
-    case 'gift': return `gifted ${event.amount ?? 1} subscription(s)`;
+    case 'gift':
+      return (event.amount ?? 1) > 1
+        ? `gifted ${event.amount} subs to the community`
+        : `gifted a sub${event.message ? ` ${event.message}` : ''}`;
     default: return '';
   }
 }
 
 function buildEventTitle(event: StreamEvent): string {
   switch (event.type) {
-    case 'subscription': return `${event.author} subscribed!`;
+    case 'subscription':
+      return (event.amount ?? 1) > 1
+        ? `${event.author} resubscribed for ${event.amount} months!`
+        : `${event.author} subscribed!`;
     case 'superchat': return `${event.author} sent a Super Chat of $${(event.amount ?? 0).toFixed(2)}`;
     case 'raid': return `${event.author} raided with ${event.amount ?? 0} viewers!`;
     case 'follow': return `${event.author} started following`;
     case 'cheer': return `${event.author} cheered ${event.amount ?? 0} bits!`;
-    case 'gift': return `${event.author} gifted ${event.amount ?? 1} subscription(s)`;
+    case 'gift':
+      return (event.amount ?? 1) > 1
+        ? `${event.author} gifted ${event.amount} subs to the community!`
+        : `${event.author} gifted a sub${event.message ? ` ${event.message}` : ''}`;
     default: return event.author;
   }
 }

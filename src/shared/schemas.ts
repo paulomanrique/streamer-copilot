@@ -63,7 +63,7 @@ export const voiceCommandDeleteInputSchema = z.object({
 
 export const voiceSpeakPayloadSchema = z.object({
   text: z.string().min(1).max(500),
-  lang: z.string().min(2).max(20),
+  lang: z.string().min(2).max(200),
 });
 
 export const rendererVoiceCapabilitiesSchema = z.object({
@@ -91,6 +91,33 @@ export const obsConnectionSettingsSchema = z.object({
   host: z.string().min(1).max(255),
   port: z.number().int().min(1).max(65535),
   password: z.string().max(200),
+});
+
+export const chatSendMessageSchema = z.object({
+  platform: platformIdSchema,
+  content: z.string().min(1).max(500),
+});
+
+export const twitchCredentialsSchema = z.object({
+  channel: z.string().min(1).max(80),
+  username: z.string().min(1).max(80),
+  oauthToken: z.string().min(1).max(200),
+});
+
+export const youtubeConnectSchema = z.object({
+  videoId: z.string().min(1).max(200),
+});
+
+export const youtubeChannelConfigSchema = z.object({
+  id: z.string(),
+  handle: z.string().min(1),
+  name: z.string().optional(),
+  enabled: z.boolean(),
+});
+
+export const youtubeSettingsSchema = z.object({
+  channels: z.array(youtubeChannelConfigSchema),
+  autoConnect: z.boolean(),
 });
 
 export const eventLogFiltersSchema = z

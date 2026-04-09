@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { PERMISSION_LEVELS } from '../../shared/constants.js';
 import type { PermissionLevel, SoundCommand, SoundCommandUpsertInput } from '../../shared/types.js';
 
 const EMPTY_FORM: SoundCommandUpsertInput = {
-  trigger: '!drumroll',
+  trigger: '!',
   filePath: '',
   permissions: ['everyone'],
   cooldownSeconds: 0,
@@ -26,6 +26,7 @@ function getFileName(filePath: string): string {
 }
 
 export function SoundCommandsPage() {
+  const triggerInputRef = useRef<HTMLInputElement | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [levels, setLevels] = useState<PermissionLevel[]>(EMPTY_FORM.permissions);
   const [rows, setRows] = useState<SoundCommand[]>([]);
@@ -65,6 +66,7 @@ export function SoundCommandsPage() {
   const openCreate = () => {
     resetForm();
     setIsModalOpen(true);
+    requestAnimationFrame(() => triggerInputRef.current?.focus());
   };
 
   const openEdit = (command: SoundCommand) => {
@@ -264,6 +266,7 @@ export function SoundCommandsPage() {
                   Command <span className="text-violet-400">*</span>
                 </label>
                 <input
+                  ref={triggerInputRef}
                   type="text"
                   value={trigger}
                   onChange={(event) => setTrigger(event.target.value)}

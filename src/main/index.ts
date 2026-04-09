@@ -2,7 +2,12 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { app, BrowserWindow, Menu, Tray, nativeImage } from 'electron';
+import { app, BrowserWindow, Menu, Tray, nativeImage, net, protocol } from 'electron';
+
+// Must be called before app.whenReady()
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'copilot-local', privileges: { secure: true, standard: true, supportFetchAPI: true } },
+]);
 
 import { openDatabase, type DatabaseHandle } from '../db/database.js';
 import { createAppContext } from './app-context.js';
@@ -69,6 +74,11 @@ async function createMainWindow(): Promise<void> {
 }
 
 app.whenReady().then(async () => {
+  protocol.handle('copilot-local', (request) => {
+    const filePath = request.url.slice('copilot-local://'.length);
+    return net.fetch(`file://${filePath}`);
+  });
+
   databaseHandle = openDatabase(app.getPath('userData'));
   generalSettingsStore = new GeneralSettingsStore(new AppSettingsRepository(databaseHandle.db));
   await applyGeneralSettings(generalSettingsStore.load());

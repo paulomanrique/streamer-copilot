@@ -1,4 +1,4 @@
-import type { ChatMessage, PlatformId, StreamEvent } from '../../shared/types.js';
+import type { ChatMessage, PlatformId, StreamEvent, TwitchConnectionStatus } from '../../shared/types.js';
 import type { PlatformChatAdapter } from '../base.js';
 
 type TmiLikeClient = {
@@ -18,6 +18,7 @@ export interface TwitchAdapterOptions {
   reconnect?: boolean;
   mockAuthor?: string;
   mockChannel?: string;
+  onStatusChange?: (status: TwitchConnectionStatus) => void;
 }
 
 const DEFAULT_MOCK_AUTHOR = 'Streamer';
@@ -59,10 +60,13 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
   async connect(): Promise<void> {
     if (this.connected) return;
 
+    this.options.onStatusChange?.('connecting');
+
     const client = await this.createClient();
     if (!client) {
       this.mockMode = true;
       this.connected = true;
+      this.options.onStatusChange?.('disconnected');
       return;
     }
 
@@ -73,10 +77,12 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
       await client.connect();
       this.connected = true;
       this.mockMode = false;
+      this.options.onStatusChange?.('connected');
     } catch {
       this.mockMode = true;
       this.connected = true;
       this.client = null;
+      this.options.onStatusChange?.('error');
     }
   }
 
@@ -92,6 +98,7 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
     }
 
     this.client = null;
+    this.options.onStatusChange?.('disconnected');
   }
 
   async sendMessage(content: string): Promise<void> {
@@ -141,6 +148,7 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
         author: this.resolveAuthor(tags, channel),
         content: message,
         badges: this.resolveBadges(tags),
+        color: typeof tags.color === 'string' && tags.color ? tags.color : undefined,
       }, tags);
     });
 
@@ -154,20 +162,100 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
       });
     });
 
-    const subscriptionEvents = ['subscription', 'resub', 'subgift', 'anonsubgift', 'giftpaidupgrade', 'anongiftpaidupgrade'];
-    for (const eventName of subscriptionEvents) {
-      client.on(eventName, (...args: any[]) => {
-        const [channel, first, second, third] = args;
-        const tags = this.extractTags(args) ?? {};
-        this.emitEvent({
-          platform: 'twitch',
-          type: 'subscription',
-          author: this.resolveEventAuthor(first, tags, channel),
-          amount: this.resolveEventAmount(first, second, third, tags) ?? 1,
-          message: this.resolveEventMessage(first, second, third, tags),
-        });
+    // New subscription
+    client.on('subscription', (...args: any[]) => {
+      const [channel, username, , message, tags] = args as [string, string, unknown, string, Record<string, any>];
+      this.emitEvent({
+        platform: 'twitch',
+        type: 'subscription',
+        author: String(username ?? this.resolveAuthor(tags ?? {}, channel)),
+        amount: 1,
+        message: message || undefined,
       });
-    }
+    });
+
+    // Resub — amount = months
+    client.on('resub', (...args: any[]) => {
+      const [channel, username, months, message, tags] = args as [string, string, number, string, Record<string, any>];
+      this.emitEvent({
+        platform: 'twitch',
+        type: 'subscription',
+        author: String(username ?? this.resolveAuthor(tags ?? {}, channel)),
+        amount: this.firstNumber(months) ?? 1,
+        message: message || undefined,
+      });
+    });
+
+    // Single gift sub
+    client.on('subgift', (...args: any[]) => {
+      const [channel, gifter, , recipient, , tags] = args as [string, string, unknown, string, unknown, Record<string, any>];
+      this.emitEvent({
+        platform: 'twitch',
+        type: 'gift',
+        author: String(gifter ?? this.resolveAuthor(tags ?? {}, channel)),
+        amount: 1,
+        message: `to @${String(recipient ?? '')}`,
+      });
+    });
+
+    // Anonymous gift sub
+    client.on('anonsubgift', (...args: any[]) => {
+      const [, , recipient] = args as [string, unknown, string];
+      this.emitEvent({
+        platform: 'twitch',
+        type: 'gift',
+        author: 'Anonymous',
+        amount: 1,
+        message: `to @${String(recipient ?? '')}`,
+      });
+    });
+
+    // Mass gift subs (community gift)
+    client.on('submysterygift', (...args: any[]) => {
+      const [channel, gifter, count, , tags] = args as [string, string, number, unknown, Record<string, any>];
+      this.emitEvent({
+        platform: 'twitch',
+        type: 'gift',
+        author: String(gifter ?? this.resolveAuthor(tags ?? {}, channel)),
+        amount: this.firstNumber(count) ?? 1,
+        message: undefined,
+      });
+    });
+
+    // Anonymous mass gift
+    client.on('anonsubmysterygift', (...args: any[]) => {
+      const [, count] = args as [string, number];
+      this.emitEvent({
+        platform: 'twitch',
+        type: 'gift',
+        author: 'Anonymous',
+        amount: this.firstNumber(count) ?? 1,
+        message: undefined,
+      });
+    });
+
+    // Gift → paid upgrade (counts as subscription)
+    client.on('giftpaidupgrade', (...args: any[]) => {
+      const [channel, username, , tags] = args as [string, string, unknown, Record<string, any>];
+      this.emitEvent({
+        platform: 'twitch',
+        type: 'subscription',
+        author: String(username ?? this.resolveAuthor(tags ?? {}, channel)),
+        amount: 1,
+        message: undefined,
+      });
+    });
+
+    client.on('anongiftpaidupgrade', (...args: any[]) => {
+      const [channel, username, tags] = args as [string, string, Record<string, any>];
+      this.emitEvent({
+        platform: 'twitch',
+        type: 'subscription',
+        author: String(username ?? this.resolveAuthor(tags ?? {}, channel)),
+        amount: 1,
+        message: undefined,
+      });
+    });
 
     client.on('raided', (...args: any[]) => {
       const [channel, user, viewers] = args;
@@ -184,14 +272,16 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
     client.on('connected', () => {
       this.connected = true;
       this.mockMode = false;
+      this.options.onStatusChange?.('connected');
     });
 
     client.on('disconnected', () => {
       this.connected = false;
+      this.options.onStatusChange?.('disconnected');
     });
   }
 
-  private emitMessage(message: Omit<ChatMessage, 'id' | 'timestampLabel'>, tags?: Record<string, any>): void {
+  private emitMessage(message: Omit<ChatMessage, 'id' | 'timestampLabel'> & { color?: string }, tags?: Record<string, any>): void {
     const payload: ChatMessage = {
       id: tags?.['id']?.toString?.() ?? this.buildId(),
       timestampLabel: this.formatTimestamp(tags?.['tmi-sent-ts']),
@@ -246,8 +336,15 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
 
   private resolveBadges(tags: Record<string, any>): ChatMessage['badges'] {
     const badges: ChatMessage['badges'] = [];
-    if (this.isTruthy(tags.mod) || this.hasBadge(tags.badges, 'moderator')) badges.push('moderator');
-    if (this.isTruthy(tags.subscriber) || this.hasBadge(tags.badges, 'subscriber')) badges.push('subscriber');
+    if (tags.badges) {
+      for (const [name, version] of Object.entries(tags.badges)) {
+        badges.push(`${name}/${version}`);
+      }
+    } else {
+      // Fallback for some clients or scenarios
+      if (this.isTruthy(tags.mod)) badges.push('moderator/1');
+      if (this.isTruthy(tags.subscriber)) badges.push('subscriber/1');
+    }
     return badges;
   }
 

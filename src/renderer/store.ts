@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import type { ChatMessage, ObsStatsSnapshot, ProfilesSnapshot, StreamEvent } from '../shared/types.js';
+import type { ChatMessage, ObsStatsSnapshot, ProfilesSnapshot, StreamEvent, TwitchConnectionStatus, TwitchLiveStats } from '../shared/types.js';
 
 const DEFAULT_OBS_STATS: ObsStatsSnapshot = {
   connected: false,
@@ -18,11 +18,19 @@ interface AppStore extends ProfilesSnapshot {
   chatMessages: ChatMessage[];
   chatEvents: StreamEvent[];
   obsStats: ObsStatsSnapshot;
+  twitchStatus: TwitchConnectionStatus;
+  twitchChannel: string | null;
+  twitchLiveStats: TwitchLiveStats | null;
+  youtubeStatus: boolean;
   setProfiles: (snapshot: ProfilesSnapshot) => void;
   setObsStats: (stats: ObsStatsSnapshot | ((current: ObsStatsSnapshot) => ObsStatsSnapshot)) => void;
   setChatSnapshot: (snapshot: { messages: ChatMessage[]; events: StreamEvent[] }) => void;
   appendChatMessage: (message: ChatMessage) => void;
   appendChatEvent: (event: StreamEvent) => void;
+  setTwitchStatus: (status: TwitchConnectionStatus) => void;
+  setTwitchChannel: (channel: string | null) => void;
+  setTwitchLiveStats: (stats: TwitchLiveStats) => void;
+  setYoutubeStatus: (status: boolean) => void;
 }
 
 export const useAppStore = create<AppStore>((set) => ({
@@ -31,6 +39,10 @@ export const useAppStore = create<AppStore>((set) => ({
   chatEvents: [],
   profiles: [],
   obsStats: DEFAULT_OBS_STATS,
+  twitchStatus: 'disconnected',
+  twitchChannel: null,
+  twitchLiveStats: null,
+  youtubeStatus: false,
   setProfiles: (snapshot) =>
     set({
       activeProfileId: snapshot.activeProfileId,
@@ -46,11 +58,19 @@ export const useAppStore = create<AppStore>((set) => ({
       chatEvents: snapshot.events,
     }),
   appendChatMessage: (message) =>
-    set((state) => ({
-      chatMessages: [message, ...state.chatMessages].slice(0, 100),
-    })),
+    set((state) => {
+      const next = [...state.chatMessages, message];
+      if (next.length > 100) next.shift();
+      return { chatMessages: next };
+    }),
   appendChatEvent: (event) =>
-    set((state) => ({
-      chatEvents: [event, ...state.chatEvents].slice(0, 100),
-    })),
+    set((state) => {
+      const next = [...state.chatEvents, event];
+      if (next.length > 100) next.shift();
+      return { chatEvents: next };
+    }),
+  setTwitchStatus: (status) => set({ twitchStatus: status }),
+  setTwitchChannel: (channel) => set({ twitchChannel: channel }),
+  setTwitchLiveStats: (stats) => set({ twitchLiveStats: stats }),
+  setYoutubeStatus: (status) => set({ youtubeStatus: status }),
 }));

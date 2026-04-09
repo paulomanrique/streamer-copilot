@@ -1,5 +1,3 @@
-import { styles } from './app-styles.js';
-
 interface StatusMessagesProps {
   isLoading: boolean;
   error: string | null;
@@ -8,8 +6,8 @@ interface StatusMessagesProps {
 export function StatusMessages({ isLoading, error }: StatusMessagesProps) {
   return (
     <>
-      {isLoading ? <p style={styles.message}>Loading...</p> : null}
-      {error ? <p style={styles.error}>{error}</p> : null}
+      {isLoading ? <p className="mt-2 px-4 text-sm text-gray-400">Loading...</p> : null}
+      {error ? <p className="mt-3 px-4 text-sm text-red-300">{error}</p> : null}
     </>
   );
 }

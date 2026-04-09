@@ -11,7 +11,6 @@ import type { AppSection } from './components/SectionTabs.js';
 import { StatusMessages } from './components/StatusMessages.js';
 import { ToastStack, type ToastItem } from './components/ToastStack.js';
 import { SettingsWorkspace } from './pages/SettingsWorkspace.js';
-import { styles } from './components/app-styles.js';
 
 const SKIP_PROFILE_SELECTOR_KEY = 'streamerCopilot.skipProfileSelector';
 const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
@@ -29,11 +28,19 @@ export default function App() {
     chatMessages,
     chatEvents,
     obsStats,
+    twitchStatus,
+    twitchChannel,
     setProfiles,
     setObsStats,
     setChatSnapshot,
     appendChatMessage,
     appendChatEvent,
+    twitchLiveStats,
+    youtubeStatus,
+    setTwitchStatus,
+    setTwitchChannel,
+    setTwitchLiveStats,
+    setYoutubeStatus,
   } = useAppStore();
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -68,16 +75,22 @@ export default function App() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [info, snapshot, recentChat, nextGeneralSettings] = await Promise.all([
+        const [info, snapshot, recentChat, nextGeneralSettings, twitchInitialStatus, twitchCreds, ytInitialStatus] = await Promise.all([
           window.copilot.getAppInfo(),
           window.copilot.listProfiles(),
           window.copilot.getRecentChat(),
           window.copilot.getGeneralSettings(),
+          window.copilot.twitchGetStatus(),
+          window.copilot.twitchGetCredentials(),
+          window.copilot.youtubeGetStatus(),
         ]);
         setAppInfo(info);
         setProfiles(snapshot);
         setChatSnapshot(recentChat);
         setGeneralSettings(nextGeneralSettings);
+        setTwitchStatus(twitchInitialStatus);
+        setTwitchChannel(twitchCreds?.channel ?? null);
+        setYoutubeStatus(ytInitialStatus);
         setSelectorProfileId(snapshot.activeProfileId);
         const skipPreference = readSkipPromptPreference(localStorage.getItem(SKIP_PROFILE_SELECTOR_KEY));
         setSkipPromptAgain(skipPreference);
@@ -95,7 +108,7 @@ export default function App() {
     };
 
     void load();
-  }, [setChatSnapshot, setProfiles]);
+  }, [setChatSnapshot, setProfiles, setTwitchStatus, setTwitchChannel]);
 
   useEffect(() => {
     if (toasts.length === 0) return undefined;
@@ -122,7 +135,14 @@ export default function App() {
       }
 
       const utterance = new window.SpeechSynthesisUtterance(payload.text);
-      utterance.lang = payload.lang || languageCode;
+      const allVoices = window.speechSynthesis.getVoices();
+      const matchedVoice = allVoices.find((v) => v.name === payload.lang);
+      if (matchedVoice) {
+        utterance.lang = matchedVoice.lang;  // must be set before .voice
+        utterance.voice = matchedVoice;
+      } else {
+        utterance.lang = payload.lang || languageCode;
+      }
       utterance.rate = voiceRate;
       utterance.volume = voiceVolume;
       window.speechSynthesis.speak(utterance);
@@ -132,34 +152,37 @@ export default function App() {
   }, [languageCode, voiceRate, voiceVolume]);
 
   useEffect(() => {
-    const play = (payload: { filePath: string }) => {
-      const source = payload.filePath.startsWith('file://') ? payload.filePath : `file://${payload.filePath}`;
-      const audio = new Audio(encodeURI(source));
-      audio.preload = 'auto';
-      audio.volume = 1;
-      activeSoundsRef.current = [...activeSoundsRef.current, audio];
+    const play = async (payload: { filePath: string }) => {
+      let objectUrl: string | null = null;
+      try {
+        const base64 = await window.copilot.readSoundFile(payload.filePath);
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const ext = payload.filePath.split('.').pop()?.toLowerCase() ?? 'mp3';
+        const mime = ext === 'ogg' ? 'audio/ogg' : ext === 'wav' ? 'audio/wav' : 'audio/mpeg';
+        objectUrl = URL.createObjectURL(new Blob([bytes], { type: mime }));
 
-      const cleanup = () => {
-        activeSoundsRef.current = activeSoundsRef.current.filter((item) => item !== audio);
-      };
+        const audio = new Audio(objectUrl);
+        audio.volume = 1;
+        activeSoundsRef.current = [...activeSoundsRef.current, audio];
 
-      audio.addEventListener('ended', cleanup, { once: true });
-      audio.addEventListener(
-        'error',
-        () => {
-          cleanup();
-          pushError(`Failed to play sound file: ${payload.filePath}`);
-        },
-        { once: true },
-      );
+        const cleanup = () => {
+          activeSoundsRef.current = activeSoundsRef.current.filter((item) => item !== audio);
+          if (objectUrl) URL.revokeObjectURL(objectUrl);
+        };
 
-      void audio.play().catch(() => {
-        cleanup();
+        audio.addEventListener('ended', cleanup, { once: true });
+        audio.addEventListener('error', () => { cleanup(); pushError(`Failed to play sound file: ${payload.filePath}`); }, { once: true });
+
+        await audio.play();
+      } catch {
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
         pushError(`Failed to play sound file: ${payload.filePath}`);
-      });
+      }
     };
 
-    return window.copilot.onSoundPlay(play);
+    return window.copilot.onSoundPlay((payload) => { void play(payload); });
   }, []);
 
   useEffect(() => {
@@ -179,6 +202,18 @@ export default function App() {
       disconnectDisconnected();
     };
   }, [setObsStats]);
+
+  useEffect(() => {
+    const unsubStatus = window.copilot.onTwitchStatus((status) => {
+      setTwitchStatus(status);
+      void window.copilot.twitchGetCredentials().then((creds) => {
+        setTwitchChannel(creds?.channel ?? null);
+      });
+    });
+    const unsubStats = window.copilot.onTwitchLiveStats(setTwitchLiveStats);
+    const unsubYt = window.copilot.onYoutubeStatus(setYoutubeStatus);
+    return () => { unsubStatus(); unsubStats(); unsubYt(); };
+  }, [setTwitchStatus, setTwitchChannel, setTwitchLiveStats, setYoutubeStatus]);
 
   useEffect(() => {
     const disconnectMessage = window.copilot.onChatMessage((message) => {
@@ -347,8 +382,8 @@ export default function App() {
   };
 
   return (
-    <main style={styles.page}>
-      <section style={styles.card}>
+    <main className="h-screen overflow-hidden bg-gray-950 text-gray-200 flex flex-col">
+      <section className="w-screen flex-1 min-h-0 bg-gray-950 flex flex-col">
         <AppHeader appInfo={appInfo} currentSection={currentSection} onChangeSection={setCurrentSection} />
 
         <StatusMessages isLoading={isLoading} error={error} />
@@ -359,6 +394,10 @@ export default function App() {
             chatEvents={chatEvents}
             chatMessages={chatMessages}
             obsStats={obsStats}
+            twitchStatus={twitchStatus}
+            twitchChannel={twitchChannel}
+            twitchLiveStats={twitchLiveStats}
+            youtubeStatus={youtubeStatus}
           />
         ) : null}
 

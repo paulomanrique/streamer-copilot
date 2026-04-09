@@ -1,10 +1,11 @@
 import { execFile as execFileCallback } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
-import { BrowserWindow, dialog, ipcMain } from 'electron';
+import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import type { OpenDialogOptions } from 'electron';
 
 import type { DatabaseHandle } from '../db/database.js';
@@ -23,11 +24,15 @@ import { SoundService } from '../modules/sounds/sound-service.js';
 import { VoiceCommandRepository } from '../modules/voice/voice-repository.js';
 import { VoiceService } from '../modules/voice/voice-service.js';
 import { createKickChatAdapter } from '../platforms/kick/adapter.js';
+import { TwitchCredentialsStore } from '../platforms/twitch/credentials-store.js';
 import { createTwitchChatAdapter } from '../platforms/twitch/adapter.js';
 import { createYouTubeChatAdapter } from '../platforms/youtube/adapter.js';
+import { YouTubeSettingsStore } from '../platforms/youtube/settings-store.js';
+import { YouTubeScraper } from './youtube-scraper.js';
 import { APP_NAME } from '../shared/constants.js';
 import { IPC_CHANNELS } from '../shared/ipc.js';
 import {
+  chatSendMessageSchema,
   cloneProfileInputSchema,
   createProfileInputSchema,
   deleteProfileInputSchema,
@@ -42,11 +47,17 @@ import {
   scheduledMessageDeleteInputSchema,
   scheduledMessageUpsertInputSchema,
   selectProfileInputSchema,
+  twitchCredentialsSchema,
   voiceCommandDeleteInputSchema,
   voiceCommandUpsertInputSchema,
   voiceSpeakPayloadSchema,
+  youtubeConnectSchema,
+  youtubeSettingsSchema,
 } from '../shared/schemas.js';
-import type { AppInfo, PlatformId } from '../shared/types.js';
+import type { AppInfo, PlatformId, TwitchConnectionStatus, TwitchLiveStats } from '../shared/types.js';
+
+const TWITCH_CLIENT_ID = 'vtwg8tzuv1nlip4qh9n6sxx2p76g0s';
+const TWITCH_REDIRECT_PORT = 32999;
 import { StateHub } from './state-hub.js';
 
 interface AppContextOptions {
@@ -92,337 +103,314 @@ export function createAppContext(options: AppContextOptions): () => void {
       void speakWithOsFallback(payload.text);
     },
   });
+  let twitchStatus: TwitchConnectionStatus = 'disconnected';
+  let twitchStatsTimer: ReturnType<typeof setInterval> | null = null;
+  const userAvatarCache = new Map<string, string>();
+  const badgeCache = new Map<string, string>();
+  let badgesFetched = false;
+  let youtubeScraper: YouTubeScraper | null = null;
+  let youtubeMonitorTimer: ReturnType<typeof setInterval> | null = null;
+  let lastDetectedVideoId: string | null = null;
+
+  const getTwitchCredentialsStore = async (): Promise<TwitchCredentialsStore | null> => {
+    const snapshot = await profileStore.list();
+    const active = snapshot.profiles.find((p) => p.id === snapshot.activeProfileId);
+    if (!active) return null;
+    return new TwitchCredentialsStore(active.directory);
+  };
+
+  const getYoutubeSettingsStore = async (): Promise<YouTubeSettingsStore | null> => {
+    const snapshot = await profileStore.list();
+    const active = snapshot.profiles.find((p) => p.id === snapshot.activeProfileId);
+    if (!active) return null;
+    return new YouTubeSettingsStore(active.directory);
+  };
+
+  const checkYouTubeLive = async (handle: string): Promise<string | null> => {
+    try {
+      const url = handle.startsWith('UC') 
+        ? `https://www.youtube.com/channel/${handle}/live`
+        : `https://www.youtube.com/${handle.startsWith('@') ? '' : '@'}${handle}/live`;
+      
+      const res = await fetch(url, { redirect: 'follow' });
+      const html = await res.text();
+      const match = html.match(/"videoId":"([0-9A-Za-z_-]{11})"/);
+      return match ? match[1] : null;
+    } catch { return null; }
+  };
+
+  const runYoutubeMonitor = async () => {
+    const store = await getYoutubeSettingsStore();
+    if (!store) return;
+    const settings = await store.load();
+    if (!settings.autoConnect || settings.channels.length === 0) return;
+
+    for (const channel of settings.channels) {
+      if (!channel.enabled) continue;
+      const videoId = await checkYouTubeLive(channel.handle);
+      if (videoId && videoId !== lastDetectedVideoId) {
+        logService.info('youtube', `Auto-detected live for ${channel.handle}: ${videoId}`);
+        lastDetectedVideoId = videoId;
+        if (youtubeScraper) youtubeScraper.stop();
+        youtubeScraper = new YouTubeScraper({
+          videoId,
+          onMessage: (message) => {
+            (chatService as any).handleMessage({
+              id: `yt-auto-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              timestampLabel: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()),
+              ...message,
+            });
+          },
+          onLog: (msg) => logService.info('youtube', msg),
+        });
+        await youtubeScraper.start();
+        options.stateHub.pushYoutubeStatus(true);
+        break;
+      }
+    }
+  };
+
+  const startYoutubeMonitor = () => {
+    if (youtubeMonitorTimer) clearInterval(youtubeMonitorTimer);
+    void runYoutubeMonitor();
+    youtubeMonitorTimer = setInterval(runYoutubeMonitor, 120_000);
+  };
+
+  const pollTwitchStats = async (channel: string, accessToken: string): Promise<void> => {
+    try {
+      const userRes = await fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(channel)}`, {
+        headers: { Authorization: `Bearer ${accessToken}`, 'Client-Id': TWITCH_CLIENT_ID }
+      });
+      const userData = (await userRes.json()) as { data?: Array<{ id: string }> };
+      const userId = userData.data?.[0]?.id;
+      if (!userId) return;
+
+      const [streamRes, followersRes, hypeRes] = await Promise.all([
+        fetch(`https://api.twitch.tv/helix/streams?user_id=${userId}`, { headers: { Authorization: `Bearer ${accessToken}`, 'Client-Id': TWITCH_CLIENT_ID } }),
+        fetch(`https://api.twitch.tv/helix/channels/followers?broadcaster_id=${userId}`, { headers: { Authorization: `Bearer ${accessToken}`, 'Client-Id': TWITCH_CLIENT_ID } }),
+        fetch(`https://api.twitch.tv/helix/hypetrain/events?broadcaster_id=${userId}`, { headers: { Authorization: `Bearer ${accessToken}`, 'Client-Id': TWITCH_CLIENT_ID } }),
+      ]);
+
+      const [streamData, followersData, hypeData] = await Promise.all([
+        streamRes.json() as Promise<{ data?: Array<{ viewer_count: number }> }>,
+        followersRes.json() as Promise<{ total?: number }>,
+        hypeRes.json() as Promise<{ data?: Array<{ event_data: any; event_type: string }> }>,
+      ]);
+
+      const stream = streamData.data?.[0];
+      let hypeTrain: TwitchLiveStats['hypeTrain'] = null;
+      const latestHypeEvent = hypeData.data?.[0];
+      if (latestHypeEvent && latestHypeEvent.event_type === 'hypetrain.progression') {
+        const data = latestHypeEvent.event_data;
+        if (new Date(data.expires_at).getTime() > Date.now()) {
+          hypeTrain = { level: data.level, progress: data.progress, goal: data.goal, expiry: data.expires_at };
+        }
+      }
+
+      options.stateHub.pushTwitchLiveStats({ viewerCount: stream?.viewer_count ?? 0, followerCount: followersData.total ?? 0, isLive: !!stream, hypeTrain });
+    } catch {}
+  };
+
+  const startTwitchStatsPoll = (channel: string, accessToken: string) => {
+    if (twitchStatsTimer) clearInterval(twitchStatsTimer);
+    void pollTwitchStats(channel, accessToken);
+    twitchStatsTimer = setInterval(() => void pollTwitchStats(channel, accessToken), 10_000);
+  };
+
+  const stopTwitchStatsPoll = () => { if (twitchStatsTimer) { clearInterval(twitchStatsTimer); twitchStatsTimer = null; } };
+
+  const setTwitchStatus = (status: TwitchConnectionStatus) => {
+    twitchStatus = status;
+    options.stateHub.pushTwitchStatus(status);
+    if (status === 'connected') {
+      void (async () => {
+        const store = await getTwitchCredentialsStore();
+        const creds = store ? await store.load() : null;
+        if (creds) startTwitchStatsPoll(creds.channel, creds.oauthToken.replace(/^oauth:/, ''));
+      })();
+    } else stopTwitchStatsPoll();
+  };
+
   const chatService = new ChatService({
-    soundService,
-    voiceService,
+    soundService, voiceService,
     onMessage: (message) => options.stateHub.pushChatMessage(message),
     onEvent: (event) => options.stateHub.pushChatEvent(event),
   });
-  chatService.registerAdapter(
-    createTwitchChatAdapter({
-      channels: readCsvEnv('TWITCH_CHANNELS') ?? readSingleValueAsArray(process.env.TWITCH_CHANNEL),
-      username: process.env.TWITCH_USERNAME ?? process.env.TWITCH_BOT_USERNAME,
-      password: process.env.TWITCH_OAUTH_TOKEN ?? process.env.TWITCH_PASSWORD,
-      mockAuthor: 'Streamer',
-    }),
-  );
-  chatService.registerAdapter(
-    createYouTubeChatAdapter({
-      liveChatId: process.env.YOUTUBE_LIVE_CHAT_ID,
-      accessToken: process.env.YOUTUBE_ACCESS_TOKEN,
-      refreshToken: process.env.YOUTUBE_REFRESH_TOKEN,
-      clientId: process.env.YOUTUBE_CLIENT_ID,
-      clientSecret: process.env.YOUTUBE_CLIENT_SECRET,
-      apiKey: process.env.YOUTUBE_API_KEY,
-      mockAuthor: 'YouTube',
-      mockChannel: process.env.YOUTUBE_CHANNEL_TITLE ?? 'YouTube',
-    }),
-  );
-  chatService.registerAdapter(
-    createKickChatAdapter({
-      channelSlug: process.env.KICK_CHANNEL_SLUG,
-      chatroomId: process.env.KICK_CHATROOM_ID,
-      clientId: process.env.KICK_CLIENT_ID,
-      clientSecret: process.env.KICK_CLIENT_SECRET,
-    }),
-  );
+
   const obsService = new ObsService({
     settingsStore: obsSettingsStore,
-    onConnected: () => {
-      logService.info('obs', 'OBS connection established');
-      options.stateHub.pushObsConnected();
-    },
-    onDisconnected: () => {
-      logService.warn('obs', 'OBS connection lost');
-      options.stateHub.pushObsDisconnected();
-    },
+    onConnected: () => { logService.info('obs', 'OBS connected'); options.stateHub.pushObsConnected(); },
+    onDisconnected: () => { logService.warn('obs', 'OBS disconnected'); options.stateHub.pushObsDisconnected(); },
     onStats: (stats) => options.stateHub.pushObsStats(stats),
   });
-  const soundsDirectory = path.join(options.userDataPath, 'sounds');
 
-  schedulerService.start();
-  void chatService.connectAll().catch((cause: unknown) => {
-    logService.warn('chat', 'Chat adapters failed to connect cleanly', {
-      error: cause instanceof Error ? cause.message : String(cause),
-    });
-  });
-  obsService.start();
-  logService.info('app', 'Application context initialized', {
-    userDataPath: options.userDataPath,
-  });
-
+  // --- IPC HANDLERS ---
   ipcMain.handle(IPC_CHANNELS.appGetInfo, async (): Promise<AppInfo> => ({
-    appName: APP_NAME,
-    appVersion: options.appVersion,
-    electronVersion: process.versions.electron,
-    chromeVersion: process.versions.chrome,
-    nodeVersion: process.versions.node,
+    appName: APP_NAME, appVersion: options.appVersion,
+    electronVersion: process.versions.electron, chromeVersion: process.versions.chrome, nodeVersion: process.versions.node,
   }));
 
   ipcMain.handle(IPC_CHANNELS.profilesList, async () => profileStore.list());
-
-  ipcMain.handle(IPC_CHANNELS.profilesSelect, async (_event, rawInput: unknown) => {
-    const input = selectProfileInputSchema.parse(rawInput);
-    const snapshot = await profileStore.select(input.profileId);
-    logService.info('profiles', 'Profile selected', { profileId: input.profileId });
-    return snapshot;
-  });
-
-  ipcMain.handle(IPC_CHANNELS.profilesCreate, async (_event, rawInput: unknown) => {
-    const input = createProfileInputSchema.parse(rawInput);
-    const snapshot = await profileStore.create(input.name, input.directory);
-    logService.info('profiles', 'Profile created', { name: input.name, directory: input.directory });
-    return snapshot;
-  });
-
-  ipcMain.handle(IPC_CHANNELS.profilesRename, async (_event, rawInput: unknown) => {
-    const input = renameProfileInputSchema.parse(rawInput);
-    const snapshot = await profileStore.rename(input.profileId, input.name);
-    logService.info('profiles', 'Profile renamed', { profileId: input.profileId, name: input.name });
-    return snapshot;
-  });
-
-  ipcMain.handle(IPC_CHANNELS.profilesClone, async (_event, rawInput: unknown) => {
-    const input = cloneProfileInputSchema.parse(rawInput);
-    const snapshot = await profileStore.clone(input.profileId, input.name, input.directory);
-    logService.info('profiles', 'Profile cloned', {
-      profileId: input.profileId,
-      name: input.name,
-      directory: input.directory,
-    });
-    return snapshot;
-  });
-
-  ipcMain.handle(IPC_CHANNELS.profilesDelete, async (_event, rawInput: unknown) => {
-    const input = deleteProfileInputSchema.parse(rawInput);
-    const snapshot = await profileStore.delete(input.profileId);
-    logService.warn('profiles', 'Profile deleted', { profileId: input.profileId });
-    return snapshot;
-  });
-
-  ipcMain.handle(IPC_CHANNELS.profilesPickDirectory, async (event) => {
-    const focusedWindow = BrowserWindow.fromWebContents(event.sender);
-    const options: OpenDialogOptions = {
-      title: 'Select profile directory',
-      properties: ['openDirectory', 'createDirectory'],
-    };
-    const result = focusedWindow
-      ? await dialog.showOpenDialog(focusedWindow, options)
-      : await dialog.showOpenDialog(options);
-    if (result.canceled || result.filePaths.length === 0) return null;
-    return result.filePaths[0];
+  ipcMain.handle(IPC_CHANNELS.profilesSelect, async (_, raw) => profileStore.select(selectProfileInputSchema.parse(raw).profileId));
+  ipcMain.handle(IPC_CHANNELS.profilesCreate, async (_, raw) => { const i = createProfileInputSchema.parse(raw); return profileStore.create(i.name, i.directory); });
+  ipcMain.handle(IPC_CHANNELS.profilesRename, async (_, raw) => { const i = renameProfileInputSchema.parse(raw); return profileStore.rename(i.profileId, i.name); });
+  ipcMain.handle(IPC_CHANNELS.profilesClone, async (_, raw) => { const i = cloneProfileInputSchema.parse(raw); return profileStore.clone(i.profileId, i.name, i.directory); });
+  ipcMain.handle(IPC_CHANNELS.profilesDelete, async (_, raw) => profileStore.delete(deleteProfileInputSchema.parse(raw).profileId));
+  ipcMain.handle(IPC_CHANNELS.profilesPickDirectory, async (e) => {
+    const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender)!, { properties: ['openDirectory', 'createDirectory'] });
+    return r.canceled ? null : r.filePaths[0];
   });
 
   ipcMain.handle(IPC_CHANNELS.generalGetSettings, async () => generalSettingsStore.load());
-
-  ipcMain.handle(IPC_CHANNELS.generalSaveSettings, async (_event, rawInput: unknown) => {
-    const input = generalSettingsSchema.parse(rawInput);
-    const saved = generalSettingsStore.save(input);
+  ipcMain.handle(IPC_CHANNELS.generalSaveSettings, async (_, raw) => {
+    const s = generalSettingsSchema.parse(raw);
+    const saved = generalSettingsStore.save(s);
     await options.onGeneralSettingsChanged(saved);
-    logService.info('settings', 'General settings saved', saved);
     return saved;
   });
 
   ipcMain.handle(IPC_CHANNELS.scheduledList, async () => schedulerService.list());
-
-  ipcMain.handle(IPC_CHANNELS.scheduledUpsert, async (_event, rawInput: unknown) => {
-    const input = scheduledMessageUpsertInputSchema.parse(rawInput);
-    const items = schedulerService.upsert(input);
-    logService.info('scheduled', 'Scheduled message saved', { id: input.id ?? null, message: input.message });
-    return items;
-  });
-
-  ipcMain.handle(IPC_CHANNELS.scheduledDelete, async (_event, rawInput: unknown) => {
-    const input = scheduledMessageDeleteInputSchema.parse(rawInput);
-    const items = schedulerService.delete(input.id);
-    logService.warn('scheduled', 'Scheduled message deleted', { id: input.id });
-    return items;
-  });
+  ipcMain.handle(IPC_CHANNELS.scheduledUpsert, async (_, raw) => schedulerService.upsert(scheduledMessageUpsertInputSchema.parse(raw)));
+  ipcMain.handle(IPC_CHANNELS.scheduledDelete, async (_, raw) => schedulerService.delete(scheduledMessageDeleteInputSchema.parse(raw).id));
 
   ipcMain.handle(IPC_CHANNELS.voiceList, async () => voiceService.list());
-
-  ipcMain.handle(IPC_CHANNELS.voiceUpsert, async (_event, rawInput: unknown) => {
-    const input = voiceCommandUpsertInputSchema.parse(rawInput);
-    const items = voiceService.upsert(input);
-    logService.info('voice', 'Voice command saved', { trigger: input.trigger, id: input.id ?? null });
-    return items;
-  });
-
-  ipcMain.handle(IPC_CHANNELS.voiceDelete, async (_event, rawInput: unknown) => {
-    const input = voiceCommandDeleteInputSchema.parse(rawInput);
-    const items = voiceService.delete(input.id);
-    logService.warn('voice', 'Voice command deleted', { id: input.id });
-    return items;
-  });
-
-  ipcMain.handle(IPC_CHANNELS.voicePreviewSpeak, async (_event, rawInput: unknown) => {
-    const input = voiceSpeakPayloadSchema.parse(rawInput);
-    voiceService.previewSpeak(input);
-  });
-
-  ipcMain.handle(IPC_CHANNELS.voiceSetRendererCapabilities, async (_event, rawInput: unknown) => {
-    const input = rendererVoiceCapabilitiesSchema.parse(rawInput);
-    rendererSpeechSynthesisAvailable = input.speechSynthesisAvailable;
-  });
+  ipcMain.handle(IPC_CHANNELS.voiceUpsert, async (_, raw) => voiceService.upsert(voiceCommandUpsertInputSchema.parse(raw)));
+  ipcMain.handle(IPC_CHANNELS.voiceDelete, async (_, raw) => voiceService.delete(voiceCommandDeleteInputSchema.parse(raw).id));
+  ipcMain.handle(IPC_CHANNELS.voicePreviewSpeak, async (_, raw) => voiceService.previewSpeak(voiceSpeakPayloadSchema.parse(raw)));
+  ipcMain.handle(IPC_CHANNELS.voiceSetRendererCapabilities, async (_, raw) => { rendererSpeechSynthesisAvailable = rendererVoiceCapabilitiesSchema.parse(raw).speechSynthesisAvailable; });
 
   ipcMain.handle(IPC_CHANNELS.soundsList, async () => soundService.list());
-
-  ipcMain.handle(IPC_CHANNELS.soundsUpsert, async (_event, rawInput: unknown) => {
-    const input = soundCommandUpsertInputSchema.parse(rawInput);
-    const items = soundService.upsert(input);
-    logService.info('sounds', 'Sound command saved', { trigger: input.trigger, id: input.id ?? null });
-    return items;
+  ipcMain.handle(IPC_CHANNELS.soundsUpsert, async (_, raw) => soundService.upsert(soundCommandUpsertInputSchema.parse(raw)));
+  ipcMain.handle(IPC_CHANNELS.soundsDelete, async (_, raw) => soundService.delete(soundCommandDeleteInputSchema.parse(raw).id));
+  ipcMain.handle(IPC_CHANNELS.soundsPickFile, async (e) => {
+    const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender)!, { properties: ['openFile'], filters: [{ name: 'Audio', extensions: ['mp3', 'ogg', 'wav'] }] });
+    if (r.canceled) return null;
+    const snapshot = await profileStore.list();
+    const active = snapshot.profiles.find(p => p.id === snapshot.activeProfileId);
+    const dest = path.join(active ? active.directory : path.join(options.userDataPath, 'sounds'), `${randomUUID()}${path.extname(r.filePaths[0])}`);
+    await fs.mkdir(path.dirname(dest), { recursive: true });
+    await fs.copyFile(r.filePaths[0], dest);
+    return dest;
   });
-
-  ipcMain.handle(IPC_CHANNELS.soundsDelete, async (_event, rawInput: unknown) => {
-    const input = soundCommandDeleteInputSchema.parse(rawInput);
-    const items = soundService.delete(input.id);
-    logService.warn('sounds', 'Sound command deleted', { id: input.id });
-    return items;
-  });
-
-  ipcMain.handle(IPC_CHANNELS.soundsPickFile, async (event) => {
-    const focusedWindow = BrowserWindow.fromWebContents(event.sender);
-    const options: OpenDialogOptions = {
-      title: 'Select sound file',
-      properties: ['openFile'],
-      filters: [
-        {
-          name: 'Audio',
-          extensions: ['mp3', 'ogg', 'wav'],
-        },
-      ],
-    };
-    const result = focusedWindow
-      ? await dialog.showOpenDialog(focusedWindow, options)
-      : await dialog.showOpenDialog(options);
-
-    if (result.canceled || result.filePaths.length === 0) return null;
-
-    const sourcePath = result.filePaths[0];
-    const extension = path.extname(sourcePath);
-    const destinationPath = path.join(soundsDirectory, `${randomUUID()}${extension}`);
-
-    await fs.mkdir(soundsDirectory, { recursive: true });
-    await fs.copyFile(sourcePath, destinationPath);
-    logService.info('sounds', 'Sound file imported', { sourcePath, destinationPath });
-
-    return destinationPath;
-  });
-
-  ipcMain.handle(IPC_CHANNELS.soundsPreviewPlay, async (_event, rawInput: unknown) => {
-    const input = soundPlayPayloadSchema.parse(rawInput);
-    soundService.previewPlay(input);
-  });
+  ipcMain.handle(IPC_CHANNELS.soundsReadFile, async (_, p) => (await fs.readFile(String(p))).toString('base64'));
+  ipcMain.handle(IPC_CHANNELS.soundsPreviewPlay, async (_, raw) => soundService.previewPlay(soundPlayPayloadSchema.parse(raw)));
 
   ipcMain.handle(IPC_CHANNELS.obsGetSettings, async () => obsService.getSettings());
-
-  ipcMain.handle(IPC_CHANNELS.obsSaveSettings, async (_event, rawInput: unknown) => {
-    const input = obsConnectionSettingsSchema.parse(rawInput);
-    const saved = await obsService.saveSettings(input);
-    logService.info('obs', 'OBS settings saved', { host: saved.host, port: saved.port });
-    return saved;
-  });
-
-  ipcMain.handle(IPC_CHANNELS.obsTestConnection, async (_event, rawInput: unknown) => {
-    const input = obsConnectionSettingsSchema.parse(rawInput);
-    await obsService.testConnection(input);
-    logService.info('obs', 'OBS connection test succeeded', { host: input.host, port: input.port });
-  });
+  ipcMain.handle(IPC_CHANNELS.obsSaveSettings, async (_, raw) => obsService.saveSettings(obsConnectionSettingsSchema.parse(raw)));
+  ipcMain.handle(IPC_CHANNELS.obsTestConnection, async (_, raw) => obsService.testConnection(obsConnectionSettingsSchema.parse(raw)));
 
   ipcMain.handle(IPC_CHANNELS.chatGetRecent, async () => chatService.getRecent());
-  ipcMain.handle(IPC_CHANNELS.logsList, async (_event, rawInput: unknown) => {
-    const filters = eventLogFiltersSchema.parse(rawInput);
-    return logService.list(filters);
+  ipcMain.handle(IPC_CHANNELS.chatSendMessage, async (_, raw) => {
+    const i = chatSendMessageSchema.parse(raw);
+    await chatService.sendMessage(i.platform, i.content);
+    const store = await getTwitchCredentialsStore();
+    const creds = store ? await store.load() : null;
+    if (creds) options.stateHub.pushChatMessage({ id: `sent-${Date.now()}`, platform: i.platform, author: creds.username, content: i.content, badges: [], timestampLabel: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()) });
+  });
+  ipcMain.handle(IPC_CHANNELS.logsList, async (_, raw) => logService.list(eventLogFiltersSchema.parse(raw)));
+
+  // Twitch Handlers
+  ipcMain.handle(IPC_CHANNELS.twitchGetCredentials, async () => { const s = await getTwitchCredentialsStore(); return s ? s.load() : null; });
+  ipcMain.handle(IPC_CHANNELS.twitchConnect, async (_, raw) => {
+    const c = twitchCredentialsSchema.parse(raw);
+    const s = await getTwitchCredentialsStore(); if (!s) throw new Error('No profile');
+    await s.save(c); setTwitchStatus('connecting');
+    await chatService.replaceAdapter(createTwitchChatAdapter({ channels: [c.channel], username: c.username, password: c.oauthToken, onStatusChange: setTwitchStatus }));
+  });
+  ipcMain.handle(IPC_CHANNELS.twitchDisconnect, async () => { await chatService.removeAdapter('twitch'); setTwitchStatus('disconnected'); const s = await getTwitchCredentialsStore(); if (s) await s.clear(); });
+  ipcMain.handle(IPC_CHANNELS.twitchGetStatus, async () => twitchStatus);
+  ipcMain.handle(IPC_CHANNELS.twitchGetUserAvatars, async (_, logins) => {
+    const list = Array.isArray(logins) ? logins.filter(l => typeof l === 'string') : [];
+    if (list.length === 0) return {};
+    const uncached = list.filter(l => !userAvatarCache.has(l));
+    if (uncached.length > 0) {
+      const s = await getTwitchCredentialsStore(); const c = s ? await s.load() : null;
+      if (c) {
+        try {
+          const res = await fetch(`https://api.twitch.tv/helix/users?${uncached.map(l => `login=${encodeURIComponent(l)}`).join('&')}`, { headers: { Authorization: `Bearer ${c.oauthToken.replace(/^oauth:/,'')}`, 'Client-Id': TWITCH_CLIENT_ID } });
+          const d = await res.json(); (d.data ?? []).forEach((u: any) => userAvatarCache.set(u.login.toLowerCase(), u.profile_image_url));
+          uncached.forEach(l => { if (!userAvatarCache.has(l.toLowerCase())) userAvatarCache.set(l.toLowerCase(), ''); });
+        } catch {}
+      }
+    }
+    const res: any = {}; list.forEach(l => { const u = userAvatarCache.get(l.toLowerCase()); if (u) res[l] = u; });
+    return res;
+  });
+  ipcMain.handle(IPC_CHANNELS.twitchGetBadgeUrls, async (_, ids) => {
+    const list = Array.isArray(ids) ? ids.filter(i => typeof i === 'string') : [];
+    if (list.length === 0) return {};
+    if (list.some(i => !badgeCache.has(i))) {
+      const s = await getTwitchCredentialsStore(); const c = s ? await s.load() : null;
+      if (c) {
+        try {
+          const h = { Authorization: `Bearer ${c.oauthToken.replace(/^oauth:/,'')}`, 'Client-Id': TWITCH_CLIENT_ID };
+          const g = await fetch('https://api.twitch.tv/helix/chat/badges/global', { headers: h });
+          const gd = await g.json(); (gd.data ?? []).forEach((set: any) => set.versions.forEach((v: any) => badgeCache.set(`${set.set_id}/${v.id}`, v.image_url_1x)));
+          const u = await fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(c.channel)}`, { headers: h });
+          const ud = await u.json(); const uid = ud.data?.[0]?.id;
+          if (uid) {
+            const ch = await fetch(`https://api.twitch.tv/helix/chat/badges?broadcaster_id=${uid}`, { headers: h });
+            const cd = await ch.json(); (cd.data ?? []).forEach((set: any) => set.versions.forEach((v: any) => badgeCache.set(`${set.set_id}/${v.id}`, v.image_url_1x)));
+          }
+        } catch {}
+      }
+    }
+    const res: any = {}; list.forEach(i => { const u = badgeCache.get(i); if (u) res[i] = u; });
+    return res;
+  });
+  ipcMain.handle(IPC_CHANNELS.twitchStartOAuth, async () => {
+    return new Promise((resolve, reject) => {
+      const server = http.createServer(async (req, res) => {
+        const url = new URL(req.url!, `http://localhost:${TWITCH_REDIRECT_PORT}`);
+        if (url.pathname === '/callback') { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end('<!DOCTYPE html><html><body style="background:#0e0e10;color:#fff;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh"><div>Connecting...<script>const t=new URLSearchParams(window.location.hash.substring(1)).get("access_token");if(t)fetch("/token?t="+t).then(()=>document.body.innerHTML="Connected! You can close this tab.")</script></div></body></html>'); return; }
+        if (url.pathname === '/token') {
+          const t = url.searchParams.get('t'); res.end('ok'); server.close();
+          if (!t) return reject(new Error('No token'));
+          const r = await fetch('https://api.twitch.tv/helix/users', { headers: { Authorization: `Bearer ${t}`, 'Client-Id': TWITCH_CLIENT_ID } });
+          const d = await r.json(); const login = d.data?.[0]?.login;
+          if (!login) return reject(new Error('No login'));
+          resolve({ accessToken: t, username: login });
+        }
+      }).listen(TWITCH_REDIRECT_PORT, '127.0.0.1', () => shell.openExternal(`https://id.twitch.tv/oauth2/authorize?client_id=${TWITCH_CLIENT_ID}&redirect_uri=http://localhost:${TWITCH_REDIRECT_PORT}/callback&response_type=token&scope=chat:read+chat:edit`));
+    });
   });
 
+  // YouTube Handlers
+  ipcMain.handle(IPC_CHANNELS.youtubeGetSettings, async () => { const s = await getYoutubeSettingsStore(); return s ? s.load() : { channels: [], autoConnect: true }; });
+  ipcMain.handle(IPC_CHANNELS.youtubeSaveSettings, async (_, raw) => { const s = await getYoutubeSettingsStore(); if (s) { await s.save(youtubeSettingsSchema.parse(raw)); startYoutubeMonitor(); } });
+  ipcMain.handle(IPC_CHANNELS.youtubeConnect, async (_, raw) => {
+    const i = youtubeConnectSchema.parse(raw); if (youtubeScraper) youtubeScraper.stop();
+    youtubeScraper = new YouTubeScraper({ videoId: i.videoId, onMessage: (m) => (chatService as any).handleMessage({ id: `yt-${Date.now()}`, timestampLabel: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()), ...m }), onLog: (msg) => logService.info('youtube', msg) });
+    await youtubeScraper.start(); options.stateHub.pushYoutubeStatus(true);
+  });
+  ipcMain.handle(IPC_CHANNELS.youtubeDisconnect, async () => { if (youtubeScraper) { youtubeScraper.stop(); youtubeScraper = null; } options.stateHub.pushYoutubeStatus(false); });
+  ipcMain.handle(IPC_CHANNELS.youtubeGetStatus, async () => youtubeScraper !== null);
+  ipcMain.handle(IPC_CHANNELS.youtubeOpenLogin, async (e) => {
+    const win = new BrowserWindow({ width: 600, height: 800, parent: BrowserWindow.fromWebContents(e.sender)!, modal: true, title: 'YouTube Login', autoHideMenuBar: true });
+    win.webContents.on('did-navigate', (_, u) => { const t = new URL(u); if (t.hostname.includes('youtube.com') && t.pathname === '/' && !u.includes('signin')) setTimeout(() => { if (!win.isDestroyed()) win.close(); }, 1500); });
+    await win.loadURL('https://accounts.google.com/ServiceLogin?service=youtube&continue=https://www.youtube.com/signin?action_handle_signin=true');
+  });
+
+  startYoutubeMonitor();
+  obsService.start();
+
   return () => {
-    schedulerService.stop();
-    void chatService.disconnectAll();
-    void obsService.stop();
-    ipcMain.removeHandler(IPC_CHANNELS.appGetInfo);
-    ipcMain.removeHandler(IPC_CHANNELS.profilesList);
-    ipcMain.removeHandler(IPC_CHANNELS.profilesSelect);
-    ipcMain.removeHandler(IPC_CHANNELS.profilesCreate);
-    ipcMain.removeHandler(IPC_CHANNELS.profilesRename);
-    ipcMain.removeHandler(IPC_CHANNELS.profilesClone);
-    ipcMain.removeHandler(IPC_CHANNELS.profilesDelete);
-    ipcMain.removeHandler(IPC_CHANNELS.profilesPickDirectory);
-    ipcMain.removeHandler(IPC_CHANNELS.generalGetSettings);
-    ipcMain.removeHandler(IPC_CHANNELS.generalSaveSettings);
-    ipcMain.removeHandler(IPC_CHANNELS.scheduledList);
-    ipcMain.removeHandler(IPC_CHANNELS.scheduledUpsert);
-    ipcMain.removeHandler(IPC_CHANNELS.scheduledDelete);
-    ipcMain.removeHandler(IPC_CHANNELS.voiceList);
-    ipcMain.removeHandler(IPC_CHANNELS.voiceUpsert);
-    ipcMain.removeHandler(IPC_CHANNELS.voiceDelete);
-    ipcMain.removeHandler(IPC_CHANNELS.voicePreviewSpeak);
-    ipcMain.removeHandler(IPC_CHANNELS.voiceSetRendererCapabilities);
-    ipcMain.removeHandler(IPC_CHANNELS.soundsList);
-    ipcMain.removeHandler(IPC_CHANNELS.soundsUpsert);
-    ipcMain.removeHandler(IPC_CHANNELS.soundsDelete);
-    ipcMain.removeHandler(IPC_CHANNELS.soundsPickFile);
-    ipcMain.removeHandler(IPC_CHANNELS.soundsPreviewPlay);
-    ipcMain.removeHandler(IPC_CHANNELS.obsGetSettings);
-    ipcMain.removeHandler(IPC_CHANNELS.obsSaveSettings);
-    ipcMain.removeHandler(IPC_CHANNELS.obsTestConnection);
-    ipcMain.removeHandler(IPC_CHANNELS.chatGetRecent);
-    ipcMain.removeHandler(IPC_CHANNELS.logsList);
+    schedulerService.stop(); stopTwitchStatsPoll(); if (youtubeMonitorTimer) clearInterval(youtubeMonitorTimer);
+    void chatService.disconnectAll(); void obsService.stop();
+    Object.values(IPC_CHANNELS).forEach(c => ipcMain.removeHandler(c));
   };
 
   async function speakWithOsFallback(text: string): Promise<void> {
-    if (process.platform === 'darwin') {
-      await execFile('say', [text]);
-      return;
-    }
-
-    if (process.platform === 'linux') {
-      await execFile('espeak', [text]);
-      return;
-    }
-
-    if (process.platform === 'win32') {
-      const escapedText = text.replace(/'/g, "''");
-      await execFile('powershell', [
-        '-NoProfile',
-        '-Command',
-        `Add-Type -AssemblyName System.Speech; $speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer; $speaker.Speak('${escapedText}')`,
-      ]);
-      return;
-    }
-
-    options.stateHub.pushVoiceSpeak({ text, lang: 'en-US' });
+    if (process.platform === 'darwin') await execFile('say', [text]);
+    else if (process.platform === 'linux') await execFile('espeak', [text]);
+    else if (process.platform === 'win32') await execFile('powershell', ['-NoProfile', '-Command', `Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; $s.Speak('${text.replace(/'/g, "''")}')`]);
+    else options.stateHub.pushVoiceSpeak({ text, lang: 'en-US' });
   }
 
   async function dispatchScheduledMessage(content: string, platforms: PlatformId[]): Promise<void> {
-    const results = await Promise.allSettled(
-      platforms.map(async (platform) => {
-        await chatService.sendMessage(platform, content);
-        logService.info('scheduled', 'Scheduled message dispatched', { platform, content });
-      }),
-    );
-
-    results.forEach((result, index) => {
-      if (result.status === 'fulfilled') return;
-      logService.warn('scheduled', 'Scheduled message skipped', {
-        platform: platforms[index],
-        content,
-        error: result.reason instanceof Error ? result.reason.message : String(result.reason),
-      });
-    });
+    await Promise.allSettled(platforms.map(async (p) => { await chatService.sendMessage(p, content); logService.info('scheduled', 'Sent', { platform: p, content }); }));
   }
 
-  function readCsvEnv(value: string | undefined): string[] | undefined {
-    if (!value) return undefined;
-    const items = value
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean);
-    return items.length > 0 ? items : undefined;
-  }
-
-  function readSingleValueAsArray(value: string | undefined): string[] | undefined {
-    if (!value?.trim()) return undefined;
-    return [value.trim()];
-  }
+  function readCsvEnv(v: string | undefined): string[] | undefined { return v ? v.split(',').map(i => i.trim()).filter(Boolean) : undefined; }
+  function readSingleValueAsArray(v: string | undefined): string[] | undefined { return v?.trim() ? [v.trim()] : undefined; }
 }

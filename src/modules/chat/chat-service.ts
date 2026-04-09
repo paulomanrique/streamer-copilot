@@ -14,7 +14,7 @@ interface ChatServiceOptions {
 
 export class ChatService {
   private readonly adapters = new Map<PlatformId, PlatformChatAdapter>();
-  private readonly detachHandlers: Array<() => void> = [];
+  private readonly adapterDetachHandlers = new Map<PlatformId, Array<() => void>>();
   private readonly messages: ChatMessage[] = [];
   private readonly events: StreamEvent[] = [];
 
@@ -22,8 +22,28 @@ export class ChatService {
 
   registerAdapter(adapter: PlatformChatAdapter): void {
     this.adapters.set(adapter.platform, adapter);
-    this.detachHandlers.push(adapter.onMessage((message) => this.handleMessage(message)));
-    this.detachHandlers.push(adapter.onEvent((event) => this.handleEvent(event)));
+    this.adapterDetachHandlers.set(adapter.platform, [
+      adapter.onMessage((message) => this.handleMessage(message)),
+      adapter.onEvent((event) => this.handleEvent(event)),
+    ]);
+  }
+
+  async replaceAdapter(adapter: PlatformChatAdapter): Promise<void> {
+    await this.removeAdapter(adapter.platform);
+    this.registerAdapter(adapter);
+    await adapter.connect();
+  }
+
+  async removeAdapter(platform: PlatformId): Promise<void> {
+    const existing = this.adapters.get(platform);
+    if (!existing) return;
+
+    const detachHandlers = this.adapterDetachHandlers.get(platform) ?? [];
+    for (const detach of detachHandlers) detach();
+    this.adapterDetachHandlers.delete(platform);
+
+    await existing.disconnect();
+    this.adapters.delete(platform);
   }
 
   async connectAll(): Promise<void> {
@@ -33,13 +53,15 @@ export class ChatService {
   }
 
   async disconnectAll(): Promise<void> {
-    for (const detach of this.detachHandlers.splice(0)) {
-      detach();
+    for (const detachers of this.adapterDetachHandlers.values()) {
+      for (const detach of detachers) detach();
     }
+    this.adapterDetachHandlers.clear();
 
     for (const adapter of this.adapters.values()) {
       await adapter.disconnect();
     }
+    this.adapters.clear();
   }
 
   async sendMessage(platform: PlatformId, content: string): Promise<void> {
@@ -67,14 +89,18 @@ export class ChatService {
       permissionLevel: 'everyone',
     });
 
-    this.messages.unshift(message);
-    this.messages.splice(this.maxHistory);
+    this.messages.push(message);
+    if (this.messages.length > this.maxHistory) {
+      this.messages.shift();
+    }
     this.options.onMessage(message);
   }
 
   private handleEvent(event: StreamEvent): void {
-    this.events.unshift(event);
-    this.events.splice(this.maxHistory);
+    this.events.push(event);
+    if (this.events.length > this.maxHistory) {
+      this.events.shift();
+    }
     this.options.onEvent(event);
   }
 

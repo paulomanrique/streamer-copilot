@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 
 import type { EventLogEntry, EventLogFilters } from '../../shared/types.js';
-import { SettingsPageShell, SettingsSurface } from '../components/SettingsScaffold.js';
-import { styles } from '../components/app-styles.js';
 
 const DEFAULT_FILTERS: EventLogFilters = {
   level: 'all',
@@ -27,7 +25,9 @@ export function EventLogPage() {
 
   useEffect(() => {
     void load(filters);
-  }, []);
+    const interval = setInterval(() => void load(filters), 3000);
+    return () => clearInterval(interval);
+  }, [filters]);
 
   const updateFilters = (nextFilters: EventLogFilters) => {
     setFilters(nextFilters);
@@ -35,18 +35,17 @@ export function EventLogPage() {
   };
 
   return (
-    <SettingsPageShell
-      title="Activity Log"
-      description="Recent operational events from the desktop app."
-      maxWidth="1160px"
-    >
-      <div style={styles.settingsColumn}>
-        <SettingsSurface>
-          <div style={styles.buttonRow}>
+    <div className="p-6 max-w-[1160px]">
+      <h2 className="text-lg font-semibold mb-1">Activity Log</h2>
+      <p className="text-sm text-gray-400 mb-6">Recent operational events from the desktop app.</p>
+
+      <div className="grid gap-4">
+        <div className="bg-gray-800/40 rounded-xl border border-gray-700 p-5">
+          <div className="flex flex-wrap gap-2">
             <select
               value={filters.level ?? 'all'}
               onChange={(event) => updateFilters({ ...filters, level: event.target.value as EventLogFilters['level'] })}
-              style={{ ...styles.select, minWidth: '140px' }}
+              className="min-w-[140px] bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
             >
               <option value="all">All levels</option>
               <option value="info">Info</option>
@@ -57,51 +56,51 @@ export function EventLogPage() {
               type="text"
               value={filters.category ?? ''}
               onChange={(event) => updateFilters({ ...filters, category: event.target.value })}
-              style={{ ...styles.searchInput, flex: 1 }}
+              className="flex-1 bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
               placeholder="Category"
             />
             <input
               type="text"
               value={filters.query ?? ''}
               onChange={(event) => updateFilters({ ...filters, query: event.target.value })}
-              style={{ ...styles.searchInput, flex: 1.4 }}
+              className="flex-[1.4] bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
               placeholder="Search message"
             />
           </div>
-        </SettingsSurface>
+        </div>
 
-        <div style={styles.settingsSurfaceTable}>
-          <table style={styles.table}>
+        <div className="bg-gray-800/40 border border-gray-700 rounded-xl overflow-hidden">
+          <table className="w-full text-sm">
             <thead>
-              <tr>
-                <th style={styles.tableHeadCell}>Time</th>
-                <th style={styles.tableHeadCell}>Level</th>
-                <th style={styles.tableHeadCell}>Category</th>
-                <th style={styles.tableHeadCell}>Message</th>
-                <th style={styles.tableHeadCell}>Metadata</th>
+              <tr className="border-b border-gray-700 bg-gray-800/60">
+                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Time</th>
+                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Level</th>
+                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Category</th>
+                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Message</th>
+                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Metadata</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.id}>
-                  <td style={styles.tableCell}>{row.createdAt.replace('T', ' ').replace('Z', '')}</td>
-                  <td style={styles.tableCell}>{row.level}</td>
-                  <td style={styles.tableCell}>{row.category}</td>
-                  <td style={styles.tableCell}>{row.message}</td>
-                  <td style={styles.tableCell}>{row.metadataJson ?? '—'}</td>
+                <tr key={row.id} className="border-b border-gray-800 hover:bg-gray-800/50">
+                  <td className="px-4 py-3 text-gray-300 text-xs align-top font-mono whitespace-nowrap">{row.createdAt.replace('T', ' ').replace('Z', '')}</td>
+                  <td className="px-4 py-3 text-gray-300 text-xs align-top">{row.level}</td>
+                  <td className="px-4 py-3 text-gray-300 text-xs align-top">{row.category}</td>
+                  <td className="px-4 py-3 text-gray-200 text-xs align-top">{row.message}</td>
+                  <td className="px-4 py-3 text-gray-500 text-xs align-top font-mono break-all">{row.metadataJson ?? '—'}</td>
                 </tr>
               ))}
               {rows.length === 0 ? (
                 <tr>
-                  <td style={styles.tableCell} colSpan={5}>No log entries match the current filters.</td>
+                  <td className="px-4 py-4 text-sm text-gray-500" colSpan={5}>No log entries match the current filters.</td>
                 </tr>
               ) : null}
             </tbody>
           </table>
         </div>
 
-        {error ? <p style={styles.error}>{error}</p> : null}
+        {error ? <p className="text-sm text-red-300">{error}</p> : null}
       </div>
-    </SettingsPageShell>
+    </div>
   );
 }

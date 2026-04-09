@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import logoUrl from '../assets/logo.svg';
 import type { AppInfo } from '../../shared/types.js';
 import type { AppSection } from './SectionTabs.js';
 
@@ -86,7 +87,7 @@ export function AppHeader({ appInfo, currentSection, onChangeSection, onOpenProf
       <header className="flex items-center gap-4 px-4 h-12 bg-gray-900 border-b border-gray-800 shrink-0 z-10">
         {/* Brand */}
         <div className="flex items-center gap-2 mr-2">
-          <div className="w-7 h-7 rounded-lg bg-violet-600 flex items-center justify-center text-sm font-bold">SC</div>
+          <img src={logoUrl} alt="Streamer Copilot" className="w-7 h-7 rounded-lg" />
           <span className="font-semibold text-sm hidden sm:block">{appName}</span>
         </div>
 

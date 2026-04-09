@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 
-import type { ObsStatsSnapshot, StreamEvent } from '../../shared/types.js';
-import { DASHBOARD_EVENTS, DASHBOARD_MESSAGES } from '../dashboard-mock-data.js';
+import type { ChatMessage, ObsStatsSnapshot, StreamEvent, TwitchConnectionStatus, TwitchLiveStats } from '../../shared/types.js';
 import { ChatFeed } from './ChatFeed.js';
 import { EventBanner } from './EventBanner.js';
 import { ObsStatsPanel } from './ObsStatsPanel.js';
@@ -9,14 +8,18 @@ import { StatusBar } from './StatusBar.js';
 
 interface DashboardSummaryProps {
   activeProfileName: string;
-  chatEvents: typeof DASHBOARD_EVENTS;
-  chatMessages: typeof DASHBOARD_MESSAGES;
+  chatEvents: StreamEvent[];
+  chatMessages: ChatMessage[];
   obsStats: ObsStatsSnapshot;
+  twitchStatus: TwitchConnectionStatus;
+  twitchChannel: string | null;
+  twitchLiveStats: TwitchLiveStats | null;
+  youtubeStatus: boolean;
 }
 
-export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, obsStats }: DashboardSummaryProps) {
-  const visibleMessages = chatMessages.length > 0 ? chatMessages : DASHBOARD_MESSAGES;
-  const visibleEvents = chatEvents.length > 0 ? chatEvents : DASHBOARD_EVENTS;
+export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, obsStats, twitchStatus, twitchChannel, twitchLiveStats, youtubeStatus }: DashboardSummaryProps) {
+  const visibleMessages = chatMessages;
+  const visibleEvents = chatEvents;
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [enabledTypes, setEnabledTypes] = useState<Record<StreamEvent['type'], boolean>>({
     subscription: true,
@@ -39,6 +42,13 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
     [],
   );
 
+  const connectedPlatforms = useMemo(() => {
+    const list: import('../../shared/types.js').PlatformId[] = [];
+    if (twitchStatus === 'connected') list.push('twitch');
+    if (youtubeStatus) list.push('youtube');
+    return list;
+  }, [twitchStatus, youtubeStatus]);
+
   const filteredActivity = visibleEvents.filter((event) => enabledTypes[event.type] !== false);
 
   const setAllFilters = (enabled: boolean) => {
@@ -55,10 +65,19 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
   return (
     <section className="flex-1 min-h-0 flex flex-col overflow-hidden">
       <div className="flex-1 flex overflow-hidden">
-        <ChatFeed messages={visibleMessages} events={visibleEvents} />
+        <ChatFeed
+            messages={visibleMessages}
+            events={visibleEvents}
+            connectedPlatforms={connectedPlatforms}
+          />
 
         <div className="flex flex-col w-[40%] overflow-hidden">
-          <ObsStatsPanel stats={obsStats} />
+          <ObsStatsPanel 
+            stats={obsStats} 
+            twitchLiveStats={twitchLiveStats} 
+            twitchConnected={twitchStatus === 'connected'} 
+            youtubeConnected={youtubeStatus}
+          />
 
           <div className="flex flex-col flex-1 overflow-hidden p-4">
             <div className="flex items-center justify-between mb-2 shrink-0">
@@ -126,7 +145,12 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
         </div>
       </div>
 
-      <StatusBar activeProfileName={activeProfileName} obsConnected={obsStats.connected} />
+      <StatusBar
+        activeProfileName={activeProfileName}
+        obsConnected={obsStats.connected}
+        twitchStatus={twitchStatus}
+        twitchChannel={twitchChannel}
+      />
     </section>
   );
 }

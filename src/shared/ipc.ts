@@ -1,6 +1,7 @@
 import type {
   AppInfo,
   ChatMessage,
+  TwitchLiveStats,
   CloneProfileInput,
   CreateProfileInput,
   DeleteProfileInput,
@@ -9,6 +10,7 @@ import type {
   GeneralSettings,
   ObsConnectionSettings,
   ObsStatsSnapshot,
+  PlatformId,
   ProfilesSnapshot,
   RenameProfileInput,
   RendererVoiceCapabilities,
@@ -22,6 +24,8 @@ import type {
   ScheduledMessageUpsertInput,
   ScheduledStatusItem,
   SelectProfileInput,
+  TwitchConnectionStatus,
+  TwitchCredentials,
   VoiceCommand,
   VoiceCommandDeleteInput,
   VoiceCommandUpsertInput,
@@ -53,6 +57,7 @@ export const IPC_CHANNELS = {
   soundsUpsert: 'sounds:upsert',
   soundsDelete: 'sounds:delete',
   soundsPickFile: 'sounds:pick-file',
+  soundsReadFile: 'sounds:read-file',
   soundsPreviewPlay: 'sounds:preview-play',
   soundsPlay: 'sounds:play',
   obsGetSettings: 'obs:get-settings',
@@ -64,7 +69,23 @@ export const IPC_CHANNELS = {
   chatGetRecent: 'chat:get-recent',
   chatMessage: 'chat:message',
   chatEvent: 'chat:event',
+  chatSendMessage: 'chat:send-message',
   logsList: 'logs:list',
+  twitchLiveStats: 'twitch:live-stats',
+  twitchGetUserAvatars: 'twitch:get-user-avatars',
+  twitchGetBadgeUrls: 'twitch:get-badge-urls',
+  twitchGetCredentials: 'twitch:get-credentials',
+  twitchConnect: 'twitch:connect',
+  twitchDisconnect: 'twitch:disconnect',
+  twitchGetStatus: 'twitch:get-status',
+  twitchStatus: 'twitch:status',
+  twitchStartOAuth: 'twitch:start-oauth',
+  youtubeConnect: 'youtube:connect',
+  youtubeDisconnect: 'youtube:disconnect',
+  youtubeGetStatus: 'youtube:get-status',
+  youtubeOpenLogin: 'youtube:open-login',
+  youtubeGetSettings: 'youtube:get-settings',
+  youtubeSaveSettings: 'youtube:save-settings',
 } as const;
 
 export interface RecentChatSnapshot {
@@ -90,14 +111,15 @@ export interface CopilotApi {
   listVoiceCommands: () => Promise<VoiceCommand[]>;
   upsertVoiceCommand: (input: VoiceCommandUpsertInput) => Promise<VoiceCommand[]>;
   deleteVoiceCommand: (input: VoiceCommandDeleteInput) => Promise<VoiceCommand[]>;
-  previewVoiceSpeak: (input: VoiceSpeakPayload) => Promise<void>;
+  previewSpeak: (input: VoiceSpeakPayload) => Promise<void>;
   setRendererVoiceCapabilities: (input: RendererVoiceCapabilities) => Promise<void>;
   onVoiceSpeak: (listener: (payload: VoiceSpeakPayload) => void) => () => void;
   listSoundCommands: () => Promise<SoundCommand[]>;
   upsertSoundCommand: (input: SoundCommandUpsertInput) => Promise<SoundCommand[]>;
   deleteSoundCommand: (input: SoundCommandDeleteInput) => Promise<SoundCommand[]>;
   pickSoundFile: () => Promise<string | null>;
-  previewSoundPlay: (input: SoundPlayPayload) => Promise<void>;
+  readSoundFile: (filePath: string) => Promise<string>;
+  previewPlay: (input: SoundPlayPayload) => Promise<void>;
   onSoundPlay: (listener: (payload: SoundPlayPayload) => void) => () => void;
   getObsSettings: () => Promise<ObsConnectionSettings>;
   saveObsSettings: (input: ObsConnectionSettings) => Promise<ObsConnectionSettings>;
@@ -106,7 +128,24 @@ export interface CopilotApi {
   onObsConnected: (listener: () => void) => () => void;
   onObsDisconnected: (listener: () => void) => () => void;
   getRecentChat: () => Promise<RecentChatSnapshot>;
+  sendChatMessage: (input: { platform: PlatformId; content: string }) => Promise<void>;
   onChatMessage: (listener: (payload: ChatMessage) => void) => () => void;
   onChatEvent: (listener: (payload: StreamEvent) => void) => () => void;
   listEventLogs: (filters?: EventLogFilters) => Promise<EventLogEntry[]>;
+  twitchGetCredentials: () => Promise<TwitchCredentials | null>;
+  twitchConnect: (input: TwitchCredentials) => Promise<void>;
+  twitchDisconnect: () => Promise<void>;
+  twitchGetStatus: () => Promise<TwitchConnectionStatus>;
+  onTwitchStatus: (listener: (status: TwitchConnectionStatus) => void) => () => void;
+  onTwitchLiveStats: (listener: (stats: TwitchLiveStats) => void) => () => void;
+  onYoutubeStatus: (listener: (connected: boolean) => void) => () => void;
+  twitchGetUserAvatars: (logins: string[]) => Promise<Record<string, string>>;
+  twitchGetBadgeUrls: (badgeIds: string[]) => Promise<Record<string, string>>;
+  twitchStartOAuth: () => Promise<{ username: string; accessToken: string }>;
+  youtubeConnect: (input: { videoId: string }) => Promise<void>;
+  youtubeDisconnect: () => Promise<void>;
+  youtubeGetStatus: () => Promise<boolean>;
+  youtubeOpenLogin: () => Promise<void>;
+  youtubeGetSettings: () => Promise<import('./types.js').YouTubeSettings>;
+  youtubeSaveSettings: (settings: import('./types.js').YouTubeSettings) => Promise<void>;
 }

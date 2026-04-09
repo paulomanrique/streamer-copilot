@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import type { GeneralSettings, ObsStatsSnapshot, PermissionLevel, ProfileSummary } from '../../shared/types.js';
-import { PlatformSettingsPreview } from '../components/PlatformSettingsPreview.js';
+import { PlatformsSettingsPage } from './PlatformsSettings.js';
 import { SettingsProfilesPanel } from '../components/SettingsProfilesPanel.js';
 import { GeneralSettingsPage } from './GeneralSettings.js';
 import { ObsSettingsPage } from './ObsSettings.js';
@@ -181,7 +181,7 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
             onChangePermissionLevels={props.onChangePermissionLevels}
           />
         ) : null}
-        {currentView === 'platforms' ? <PlatformSettingsPreview activeProfileName={props.activeProfileName} /> : null}
+        {currentView === 'platforms' ? <PlatformsSettingsPage /> : null}
         {currentView === 'obs' ? <ObsSettingsPage obsStats={props.obsStats} /> : null}
         {currentView === 'sound' ? <SoundCommandsPage /> : null}
         {currentView === 'voice' ? (

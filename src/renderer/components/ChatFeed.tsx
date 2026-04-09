@@ -16,6 +16,7 @@ interface ContextMenuState {
 interface ChatFeedProps {
   messages: ChatMessage[];
   events: StreamEvent[];
+  connectedPlatforms: string[];
 }
 
 const PLATFORM_META = {
@@ -102,13 +103,30 @@ const CONTEXT_MENU_ACTIONS: Record<string, ContextMenuAction[]> = {
   ],
 };
 
+// Twitch's default color palette assigned when a user has no color set
+const TWITCH_DEFAULT_COLORS = [
+  '#FF0000', '#0000FF', '#008000', '#B22222', '#FF7F50',
+  '#9ACD32', '#FF4500', '#2E8B57', '#DAA520', '#D2691E',
+  '#5F9EA0', '#1E90FF', '#FF69B4', '#8A2BE2', '#00FF7F',
+];
+
+function resolveAuthorColor(message: ChatMessage): string {
+  if (message.color) return message.color;
+  // Deterministic color from username (matches Twitch's own fallback algorithm)
+  let hash = 0;
+  for (let i = 0; i < message.author.length; i++) {
+    hash = message.author.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return TWITCH_DEFAULT_COLORS[Math.abs(hash) % TWITCH_DEFAULT_COLORS.length];
+}
+
 function platformKey(platform: string): keyof typeof PLATFORM_META {
   if (platform === 'youtube-v') return 'youtube-v';
   if (platform in PLATFORM_META) return platform as keyof typeof PLATFORM_META;
   return 'twitch';
 }
 
-export function ChatFeed({ messages, events }: ChatFeedProps) {
+export function ChatFeed({ messages, events, connectedPlatforms }: ChatFeedProps) {
   const feedRef  = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const menuRef  = useRef<HTMLDivElement | null>(null);
@@ -118,11 +136,29 @@ export function ChatFeed({ messages, events }: ChatFeedProps) {
     twitch: true, youtube: true, 'youtube-v': true, kick: true, tiktok: true,
   });
   const [inputValue,    setInputValue]    = useState('');
-  const [inputPlatform, setInputPlatform] = useState('twitch');
+  const [inputPlatform, setInputPlatform] = useState(() => connectedPlatforms[0] ?? 'twitch');
+  const [avatarCache,   setAvatarCache]   = useState<Map<string, string>>(new Map());
+  const [badgeCache,    setBadgeCache]    = useState<Map<string, string>>(new Map());
   const [highlighted,   setHighlighted]   = useState<string | null>(null);
+  const [isAtBottom,    setIsAtBottom]    = useState(true);
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState>({
     visible: false, x: 0, y: 0, platform: '', author: '',
   });
+
+  // ── scroll management ──────────────────────────────────────────────
+  const onScroll = () => {
+    if (!feedRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = feedRef.current;
+    // Consider "at bottom" if within 60px of the actual bottom
+    const atBottom = scrollHeight - scrollTop - clientHeight < 60;
+    setIsAtBottom(atBottom);
+  };
+
+  const jumpToBottom = () => {
+    if (!feedRef.current) return;
+    feedRef.current.scrollTop = feedRef.current.scrollHeight;
+    setIsAtBottom(true);
+  };
 
   // ── filtering ──────────────────────────────────────────────────────
   const allowedEventTypes = feedMode === 'superchat' ? new Set(['superchat']) : new Set(['raid', 'superchat']);
@@ -133,16 +169,64 @@ export function ChatFeed({ messages, events }: ChatFeedProps) {
     (e) => allowedEventTypes.has(e.type) && platformFilter[platformKey(e.platform)] !== false,
   );
 
+  // Since store now appends to the end, and getRecent also returns them in chronological order,
+  // we just need to merge them and keep them in that order.
   const items = [
     ...visibleMessages.map((m) => ({ kind: 'message' as const, id: m.id, time: m.timestampLabel, message: m })),
     ...visibleEvents.map((e)  => ({ kind: 'event'   as const, id: e.id, time: e.timestampLabel, event: e })),
-  ].sort((a, b) => a.time.localeCompare(b.time));
+  ];
 
   // ── auto-scroll ────────────────────────────────────────────────────
   useEffect(() => {
-    if (!feedRef.current) return;
+    if (!feedRef.current || !isAtBottom) return;
     feedRef.current.scrollTop = feedRef.current.scrollHeight;
-  }, [items]);
+  }, [items, isAtBottom]);
+
+  // ── batch-fetch Twitch avatars for new users ──────────────────────
+  useEffect(() => {
+    const twitchLogins = messages
+      .filter((m) => m.platform === 'twitch')
+      .map((m) => m.author.toLowerCase())
+      .filter((login, i, arr) => arr.indexOf(login) === i) // unique
+      .filter((login) => !avatarCache.has(login));
+
+    if (twitchLogins.length === 0) return;
+
+    void window.copilot.twitchGetUserAvatars(twitchLogins).then((result) => {
+      setAvatarCache((prev) => {
+        const next = new Map(prev);
+        for (const [login, url] of Object.entries(result)) next.set(login.toLowerCase(), url);
+        // Mark misses so we don't re-fetch
+        for (const login of twitchLogins) {
+          if (!next.has(login)) next.set(login, '');
+        }
+        return next;
+      });
+    });
+  }, [messages]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── batch-fetch Twitch badges for new messages ────────────────────
+  useEffect(() => {
+    const twitchBadges = messages
+      .filter((m) => m.platform === 'twitch')
+      .flatMap((m) => m.badges)
+      .filter((badge, i, arr) => arr.indexOf(badge) === i) // unique
+      .filter((badge) => !badgeCache.has(badge));
+
+    if (twitchBadges.length === 0) return;
+
+    void window.copilot.twitchGetBadgeUrls(twitchBadges).then((result) => {
+      setBadgeCache((prev) => {
+        const next = new Map(prev);
+        for (const [badgeId, url] of Object.entries(result)) next.set(badgeId, url);
+        // Mark misses so we don't re-fetch
+        for (const badge of twitchBadges) {
+          if (!next.has(badge)) next.set(badge, '');
+        }
+        return next;
+      });
+    });
+  }, [messages]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── close context menu on outside click / Escape ───────────────────
   useEffect(() => {
@@ -186,8 +270,18 @@ export function ChatFeed({ messages, events }: ChatFeedProps) {
     setCtxMenu({ visible: true, x: e.clientX, y: e.clientY, platform, author });
   };
 
+  const sendMessage = () => {
+    const content = inputValue.trim();
+    if (!content) return;
+    setInputValue('');
+    void window.copilot.sendChatMessage({
+      platform: inputPlatform as import('../../shared/types.js').PlatformId,
+      content,
+    }).catch(() => null);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && inputValue.trim()) setInputValue('');
+    if (e.key === 'Enter') sendMessage();
   };
 
   return (
@@ -209,7 +303,7 @@ export function ChatFeed({ messages, events }: ChatFeedProps) {
         </div>
 
         <div className="flex items-center gap-1.5">
-          {PLATFORM_BUTTONS.map(({ id, title }) => {
+          {PLATFORM_BUTTONS.filter(b => connectedPlatforms.includes(b.id as any)).map(({ id, title }) => {
             const meta = PLATFORM_META[platformKey(id)];
             const on = platformFilter[id] !== false;
             return (
@@ -224,7 +318,7 @@ export function ChatFeed({ messages, events }: ChatFeedProps) {
       </div>
 
       {/* ── messages ───────────────────────────────────────────────── */}
-      <div ref={feedRef} className="flex-1 overflow-y-auto py-1 space-y-0.5">
+      <div ref={feedRef} onScroll={onScroll} className="flex-1 overflow-y-auto py-1 space-y-0.5 relative">
         {items.map((item) =>
           item.kind === 'event' ? (
             <EventBanner key={item.id} event={item.event} />
@@ -232,28 +326,46 @@ export function ChatFeed({ messages, events }: ChatFeedProps) {
             <ChatMessageRow
               key={item.id}
               message={item.message}
+              avatarUrl={avatarCache.get(item.message.author.toLowerCase()) || undefined}
+              badgeCache={badgeCache}
               highlighted={highlighted === item.message.author}
               onDoubleClick={() => replyTo(item.message.platform, item.message.author)}
               onContextMenu={(e) => handleContextMenu(e, item.message.platform, item.message.author)}
             />
           ),
         )}
+
+        {/* Floating Scroll Button */}
+        {!isAtBottom && (
+          <button
+            type="button"
+            onClick={jumpToBottom}
+            className="sticky bottom-4 left-1/2 -translate-x-1/2 z-10 bg-violet-600 hover:bg-violet-500 text-white text-[10px] font-bold uppercase tracking-widest px-4 py-2 rounded-full shadow-2xl border border-violet-400/30 flex items-center gap-2 transition-all animate-bounce"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+            </svg>
+            New Messages Below
+          </button>
+        )}
       </div>
 
       {/* ── input ──────────────────────────────────────────────────── */}
       <div className="px-3 py-2 border-t border-gray-800 shrink-0">
         <div className="flex gap-2">
-          <select
-            value={inputPlatform}
-            onChange={(e) => setInputPlatform(e.target.value)}
-            className="bg-gray-800 border border-gray-700 rounded text-xs text-gray-300 px-2 py-1.5 focus:outline-none focus:border-violet-500"
-          >
-            <option value="twitch">Twitch</option>
-            <option value="youtube">YouTube (Horizontal)</option>
-            <option value="youtube-v">YouTube (Vertical)</option>
-            <option value="kick">Kick</option>
-            <option value="tiktok">TikTok</option>
-          </select>
+          {connectedPlatforms.length > 1 ? (
+            <select
+              value={inputPlatform}
+              onChange={(e) => setInputPlatform(e.target.value)}
+              className="bg-gray-800 border border-gray-700 rounded text-xs text-gray-300 px-2 py-1.5 focus:outline-none focus:border-violet-500"
+            >
+              {PLATFORM_BUTTONS.filter((b) => connectedPlatforms.includes(b.id)).map(({ id, title }) => (
+                <option key={id} value={id}>{title}</option>
+              ))}
+            </select>
+          ) : connectedPlatforms.length === 1 ? (
+            <span className="text-xs text-gray-500 px-2 py-1.5 capitalize">{connectedPlatforms[0]}</span>
+          ) : null}
           <input
             ref={inputRef}
             type="text"
@@ -263,7 +375,7 @@ export function ChatFeed({ messages, events }: ChatFeedProps) {
             placeholder="Send message... (Press Enter)"
             className="flex-1 bg-gray-800 border border-gray-700 rounded text-sm text-gray-300 px-3 py-1.5 focus:outline-none focus:border-violet-500 placeholder-gray-600"
           />
-          <button type="button" onClick={() => setInputValue('')}
+          <button type="button" onClick={sendMessage}
             className="px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors">
             Send
           </button>
@@ -325,16 +437,41 @@ export function ChatFeed({ messages, events }: ChatFeedProps) {
 
 interface ChatMessageRowProps {
   message: ChatMessage;
+  avatarUrl?: string;
+  badgeCache: Map<string, string>;
   highlighted: boolean;
   onDoubleClick: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
 }
 
-function ChatMessageRow({ message, highlighted, onDoubleClick, onContextMenu }: ChatMessageRowProps) {
-  const meta = PLATFORM_META[platformKey(message.platform)];
+function ChatMessageRow({ message, avatarUrl, badgeCache, highlighted, onDoubleClick, onContextMenu }: ChatMessageRowProps) {
+  const pKey = platformKey(message.platform);
+  const meta = PLATFORM_META[pKey];
+
+  // Platform badge metadata (matching Activity Log style)
+  const PLATFORM_BADGE_META: Record<string, { bg: string; text: string; label: string }> = {
+    twitch: { bg: 'bg-purple-500/20', text: 'text-purple-300', label: 'Twitch' },
+    youtube: { bg: 'bg-red-500/20', text: 'text-red-300', label: 'YouTube' },
+    'youtube-v': { bg: 'bg-rose-400/20', text: 'text-rose-300', label: 'YouTube' },
+    kick: { bg: 'bg-green-500/20', text: 'text-green-300', label: 'Kick' },
+    tiktok: { bg: 'bg-pink-500/20', text: 'text-pink-300', label: 'TikTok' },
+  };
+
+  const badgeMeta = PLATFORM_BADGE_META[pKey] || PLATFORM_BADGE_META.twitch;
   const isCommand = message.content.startsWith('!');
-  const isSub = message.badges.includes('subscriber') || message.badges.includes('member');
-  const isMod = message.badges.includes('moderator');
+
+  // STAR LOGIC: 
+  // YouTube: ONLY if badge is 'member'
+  // Others: if 'subscriber', 'member' or 'subscriber/'
+  const isSub = message.platform === 'youtube'
+    ? message.badges.includes('member')
+    : message.badges.some((b) => b.startsWith('subscriber/') || b === 'subscriber' || b === 'member');
+
+  const isMod = message.badges.some((b) => b.startsWith('moderator/') || b === 'moderator');
+  const authorColor = resolveAuthorColor(message);
+
+  const twitchBadges = message.platform === 'twitch' ? message.badges : [];
+  const effectiveAvatarUrl = message.avatarUrl || avatarUrl;
 
   return (
     <div
@@ -349,13 +486,61 @@ function ChatMessageRow({ message, highlighted, onDoubleClick, onContextMenu }: 
     >
       <span className="text-gray-600 text-xs mt-0.5 shrink-0 font-mono w-[54px] text-right">{message.timestampLabel}</span>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1 flex-wrap">
-          <span className={`inline-flex items-center justify-center w-5 h-5 rounded ${meta.bg}`}>
-            <svg className={`w-3 h-3 ${meta.text}`} viewBox="0 0 24 24" fill="currentColor"><path d={meta.icon} /></svg>
+        <div className="flex items-center gap-1.5 flex-wrap">
+
+          {/* Platform Badge (Activity Log Style) */}
+          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] text-[10px] font-bold shrink-0 ${badgeMeta.bg} ${badgeMeta.text}`}>
+            <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor">
+              <path d={meta.icon} />
+            </svg>
+            {badgeMeta.label}
           </span>
+
+          {/* Avatar (Shown for everyone except Twitch by default, or if available) */}
+          {message.platform !== 'twitch' && (
+            effectiveAvatarUrl ? (
+              <img
+                src={effectiveAvatarUrl}
+                alt={message.author}
+                className="w-5 h-5 rounded-full shrink-0 object-cover"
+                style={{ outline: `1.5px solid ${authorColor}60` }}
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+            ) : (
+              <span
+                className="inline-flex items-center justify-center w-5 h-5 rounded-full shrink-0"
+                style={{ backgroundColor: `${authorColor}28` }}
+              >
+                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor" style={{ color: authorColor }}>
+                  <path d={meta.icon} />
+                </svg>
+              </span>
+            )
+          )}
+
+          {/* Twitch-specific versioned badges */}
+          {twitchBadges.map((badgeId) => {
+            const url = badgeCache.get(badgeId);
+            if (!url) return null;
+            return (
+              <img
+                key={badgeId}
+                src={url}
+                alt={badgeId}
+                className="w-4 h-4 rounded-sm shrink-0"
+                title={badgeId}
+              />
+            );
+          })}
+
+          {/* Member Star */}
           {isSub ? <span className="text-yellow-400 text-xs leading-none">★</span> : null}
-          <span className={`font-semibold text-sm ${meta.text}`}>{message.author}</span>
-          {isMod ? <span className="text-xs text-emerald-400 font-semibold">MOD</span> : null}
+
+          <span className="font-semibold text-sm" style={{ color: authorColor }}>
+            {message.platform === 'youtube' ? `@${message.author}` : message.author}
+          </span>
+
+          {message.platform !== 'twitch' && isMod ? <span className="text-xs text-emerald-400 font-semibold">MOD</span> : null}
         </div>
         <p className={`text-sm mt-0.5 break-words leading-snug ${isCommand ? 'text-violet-300 font-mono' : 'text-gray-300'}`}>
           {message.content}
