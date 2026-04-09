@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 
 import type { ChatMessage, StreamEvent } from '../../shared/types.js';
 import { EventBanner } from './EventBanner.js';
@@ -118,6 +119,57 @@ function resolveAuthorColor(message: ChatMessage): string {
     hash = message.author.charCodeAt(i) + ((hash << 5) - hash);
   }
   return TWITCH_DEFAULT_COLORS[Math.abs(hash) % TWITCH_DEFAULT_COLORS.length];
+}
+
+const URL_REGEX = /https?:\/\/[^\s]+/gi;
+
+function trimUrlTrailingPunctuation(raw: string): { url: string; trailing: string } {
+  const match = raw.match(/[),.!?:;]+$/);
+  if (!match) return { url: raw, trailing: '' };
+  const trailing = match[0];
+  return {
+    url: raw.slice(0, raw.length - trailing.length),
+    trailing,
+  };
+}
+
+function renderContentWithLinks(content: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  let lastIndex = 0;
+  let key = 0;
+
+  for (const match of content.matchAll(URL_REGEX)) {
+    const full = match[0];
+    const index = match.index ?? 0;
+    if (index > lastIndex) {
+      nodes.push(<span key={`text-${key++}`}>{content.slice(lastIndex, index)}</span>);
+    }
+
+    const { url, trailing } = trimUrlTrailingPunctuation(full);
+    nodes.push(
+      <a
+        key={`link-${key++}`}
+        href={url}
+        className="underline underline-offset-2 text-sky-300 hover:text-sky-200"
+        onClick={(event) => {
+          event.preventDefault();
+          void window.copilot.openExternalUrl(url);
+        }}
+      >
+        {url}
+      </a>,
+    );
+    if (trailing) nodes.push(<span key={`trail-${key++}`}>{trailing}</span>);
+
+    lastIndex = index + full.length;
+  }
+
+  if (lastIndex < content.length) {
+    nodes.push(<span key={`text-${key++}`}>{content.slice(lastIndex)}</span>);
+  }
+
+  if (nodes.length === 0) nodes.push(<span key="text-0">{content}</span>);
+  return nodes;
 }
 
 function platformKey(platform: string): keyof typeof PLATFORM_META {
@@ -504,7 +556,7 @@ function ChatMessageRow({ message, avatarUrl, highlighted, onDoubleClick, onCont
           {message.platform !== 'twitch' && isMod ? <span className="text-xs text-emerald-400 font-semibold">MOD</span> : null}
         </div>
         <p className={`text-sm mt-0.5 break-words leading-snug ${isCommand ? 'text-violet-300 font-mono' : 'text-gray-300'}`}>
-          {message.content}
+          {renderContentWithLinks(message.content)}
         </p>
       </div>
     </div>

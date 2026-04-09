@@ -40,6 +40,7 @@ import type {
 
 const IPC_CHANNELS = {
   appGetInfo: 'app:get-info',
+  appOpenExternalUrl: 'app:open-external-url',
   profilesList: 'profiles:list',
   profilesSelect: 'profiles:select',
   profilesCreate: 'profiles:create',
@@ -101,6 +102,7 @@ const IPC_CHANNELS = {
 
 const copilotApi: CopilotApi = {
   getAppInfo: () => ipcRenderer.invoke(IPC_CHANNELS.appGetInfo),
+  openExternalUrl: (url: string) => ipcRenderer.invoke(IPC_CHANNELS.appOpenExternalUrl, url),
   listProfiles: () => ipcRenderer.invoke(IPC_CHANNELS.profilesList),
   selectProfile: (input: SelectProfileInput) => ipcRenderer.invoke(IPC_CHANNELS.profilesSelect, input),
   createProfile: (input: CreateProfileInput) => ipcRenderer.invoke(IPC_CHANNELS.profilesCreate, input),

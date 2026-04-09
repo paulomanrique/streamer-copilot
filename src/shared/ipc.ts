@@ -38,6 +38,7 @@ import type {
 
 export const IPC_CHANNELS = {
   appGetInfo: 'app:get-info',
+  appOpenExternalUrl: 'app:open-external-url',
   profilesList: 'profiles:list',
   profilesSelect: 'profiles:select',
   profilesCreate: 'profiles:create',
@@ -104,6 +105,7 @@ export interface RecentChatSnapshot {
 
 export interface CopilotApi {
   getAppInfo: () => Promise<AppInfo>;
+  openExternalUrl: (url: string) => Promise<void>;
   listProfiles: () => Promise<ProfilesSnapshot>;
   selectProfile: (input: SelectProfileInput) => Promise<ProfilesSnapshot>;
   createProfile: (input: CreateProfileInput) => Promise<ProfilesSnapshot>;

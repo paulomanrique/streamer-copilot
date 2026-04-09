@@ -410,6 +410,11 @@ export function createAppContext(options: AppContextOptions): () => void {
     appName: APP_NAME, appVersion: options.appVersion,
     electronVersion: process.versions.electron, chromeVersion: process.versions.chrome, nodeVersion: process.versions.node,
   }));
+  ipcMain.handle(IPC_CHANNELS.appOpenExternalUrl, async (_, raw) => {
+    const url = String(raw ?? '').trim();
+    if (!/^https?:\/\//i.test(url)) throw new Error('Only http(s) links are allowed');
+    await shell.openExternal(url);
+  });
 
   ipcMain.handle(IPC_CHANNELS.profilesList, async () => profileStore.list());
   ipcMain.handle(IPC_CHANNELS.profilesSelect, async (_, raw) => profileStore.select(selectProfileInputSchema.parse(raw).profileId));
