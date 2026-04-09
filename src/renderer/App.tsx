@@ -36,11 +36,11 @@ export default function App() {
     appendChatMessage,
     appendChatEvent,
     twitchLiveStats,
-    youtubeStatus,
+    youtubeStreams,
     setTwitchStatus,
     setTwitchChannel,
     setTwitchLiveStats,
-    setYoutubeStatus,
+    setYoutubeStreams,
   } = useAppStore();
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -90,7 +90,7 @@ export default function App() {
         setGeneralSettings(nextGeneralSettings);
         setTwitchStatus(twitchInitialStatus);
         setTwitchChannel(twitchCreds?.channel ?? null);
-        setYoutubeStatus(ytInitialStatus);
+        setYoutubeStreams(ytInitialStatus);
         setSelectorProfileId(snapshot.activeProfileId);
         const skipPreference = readSkipPromptPreference(localStorage.getItem(SKIP_PROFILE_SELECTOR_KEY));
         setSkipPromptAgain(skipPreference);
@@ -211,9 +211,9 @@ export default function App() {
       });
     });
     const unsubStats = window.copilot.onTwitchLiveStats(setTwitchLiveStats);
-    const unsubYt = window.copilot.onYoutubeStatus(setYoutubeStatus);
+    const unsubYt = window.copilot.onYoutubeStatus(setYoutubeStreams);
     return () => { unsubStatus(); unsubStats(); unsubYt(); };
-  }, [setTwitchStatus, setTwitchChannel, setTwitchLiveStats, setYoutubeStatus]);
+  }, [setTwitchStatus, setTwitchChannel, setTwitchLiveStats, setYoutubeStreams]);
 
   useEffect(() => {
     const disconnectMessage = window.copilot.onChatMessage((message) => {
@@ -397,7 +397,7 @@ export default function App() {
             twitchStatus={twitchStatus}
             twitchChannel={twitchChannel}
             twitchLiveStats={twitchLiveStats}
-            youtubeStatus={youtubeStatus}
+            youtubeStreams={youtubeStreams}
           />
         ) : null}
 

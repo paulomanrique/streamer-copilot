@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 
-import type { ChatMessage, ObsStatsSnapshot, StreamEvent, TwitchConnectionStatus, TwitchLiveStats } from '../../shared/types.js';
+import type { ChatMessage, ObsStatsSnapshot, StreamEvent, TwitchConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
 import { ChatFeed } from './ChatFeed.js';
 import { EventBanner } from './EventBanner.js';
 import { ObsStatsPanel } from './ObsStatsPanel.js';
@@ -14,10 +14,10 @@ interface DashboardSummaryProps {
   twitchStatus: TwitchConnectionStatus;
   twitchChannel: string | null;
   twitchLiveStats: TwitchLiveStats | null;
-  youtubeStatus: number;
+  youtubeStreams: YouTubeStreamInfo[];
 }
 
-export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, obsStats, twitchStatus, twitchChannel, twitchLiveStats, youtubeStatus }: DashboardSummaryProps) {
+export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, obsStats, twitchStatus, twitchChannel, twitchLiveStats, youtubeStreams }: DashboardSummaryProps) {
   const visibleMessages = chatMessages;
   const visibleEvents = chatEvents;
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -45,10 +45,10 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
   const connectedPlatforms = useMemo(() => {
     const list: import('../../shared/types.js').PlatformId[] = [];
     if (twitchStatus === 'connected') list.push('twitch');
-    if (youtubeStatus >= 1) list.push('youtube');
-    if (youtubeStatus >= 2) list.push('youtube-v');
+    if (youtubeStreams.length >= 1) list.push('youtube');
+    if (youtubeStreams.length >= 2) list.push('youtube-v');
     return list;
-  }, [twitchStatus, youtubeStatus]);
+  }, [twitchStatus, youtubeStreams]);
 
   const filteredActivity = visibleEvents.filter((event) => enabledTypes[event.type] !== false);
 
@@ -77,7 +77,7 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
             stats={obsStats} 
             twitchLiveStats={twitchLiveStats} 
             twitchConnected={twitchStatus === 'connected'} 
-            youtubeConnected={youtubeStatus}
+            youtubeStreams={youtubeStreams}
           />
 
           <div className="flex flex-col flex-1 overflow-hidden p-4">

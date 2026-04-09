@@ -420,10 +420,11 @@ function ChatMessageRow({ message, avatarUrl, highlighted, onDoubleClick, onCont
   const meta = PLATFORM_META[pKey];
 
   // Platform badge metadata (matching Activity Log style)
+  const ytLabel = message.streamLabel ? `YT-${message.streamLabel}` : 'YouTube';
   const PLATFORM_BADGE_META: Record<string, { bg: string; text: string; label: string }> = {
     twitch: { bg: 'bg-purple-500/20', text: 'text-purple-300', label: 'Twitch' },
-    youtube: { bg: 'bg-red-500/20', text: 'text-red-300', label: 'YouTube' },
-    'youtube-v': { bg: 'bg-rose-400/20', text: 'text-rose-300', label: 'YouTube' },
+    youtube: { bg: 'bg-red-500/20', text: 'text-red-300', label: ytLabel },
+    'youtube-v': { bg: 'bg-rose-400/20', text: 'text-rose-300', label: ytLabel },
     kick: { bg: 'bg-green-500/20', text: 'text-green-300', label: 'Kick' },
     tiktok: { bg: 'bg-pink-500/20', text: 'text-pink-300', label: 'TikTok' },
   };

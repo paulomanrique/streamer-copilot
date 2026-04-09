@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import type { ObsStatsSnapshot, TwitchLiveStats } from '../../shared/types.js';
+import type { ObsStatsSnapshot, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
 
 interface ObsStatsPanelProps {
   stats: ObsStatsSnapshot;
   twitchLiveStats: TwitchLiveStats | null;
   twitchConnected: boolean;
-  youtubeConnected: number;
+  youtubeStreams: YouTubeStreamInfo[];
 }
 
 
@@ -22,7 +22,7 @@ function fmtNum(n: number): string {
   return String(n);
 }
 
-export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtubeConnected }: ObsStatsPanelProps) {
+export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtubeStreams }: ObsStatsPanelProps) {
   const totalFrames = Math.max(1, stats.droppedFrames + stats.droppedFramesRender + 100);
   const connectionPct = Math.max(0, Math.min(100, (1 - stats.droppedFrames / totalFrames) * 100));
   const connectionTone = connectionPct >= 95 ? 'text-green-400' : connectionPct >= 80 ? 'text-yellow-400' : 'text-red-400';
@@ -97,7 +97,7 @@ export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtube
           <span className="text-xs font-mono text-gray-300">{connectionPct.toFixed(1)}%</span>
         </div>
 
-        {(twitchConnected || youtubeConnected > 0) && (
+        {(twitchConnected || youtubeStreams.length > 0) && (
           <div className="col-span-4 grid grid-cols-2 gap-2">
             {twitchConnected && (
               <ViewerCard
@@ -110,23 +110,23 @@ export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtube
                 followers={twitchLiveStats ? fmtNum(twitchLiveStats.followerCount) : undefined}
               />
             )}
-            {youtubeConnected >= 1 && (
+            {youtubeStreams.length >= 1 && (
               <ViewerCard
-                label="YouTube H"
+                label={`YouTube ${youtubeStreams[0].label}`}
                 icon={ICONS.youtube}
                 classes="bg-red-500/10 border-red-500/20 text-red-300"
                 metaClass="text-red-400"
-                value="—"
+                value={youtubeStreams[0].viewerCount !== null ? fmtNum(youtubeStreams[0].viewerCount) : '—'}
                 isLive
               />
             )}
-            {youtubeConnected >= 2 && (
+            {youtubeStreams.length >= 2 && (
               <ViewerCard
-                label="YouTube V"
+                label={`YouTube ${youtubeStreams[1].label}`}
                 icon={ICONS.youtube}
                 classes="bg-rose-400/10 border-rose-400/20 text-rose-300"
                 metaClass="text-rose-400"
-                value="—"
+                value={youtubeStreams[1].viewerCount !== null ? fmtNum(youtubeStreams[1].viewerCount) : '—'}
                 isLive
               />
             )}

@@ -51,7 +51,10 @@ interface EventBannerProps {
 }
 
 export function EventBanner({ event, variant = 'chat' }: EventBannerProps) {
-  const platform = PLATFORM_META[event.platform] ?? PLATFORM_META.twitch;
+  const baseMeta = PLATFORM_META[event.platform] ?? PLATFORM_META.twitch;
+  const platform = (event.platform === 'youtube' || event.platform === 'youtube-v') && event.streamLabel
+    ? { ...baseMeta, label: `YT-${event.streamLabel}` }
+    : baseMeta;
 
   if (variant === 'activity') {
     return (

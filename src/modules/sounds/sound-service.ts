@@ -1,4 +1,5 @@
-import type { PermissionLevel, SoundCommand, SoundPlayPayload } from '../../shared/types.js';
+import type { ChatMessage, PermissionLevel, SoundCommand, SoundPlayPayload } from '../../shared/types.js';
+import type { CommandModule } from '../commands/command-dispatcher.js';
 import { SoundCommandRepository } from './sound-repository.js';
 
 interface SoundServiceOptions {
@@ -20,7 +21,8 @@ const PERMISSION_RANK: Record<PermissionLevel, number> = {
   broadcaster: 4,
 };
 
-export class SoundService {
+export class SoundService implements CommandModule {
+  readonly name = 'sound';
   private readonly commandCooldowns = new Map<string, number>();
   private readonly userCooldowns = new Map<string, number>();
 
@@ -40,6 +42,11 @@ export class SoundService {
 
   previewPlay(payload: SoundPlayPayload): void {
     this.options.onPlay(payload);
+  }
+
+  /** CommandModule entry point — called by CommandDispatcher with resolved permission. */
+  handle(message: ChatMessage, permissionLevel: PermissionLevel): void {
+    this.handleChatMessage(message.content, { permissionLevel, userId: message.author });
   }
 
   handleChatMessage(content: string, context: ChatPermissionContext): SoundPlayPayload | null {

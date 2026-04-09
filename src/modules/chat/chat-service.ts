@@ -1,6 +1,7 @@
 import type { RecentChatSnapshot } from '../../shared/ipc.js';
 import type { ChatMessage, PlatformId, StreamEvent } from '../../shared/types.js';
 import type { PlatformChatAdapter } from '../../platforms/base.js';
+import { CommandDispatcher } from '../commands/command-dispatcher.js';
 import { SoundService } from '../sounds/sound-service.js';
 import { VoiceService } from '../voice/voice-service.js';
 
@@ -17,8 +18,13 @@ export class ChatService {
   private readonly adapterDetachHandlers = new Map<PlatformId, Array<() => void>>();
   private readonly messages: ChatMessage[] = [];
   private readonly events: StreamEvent[] = [];
+  private readonly dispatcher: CommandDispatcher;
 
-  constructor(private readonly options: ChatServiceOptions) {}
+  constructor(private readonly options: ChatServiceOptions) {
+    this.dispatcher = new CommandDispatcher();
+    this.dispatcher.register(options.soundService);
+    this.dispatcher.register(options.voiceService);
+  }
 
   registerAdapter(adapter: PlatformChatAdapter): void {
     this.adapters.set(adapter.platform, adapter);
@@ -80,14 +86,17 @@ export class ChatService {
     };
   }
 
+  /**
+   * Public entry point for messages that don't come through a registered adapter
+   * (e.g. YouTube scraper, injected test messages). Goes through the same
+   * CommandDispatcher pipeline as adapter messages.
+   */
+  injectMessage(message: ChatMessage): void {
+    this.handleMessage(message);
+  }
+
   private handleMessage(message: ChatMessage): void {
-    this.options.soundService.handleChatMessage(message.content, {
-      permissionLevel: 'everyone',
-      userId: message.author,
-    });
-    this.options.voiceService.handleChatMessage(message.content, {
-      permissionLevel: 'everyone',
-    });
+    this.dispatcher.dispatch(message);
 
     this.messages.push(message);
     if (this.messages.length > this.maxHistory) {

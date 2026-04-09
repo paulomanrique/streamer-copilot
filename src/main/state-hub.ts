@@ -10,6 +10,7 @@ import type {
   TwitchConnectionStatus,
   TwitchLiveStats,
   VoiceSpeakPayload,
+  YouTubeStreamInfo,
 } from '../shared/types.js';
 
 // Foundation placeholder for future push-based state sync to renderer.
@@ -68,7 +69,7 @@ export class StateHub {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.twitchLiveStats, stats);
   }
 
-  pushYoutubeStatus(streamCount: number): void {
-    this.rendererWindow?.webContents.send(IPC_CHANNELS.youtubeGetStatus, streamCount);
+  pushYoutubeStatus(streams: YouTubeStreamInfo[]): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.youtubeGetStatus, streams);
   }
 }

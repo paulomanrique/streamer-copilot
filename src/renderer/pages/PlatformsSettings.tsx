@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { TwitchConnectionStatus, TwitchCredentials, YouTubeSettings } from '../../shared/types.js';
+import type { TwitchConnectionStatus, TwitchCredentials, YouTubeSettings, YouTubeStreamInfo } from '../../shared/types.js';
 
 interface LiveCheckResult {
   handle: string;
@@ -42,7 +42,7 @@ export function PlatformsSettingsPage() {
   const [isEditingChannel, setIsEditingChannel] = useState(false);
 
   // YouTube state
-  const [ytConnected, setYtConnected] = useState(0);
+  const [ytStreams, setYtStreams] = useState<YouTubeStreamInfo[]>([]);
   const [ytSettings, setYtSettings] = useState<YouTubeSettings>({ channels: [], autoConnect: true });
   const [newChannelHandle, setNewChannelHandle] = useState('');
 
@@ -61,12 +61,12 @@ export function PlatformsSettingsPage() {
       ]);
       setStatus(currentStatus);
       setSavedCreds(creds);
-      setYtConnected(ytConnectedStatus);
+      setYtStreams(ytConnectedStatus);
       setYtSettings(ytSavedSettings);
     })();
 
     const unsubTwitch = window.copilot.onTwitchStatus((s) => setStatus(s));
-    const unsubYt = window.copilot.onYoutubeStatus((s) => setYtConnected(s));
+    const unsubYt = window.copilot.onYoutubeStatus((s) => setYtStreams(s));
 
     return () => {
       unsubTwitch();
@@ -302,14 +302,14 @@ export function PlatformsSettingsPage() {
               <div>
                 <p className="text-sm font-medium">YouTube Auto-Monitor</p>
                 <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className={`w-1.5 h-1.5 rounded-full ${ytConnected > 0 ? 'bg-green-400' : 'bg-gray-500'}`} />
-                  <span className={`text-xs ${ytConnected > 0 ? 'text-green-400' : 'text-gray-400'}`}>
-                    {ytConnected > 0 ? `${ytConnected} Scraper${ytConnected > 1 ? 's' : ''} Active` : 'Monitoring for Lives'}
+                  <span className={`w-1.5 h-1.5 rounded-full ${ytStreams.length > 0 ? 'bg-green-400' : 'bg-gray-500'}`} />
+                  <span className={`text-xs ${ytStreams.length > 0 ? 'text-green-400' : 'text-gray-400'}`}>
+                    {ytStreams.length > 0 ? `${ytStreams.length} Scraper${ytStreams.length > 1 ? 's' : ''} Active` : 'Monitoring for Lives'}
                   </span>
                 </div>
               </div>
             </div>
-            {ytConnected > 0 && (
+            {ytStreams.length > 0 && (
               <button type="button" onClick={disconnectYoutube} className="text-xs px-2 py-1 rounded bg-red-900/30 text-red-400 hover:bg-red-900/50">Stop Scrapers</button>
             )}
           </div>

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import type { ChatMessage, ObsStatsSnapshot, ProfilesSnapshot, StreamEvent, TwitchConnectionStatus, TwitchLiveStats } from '../shared/types.js';
+import type { ChatMessage, ObsStatsSnapshot, ProfilesSnapshot, StreamEvent, TwitchConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../shared/types.js';
 
 const DEFAULT_OBS_STATS: ObsStatsSnapshot = {
   connected: false,
@@ -21,7 +21,7 @@ interface AppStore extends ProfilesSnapshot {
   twitchStatus: TwitchConnectionStatus;
   twitchChannel: string | null;
   twitchLiveStats: TwitchLiveStats | null;
-  youtubeStatus: number;
+  youtubeStreams: YouTubeStreamInfo[];
   setProfiles: (snapshot: ProfilesSnapshot) => void;
   setObsStats: (stats: ObsStatsSnapshot | ((current: ObsStatsSnapshot) => ObsStatsSnapshot)) => void;
   setChatSnapshot: (snapshot: { messages: ChatMessage[]; events: StreamEvent[] }) => void;
@@ -30,7 +30,7 @@ interface AppStore extends ProfilesSnapshot {
   setTwitchStatus: (status: TwitchConnectionStatus) => void;
   setTwitchChannel: (channel: string | null) => void;
   setTwitchLiveStats: (stats: TwitchLiveStats) => void;
-  setYoutubeStatus: (status: number) => void;
+  setYoutubeStreams: (streams: YouTubeStreamInfo[]) => void;
 }
 
 export const useAppStore = create<AppStore>((set) => ({
@@ -42,7 +42,7 @@ export const useAppStore = create<AppStore>((set) => ({
   twitchStatus: 'disconnected',
   twitchChannel: null,
   twitchLiveStats: null,
-  youtubeStatus: 0,
+  youtubeStreams: [],
   setProfiles: (snapshot) =>
     set({
       activeProfileId: snapshot.activeProfileId,
@@ -72,5 +72,5 @@ export const useAppStore = create<AppStore>((set) => ({
   setTwitchStatus: (status) => set({ twitchStatus: status }),
   setTwitchChannel: (channel) => set({ twitchChannel: channel }),
   setTwitchLiveStats: (stats) => set({ twitchLiveStats: stats }),
-  setYoutubeStatus: (status) => set({ youtubeStatus: status }),
+  setYoutubeStreams: (streams) => set({ youtubeStreams: streams }),
 }));
