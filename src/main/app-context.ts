@@ -5,7 +5,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
-import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { BrowserWindow, dialog, ipcMain, net, shell } from 'electron';
 import type { OpenDialogOptions } from 'electron';
 
 import type { DatabaseHandle } from '../db/database.js';
@@ -129,9 +129,8 @@ export function createAppContext(options: AppContextOptions): () => void {
     try {
       const normalizedHandle = handle.startsWith('@') ? handle : `@${handle}`;
       const url = `https://www.youtube.com/${normalizedHandle}/streams`;
-      const response = await fetch(url, {
+      const response = await net.fetch(url, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
           'Accept-Language': 'en-US,en;q=0.9',
         },
       });
