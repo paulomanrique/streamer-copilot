@@ -127,7 +127,10 @@ export function createAppContext(options: AppContextOptions): () => void {
 
   const checkYouTubeLive = async (handle: string): Promise<string | null> => {
     try {
-      const normalizedHandle = handle.startsWith('@') ? handle : `@${handle}`;
+      // Extract handle from full URL if needed (e.g. https://www.youtube.com/@user)
+      const handleMatch = handle.match(/(?:youtube\.com\/)?(@?[\w-]+)(?:\/.*)?$/);
+      const rawHandle = handleMatch ? handleMatch[1] : handle;
+      const normalizedHandle = rawHandle.startsWith('@') ? rawHandle : `@${rawHandle}`;
       const url = `https://www.youtube.com/${normalizedHandle}/streams`;
       const response = await fetch(url, {
         headers: {
