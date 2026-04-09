@@ -149,5 +149,5 @@ export interface CopilotApi {
   youtubeOpenLogin: () => Promise<void>;
   youtubeGetSettings: () => Promise<import('./types.js').YouTubeSettings>;
   youtubeSaveSettings: (settings: import('./types.js').YouTubeSettings) => Promise<void>;
-  youtubeCheckLive: (handle: string) => Promise<{ videoId: string | null }>;
+  youtubeCheckLive: (handle: string) => Promise<{ videoIds: string[] }>;
 }

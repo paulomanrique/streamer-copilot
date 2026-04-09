@@ -125,7 +125,7 @@ export function createAppContext(options: AppContextOptions): () => void {
     return new YouTubeSettingsStore(active.directory);
   };
 
-  const checkYouTubeLive = async (handle: string): Promise<string | null> => {
+  const checkYouTubeLive = async (handle: string): Promise<string[]> => {
     try {
       // Extract handle from full URL if needed (e.g. https://www.youtube.com/@user)
       const handleMatch = handle.match(/(?:youtube\.com\/)?(@?[\w-]+)(?:\/.*)?$/);
@@ -138,11 +138,10 @@ export function createAppContext(options: AppContextOptions): () => void {
           'Accept-Language': 'en-US,en;q=0.9',
         },
       });
-      if (!response.ok) return null;
+      if (!response.ok) return [];
       const html = await response.text();
-      const videoId = extractYtLiveVideoId(html);
-      return videoId;
-    } catch { return null; }
+      return extractYtLiveVideoIds(html);
+    } catch { return []; }
   };
 
   function extractYtInitialData(html: string): unknown {
@@ -159,11 +158,11 @@ export function createAppContext(options: AppContextOptions): () => void {
     try { return JSON.parse(html.slice(jsonStart, end)); } catch { return null; }
   }
 
-  function findLiveVideoId(obj: unknown): string | null {
-    if (!obj || typeof obj !== 'object') return null;
+  function findLiveVideoIds(obj: unknown, found: string[] = []): string[] {
+    if (!obj || typeof obj !== 'object') return found;
     if (Array.isArray(obj)) {
-      for (const item of obj) { const r = findLiveVideoId(item); if (r) return r; }
-      return null;
+      for (const item of obj) findLiveVideoIds(item, found);
+      return found;
     }
     const record = obj as Record<string, unknown>;
     if (typeof record.videoId === 'string' && Array.isArray(record.thumbnailOverlays)) {
@@ -172,16 +171,16 @@ export function createAppContext(options: AppContextOptions): () => void {
         const tots = (overlay as Record<string, unknown>).thumbnailOverlayTimeStatusRenderer as Record<string, unknown> | undefined;
         return tots?.style === 'LIVE';
       });
-      if (isLive) return record.videoId;
+      if (isLive) found.push(record.videoId);
     }
-    for (const value of Object.values(record)) { const r = findLiveVideoId(value); if (r) return r; }
-    return null;
+    for (const value of Object.values(record)) findLiveVideoIds(value, found);
+    return found;
   }
 
-  function extractYtLiveVideoId(html: string): string | null {
+  function extractYtLiveVideoIds(html: string): string[] {
     const data = extractYtInitialData(html);
-    if (!data) return null;
-    return findLiveVideoId(data);
+    if (!data) return [];
+    return findLiveVideoIds(data);
   }
 
   const runYoutubeMonitor = async () => {
@@ -192,9 +191,10 @@ export function createAppContext(options: AppContextOptions): () => void {
 
     for (const channel of settings.channels) {
       if (!channel.enabled) continue;
-      const videoId = await checkYouTubeLive(channel.handle);
+      const videoIds = await checkYouTubeLive(channel.handle);
+      const videoId = videoIds[0] ?? null;
       if (videoId && videoId !== lastDetectedVideoId) {
-        logService.info('youtube', `Auto-detected live for ${channel.handle}: ${videoId}`);
+        logService.info('youtube', `Auto-detected live for ${channel.handle}: ${videoIds.join(', ')}`);
         lastDetectedVideoId = videoId;
         if (youtubeScraper) youtubeScraper.stop();
         youtubeScraper = new YouTubeScraper({
@@ -471,8 +471,8 @@ export function createAppContext(options: AppContextOptions): () => void {
     await win.loadURL('https://accounts.google.com/ServiceLogin?service=youtube&continue=https://www.youtube.com/signin?action_handle_signin=true');
   });
   ipcMain.handle(IPC_CHANNELS.youtubeCheckLive, async (_, handle: unknown) => {
-    const videoId = await checkYouTubeLive(String(handle ?? ''));
-    return { videoId };
+    const videoIds = await checkYouTubeLive(String(handle ?? ''));
+    return { videoIds };
   });
 
   // Auto-reconnect Twitch from saved credentials on startup
