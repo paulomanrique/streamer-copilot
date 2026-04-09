@@ -21,6 +21,8 @@ import { GeneralSettingsStore } from '../modules/settings/general-settings-store
 import { ProfileStore } from '../modules/settings/profile-store.js';
 import { SoundCommandRepository } from '../modules/sounds/sound-repository.js';
 import { SoundService } from '../modules/sounds/sound-service.js';
+import { TextCommandRepository } from '../modules/text/text-repository.js';
+import { TextService } from '../modules/text/text-service.js';
 import { VoiceCommandRepository } from '../modules/voice/voice-repository.js';
 import { VoiceService } from '../modules/voice/voice-service.js';
 import { createKickChatAdapter } from '../platforms/kick/adapter.js';
@@ -47,6 +49,8 @@ import {
   scheduledMessageDeleteInputSchema,
   scheduledMessageUpsertInputSchema,
   selectProfileInputSchema,
+  textCommandDeleteInputSchema,
+  textCommandUpsertInputSchema,
   twitchCredentialsSchema,
   voiceCommandDeleteInputSchema,
   voiceCommandUpsertInputSchema,
@@ -79,6 +83,7 @@ export function createAppContext(options: AppContextOptions): () => void {
   const logService = new LogService(logRepository);
   const scheduledRepository = new ScheduledMessageRepository(options.databaseHandle.db);
   const soundRepository = new SoundCommandRepository(options.databaseHandle.db);
+  const textRepository = new TextCommandRepository(options.databaseHandle.db);
   const voiceRepository = new VoiceCommandRepository(options.databaseHandle.db);
   const schedulerService = new SchedulerService({
     repository: scheduledRepository,
@@ -89,6 +94,21 @@ export function createAppContext(options: AppContextOptions): () => void {
   const soundService = new SoundService({
     repository: soundRepository,
     onPlay: (payload) => options.stateHub.pushSoundPlay(payload),
+  });
+  const textService = new TextService({
+    repository: textRepository,
+    onRespond: async (payload) => {
+      try {
+        await chatService.sendMessage(payload.platform, payload.content);
+        logService.info('text-command', 'Sent response', { platform: payload.platform, content: payload.content });
+      } catch (cause) {
+        logService.error('text-command', 'Failed to send response', {
+          platform: payload.platform,
+          content: payload.content,
+          error: cause instanceof Error ? cause.message : String(cause),
+        });
+      }
+    },
   });
   let rendererSpeechSynthesisAvailable = process.platform !== 'linux';
   const voiceService = new VoiceService({
@@ -372,7 +392,7 @@ export function createAppContext(options: AppContextOptions): () => void {
   };
 
   const chatService = new ChatService({
-    soundService, voiceService,
+    soundService, textService, voiceService,
     onMessage: (message) => options.stateHub.pushChatMessage(message),
     onEvent: (event) => options.stateHub.pushChatEvent(event),
   });
@@ -416,6 +436,10 @@ export function createAppContext(options: AppContextOptions): () => void {
     supported: [...SCHEDULED_SUPPORTED_TARGETS],
     connected: getConnectedScheduledTargets(),
   }));
+
+  ipcMain.handle(IPC_CHANNELS.textList, async () => textService.list());
+  ipcMain.handle(IPC_CHANNELS.textUpsert, async (_, raw) => textService.upsert(textCommandUpsertInputSchema.parse(raw)));
+  ipcMain.handle(IPC_CHANNELS.textDelete, async (_, raw) => textService.delete(textCommandDeleteInputSchema.parse(raw).id));
 
   ipcMain.handle(IPC_CHANNELS.voiceList, async () => voiceService.list());
   ipcMain.handle(IPC_CHANNELS.voiceUpsert, async (_, raw) => voiceService.upsert(voiceCommandUpsertInputSchema.parse(raw)));

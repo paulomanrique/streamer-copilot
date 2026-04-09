@@ -75,4 +75,20 @@ export const MIGRATIONS: SqlMigration[] = [
       );
     `,
   },
+  {
+    version: 5,
+    name: 'create_text_commands',
+    sql: `
+      CREATE TABLE IF NOT EXISTS text_commands (
+        id TEXT PRIMARY KEY,
+        trigger TEXT NOT NULL,
+        response TEXT NOT NULL,
+        permissions_json TEXT NOT NULL,
+        cooldown_seconds INTEGER NOT NULL DEFAULT 0,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `,
+  },
 ];

@@ -3,10 +3,12 @@ import type { ChatMessage, PlatformId, StreamEvent } from '../../shared/types.js
 import type { PlatformChatAdapter } from '../../platforms/base.js';
 import { CommandDispatcher } from '../commands/command-dispatcher.js';
 import { SoundService } from '../sounds/sound-service.js';
+import { TextService } from '../text/text-service.js';
 import { VoiceService } from '../voice/voice-service.js';
 
 interface ChatServiceOptions {
   soundService: SoundService;
+  textService: TextService;
   voiceService: VoiceService;
   onMessage: (message: ChatMessage) => void;
   onEvent: (event: StreamEvent) => void;
@@ -23,6 +25,7 @@ export class ChatService {
   constructor(private readonly options: ChatServiceOptions) {
     this.dispatcher = new CommandDispatcher();
     this.dispatcher.register(options.soundService);
+    this.dispatcher.register(options.textService);
     this.dispatcher.register(options.voiceService);
   }
 

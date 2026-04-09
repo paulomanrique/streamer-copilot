@@ -18,6 +18,9 @@ import type {
   SoundCommandDeleteInput,
   SoundCommandUpsertInput,
   SoundPlayPayload,
+  TextCommand,
+  TextCommandDeleteInput,
+  TextCommandUpsertInput,
   StreamEvent,
   ScheduledMessage,
   ScheduledMessageDeleteInput,
@@ -49,6 +52,9 @@ export const IPC_CHANNELS = {
   scheduledDelete: 'scheduled:delete',
   scheduledGetAvailableTargets: 'scheduled:get-available-targets',
   scheduledStatus: 'scheduled:status',
+  textList: 'text:list',
+  textUpsert: 'text:upsert',
+  textDelete: 'text:delete',
   voiceList: 'voice:list',
   voiceUpsert: 'voice:upsert',
   voiceDelete: 'voice:delete',
@@ -112,6 +118,9 @@ export interface CopilotApi {
   deleteScheduledMessage: (input: ScheduledMessageDeleteInput) => Promise<ScheduledMessage[]>;
   getScheduledAvailableTargets: () => Promise<ScheduledAvailableTargets>;
   onScheduledStatus: (listener: (items: ScheduledStatusItem[]) => void) => () => void;
+  listTextCommands: () => Promise<TextCommand[]>;
+  upsertTextCommand: (input: TextCommandUpsertInput) => Promise<TextCommand[]>;
+  deleteTextCommand: (input: TextCommandDeleteInput) => Promise<TextCommand[]>;
   listVoiceCommands: () => Promise<VoiceCommand[]>;
   upsertVoiceCommand: (input: VoiceCommandUpsertInput) => Promise<VoiceCommand[]>;
   deleteVoiceCommand: (input: VoiceCommandDeleteInput) => Promise<VoiceCommand[]>;

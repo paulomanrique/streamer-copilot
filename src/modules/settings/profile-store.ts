@@ -191,6 +191,7 @@ export class ProfileStore {
       const files = [
         { fileName: PROFILE_CONFIG_FILES.settings, defaultContent: EMPTY_OBJECT },
         { fileName: PROFILE_CONFIG_FILES.soundCommands, defaultContent: EMPTY_ARRAY },
+        { fileName: PROFILE_CONFIG_FILES.textCommands, defaultContent: EMPTY_ARRAY },
         { fileName: PROFILE_CONFIG_FILES.voiceCommands, defaultContent: EMPTY_ARRAY },
         { fileName: PROFILE_CONFIG_FILES.scheduled, defaultContent: EMPTY_ARRAY },
       ];

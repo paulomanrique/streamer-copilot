@@ -183,6 +183,33 @@ export interface VoiceSpeakPayload {
   lang: string;
 }
 
+export interface TextCommand {
+  id: string;
+  trigger: string;
+  response: string;
+  permissions: PermissionLevel[];
+  cooldownSeconds: number;
+  enabled: boolean;
+}
+
+export interface TextCommandUpsertInput {
+  id?: string;
+  trigger: string;
+  response: string;
+  permissions: PermissionLevel[];
+  cooldownSeconds: number;
+  enabled: boolean;
+}
+
+export interface TextCommandDeleteInput {
+  id: string;
+}
+
+export interface TextCommandResponsePayload {
+  platform: PlatformId;
+  content: string;
+}
+
 export interface RendererVoiceCapabilities {
   speechSynthesisAvailable: boolean;
 }

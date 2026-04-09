@@ -1,0 +1,363 @@
+import { useEffect, useRef, useState } from 'react';
+
+import { PERMISSION_LEVELS } from '../../shared/constants.js';
+import type {
+  PermissionLevel,
+  TextCommand,
+  TextCommandUpsertInput,
+} from '../../shared/types.js';
+
+const EMPTY_FORM: TextCommandUpsertInput = {
+  trigger: '!',
+  response: '',
+  permissions: ['everyone'],
+  cooldownSeconds: 0,
+  enabled: true,
+};
+
+const PERMISSION_LABELS: Record<PermissionLevel, string> = {
+  everyone: 'Everyone',
+  follower: 'Followers',
+  subscriber: 'Subscribers',
+  moderator: 'Moderators',
+  broadcaster: 'Broadcaster',
+};
+
+export function TextCommandsPage() {
+  const triggerInputRef = useRef<HTMLInputElement | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [rows, setRows] = useState<TextCommand[]>([]);
+  const [draftId, setDraftId] = useState<string | undefined>(undefined);
+  const [trigger, setTrigger] = useState(EMPTY_FORM.trigger);
+  const [response, setResponse] = useState(EMPTY_FORM.response);
+  const [levels, setLevels] = useState<PermissionLevel[]>(EMPTY_FORM.permissions);
+  const [cooldownSeconds, setCooldownSeconds] = useState(EMPTY_FORM.cooldownSeconds);
+  const [enabled, setEnabled] = useState(EMPTY_FORM.enabled);
+  const [isBusy, setIsBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [triggerError, setTriggerError] = useState<string | null>(null);
+  const [occupiedTriggers, setOccupiedTriggers] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const commands = await window.copilot.listTextCommands();
+        setRows(commands);
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : 'Failed to load text commands');
+      }
+    };
+
+    void load();
+  }, []);
+
+  useEffect(() => {
+    const loadOccupiedTriggers = async () => {
+      try {
+        const [sounds, voices, texts] = await Promise.all([
+          window.copilot.listSoundCommands(),
+          window.copilot.listVoiceCommands(),
+          window.copilot.listTextCommands(),
+        ]);
+        const skipId = draftId;
+        const occupied = new Set<string>([
+          ...sounds.map((item) => item.trigger.toLowerCase()),
+          ...voices.map((item) => item.trigger.toLowerCase()),
+          ...texts
+            .filter((item) => item.id !== skipId)
+            .map((item) => item.trigger.toLowerCase()),
+        ]);
+        setOccupiedTriggers(occupied);
+      } catch {
+        // non-critical
+      }
+    };
+
+    void loadOccupiedTriggers();
+  }, [draftId, isModalOpen, rows]);
+
+  const validateTrigger = (value: string): string | null => {
+    const normalized = value.trim();
+    if (!normalized.startsWith('!')) return 'Command must start with !';
+    if (normalized.length < 2) return 'Command must have at least one character after !';
+    if (occupiedTriggers.has(normalized.toLowerCase())) return 'This trigger is already used by another command';
+    return null;
+  };
+
+  const resetForm = () => {
+    setDraftId(undefined);
+    setTrigger(EMPTY_FORM.trigger);
+    setResponse(EMPTY_FORM.response);
+    setLevels(EMPTY_FORM.permissions);
+    setCooldownSeconds(EMPTY_FORM.cooldownSeconds);
+    setEnabled(EMPTY_FORM.enabled);
+    setError(null);
+    setTriggerError(null);
+  };
+
+  const openCreate = () => {
+    resetForm();
+    setIsModalOpen(true);
+    requestAnimationFrame(() => triggerInputRef.current?.focus());
+  };
+
+  const openEdit = (command: TextCommand) => {
+    setDraftId(command.id);
+    setTrigger(command.trigger);
+    setResponse(command.response);
+    setLevels(command.permissions);
+    setCooldownSeconds(command.cooldownSeconds);
+    setEnabled(command.enabled);
+    setError(null);
+    setTriggerError(null);
+    setIsModalOpen(true);
+  };
+
+  const saveCommand = async () => {
+    const nextError = validateTrigger(trigger);
+    if (nextError) {
+      setTriggerError(nextError);
+      triggerInputRef.current?.focus();
+      return;
+    }
+
+    if (!response.trim()) {
+      setError('Response text is required');
+      return;
+    }
+
+    setIsBusy(true);
+
+    try {
+      const commands = await window.copilot.upsertTextCommand({
+        id: draftId,
+        trigger: trigger.trim(),
+        response: response.trim(),
+        permissions: levels,
+        cooldownSeconds,
+        enabled,
+      });
+      setRows(commands);
+      setIsModalOpen(false);
+      resetForm();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Failed to save text command');
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const deleteCommand = async (id: string) => {
+    try {
+      const commands = await window.copilot.deleteTextCommand({ id });
+      setRows(commands);
+      if (draftId === id) {
+        setIsModalOpen(false);
+        resetForm();
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Failed to delete text command');
+    }
+  };
+
+  const toggleLevel = (level: PermissionLevel) => {
+    if (levels.includes(level)) {
+      const nextLevels = levels.filter((item) => item !== level);
+      setLevels(nextLevels.length > 0 ? nextLevels : ['everyone']);
+      return;
+    }
+    setLevels([...levels, level]);
+  };
+
+  return (
+    <>
+      <div className="p-6">
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-lg font-semibold">Text Commands</h2>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors"
+          >
+            + New Command
+          </button>
+        </div>
+        <p className="text-sm text-gray-400 mb-4">
+          Configure chat triggers that automatically reply with text. Example:{' '}
+          <code className="text-violet-300 text-xs bg-gray-800 px-1 py-0.5 rounded">!site</code>
+        </p>
+
+        {error ? <p className="mb-4 text-sm text-red-400">{error}</p> : null}
+
+        <div className="bg-gray-800/40 rounded-xl border border-gray-700 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-700 bg-gray-800/60">
+                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Command</th>
+                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Response</th>
+                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Permissions</th>
+                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Cooldown</th>
+                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Active</th>
+                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id} className="border-b border-gray-800 hover:bg-gray-800/50">
+                  <td className="px-4 py-3 font-mono text-violet-300">{row.trigger}</td>
+                  <td className="px-4 py-3 text-gray-300 max-w-xl truncate">{row.response}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-1 flex-wrap">
+                      {row.permissions.map((level) => (
+                        <span key={level} className="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">
+                          {level}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-400 text-sm">{row.cooldownSeconds}s</td>
+                  <td className="px-4 py-3">
+                    <label className="toggle-switch">
+                      <input type="checkbox" checked={row.enabled} readOnly />
+                      <span className="toggle-slider" />
+                    </label>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openEdit(row)}
+                        className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void deleteCommand(row.id)}
+                        className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-red-700 text-gray-300 hover:text-white transition-colors"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {rows.length === 0 ? (
+                <tr>
+                  <td className="px-4 py-4 text-sm text-gray-500" colSpan={6}>No text commands saved yet.</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {isModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="modal-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="relative bg-gray-900 border border-gray-700 rounded-xl w-full max-w-lg shadow-2xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700">
+              <h3 className="font-semibold">{draftId ? 'Edit Text Command' : 'New Text Command'}</h3>
+              <button type="button" onClick={() => { setIsModalOpen(false); resetForm(); }} className="text-gray-400 hover:text-white">✕</button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1.5">
+                  Command <span className="text-violet-400">*</span>
+                </label>
+                <input
+                  ref={triggerInputRef}
+                  type="text"
+                  value={trigger}
+                  onChange={(event) => {
+                    setTrigger(event.target.value);
+                    setTriggerError(validateTrigger(event.target.value));
+                  }}
+                  placeholder="!site"
+                  className={`w-full bg-gray-800 border rounded text-sm text-gray-300 px-3 py-2 focus:outline-none font-mono ${
+                    triggerError ? 'border-red-500 focus:border-red-400' : 'border-gray-600 focus:border-violet-500'
+                  }`}
+                />
+                {triggerError ? <p className="mt-1.5 text-xs text-red-400">{triggerError}</p> : null}
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-1.5">
+                  Response <span className="text-violet-400">*</span>
+                </label>
+                <textarea
+                  rows={4}
+                  value={response}
+                  onChange={(event) => setResponse(event.target.value)}
+                  placeholder="https://www.example.com"
+                  className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600 resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">Permissions</label>
+                <div className="flex flex-wrap gap-2">
+                  {PERMISSION_LEVELS.map((level) => {
+                    const active = levels.includes(level);
+                    return (
+                      <button
+                        key={level}
+                        type="button"
+                        onClick={() => toggleLevel(level)}
+                        className={
+                          active
+                            ? 'px-3 py-1.5 rounded-full bg-violet-600 text-white text-xs font-medium'
+                            : 'px-3 py-1.5 rounded-full bg-gray-800 border border-gray-700 text-gray-300 text-xs'
+                        }
+                      >
+                        {PERMISSION_LABELS[level]}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-1.5">Cooldown (seconds)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={3600}
+                  value={cooldownSeconds}
+                  onChange={(event) => setCooldownSeconds(Number(event.target.value))}
+                  className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
+                />
+              </div>
+
+              <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} className="accent-violet-500" />
+                Active
+              </label>
+            </div>
+
+            <div className="flex gap-3 px-5 py-4 border-t border-gray-700">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsModalOpen(false);
+                  resetForm();
+                }}
+                className="flex-1 px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isBusy}
+                onClick={() => void saveCommand()}
+                className="flex-1 px-3 py-2 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors disabled:opacity-60"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+}

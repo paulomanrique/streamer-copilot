@@ -8,9 +8,10 @@ import { GeneralSettingsPage } from './GeneralSettings.js';
 import { ObsSettingsPage } from './ObsSettings.js';
 import { ScheduledMessagesPage } from './ScheduledMessages.js';
 import { SoundCommandsPage } from './SoundCommands.js';
+import { TextCommandsPage } from './TextCommands.js';
 import { VoiceCommandsPage } from './VoiceCommands.js';
 
-type SettingsView = 'general' | 'profiles' | 'platforms' | 'obs' | 'sound' | 'voice' | 'scheduled';
+type SettingsView = 'general' | 'profiles' | 'platforms' | 'obs' | 'sound' | 'text' | 'voice' | 'scheduled';
 
 interface SettingsWorkspaceProps {
   activeProfileId: string;
@@ -70,6 +71,15 @@ const SETTINGS_GROUPS: Array<{
         icon: (
           <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+          </svg>
+        ),
+      },
+      {
+        id: 'text',
+        label: 'Text Commands',
+        icon: (
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 8h10M7 12h8m-8 4h6M5 4h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z" />
           </svg>
         ),
       },
@@ -185,6 +195,7 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
         {currentView === 'platforms' ? <PlatformsSettingsPage /> : null}
         {currentView === 'obs' ? <ObsSettingsPage obsStats={props.obsStats} /> : null}
         {currentView === 'sound' ? <SoundCommandsPage /> : null}
+        {currentView === 'text' ? <TextCommandsPage /> : null}
         {currentView === 'voice' ? (
           <VoiceCommandsPage
             voiceRate={props.voiceRate}
