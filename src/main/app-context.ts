@@ -128,7 +128,12 @@ export function createAppContext(options: AppContextOptions): () => void {
   const userAvatarCache = new Map<string, string>();
   const badgeCache = new Map<string, string>();
   const youtubeScrapers = new Map<string, YouTubeScraper>();
-  const youtubeStreamData = new Map<string, { label: string; viewerCount: number | null; platform: 'youtube' | 'youtube-v' }>();
+  const youtubeStreamData = new Map<string, {
+    label: string;
+    viewerCount: number | null;
+    platform: 'youtube' | 'youtube-v';
+    channelHandle: string | null;
+  }>();
   let youtubeMonitorTimer: ReturnType<typeof setInterval> | null = null;
   let lastDetectedVideoIds: Set<string> = new Set();
 
@@ -139,7 +144,14 @@ export function createAppContext(options: AppContextOptions): () => void {
   const getYoutubeStreams = (): YouTubeStreamInfo[] =>
     Array.from(youtubeScrapers.keys()).map((videoId) => {
       const data = youtubeStreamData.get(videoId);
-      return { label: data?.label ?? '?', viewerCount: data?.viewerCount ?? null };
+      return {
+        videoId,
+        platform: data?.platform ?? 'youtube',
+        channelHandle: data?.channelHandle ?? null,
+        label: data?.label ?? '?',
+        viewerCount: data?.viewerCount ?? null,
+        liveUrl: `https://www.youtube.com/watch?v=${videoId}`,
+      };
     });
 
   const getTwitchCredentialsStore = async (): Promise<TwitchCredentialsStore | null> => {
@@ -160,6 +172,7 @@ export function createAppContext(options: AppContextOptions): () => void {
     videoId: string;
     title: string;
     viewCount: number | null;
+    channelHandle: string;
   }
 
   function getLabelFromTitle(title: string, idx: number): string {
@@ -192,7 +205,8 @@ export function createAppContext(options: AppContextOptions): () => void {
       });
       if (!response.ok) return [];
       const html = await response.text();
-      return extractYtLiveVideoIds(html);
+      const streams = extractYtLiveVideoIds(html);
+      return streams.map((stream) => ({ ...stream, channelHandle: normalizedHandle }));
     } catch { return []; }
   };
 
@@ -227,7 +241,7 @@ export function createAppContext(options: AppContextOptions): () => void {
         const title = getYtText(record.title);
         const viewCountRaw = getYtText(record.viewCountText);
         const viewCount = viewCountRaw ? parseInt(viewCountRaw.replace(/[^0-9]/g, ''), 10) || null : null;
-        found.push({ videoId: record.videoId, title, viewCount });
+        found.push({ videoId: record.videoId, title, viewCount, channelHandle: '' });
       }
     }
     for (const value of Object.values(record)) findLiveVideoIds(value, found);
@@ -275,7 +289,12 @@ export function createAppContext(options: AppContextOptions): () => void {
       if (youtubeScrapers.has(videoId)) continue;
       const platform = YT_PLATFORMS[i];
       const label = getLabelFromTitle(title, i);
-      youtubeStreamData.set(videoId, { label, viewerCount: viewCount, platform });
+      youtubeStreamData.set(videoId, {
+        label,
+        viewerCount: viewCount,
+        platform,
+        channelHandle: allLiveStreams[i].channelHandle,
+      });
       logService.info('youtube', `Auto-detected live (${platform}, label=${label}): ${videoId} — "${title}"`);
       const scraper = new YouTubeScraper({
         videoId,
@@ -559,7 +578,7 @@ export function createAppContext(options: AppContextOptions): () => void {
       const idx = youtubeScrapers.size;
       const platform = YT_PLATFORMS[idx] ?? 'youtube-v';
       const label = String(idx + 1);
-      youtubeStreamData.set(i.videoId, { label, viewerCount: null, platform });
+      youtubeStreamData.set(i.videoId, { label, viewerCount: null, platform, channelHandle: null });
       const scraper = new YouTubeScraper({
         videoId: i.videoId,
         onMessage: (m) => chatService.injectMessage({ id: `yt-${Date.now()}`, timestampLabel: fmt.format(new Date()), ...m, platform, streamLabel: label }),

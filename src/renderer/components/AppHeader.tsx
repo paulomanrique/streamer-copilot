@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import logoUrl from '../assets/logo.svg';
-import type { AppInfo } from '../../shared/types.js';
+import type { AppInfo, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
 import type { AppSection } from './SectionTabs.js';
 
 interface AppHeaderProps {
@@ -9,65 +9,53 @@ interface AppHeaderProps {
   currentSection: AppSection;
   onChangeSection: (section: AppSection) => void;
   onOpenProfileSelector?: () => void;
+  twitchChannel: string | null;
+  twitchLiveStats: TwitchLiveStats | null;
+  youtubeStreams: YouTubeStreamInfo[];
 }
 
-const LIVE_LINKS = [
-  {
-    id: 'twitch',
-    label: 'Twitch',
-    url: 'twitch.tv/mychannel',
-    full: 'https://twitch.tv/mychannel',
-    icon: 'M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z',
-    color: 'text-purple-400',
-    border: 'border-purple-500/30',
-    btnBg: 'bg-purple-600/30 hover:bg-purple-600/50 text-purple-300',
-  },
-  {
-    id: 'youtube',
-    label: 'YouTube (Horizontal)',
-    url: 'youtube.com/live/... (horizontal)',
-    full: 'https://youtube.com/live/dQw4w9WgXcQ',
-    icon: 'M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z',
-    color: 'text-red-400',
-    border: 'border-red-500/30',
-    btnBg: 'bg-red-600/30 hover:bg-red-600/50 text-red-300',
-  },
-  {
-    id: 'youtube-v',
-    label: 'YouTube (Vertical)',
-    url: 'youtube.com/live/... (vertical)',
-    full: 'https://youtube.com/live/AbC123Shorts',
-    icon: 'M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z',
-    color: 'text-rose-400',
-    border: 'border-rose-500/30',
-    btnBg: 'bg-rose-600/30 hover:bg-rose-600/50 text-rose-300',
-  },
-  {
-    id: 'kick',
-    label: 'Kick',
-    url: 'kick.com/mychannel',
-    full: 'https://kick.com/mychannel',
-    icon: 'M2 2h4v8l4-4h4l-6 6 6 6h-4l-4-4v4H2V2zm14 0h4v20h-4z',
-    color: 'text-green-400',
-    border: 'border-green-500/30',
-    btnBg: 'bg-green-600/30 hover:bg-green-600/50 text-green-300',
-  },
-  {
-    id: 'tiktok',
-    label: 'TikTok',
-    url: 'tiktok.com/@mychannel',
-    full: 'https://tiktok.com/@mychannel',
-    icon: 'M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.67a8.17 8.17 0 0 0 4.79 1.53V6.75a4.85 4.85 0 0 1-1.02-.06z',
-    color: 'text-pink-400',
-    border: 'border-pink-500/30',
-    btnBg: 'bg-pink-600/30 hover:bg-pink-600/50 text-pink-300',
-  },
-] as const;
+const TWITCH_ICON = 'M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z';
+const YOUTUBE_ICON = 'M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z';
 
-export function AppHeader({ appInfo, currentSection, onChangeSection, onOpenProfileSelector }: AppHeaderProps) {
+export function AppHeader({
+  appInfo,
+  currentSection,
+  onChangeSection,
+  onOpenProfileSelector,
+  twitchChannel,
+  twitchLiveStats,
+  youtubeStreams,
+}: AppHeaderProps) {
   const [liveOpen, setLiveOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const appName = appInfo?.appName ?? 'Streamer Copilot';
+  const isAnyLive = Boolean(twitchLiveStats?.isLive) || youtubeStreams.length > 0;
+  const liveLinks = [
+    ...(twitchLiveStats?.isLive && twitchChannel
+      ? [{
+          id: 'twitch',
+          label: `Twitch #${twitchChannel}`,
+          url: `twitch.tv/${twitchChannel}`,
+          full: `https://twitch.tv/${twitchChannel}`,
+          icon: TWITCH_ICON,
+          color: 'text-purple-400',
+          border: 'border-purple-500/30',
+          btnBg: 'bg-purple-600/30 hover:bg-purple-600/50 text-purple-300',
+        }]
+      : []),
+    ...youtubeStreams.map((stream) => ({
+      id: `yt-${stream.videoId}`,
+      label: stream.channelHandle ? `YouTube ${stream.channelHandle}` : `YouTube ${stream.label}`,
+      url: stream.liveUrl.replace(/^https?:\/\//, ''),
+      full: stream.liveUrl,
+      icon: YOUTUBE_ICON,
+      color: stream.platform === 'youtube-v' ? 'text-rose-400' : 'text-red-400',
+      border: stream.platform === 'youtube-v' ? 'border-rose-500/30' : 'border-red-500/30',
+      btnBg: stream.platform === 'youtube-v'
+        ? 'bg-rose-600/30 hover:bg-rose-600/50 text-rose-300'
+        : 'bg-red-600/30 hover:bg-red-600/50 text-red-300',
+    })),
+  ];
 
   const copyLink = (id: string, url: string) => {
     navigator.clipboard.writeText(url).catch(() => null);
@@ -76,7 +64,7 @@ export function AppHeader({ appInfo, currentSection, onChangeSection, onOpenProf
   };
 
   const copyAll = () => {
-    const text = LIVE_LINKS.map((l) => `${l.label}: ${l.full}`).join('\n');
+    const text = liveLinks.map((l) => `${l.label}: ${l.full}`).join('\n');
     navigator.clipboard.writeText(text).catch(() => null);
     setCopiedId('all');
     setTimeout(() => setCopiedId(null), 1500);
@@ -122,10 +110,16 @@ export function AppHeader({ appInfo, currentSection, onChangeSection, onOpenProf
               Profiles
             </button>
           ) : null}
-          <button type="button" onClick={() => setLiveOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-red-600 hover:bg-red-500 text-sm font-medium transition-colors">
-            <span className="pulse-dot w-2 h-2 rounded-full bg-white" />
-            Go Live
+          <button
+            type="button"
+            onClick={() => setLiveOpen(true)}
+            disabled={!isAnyLive}
+            className={isAnyLive
+              ? 'flex items-center gap-1.5 px-3 py-1.5 rounded bg-red-600 hover:bg-red-500 text-sm font-medium transition-colors'
+              : 'flex items-center gap-1.5 px-3 py-1.5 rounded bg-gray-700/60 text-gray-400 text-sm font-medium opacity-60 cursor-not-allowed'}
+          >
+            <span className={`w-2 h-2 rounded-full ${isAnyLive ? 'pulse-dot bg-white' : 'bg-gray-400'}`} />
+            {isAnyLive ? 'Live' : 'Offline'}
           </button>
         </div>
       </header>
@@ -149,7 +143,13 @@ export function AppHeader({ appInfo, currentSection, onChangeSection, onOpenProf
             <div className="p-5 space-y-3">
               <p className="text-xs text-gray-500 mb-4">Copy links to share each live output on social media.</p>
 
-              {LIVE_LINKS.map(({ id, label, url, full, icon, color, border, btnBg }) => (
+              {liveLinks.length === 0 ? (
+                <div className="text-sm text-gray-500 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5">
+                  No live outputs detected.
+                </div>
+              ) : null}
+
+              {liveLinks.map(({ id, label, url, full, icon, color, border, btnBg }) => (
                 <div key={id} className={`flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-2.5 border ${border}`}>
                   <span className={`${color} shrink-0`}>
                     <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d={icon} /></svg>
@@ -165,8 +165,8 @@ export function AppHeader({ appInfo, currentSection, onChangeSection, onOpenProf
                 </div>
               ))}
 
-              <button type="button" onClick={copyAll}
-                className="w-full py-2 rounded bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 text-sm border border-violet-600/30 transition-colors mt-1">
+              <button type="button" onClick={copyAll} disabled={liveLinks.length === 0}
+                className="w-full py-2 rounded bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 text-sm border border-violet-600/30 transition-colors mt-1 disabled:opacity-40 disabled:cursor-not-allowed">
                 {copiedId === 'all' ? '✓ Copied!' : 'Copy all links'}
               </button>
             </div>

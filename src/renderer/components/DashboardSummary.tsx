@@ -151,6 +151,7 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
         obsConnected={obsStats.connected}
         twitchStatus={twitchStatus}
         twitchChannel={twitchChannel}
+        youtubeStreams={youtubeStreams}
       />
     </section>
   );

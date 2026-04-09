@@ -384,7 +384,14 @@ export default function App() {
   return (
     <main className="h-screen overflow-hidden bg-gray-950 text-gray-200 flex flex-col">
       <section className="w-screen flex-1 min-h-0 bg-gray-950 flex flex-col">
-        <AppHeader appInfo={appInfo} currentSection={currentSection} onChangeSection={setCurrentSection} />
+        <AppHeader
+          appInfo={appInfo}
+          currentSection={currentSection}
+          onChangeSection={setCurrentSection}
+          twitchChannel={twitchChannel}
+          twitchLiveStats={twitchLiveStats}
+          youtubeStreams={youtubeStreams}
+        />
 
         <StatusMessages isLoading={isLoading} error={error} />
 

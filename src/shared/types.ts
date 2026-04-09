@@ -68,8 +68,12 @@ export interface StreamEvent {
 }
 
 export interface YouTubeStreamInfo {
+  videoId: string;
+  platform: 'youtube' | 'youtube-v';
+  channelHandle: string | null;
   label: string;
   viewerCount: number | null;
+  liveUrl: string;
 }
 
 export interface PlatformConnectionStatus {
