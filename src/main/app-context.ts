@@ -127,34 +127,59 @@ export function createAppContext(options: AppContextOptions): () => void {
 
   const checkYouTubeLive = async (handle: string): Promise<string | null> => {
     try {
-      const base = handle.match(/^UC[A-Za-z0-9_-]{22}$/)
-        ? `https://www.youtube.com/channel/${handle}/live`
-        : `https://www.youtube.com/${handle.startsWith('@') ? handle : `@${handle}`}/live`;
-
-      const headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Cookie': 'CONSENT=YES+1; SOCS=CAI',
-      };
-
-      const res = await fetch(base, { redirect: 'follow', headers });
-
-      // Primary: YouTube HTTP-redirects /live → /watch?v=ID when the channel is live
-      const finalUrl = res.url;
-      const redirectMatch = finalUrl.match(/[?&]v=([A-Za-z0-9_-]{11})/);
-      if (redirectMatch) return redirectMatch[1];
-
-      // Fallback: parse the HTML for a canonical watch URL or ytInitialData
-      const html = await res.text();
-      const canonical = html.match(/"canonicalBaseUrl"\s*:\s*"[^"]*\/watch\?v=([A-Za-z0-9_-]{11})"/);
-      if (canonical) return canonical[1];
-      const watchLink = html.match(/href="\/watch\?v=([A-Za-z0-9_-]{11})[^"]*"[^>]*>[^<]*[Ll]ive/);
-      if (watchLink) return watchLink[1];
-
-      return null;
+      const normalizedHandle = handle.startsWith('@') ? handle : `@${handle}`;
+      const url = `https://www.youtube.com/${normalizedHandle}/streams`;
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+      });
+      if (!response.ok) return null;
+      const html = await response.text();
+      const videoId = extractYtLiveVideoId(html);
+      return videoId;
     } catch { return null; }
   };
+
+  function extractYtInitialData(html: string): unknown {
+    const marker = 'var ytInitialData = ';
+    const start = html.indexOf(marker);
+    if (start === -1) return null;
+    const jsonStart = start + marker.length;
+    let depth = 0;
+    let end = jsonStart;
+    for (let i = jsonStart; i < html.length; i++) {
+      if (html[i] === '{') depth++;
+      else if (html[i] === '}') { depth--; if (depth === 0) { end = i + 1; break; } }
+    }
+    try { return JSON.parse(html.slice(jsonStart, end)); } catch { return null; }
+  }
+
+  function findLiveVideoId(obj: unknown): string | null {
+    if (!obj || typeof obj !== 'object') return null;
+    if (Array.isArray(obj)) {
+      for (const item of obj) { const r = findLiveVideoId(item); if (r) return r; }
+      return null;
+    }
+    const record = obj as Record<string, unknown>;
+    if (typeof record.videoId === 'string' && Array.isArray(record.thumbnailOverlays)) {
+      const isLive = record.thumbnailOverlays.some((overlay: unknown) => {
+        if (!overlay || typeof overlay !== 'object') return false;
+        const tots = (overlay as Record<string, unknown>).thumbnailOverlayTimeStatusRenderer as Record<string, unknown> | undefined;
+        return tots?.style === 'LIVE';
+      });
+      if (isLive) return record.videoId;
+    }
+    for (const value of Object.values(record)) { const r = findLiveVideoId(value); if (r) return r; }
+    return null;
+  }
+
+  function extractYtLiveVideoId(html: string): string | null {
+    const data = extractYtInitialData(html);
+    if (!data) return null;
+    return findLiveVideoId(data);
+  }
 
   const runYoutubeMonitor = async () => {
     const store = await getYoutubeSettingsStore();
