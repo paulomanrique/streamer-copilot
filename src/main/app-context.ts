@@ -73,7 +73,7 @@ interface AppContextOptions {
   userDataPath: string;
 }
 
-export function createAppContext(options: AppContextOptions): () => void {
+export function createAppContext(options: AppContextOptions): () => Promise<void> {
   const execFile = promisify(execFileCallback);
   const profileStore = new ProfileStore(options.userDataPath);
   const appSettingsRepository = new AppSettingsRepository(options.databaseHandle.db);
@@ -639,10 +639,12 @@ export function createAppContext(options: AppContextOptions): () => void {
   schedulerService.start();
   obsService.start();
 
-  return () => {
+  return async () => {
     isShuttingDown = true;
-    schedulerService.stop(); stopTwitchStatsPoll(); if (youtubeMonitorTimer) clearInterval(youtubeMonitorTimer);
-    void chatService.disconnectAll(); void obsService.stop();
+    schedulerService.stop();
+    stopTwitchStatsPoll();
+    if (youtubeMonitorTimer) clearInterval(youtubeMonitorTimer);
+    await Promise.allSettled([chatService.disconnectAll(), obsService.stop()]);
     Object.values(IPC_CHANNELS).forEach(c => ipcMain.removeHandler(c));
   };
 

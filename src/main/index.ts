@@ -25,11 +25,13 @@ const RENDERER_INDEX_PATH = path.join(DIST_ROOT, 'renderer', 'index.html');
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
-let teardownContext: (() => void) | null = null;
+let teardownContext: (() => Promise<void>) | null = null;
 let stopAutoUpdater: (() => void) | null = null;
 let databaseHandle: DatabaseHandle | null = null;
 let generalSettingsStore: GeneralSettingsStore | null = null;
 let isQuitting = false;
+let isRunningQuitCleanup = false;
+let didFinishQuitCleanup = false;
 const stateHub = new StateHub();
 
 async function createMainWindow(): Promise<void> {
@@ -118,14 +120,31 @@ app.on('window-all-closed', () => {
   }
 });
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
   isQuitting = true;
-  teardownContext?.();
-  teardownContext = null;
-  stopAutoUpdater?.();
-  stopAutoUpdater = null;
-  databaseHandle?.close();
-  databaseHandle = null;
+  if (didFinishQuitCleanup) return;
+  event.preventDefault();
+  if (isRunningQuitCleanup) return;
+  isRunningQuitCleanup = true;
+
+  void (async () => {
+    try {
+      if (teardownContext) {
+        await teardownContext();
+        teardownContext = null;
+      }
+      stopAutoUpdater?.();
+      stopAutoUpdater = null;
+      databaseHandle?.close();
+      databaseHandle = null;
+    } catch (error) {
+      console.error('Quit cleanup failed', error);
+    } finally {
+      didFinishQuitCleanup = true;
+      isRunningQuitCleanup = false;
+      app.quit();
+    }
+  })();
 });
 
 function ensureTray(): void {
