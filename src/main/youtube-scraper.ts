@@ -75,6 +75,41 @@ export class YouTubeScraper {
     }
   }
 
+  async sendMessage(content: string): Promise<void> {
+    if (!this.window || this.isDestroyed || this.window.isDestroyed()) {
+      throw new Error('YouTube scraper window is not available');
+    }
+
+    const escaped = JSON.stringify(content);
+    const sent = await this.window.webContents.executeJavaScript(
+      `
+        (function() {
+          const payload = ${escaped};
+          const input = document.querySelector('#input.yt-live-chat-text-input-field-renderer') || document.querySelector('[contenteditable="true"]');
+          const button = document.querySelector('#send-button button') || document.querySelector('yt-button-renderer#send-button button');
+          if (!input || !button) return false;
+
+          input.focus();
+          if ('value' in input) {
+            input.value = payload;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+          } else {
+            input.textContent = payload;
+            input.dispatchEvent(new InputEvent('input', { bubbles: true, data: payload, inputType: 'insertText' }));
+          }
+
+          button.click();
+          return true;
+        })();
+      `,
+      true,
+    );
+
+    if (!sent) {
+      throw new Error('YouTube chat input not available (login or chat DOM not ready)');
+    }
+  }
+
   private async injectScraper(): Promise<void> {
     if (!this.window) return;
 

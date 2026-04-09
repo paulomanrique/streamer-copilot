@@ -1,15 +1,24 @@
-import type { ScheduledMessage, ScheduledStatusItem } from '../../shared/types.js';
+import type { PlatformId, ScheduledMessage, ScheduledStatusItem } from '../../shared/types.js';
 import { ScheduledMessageRepository } from './scheduled-repository.js';
+
+export interface ScheduledRunState {
+  runAt: string;
+  result: 'sent' | 'skipped' | 'failed';
+  detail: string | null;
+}
 
 interface SchedulerServiceOptions {
   repository: ScheduledMessageRepository;
   onStatus: (items: ScheduledStatusItem[]) => void;
-  onDueMessage?: (message: ScheduledMessage) => void;
+  onDueMessage?: (message: ScheduledMessage) => Promise<ScheduledRunState | void> | ScheduledRunState | void;
+  resolveEffectiveTargets?: (message: ScheduledMessage) => PlatformId[];
   now?: () => number;
 }
 
 export class SchedulerService {
   private timer: NodeJS.Timeout | null = null;
+  private ticking = false;
+  private readonly lastRunState = new Map<string, ScheduledRunState>();
 
   constructor(private readonly options: SchedulerServiceOptions) {}
 
@@ -17,7 +26,7 @@ export class SchedulerService {
     if (this.timer) return;
     this.emitStatus();
     this.timer = setInterval(() => {
-      this.tick();
+      void this.tick();
     }, 5000);
   }
 
@@ -33,32 +42,52 @@ export class SchedulerService {
 
   upsert(input: Parameters<ScheduledMessageRepository['upsert']>[0]): ScheduledMessage[] {
     const scheduled = this.options.repository.upsert(input);
+    const validIds = new Set(scheduled.map((item) => item.id));
+    for (const id of this.lastRunState.keys()) {
+      if (!validIds.has(id)) this.lastRunState.delete(id);
+    }
     this.emitStatusFrom(scheduled);
     return scheduled;
   }
 
   delete(id: string): ScheduledMessage[] {
     const scheduled = this.options.repository.delete(id);
+    this.lastRunState.delete(id);
     this.emitStatusFrom(scheduled);
     return scheduled;
   }
 
-  private tick(): void {
+  private async tick(): Promise<void> {
+    if (this.ticking) return;
+    this.ticking = true;
     const scheduled = this.options.repository.list();
     const currentTime = this.now();
 
-    for (const message of scheduled) {
-      if (!message.enabled) continue;
+    try {
+      for (const message of scheduled) {
+        if (!message.enabled) continue;
 
-      const nextFireTime = this.computeNextFireTime(message, currentTime);
-      if (nextFireTime === null || currentTime < nextFireTime) continue;
+        const nextFireTime = this.computeNextFireTime(message, currentTime);
+        if (nextFireTime === null || currentTime < nextFireTime) continue;
 
-      const sentAt = new Date(currentTime).toISOString();
-      this.options.repository.markSent(message.id, sentAt);
-      this.options.onDueMessage?.({ ...message, lastSentAt: sentAt });
+        const runAt = new Date(currentTime).toISOString();
+        this.options.repository.markSent(message.id, runAt);
+
+        try {
+          const result = await this.options.onDueMessage?.({ ...message, lastSentAt: runAt });
+          this.lastRunState.set(message.id, result ?? { runAt, result: 'sent', detail: null });
+        } catch (error) {
+          this.lastRunState.set(message.id, {
+            runAt,
+            result: 'failed',
+            detail: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    } finally {
+      this.emitStatus();
+      this.ticking = false;
     }
-
-    this.emitStatus();
   }
 
   private emitStatus(): void {
@@ -72,14 +101,19 @@ export class SchedulerService {
         id: message.id,
         enabled: message.enabled,
         nextFireAt: this.toIsoOrNull(this.computeNextFireTime(message, currentTime)),
+        lastRunAt: this.lastRunState.get(message.id)?.runAt ?? null,
+        lastResult: this.lastRunState.get(message.id)?.result ?? null,
+        lastResultDetail: this.lastRunState.get(message.id)?.detail ?? null,
+        effectiveTargets: this.options.resolveEffectiveTargets?.(message) ?? [...message.targetPlatforms],
       })),
     );
   }
 
   private computeNextFireTime(message: ScheduledMessage, currentTime: number): number | null {
     if (!message.enabled) return null;
+    if (!message.lastSentAt) return currentTime;
 
-    const lastSentAt = message.lastSentAt ? new Date(message.lastSentAt).getTime() : currentTime;
+    const lastSentAt = new Date(message.lastSentAt).getTime();
     const jitterWindow = message.randomWindowSeconds * 1000;
     const deterministicJitter = this.computeDeterministicJitter(message.id, lastSentAt, jitterWindow);
 

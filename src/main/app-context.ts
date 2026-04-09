@@ -15,7 +15,7 @@ import { LogService } from '../modules/logs/log-service.js';
 import { ObsService } from '../modules/obs/obs-service.js';
 import { ObsSettingsStore } from '../modules/obs/obs-settings-store.js';
 import { ScheduledMessageRepository } from '../modules/scheduled/scheduled-repository.js';
-import { SchedulerService } from '../modules/scheduled/scheduler-service.js';
+import { SchedulerService, type ScheduledRunState } from '../modules/scheduled/scheduler-service.js';
 import { AppSettingsRepository } from '../modules/settings/app-settings-repository.js';
 import { GeneralSettingsStore } from '../modules/settings/general-settings-store.js';
 import { ProfileStore } from '../modules/settings/profile-store.js';
@@ -54,7 +54,7 @@ import {
   youtubeConnectSchema,
   youtubeSettingsSchema,
 } from '../shared/schemas.js';
-import type { AppInfo, PlatformId, TwitchConnectionStatus, TwitchLiveStats } from '../shared/types.js';
+import type { AppInfo, PlatformId, TwitchConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../shared/types.js';
 
 const TWITCH_CLIENT_ID = 'vtwg8tzuv1nlip4qh9n6sxx2p76g0s';
 const TWITCH_REDIRECT_PORT = 32999;
@@ -83,9 +83,8 @@ export function createAppContext(options: AppContextOptions): () => void {
   const schedulerService = new SchedulerService({
     repository: scheduledRepository,
     onStatus: (items) => options.stateHub.pushScheduledStatus(items),
-    onDueMessage: (message) => {
-      void dispatchScheduledMessage(message.message, message.targetPlatforms);
-    },
+    onDueMessage: (message) => dispatchScheduledMessageWithResult(message.message, message.targetPlatforms),
+    resolveEffectiveTargets: (message) => resolveDispatchTargets(message.targetPlatforms),
   });
   const soundService = new SoundService({
     repository: soundRepository,
@@ -108,11 +107,19 @@ export function createAppContext(options: AppContextOptions): () => void {
   const userAvatarCache = new Map<string, string>();
   const badgeCache = new Map<string, string>();
   const youtubeScrapers = new Map<string, YouTubeScraper>();
+  const youtubeStreamData = new Map<string, { label: string; viewerCount: number | null; platform: 'youtube' | 'youtube-v' }>();
   let youtubeMonitorTimer: ReturnType<typeof setInterval> | null = null;
   let lastDetectedVideoIds: Set<string> = new Set();
 
   // Ordered list of platform IDs for YouTube streams (first = horizontal, second = vertical)
   const YT_PLATFORMS: Array<'youtube' | 'youtube-v'> = ['youtube', 'youtube-v'];
+  const SCHEDULED_SUPPORTED_TARGETS: PlatformId[] = ['twitch', 'youtube'];
+
+  const getYoutubeStreams = (): YouTubeStreamInfo[] =>
+    Array.from(youtubeScrapers.keys()).map((videoId) => {
+      const data = youtubeStreamData.get(videoId);
+      return { label: data?.label ?? '?', viewerCount: data?.viewerCount ?? null };
+    });
 
   const getTwitchCredentialsStore = async (): Promise<TwitchCredentialsStore | null> => {
     const snapshot = await profileStore.list();
@@ -128,7 +135,28 @@ export function createAppContext(options: AppContextOptions): () => void {
     return new YouTubeSettingsStore(active.directory);
   };
 
-  const checkYouTubeLive = async (handle: string): Promise<string[]> => {
+  interface LiveStreamInfo {
+    videoId: string;
+    title: string;
+    viewCount: number | null;
+  }
+
+  function getLabelFromTitle(title: string, idx: number): string {
+    const lower = title.toLowerCase();
+    if (lower.includes('horizontal')) return 'H';
+    if (lower.includes('vertical') || lower.includes('shorts')) return 'V';
+    return String(idx + 1);
+  }
+
+  function getYtText(obj: unknown): string {
+    if (!obj || typeof obj !== 'object') return '';
+    const o = obj as Record<string, unknown>;
+    if (typeof o.simpleText === 'string') return o.simpleText;
+    if (Array.isArray(o.runs)) return (o.runs as Array<Record<string, unknown>>).map((r) => String(r.text ?? '')).join('');
+    return '';
+  }
+
+  const checkYouTubeLive = async (handle: string): Promise<LiveStreamInfo[]> => {
     try {
       // Extract handle from full URL if needed (e.g. https://www.youtube.com/@user)
       const handleMatch = handle.match(/(?:youtube\.com\/)?(@?[\w-]+)(?:\/.*)?$/);
@@ -161,7 +189,7 @@ export function createAppContext(options: AppContextOptions): () => void {
     try { return JSON.parse(html.slice(jsonStart, end)); } catch { return null; }
   }
 
-  function findLiveVideoIds(obj: unknown, found: string[] = []): string[] {
+  function findLiveVideoIds(obj: unknown, found: LiveStreamInfo[] = []): LiveStreamInfo[] {
     if (!obj || typeof obj !== 'object') return found;
     if (Array.isArray(obj)) {
       for (const item of obj) findLiveVideoIds(item, found);
@@ -174,13 +202,18 @@ export function createAppContext(options: AppContextOptions): () => void {
         const tots = (overlay as Record<string, unknown>).thumbnailOverlayTimeStatusRenderer as Record<string, unknown> | undefined;
         return tots?.style === 'LIVE';
       });
-      if (isLive) found.push(record.videoId);
+      if (isLive) {
+        const title = getYtText(record.title);
+        const viewCountRaw = getYtText(record.viewCountText);
+        const viewCount = viewCountRaw ? parseInt(viewCountRaw.replace(/[^0-9]/g, ''), 10) || null : null;
+        found.push({ videoId: record.videoId, title, viewCount });
+      }
     }
     for (const value of Object.values(record)) findLiveVideoIds(value, found);
     return found;
   }
 
-  function extractYtLiveVideoIds(html: string): string[] {
+  function extractYtLiveVideoIds(html: string): LiveStreamInfo[] {
     const data = extractYtInitialData(html);
     if (!data) return [];
     return findLiveVideoIds(data);
@@ -192,38 +225,46 @@ export function createAppContext(options: AppContextOptions): () => void {
     const settings = await store.load();
     if (!settings.autoConnect || settings.channels.length === 0) return;
 
-    // Collect all live videoIds across all enabled channels
-    const allLiveIds: string[] = [];
+    // Collect all live streams across all enabled channels
+    const allLiveStreams: LiveStreamInfo[] = [];
     for (const channel of settings.channels) {
       if (!channel.enabled) continue;
-      const ids = await checkYouTubeLive(channel.handle);
-      for (const id of ids) if (!allLiveIds.includes(id)) allLiveIds.push(id);
+      const streams = await checkYouTubeLive(channel.handle);
+      for (const s of streams) if (!allLiveStreams.find((x) => x.videoId === s.videoId)) allLiveStreams.push(s);
     }
 
-    // Stop scrapers for streams that are no longer live
+    // Update viewer counts for existing scrapers and stop those no longer live
     for (const [videoId, scraper] of youtubeScrapers) {
-      if (!allLiveIds.includes(videoId)) {
+      const updated = allLiveStreams.find((s) => s.videoId === videoId);
+      if (!updated) {
         scraper.stop();
         youtubeScrapers.delete(videoId);
+        youtubeStreamData.delete(videoId);
         logService.info('youtube', `Stopped scraper for ${videoId} (no longer live)`);
+      } else if (updated.viewCount !== null) {
+        const data = youtubeStreamData.get(videoId);
+        if (data) youtubeStreamData.set(videoId, { ...data, viewerCount: updated.viewCount });
       }
     }
 
     // Start scrapers for newly detected streams (up to 2)
     const fmt = new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' });
-    for (let i = 0; i < Math.min(allLiveIds.length, YT_PLATFORMS.length); i++) {
-      const videoId = allLiveIds[i];
+    for (let i = 0; i < Math.min(allLiveStreams.length, YT_PLATFORMS.length); i++) {
+      const { videoId, title, viewCount } = allLiveStreams[i];
       if (youtubeScrapers.has(videoId)) continue;
       const platform = YT_PLATFORMS[i];
-      logService.info('youtube', `Auto-detected live (${platform}): ${videoId}`);
+      const label = getLabelFromTitle(title, i);
+      youtubeStreamData.set(videoId, { label, viewerCount: viewCount, platform });
+      logService.info('youtube', `Auto-detected live (${platform}, label=${label}): ${videoId} — "${title}"`);
       const scraper = new YouTubeScraper({
         videoId,
         onMessage: (message) => {
-          (chatService as any).handleMessage({
+          chatService.injectMessage({
             id: `yt-auto-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
             timestampLabel: fmt.format(new Date()),
             ...message,
             platform,
+            streamLabel: label,
           });
         },
         onLog: (msg) => logService.info('youtube', msg),
@@ -232,8 +273,8 @@ export function createAppContext(options: AppContextOptions): () => void {
       await scraper.start();
     }
 
-    lastDetectedVideoIds = new Set(allLiveIds);
-    options.stateHub.pushYoutubeStatus(youtubeScrapers.size);
+    lastDetectedVideoIds = new Set(allLiveStreams.map((s) => s.videoId));
+    options.stateHub.pushYoutubeStatus(getYoutubeStreams());
   };
 
   const startYoutubeMonitor = () => {
@@ -371,6 +412,10 @@ export function createAppContext(options: AppContextOptions): () => void {
   ipcMain.handle(IPC_CHANNELS.scheduledList, async () => schedulerService.list());
   ipcMain.handle(IPC_CHANNELS.scheduledUpsert, async (_, raw) => schedulerService.upsert(scheduledMessageUpsertInputSchema.parse(raw)));
   ipcMain.handle(IPC_CHANNELS.scheduledDelete, async (_, raw) => schedulerService.delete(scheduledMessageDeleteInputSchema.parse(raw).id));
+  ipcMain.handle(IPC_CHANNELS.scheduledGetAvailableTargets, async () => ({
+    supported: [...SCHEDULED_SUPPORTED_TARGETS],
+    connected: getConnectedScheduledTargets(),
+  }));
 
   ipcMain.handle(IPC_CHANNELS.voiceList, async () => voiceService.list());
   ipcMain.handle(IPC_CHANNELS.voiceUpsert, async (_, raw) => voiceService.upsert(voiceCommandUpsertInputSchema.parse(raw)));
@@ -485,30 +530,33 @@ export function createAppContext(options: AppContextOptions): () => void {
     if (!youtubeScrapers.has(i.videoId)) {
       const idx = youtubeScrapers.size;
       const platform = YT_PLATFORMS[idx] ?? 'youtube-v';
+      const label = String(idx + 1);
+      youtubeStreamData.set(i.videoId, { label, viewerCount: null, platform });
       const scraper = new YouTubeScraper({
         videoId: i.videoId,
-        onMessage: (m) => (chatService as any).handleMessage({ id: `yt-${Date.now()}`, timestampLabel: fmt.format(new Date()), ...m, platform }),
+        onMessage: (m) => chatService.injectMessage({ id: `yt-${Date.now()}`, timestampLabel: fmt.format(new Date()), ...m, platform, streamLabel: label }),
         onLog: (msg) => logService.info('youtube', msg),
       });
       youtubeScrapers.set(i.videoId, scraper);
       await scraper.start();
     }
-    options.stateHub.pushYoutubeStatus(youtubeScrapers.size);
+    options.stateHub.pushYoutubeStatus(getYoutubeStreams());
   });
   ipcMain.handle(IPC_CHANNELS.youtubeDisconnect, async () => {
     for (const scraper of youtubeScrapers.values()) scraper.stop();
     youtubeScrapers.clear();
-    options.stateHub.pushYoutubeStatus(0);
+    youtubeStreamData.clear();
+    options.stateHub.pushYoutubeStatus([]);
   });
-  ipcMain.handle(IPC_CHANNELS.youtubeGetStatus, async () => youtubeScrapers.size);
+  ipcMain.handle(IPC_CHANNELS.youtubeGetStatus, async () => getYoutubeStreams());
   ipcMain.handle(IPC_CHANNELS.youtubeOpenLogin, async (e) => {
     const win = new BrowserWindow({ width: 600, height: 800, parent: BrowserWindow.fromWebContents(e.sender)!, modal: true, title: 'YouTube Login', autoHideMenuBar: true });
     win.webContents.on('did-navigate', (_, u) => { const t = new URL(u); if (t.hostname.includes('youtube.com') && t.pathname === '/' && !u.includes('signin')) setTimeout(() => { if (!win.isDestroyed()) win.close(); }, 1500); });
     await win.loadURL('https://accounts.google.com/ServiceLogin?service=youtube&continue=https://www.youtube.com/signin?action_handle_signin=true');
   });
   ipcMain.handle(IPC_CHANNELS.youtubeCheckLive, async (_, handle: unknown) => {
-    const videoIds = await checkYouTubeLive(String(handle ?? ''));
-    return { videoIds };
+    const streams = await checkYouTubeLive(String(handle ?? ''));
+    return { videoIds: streams.map((s) => s.videoId) };
   });
 
   // Auto-reconnect Twitch from saved credentials on startup
@@ -534,6 +582,7 @@ export function createAppContext(options: AppContextOptions): () => void {
   })();
 
   startYoutubeMonitor();
+  schedulerService.start();
   obsService.start();
 
   return () => {
@@ -549,8 +598,106 @@ export function createAppContext(options: AppContextOptions): () => void {
     else options.stateHub.pushVoiceSpeak({ text, lang: 'en-US' });
   }
 
-  async function dispatchScheduledMessage(content: string, platforms: PlatformId[]): Promise<void> {
-    await Promise.allSettled(platforms.map(async (p) => { await chatService.sendMessage(p, content); logService.info('scheduled', 'Sent', { platform: p, content }); }));
+  function getConnectedYoutubePlatforms(): Array<'youtube' | 'youtube-v'> {
+    const connected = new Set<'youtube' | 'youtube-v'>();
+    for (const data of youtubeStreamData.values()) {
+      connected.add(data.platform);
+    }
+    return YT_PLATFORMS.filter((platform) => connected.has(platform));
+  }
+
+  function getConnectedScheduledTargets(): PlatformId[] {
+    const connected: PlatformId[] = [];
+    if (twitchStatus === 'connected') connected.push('twitch');
+    if (getConnectedYoutubePlatforms().length > 0) connected.push('youtube');
+    return connected;
+  }
+
+  function resolveDispatchTargets(requestedTargets: PlatformId[]): PlatformId[] {
+    const resolved = new Set<PlatformId>();
+    for (const target of requestedTargets) {
+      if (!SCHEDULED_SUPPORTED_TARGETS.includes(target)) continue;
+      if (target === 'twitch') {
+        if (twitchStatus === 'connected') resolved.add('twitch');
+        continue;
+      }
+      if (target === 'youtube') {
+        for (const ytTarget of getConnectedYoutubePlatforms()) {
+          resolved.add(ytTarget);
+        }
+      }
+    }
+    return Array.from(resolved);
+  }
+
+  function getYoutubeScraperByPlatform(platform: 'youtube' | 'youtube-v'): YouTubeScraper | null {
+    for (const [videoId, scraper] of youtubeScrapers.entries()) {
+      const data = youtubeStreamData.get(videoId);
+      if (data?.platform === platform) return scraper;
+    }
+    return null;
+  }
+
+  async function dispatchScheduledMessageWithResult(content: string, requestedTargets: PlatformId[]): Promise<ScheduledRunState> {
+    const runAt = new Date().toISOString();
+    const effectiveTargets = resolveDispatchTargets(requestedTargets);
+    const sent: string[] = [];
+    const failed: string[] = [];
+    const skipped: string[] = [];
+
+    if (effectiveTargets.length === 0) {
+      const detail = 'No connected targets (supported: twitch, youtube)';
+      logService.warn('scheduled', 'Skipped message dispatch', { detail, requestedTargets, content });
+      return { runAt, result: 'skipped', detail };
+    }
+
+    for (const target of effectiveTargets) {
+      try {
+        if (target === 'twitch') {
+          await chatService.sendMessage('twitch', content);
+          sent.push('twitch');
+          logService.info('scheduled', 'Sent', { platform: 'twitch', content });
+          continue;
+        }
+
+        if (target === 'youtube' || target === 'youtube-v') {
+          const scraper = getYoutubeScraperByPlatform(target);
+          if (!scraper) {
+            const reason = `${target}: disconnected`;
+            skipped.push(reason);
+            logService.warn('scheduled', 'Skipped', { platform: target, reason, content });
+            continue;
+          }
+          await scraper.sendMessage(content);
+          sent.push(target);
+          logService.info('scheduled', 'Sent', { platform: target, content });
+          continue;
+        }
+
+        const reason = `${target}: not-supported`;
+        skipped.push(reason);
+        logService.warn('scheduled', 'Skipped', { platform: target, reason, content });
+      } catch (error) {
+        const detail = `${target}: ${error instanceof Error ? error.message : String(error)}`;
+        failed.push(detail);
+        logService.error('scheduled', 'Failed to send', { platform: target, detail, content });
+      }
+    }
+
+    if (failed.length > 0) {
+      return {
+        runAt,
+        result: 'failed',
+        detail: `sent=[${sent.join(', ')}] failed=[${failed.join('; ')}] skipped=[${skipped.join('; ')}]`,
+      };
+    }
+    if (sent.length > 0) {
+      const detail = skipped.length > 0
+        ? `sent=[${sent.join(', ')}] skipped=[${skipped.join('; ')}]`
+        : `sent=[${sent.join(', ')}]`;
+      return { runAt, result: 'sent', detail };
+    }
+    return { runAt, result: 'skipped', detail: skipped.join('; ') || 'No connected targets' };
   }
 
   function readCsvEnv(v: string | undefined): string[] | undefined { return v ? v.split(',').map(i => i.trim()).filter(Boolean) : undefined; }

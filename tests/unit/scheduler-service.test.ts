@@ -36,7 +36,7 @@ function createRepository(messages: ScheduledMessage[]): RepositoryLike {
 }
 
 describe('SchedulerService', () => {
-  it('fires exactly when the interval threshold is reached', () => {
+  it('fires exactly when the interval threshold is reached', async () => {
     const messages = [createMessage({ intervalSeconds: 30, lastSentAt: '2026-04-08T07:00:00.000Z' })];
     const repository = createRepository(messages);
     const onDueMessage = vi.fn();
@@ -48,7 +48,7 @@ describe('SchedulerService', () => {
       now: () => new Date('2026-04-08T07:00:30.000Z').getTime(),
     });
 
-    (service as { tick: () => void }).tick();
+    await (service as { tick: () => Promise<void> }).tick();
 
     expect(onDueMessage).toHaveBeenCalledTimes(1);
     expect(messages[0].lastSentAt).toBe('2026-04-08T07:00:30.000Z');
@@ -81,7 +81,7 @@ describe('SchedulerService', () => {
     expect(nextFireAt).toBeLessThanOrEqual(maxTime);
   });
 
-  it('skips disabled messages during tick evaluation', () => {
+  it('skips disabled messages during tick evaluation', async () => {
     const messages = [
       createMessage({
         enabled: false,
@@ -98,13 +98,13 @@ describe('SchedulerService', () => {
       now: () => new Date('2026-04-08T07:01:00.000Z').getTime(),
     });
 
-    (service as { tick: () => void }).tick();
+    await (service as { tick: () => Promise<void> }).tick();
 
     expect(onDueMessage).not.toHaveBeenCalled();
     expect(messages[0].lastSentAt).toBe('2026-04-08T07:00:00.000Z');
   });
 
-  it('updates lastSentAt when a due message is emitted', () => {
+  it('updates lastSentAt when a due message is emitted', async () => {
     const messages = [createMessage({ intervalSeconds: 10, lastSentAt: '2026-04-08T07:00:00.000Z' })];
     const repository = createRepository(messages);
     const onDueMessage = vi.fn();
@@ -115,12 +115,62 @@ describe('SchedulerService', () => {
       now: () => new Date('2026-04-08T07:00:10.000Z').getTime(),
     });
 
-    (service as { tick: () => void }).tick();
+    await (service as { tick: () => Promise<void> }).tick();
 
     expect(messages[0].lastSentAt).toBe('2026-04-08T07:00:10.000Z');
     expect(onDueMessage).toHaveBeenCalledWith({
       ...messages[0],
       lastSentAt: '2026-04-08T07:00:10.000Z',
     });
+  });
+
+  it('fires immediately for a newly enabled message without lastSentAt', async () => {
+    const messages = [createMessage({ lastSentAt: null, intervalSeconds: 300, randomWindowSeconds: 60 })];
+    const repository = createRepository(messages);
+    const onDueMessage = vi.fn();
+    const service = new SchedulerService({
+      repository: repository as never,
+      onStatus: vi.fn(),
+      onDueMessage,
+      now: () => new Date('2026-04-08T07:00:00.000Z').getTime(),
+    });
+
+    await (service as { tick: () => Promise<void> }).tick();
+
+    expect(onDueMessage).toHaveBeenCalledTimes(1);
+    expect(messages[0].lastSentAt).toBe('2026-04-08T07:00:00.000Z');
+  });
+
+  it('includes last result details in scheduled status', async () => {
+    const messages = [createMessage({ intervalSeconds: 10, lastSentAt: '2026-04-08T07:00:00.000Z' })];
+    const repository = createRepository(messages);
+    const onStatus = vi.fn();
+    const service = new SchedulerService({
+      repository: repository as never,
+      onStatus,
+      onDueMessage: async () => ({
+        runAt: '2026-04-08T07:00:10.000Z',
+        result: 'skipped',
+        detail: 'No connected targets',
+      }),
+      resolveEffectiveTargets: () => ['twitch'],
+      now: () => new Date('2026-04-08T07:00:10.000Z').getTime(),
+    });
+
+    await (service as { tick: () => Promise<void> }).tick();
+
+    const [statusItems] = onStatus.mock.calls.at(-1) as [{
+      id: string;
+      nextFireAt: string | null;
+      enabled: boolean;
+      lastRunAt: string | null;
+      lastResult: string | null;
+      lastResultDetail: string | null;
+      effectiveTargets: string[];
+    }[]];
+    expect(statusItems[0].lastRunAt).toBe('2026-04-08T07:00:10.000Z');
+    expect(statusItems[0].lastResult).toBe('skipped');
+    expect(statusItems[0].lastResultDetail).toBe('No connected targets');
+    expect(statusItems[0].effectiveTargets).toEqual(['twitch']);
   });
 });

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 const platformIdSchema = z.enum(['twitch', 'youtube', 'kick', 'tiktok']);
+const scheduledTargetPlatformSchema = z.enum(['twitch', 'youtube']);
 const permissionLevelSchema = z.enum(['everyone', 'follower', 'subscriber', 'moderator', 'broadcaster']);
 const eventLogLevelSchema = z.enum(['info', 'warn', 'error']);
 
@@ -39,7 +40,7 @@ export const scheduledMessageUpsertInputSchema = z.object({
   message: z.string().min(1).max(500),
   intervalSeconds: z.number().int().min(5),
   randomWindowSeconds: z.number().int().min(0).max(3600),
-  targetPlatforms: z.array(platformIdSchema).min(1),
+  targetPlatforms: z.array(scheduledTargetPlatformSchema).min(1),
   enabled: z.boolean(),
 });
 

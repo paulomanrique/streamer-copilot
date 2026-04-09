@@ -39,6 +39,7 @@ export interface ChatMessage {
   color?: string;
   avatarUrl?: string;
   badgeUrls?: string[];
+  streamLabel?: string;
 }
 
 export interface TwitchLiveStats {
@@ -63,6 +64,12 @@ export interface StreamEvent {
   amount?: number;
   message?: string;
   timestampLabel: string;
+  streamLabel?: string;
+}
+
+export interface YouTubeStreamInfo {
+  label: string;
+  viewerCount: number | null;
 }
 
 export interface PlatformConnectionStatus {
@@ -136,6 +143,15 @@ export interface ScheduledStatusItem {
   id: string;
   nextFireAt: string | null;
   enabled: boolean;
+  lastRunAt: string | null;
+  lastResult: 'sent' | 'skipped' | 'failed' | null;
+  lastResultDetail: string | null;
+  effectiveTargets: PlatformId[];
+}
+
+export interface ScheduledAvailableTargets {
+  supported: PlatformId[];
+  connected: PlatformId[];
 }
 
 export interface VoiceCommand {

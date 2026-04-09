@@ -15,6 +15,7 @@ import type {
   ProfilesSnapshot,
   RenameProfileInput,
   RendererVoiceCapabilities,
+  ScheduledAvailableTargets,
   ScheduledMessage,
   ScheduledMessageDeleteInput,
   ScheduledMessageUpsertInput,
@@ -31,6 +32,7 @@ import type {
   VoiceCommandDeleteInput,
   VoiceCommandUpsertInput,
   VoiceSpeakPayload,
+  YouTubeStreamInfo,
 } from '../shared/types.js';
 
 const IPC_CHANNELS = {
@@ -47,6 +49,7 @@ const IPC_CHANNELS = {
   scheduledList: 'scheduled:list',
   scheduledUpsert: 'scheduled:upsert',
   scheduledDelete: 'scheduled:delete',
+  scheduledGetAvailableTargets: 'scheduled:get-available-targets',
   scheduledStatus: 'scheduled:status',
   voiceList: 'voice:list',
   voiceUpsert: 'voice:upsert',
@@ -104,6 +107,7 @@ const copilotApi: CopilotApi = {
   listScheduledMessages: () => ipcRenderer.invoke(IPC_CHANNELS.scheduledList),
   upsertScheduledMessage: (input: ScheduledMessageUpsertInput) => ipcRenderer.invoke(IPC_CHANNELS.scheduledUpsert, input),
   deleteScheduledMessage: (input: ScheduledMessageDeleteInput) => ipcRenderer.invoke(IPC_CHANNELS.scheduledDelete, input),
+  getScheduledAvailableTargets: () => ipcRenderer.invoke(IPC_CHANNELS.scheduledGetAvailableTargets) as Promise<ScheduledAvailableTargets>,
   onScheduledStatus: (listener: (items: ScheduledStatusItem[]) => void) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, items: ScheduledStatusItem[]) => listener(items);
     ipcRenderer.on(IPC_CHANNELS.scheduledStatus, wrappedListener);
@@ -171,7 +175,7 @@ const copilotApi: CopilotApi = {
   twitchStartOAuth: () => ipcRenderer.invoke(IPC_CHANNELS.twitchStartOAuth) as Promise<{ username: string; accessToken: string }>,
   youtubeConnect: (input) => ipcRenderer.invoke(IPC_CHANNELS.youtubeConnect, input),
   youtubeDisconnect: () => ipcRenderer.invoke(IPC_CHANNELS.youtubeDisconnect),
-  youtubeGetStatus: () => ipcRenderer.invoke(IPC_CHANNELS.youtubeGetStatus) as Promise<number>,
+  youtubeGetStatus: () => ipcRenderer.invoke(IPC_CHANNELS.youtubeGetStatus) as Promise<YouTubeStreamInfo[]>,
   youtubeOpenLogin: () => ipcRenderer.invoke(IPC_CHANNELS.youtubeOpenLogin),
   youtubeGetSettings: () => ipcRenderer.invoke(IPC_CHANNELS.youtubeGetSettings),
   youtubeSaveSettings: (settings) => ipcRenderer.invoke(IPC_CHANNELS.youtubeSaveSettings, settings),
@@ -186,8 +190,8 @@ const copilotApi: CopilotApi = {
     ipcRenderer.on(IPC_CHANNELS.twitchLiveStats, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.twitchLiveStats, wrappedListener); };
   },
-  onYoutubeStatus: (listener: (streamCount: number) => void) => {
-    const wrappedListener = (_event: Electron.IpcRendererEvent, streamCount: number) => listener(streamCount);
+  onYoutubeStatus: (listener: (streams: YouTubeStreamInfo[]) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, streams: YouTubeStreamInfo[]) => listener(streams);
     ipcRenderer.on(IPC_CHANNELS.youtubeGetStatus, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.youtubeGetStatus, wrappedListener); };
   },

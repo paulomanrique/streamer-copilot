@@ -22,6 +22,7 @@ import type {
   ScheduledMessage,
   ScheduledMessageDeleteInput,
   ScheduledMessageUpsertInput,
+  ScheduledAvailableTargets,
   ScheduledStatusItem,
   SelectProfileInput,
   TwitchConnectionStatus,
@@ -46,6 +47,7 @@ export const IPC_CHANNELS = {
   scheduledList: 'scheduled:list',
   scheduledUpsert: 'scheduled:upsert',
   scheduledDelete: 'scheduled:delete',
+  scheduledGetAvailableTargets: 'scheduled:get-available-targets',
   scheduledStatus: 'scheduled:status',
   voiceList: 'voice:list',
   voiceUpsert: 'voice:upsert',
@@ -108,6 +110,7 @@ export interface CopilotApi {
   listScheduledMessages: () => Promise<ScheduledMessage[]>;
   upsertScheduledMessage: (input: ScheduledMessageUpsertInput) => Promise<ScheduledMessage[]>;
   deleteScheduledMessage: (input: ScheduledMessageDeleteInput) => Promise<ScheduledMessage[]>;
+  getScheduledAvailableTargets: () => Promise<ScheduledAvailableTargets>;
   onScheduledStatus: (listener: (items: ScheduledStatusItem[]) => void) => () => void;
   listVoiceCommands: () => Promise<VoiceCommand[]>;
   upsertVoiceCommand: (input: VoiceCommandUpsertInput) => Promise<VoiceCommand[]>;
@@ -139,13 +142,13 @@ export interface CopilotApi {
   twitchGetStatus: () => Promise<TwitchConnectionStatus>;
   onTwitchStatus: (listener: (status: TwitchConnectionStatus) => void) => () => void;
   onTwitchLiveStats: (listener: (stats: TwitchLiveStats) => void) => () => void;
-  onYoutubeStatus: (listener: (streamCount: number) => void) => () => void;
+  onYoutubeStatus: (listener: (streams: import('./types.js').YouTubeStreamInfo[]) => void) => () => void;
   twitchGetUserAvatars: (logins: string[]) => Promise<Record<string, string>>;
   twitchGetBadgeUrls: (badgeIds: string[]) => Promise<Record<string, string>>;
   twitchStartOAuth: () => Promise<{ username: string; accessToken: string }>;
   youtubeConnect: (input: { videoId: string }) => Promise<void>;
   youtubeDisconnect: () => Promise<void>;
-  youtubeGetStatus: () => Promise<number>;
+  youtubeGetStatus: () => Promise<import('./types.js').YouTubeStreamInfo[]>;
   youtubeOpenLogin: () => Promise<void>;
   youtubeGetSettings: () => Promise<import('./types.js').YouTubeSettings>;
   youtubeSaveSettings: (settings: import('./types.js').YouTubeSettings) => Promise<void>;
