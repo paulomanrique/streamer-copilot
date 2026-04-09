@@ -59,8 +59,8 @@ export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtube
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-gray-200">OBS Studio</h2>
-          <span className={`text-xs font-medium ${stats.connected ? 'text-red-400' : 'text-gray-500'}`}>
-            {stats.connected ? 'LIVE' : 'OFFLINE'}
+          <span className={`text-xs font-medium ${stats.connected ? 'text-cyan-400' : 'text-gray-500'}`}>
+            {stats.connected ? 'CONNECTED' : 'OFFLINE'}
           </span>
         </div>
         <span className="text-xs text-gray-500">

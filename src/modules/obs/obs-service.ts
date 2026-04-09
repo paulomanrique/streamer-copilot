@@ -12,6 +12,7 @@ interface ObsServiceOptions {
 
 const POLL_INTERVAL_MS = 3_000;
 const MAX_RECONNECT_DELAY_MS = 30_000;
+const MAX_TRANSIENT_POLL_FAILURES = 3;
 
 export class ObsService {
   private readonly client = new OBSWebSocket();
@@ -21,6 +22,8 @@ export class ObsService {
   private currentSettings: ObsConnectionSettings | null = null;
   private started = false;
   private connected = false;
+  private consecutivePollFailures = 0;
+  private lastStats: ObsStatsSnapshot | null = null;
 
   constructor(private readonly options: ObsServiceOptions) {
     this.client.on('ConnectionClosed', () => {
@@ -90,6 +93,7 @@ export class ObsService {
     try {
       await this.client.connect(this.toUrl(settings), settings.password || undefined, { rpcVersion: 1 });
       this.connected = true;
+      this.consecutivePollFailures = 0;
       this.reconnectDelayMs = 1_000;
       this.options.onConnected();
       await this.emitStats();
@@ -103,6 +107,7 @@ export class ObsService {
   private handleDisconnected(): void {
     const wasConnected = this.connected;
     this.connected = false;
+    this.consecutivePollFailures = 0;
     this.stopPolling();
     this.options.onStats(this.createOfflineStats());
     if (wasConnected) this.options.onDisconnected();
@@ -156,7 +161,7 @@ export class ObsService {
       const bitrateKbps =
         outputDuration > 0 ? Math.round(((outputBytes * 8) / Math.max(outputDuration / 1000, 1)) / 1000) : 0;
 
-      this.options.onStats({
+      const snapshot: ObsStatsSnapshot = {
         connected: true,
         sceneName: this.readString(scene.currentProgramSceneName, 'Unknown'),
         uptimeLabel: this.formatDuration(outputDuration),
@@ -166,24 +171,30 @@ export class ObsService {
         ramMb: Math.round(this.readNumber(stats.memoryUsage)),
         droppedFrames: Math.round(this.readNumber(streamStatus.outputSkippedFrames)),
         droppedFramesRender: Math.round(this.readNumber(stats.renderSkippedFrames)),
-      });
+      };
+      this.options.onStats(snapshot);
+      this.lastStats = snapshot;
+      this.consecutivePollFailures = 0;
     } catch {
+      this.consecutivePollFailures += 1;
+      if (this.consecutivePollFailures < MAX_TRANSIENT_POLL_FAILURES) return;
       this.handleDisconnected();
       this.scheduleReconnect();
     }
   }
 
   private createOfflineStats(): ObsStatsSnapshot {
+    const previous = this.lastStats;
     return {
       connected: false,
-      sceneName: 'Offline',
-      uptimeLabel: '00:00:00',
-      bitrateKbps: 0,
-      fps: 0,
-      cpuPercent: 0,
-      ramMb: 0,
-      droppedFrames: 0,
-      droppedFramesRender: 0,
+      sceneName: previous?.sceneName ?? 'Offline',
+      uptimeLabel: previous?.uptimeLabel ?? '00:00:00',
+      bitrateKbps: previous?.bitrateKbps ?? 0,
+      fps: previous?.fps ?? 0,
+      cpuPercent: previous?.cpuPercent ?? 0,
+      ramMb: previous?.ramMb ?? 0,
+      droppedFrames: previous?.droppedFrames ?? 0,
+      droppedFramesRender: previous?.droppedFramesRender ?? 0,
     };
   }
 
