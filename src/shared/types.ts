@@ -38,6 +38,7 @@ export interface ChatMessage {
   timestampLabel: string;
   color?: string;
   avatarUrl?: string;
+  badgeUrls?: string[];
 }
 
 export interface TwitchLiveStats {

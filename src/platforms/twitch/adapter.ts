@@ -19,6 +19,7 @@ export interface TwitchAdapterOptions {
   mockAuthor?: string;
   mockChannel?: string;
   onStatusChange?: (status: TwitchConnectionStatus) => void;
+  resolveBadgeUrls?: (rawBadges: string | Record<string, string>) => string[];
 }
 
 const DEFAULT_MOCK_AUTHOR = 'Streamer';
@@ -149,6 +150,7 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
         content: message,
         badges: this.resolveBadges(tags),
         color: typeof tags.color === 'string' && tags.color ? tags.color : undefined,
+        badgeUrls: this.options.resolveBadgeUrls ? this.options.resolveBadgeUrls(tags.badges ?? '') : undefined,
       }, tags);
     });
 

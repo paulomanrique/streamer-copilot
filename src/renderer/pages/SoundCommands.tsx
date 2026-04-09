@@ -133,7 +133,7 @@ export function SoundCommandsPage() {
     }
 
     try {
-      await window.copilot.previewSoundPlay({ filePath: nextPath });
+      await window.copilot.previewPlay({ filePath: nextPath });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Failed to preview sound command');
     }

@@ -98,7 +98,7 @@ export function PlatformSettingsPreview(_: PlatformSettingsPreviewProps) {
               </div>
               {'tags' in platform ? (
                 <div className="mt-3 flex gap-2 flex-wrap">
-                  {platform.tags.map((tag) => (
+                  {platform.tags?.map((tag) => (
                     <span key={tag} className="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">
                       {tag}
                     </span>

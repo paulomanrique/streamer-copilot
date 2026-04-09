@@ -138,7 +138,6 @@ export function ChatFeed({ messages, events, connectedPlatforms }: ChatFeedProps
   const [inputValue,    setInputValue]    = useState('');
   const [inputPlatform, setInputPlatform] = useState(() => connectedPlatforms[0] ?? 'twitch');
   const [avatarCache,   setAvatarCache]   = useState<Map<string, string>>(new Map());
-  const [badgeCache,    setBadgeCache]    = useState<Map<string, string>>(new Map());
   const [highlighted,   setHighlighted]   = useState<string | null>(null);
   const [isAtBottom,    setIsAtBottom]    = useState(true);
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState>({
@@ -182,47 +181,21 @@ export function ChatFeed({ messages, events, connectedPlatforms }: ChatFeedProps
     feedRef.current.scrollTop = feedRef.current.scrollHeight;
   }, [items, isAtBottom]);
 
-  // ── batch-fetch Twitch avatars for new users ──────────────────────
+  // ── batch-fetch avatars for YouTube / non-Twitch platforms ──────────
   useEffect(() => {
-    const twitchLogins = messages
-      .filter((m) => m.platform === 'twitch')
+    const logins = messages
+      .filter((m) => m.platform !== 'twitch' && !m.avatarUrl)
       .map((m) => m.author.toLowerCase())
-      .filter((login, i, arr) => arr.indexOf(login) === i) // unique
+      .filter((login, i, arr) => arr.indexOf(login) === i)
       .filter((login) => !avatarCache.has(login));
 
-    if (twitchLogins.length === 0) return;
+    if (logins.length === 0) return;
 
-    void window.copilot.twitchGetUserAvatars(twitchLogins).then((result) => {
+    void window.copilot.twitchGetUserAvatars(logins).then((result) => {
       setAvatarCache((prev) => {
         const next = new Map(prev);
         for (const [login, url] of Object.entries(result)) next.set(login.toLowerCase(), url);
-        // Mark misses so we don't re-fetch
-        for (const login of twitchLogins) {
-          if (!next.has(login)) next.set(login, '');
-        }
-        return next;
-      });
-    });
-  }, [messages]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── batch-fetch Twitch badges for new messages ────────────────────
-  useEffect(() => {
-    const twitchBadges = messages
-      .filter((m) => m.platform === 'twitch')
-      .flatMap((m) => m.badges)
-      .filter((badge, i, arr) => arr.indexOf(badge) === i) // unique
-      .filter((badge) => !badgeCache.has(badge));
-
-    if (twitchBadges.length === 0) return;
-
-    void window.copilot.twitchGetBadgeUrls(twitchBadges).then((result) => {
-      setBadgeCache((prev) => {
-        const next = new Map(prev);
-        for (const [badgeId, url] of Object.entries(result)) next.set(badgeId, url);
-        // Mark misses so we don't re-fetch
-        for (const badge of twitchBadges) {
-          if (!next.has(badge)) next.set(badge, '');
-        }
+        for (const login of logins) { if (!next.has(login)) next.set(login, ''); }
         return next;
       });
     });
@@ -327,7 +300,6 @@ export function ChatFeed({ messages, events, connectedPlatforms }: ChatFeedProps
               key={item.id}
               message={item.message}
               avatarUrl={avatarCache.get(item.message.author.toLowerCase()) || undefined}
-              badgeCache={badgeCache}
               highlighted={highlighted === item.message.author}
               onDoubleClick={() => replyTo(item.message.platform, item.message.author)}
               onContextMenu={(e) => handleContextMenu(e, item.message.platform, item.message.author)}
@@ -438,13 +410,12 @@ export function ChatFeed({ messages, events, connectedPlatforms }: ChatFeedProps
 interface ChatMessageRowProps {
   message: ChatMessage;
   avatarUrl?: string;
-  badgeCache: Map<string, string>;
   highlighted: boolean;
   onDoubleClick: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
 }
 
-function ChatMessageRow({ message, avatarUrl, badgeCache, highlighted, onDoubleClick, onContextMenu }: ChatMessageRowProps) {
+function ChatMessageRow({ message, avatarUrl, highlighted, onDoubleClick, onContextMenu }: ChatMessageRowProps) {
   const pKey = platformKey(message.platform);
   const meta = PLATFORM_META[pKey];
 
@@ -470,7 +441,6 @@ function ChatMessageRow({ message, avatarUrl, badgeCache, highlighted, onDoubleC
   const isMod = message.badges.some((b) => b.startsWith('moderator/') || b === 'moderator');
   const authorColor = resolveAuthorColor(message);
 
-  const twitchBadges = message.platform === 'twitch' ? message.badges : [];
   const effectiveAvatarUrl = message.avatarUrl || avatarUrl;
 
   return (
@@ -518,20 +488,10 @@ function ChatMessageRow({ message, avatarUrl, badgeCache, highlighted, onDoubleC
             )
           )}
 
-          {/* Twitch-specific versioned badges */}
-          {twitchBadges.map((badgeId) => {
-            const url = badgeCache.get(badgeId);
-            if (!url) return null;
-            return (
-              <img
-                key={badgeId}
-                src={url}
-                alt={badgeId}
-                className="w-4 h-4 rounded-sm shrink-0"
-                title={badgeId}
-              />
-            );
-          })}
+          {/* Twitch chat badges (broadcaster, moderator, subscriber, etc.) */}
+          {message.platform === 'twitch' && message.badgeUrls?.map((url, i) => (
+            <img key={i} src={url} alt="" className="w-4 h-4 rounded-sm shrink-0 object-contain" />
+          ))}
 
           {/* Member Star */}
           {isSub ? <span className="text-yellow-400 text-xs leading-none">★</span> : null}

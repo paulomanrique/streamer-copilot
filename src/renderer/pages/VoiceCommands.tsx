@@ -145,7 +145,7 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
   const preview = async () => {
     const text = previewText.trim() || 'Hello, I am your stream copilot!';
     try {
-      await window.copilot.previewVoiceSpeak({ text, lang: selectedVoiceName });
+      await window.copilot.previewSpeak({ text, lang: selectedVoiceName });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Preview failed');
     }

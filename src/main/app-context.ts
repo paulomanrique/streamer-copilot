@@ -107,7 +107,6 @@ export function createAppContext(options: AppContextOptions): () => void {
   let twitchStatsTimer: ReturnType<typeof setInterval> | null = null;
   const userAvatarCache = new Map<string, string>();
   const badgeCache = new Map<string, string>();
-  let badgesFetched = false;
   let youtubeScraper: YouTubeScraper | null = null;
   let youtubeMonitorTimer: ReturnType<typeof setInterval> | null = null;
   let lastDetectedVideoId: string | null = null;
@@ -219,6 +218,35 @@ export function createAppContext(options: AppContextOptions): () => void {
 
   const stopTwitchStatsPoll = () => { if (twitchStatsTimer) { clearInterval(twitchStatsTimer); twitchStatsTimer = null; } };
 
+  const loadTwitchBadges = async (channel: string, token: string): Promise<void> => {
+    try {
+      const h = { Authorization: `Bearer ${token}`, 'Client-Id': TWITCH_CLIENT_ID };
+      const userRes = await fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(channel)}`, { headers: h });
+      const userData = (await userRes.json()) as { data?: Array<{ id: string }> };
+      const broadcasterId = userData.data?.[0]?.id;
+      const urls = ['https://api.twitch.tv/helix/chat/badges/global'];
+      if (broadcasterId) urls.push(`https://api.twitch.tv/helix/chat/badges?broadcaster_id=${broadcasterId}`);
+      const jsons = await Promise.all(
+        urls.map(async (url) => (await fetch(url, { headers: h })).json() as Promise<{ data?: Array<{ set_id: string; versions: Array<{ id: string; image_url_2x: string }> }> }>),
+      );
+      for (const json of jsons) {
+        for (const set of json.data ?? []) {
+          for (const version of set.versions) badgeCache.set(`${set.set_id}/${version.id}`, version.image_url_2x);
+        }
+      }
+    } catch {}
+  };
+
+  const resolveBadgeUrls = (rawBadges: string | Record<string, string>): string[] => {
+    let entries: string[];
+    if (typeof rawBadges === 'string') {
+      entries = rawBadges.split(',').map((e) => e.trim()).filter(Boolean);
+    } else {
+      entries = Object.entries(rawBadges).map(([k, v]) => `${k}/${v}`);
+    }
+    return entries.map((e) => badgeCache.get(e)).filter((url): url is string => Boolean(url));
+  };
+
   const setTwitchStatus = (status: TwitchConnectionStatus) => {
     twitchStatus = status;
     options.stateHub.pushTwitchStatus(status);
@@ -226,7 +254,11 @@ export function createAppContext(options: AppContextOptions): () => void {
       void (async () => {
         const store = await getTwitchCredentialsStore();
         const creds = store ? await store.load() : null;
-        if (creds) startTwitchStatsPoll(creds.channel, creds.oauthToken.replace(/^oauth:/, ''));
+        if (creds) {
+          const token = creds.oauthToken.replace(/^oauth:/, '');
+          startTwitchStatsPoll(creds.channel, token);
+          void loadTwitchBadges(creds.channel, token);
+        }
       })();
     } else stopTwitchStatsPoll();
   };
@@ -315,7 +347,7 @@ export function createAppContext(options: AppContextOptions): () => void {
     const c = twitchCredentialsSchema.parse(raw);
     const s = await getTwitchCredentialsStore(); if (!s) throw new Error('No profile');
     await s.save(c); setTwitchStatus('connecting');
-    await chatService.replaceAdapter(createTwitchChatAdapter({ channels: [c.channel], username: c.username, password: c.oauthToken, onStatusChange: setTwitchStatus }));
+    await chatService.replaceAdapter(createTwitchChatAdapter({ channels: [c.channel], username: c.username, password: c.oauthToken, onStatusChange: setTwitchStatus, resolveBadgeUrls }));
   });
   ipcMain.handle(IPC_CHANNELS.twitchDisconnect, async () => { await chatService.removeAdapter('twitch'); setTwitchStatus('disconnected'); const s = await getTwitchCredentialsStore(); if (s) await s.clear(); });
   ipcMain.handle(IPC_CHANNELS.twitchGetStatus, async () => twitchStatus);

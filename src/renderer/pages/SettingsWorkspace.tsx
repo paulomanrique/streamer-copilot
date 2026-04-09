@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { ReactElement } from 'react';
 
 import type { GeneralSettings, ObsStatsSnapshot, PermissionLevel, ProfileSummary } from '../../shared/types.js';
 import { PlatformsSettingsPage } from './PlatformsSettings.js';
@@ -35,7 +36,7 @@ interface SettingsWorkspaceProps {
 
 const SETTINGS_GROUPS: Array<{
   label: string;
-  items: Array<{ id: SettingsView; label: string; icon: JSX.Element }>;
+  items: Array<{ id: SettingsView; label: string; icon: ReactElement }>;
 }> = [
   {
     label: 'Platforms',

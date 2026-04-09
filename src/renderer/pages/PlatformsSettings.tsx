@@ -102,6 +102,25 @@ export function PlatformsSettingsPage() {
     } finally { setIsBusy(false); }
   };
 
+  const saveEditedChannel = async () => {
+    if (!channel.trim()) { setError('Channel is required'); return; }
+    if (!savedCreds) return;
+    setIsBusy(true);
+    setError(null);
+    try {
+      await window.copilot.twitchConnect({
+        channel: channel.trim().replace(/^#/, '').toLowerCase(),
+        username: savedCreds.username,
+        oauthToken: savedCreds.oauthToken,
+      });
+      const creds = await window.copilot.twitchGetCredentials();
+      setSavedCreds(creds);
+      setIsEditingChannel(false);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Failed to update channel');
+    } finally { setIsBusy(false); }
+  };
+
   const disconnectTwitch = async () => {
     setIsBusy(true);
     try {
