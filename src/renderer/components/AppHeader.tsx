@@ -43,9 +43,13 @@ export function AppHeader({
           btnBg: 'bg-purple-600/30 hover:bg-purple-600/50 text-purple-300',
         }]
       : []),
-    ...youtubeStreams.map((stream) => ({
+    ...youtubeStreams.map((stream) => {
+      const streamLabel = stream.label === 'YouTube' ? 'YouTube' : `YouTube ${stream.label}`;
+      return ({
       id: `yt-${stream.videoId}`,
-      label: stream.channelHandle ? `YouTube ${stream.channelHandle}` : `YouTube ${stream.label}`,
+      label: stream.channelHandle
+        ? `${streamLabel} ${stream.channelHandle}`
+        : streamLabel,
       url: stream.liveUrl.replace(/^https?:\/\//, ''),
       full: stream.liveUrl,
       icon: YOUTUBE_ICON,
@@ -54,7 +58,8 @@ export function AppHeader({
       btnBg: stream.platform === 'youtube-v'
         ? 'bg-rose-600/30 hover:bg-rose-600/50 text-rose-300'
         : 'bg-red-600/30 hover:bg-red-600/50 text-red-300',
-    })),
+    });
+    }),
   ];
 
   const copyLink = (id: string, url: string) => {

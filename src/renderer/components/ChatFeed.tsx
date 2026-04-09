@@ -54,11 +54,11 @@ const PLATFORM_META = {
 } as const;
 
 const PLATFORM_BUTTONS = [
-  { id: 'twitch',    title: 'Twitch' },
-  { id: 'youtube',   title: 'YouTube Horizontal' },
-  { id: 'youtube-v', title: 'YouTube Vertical' },
-  { id: 'kick',      title: 'Kick' },
-  { id: 'tiktok',    title: 'TikTok' },
+  { id: 'twitch' },
+  { id: 'youtube' },
+  { id: 'youtube-v' },
+  { id: 'kick' },
+  { id: 'tiktok' },
 ] as const;
 
 type ContextMenuAction = { separator: true } | { id: string; label: string; danger?: boolean };
@@ -178,6 +178,17 @@ function platformKey(platform: string): keyof typeof PLATFORM_META {
   return 'twitch';
 }
 
+function getPlatformDisplayName(platformId: string, connectedPlatforms: string[]): string {
+  if (platformId === 'youtube') {
+    return connectedPlatforms.includes('youtube-v') ? 'YouTube Horizontal' : 'YouTube';
+  }
+  if (platformId === 'youtube-v') return 'YouTube Vertical';
+  if (platformId === 'twitch') return 'Twitch';
+  if (platformId === 'kick') return 'Kick';
+  if (platformId === 'tiktok') return 'TikTok';
+  return platformId;
+}
+
 export function ChatFeed({ messages, events, connectedPlatforms }: ChatFeedProps) {
   const feedRef  = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -195,6 +206,7 @@ export function ChatFeed({ messages, events, connectedPlatforms }: ChatFeedProps
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState>({
     visible: false, x: 0, y: 0, platform: '', author: '',
   });
+  const hasMultipleYouTubeStreams = connectedPlatforms.includes('youtube') && connectedPlatforms.includes('youtube-v');
 
   // ── scroll management ──────────────────────────────────────────────
   const onScroll = () => {
@@ -328,9 +340,10 @@ export function ChatFeed({ messages, events, connectedPlatforms }: ChatFeedProps
         </div>
 
         <div className="flex items-center gap-1.5">
-          {PLATFORM_BUTTONS.filter(b => connectedPlatforms.includes(b.id as any)).map(({ id, title }) => {
+          {PLATFORM_BUTTONS.filter((b) => connectedPlatforms.includes(b.id as any)).map(({ id }) => {
             const meta = PLATFORM_META[platformKey(id)];
             const on = platformFilter[id] !== false;
+            const title = getPlatformDisplayName(id, connectedPlatforms);
             return (
               <button key={id} type="button" title={title} aria-label={title}
                 onClick={() => setPlatformFilter((c) => ({ ...c, [id]: !c[id] }))}
@@ -353,6 +366,7 @@ export function ChatFeed({ messages, events, connectedPlatforms }: ChatFeedProps
               message={item.message}
               avatarUrl={avatarCache.get(item.message.author.toLowerCase()) || undefined}
               highlighted={highlighted === item.message.author}
+              hasMultipleYouTubeStreams={hasMultipleYouTubeStreams}
               onDoubleClick={() => replyTo(item.message.platform, item.message.author)}
               onContextMenu={(e) => handleContextMenu(e, item.message.platform, item.message.author)}
             />
@@ -383,12 +397,14 @@ export function ChatFeed({ messages, events, connectedPlatforms }: ChatFeedProps
               onChange={(e) => setInputPlatform(e.target.value)}
               className="bg-gray-800 border border-gray-700 rounded text-xs text-gray-300 px-2 py-1.5 focus:outline-none focus:border-violet-500"
             >
-              {PLATFORM_BUTTONS.filter((b) => connectedPlatforms.includes(b.id)).map(({ id, title }) => (
-                <option key={id} value={id}>{title}</option>
+              {PLATFORM_BUTTONS.filter((b) => connectedPlatforms.includes(b.id)).map(({ id }) => (
+                <option key={id} value={id}>{getPlatformDisplayName(id, connectedPlatforms)}</option>
               ))}
             </select>
           ) : connectedPlatforms.length === 1 ? (
-            <span className="text-xs text-gray-500 px-2 py-1.5 capitalize">{connectedPlatforms[0]}</span>
+            <span className="text-xs text-gray-500 px-2 py-1.5">
+              {getPlatformDisplayName(connectedPlatforms[0], connectedPlatforms)}
+            </span>
           ) : null}
           <input
             ref={inputRef}
@@ -463,16 +479,19 @@ interface ChatMessageRowProps {
   message: ChatMessage;
   avatarUrl?: string;
   highlighted: boolean;
+  hasMultipleYouTubeStreams: boolean;
   onDoubleClick: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
 }
 
-function ChatMessageRow({ message, avatarUrl, highlighted, onDoubleClick, onContextMenu }: ChatMessageRowProps) {
+function ChatMessageRow({ message, avatarUrl, highlighted, hasMultipleYouTubeStreams, onDoubleClick, onContextMenu }: ChatMessageRowProps) {
   const pKey = platformKey(message.platform);
   const meta = PLATFORM_META[pKey];
 
   // Platform badge metadata (matching Activity Log style)
-  const ytLabel = message.streamLabel ? `YT-${message.streamLabel}` : 'YouTube';
+  const ytLabel = hasMultipleYouTubeStreams
+    ? (message.platform === 'youtube-v' ? 'YouTube Vertical' : 'YouTube Horizontal')
+    : 'YouTube';
   const PLATFORM_BADGE_META: Record<string, { bg: string; text: string; label: string }> = {
     twitch: { bg: 'bg-purple-500/20', text: 'text-purple-300', label: 'Twitch' },
     youtube: { bg: 'bg-red-500/20', text: 'text-red-300', label: ytLabel },
@@ -487,7 +506,7 @@ function ChatMessageRow({ message, avatarUrl, highlighted, onDoubleClick, onCont
   // STAR LOGIC: 
   // YouTube: ONLY if badge is 'member'
   // Others: if 'subscriber', 'member' or 'subscriber/'
-  const isSub = message.platform === 'youtube'
+  const isSub = message.platform === 'youtube' || message.platform === 'youtube-v'
     ? message.badges.includes('member')
     : message.badges.some((b) => b.startsWith('subscriber/') || b === 'subscriber' || b === 'member');
 
@@ -550,7 +569,7 @@ function ChatMessageRow({ message, avatarUrl, highlighted, onDoubleClick, onCont
           {isSub ? <span className="text-yellow-400 text-xs leading-none">★</span> : null}
 
           <span className="font-semibold text-sm" style={{ color: authorColor }}>
-            {message.platform === 'youtube' ? `@${message.author}` : message.author}
+            {message.platform === 'youtube' || message.platform === 'youtube-v' ? `@${message.author}` : message.author}
           </span>
 
           {message.platform !== 'twitch' && isMod ? <span className="text-xs text-emerald-400 font-semibold">MOD</span> : null}

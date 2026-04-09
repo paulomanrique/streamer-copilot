@@ -11,7 +11,13 @@ const PLATFORM_META: Record<string, { bg: string; text: string; icon: string; la
     bg: 'bg-red-500/20',
     text: 'text-red-300',
     icon: 'M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z',
-    label: 'YT Horizontal',
+    label: 'YouTube',
+  },
+  'youtube-v': {
+    bg: 'bg-rose-400/20',
+    text: 'text-rose-300',
+    icon: 'M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z',
+    label: 'YouTube Vertical',
   },
   kick: {
     bg: 'bg-green-500/20',
@@ -52,9 +58,7 @@ interface EventBannerProps {
 
 export function EventBanner({ event, variant = 'chat' }: EventBannerProps) {
   const baseMeta = PLATFORM_META[event.platform] ?? PLATFORM_META.twitch;
-  const platform = (event.platform === 'youtube' || event.platform === 'youtube-v') && event.streamLabel
-    ? { ...baseMeta, label: `YT-${event.streamLabel}` }
-    : baseMeta;
+  const platform = baseMeta;
 
   if (variant === 'activity') {
     return (
@@ -100,6 +104,7 @@ function getBorderColor(platform: string): string {
   const map: Record<string, string> = {
     twitch: 'rgba(168,85,247,0.2)',
     youtube: 'rgba(239,68,68,0.2)',
+    'youtube-v': 'rgba(244,63,94,0.2)',
     kick: 'rgba(34,197,94,0.2)',
     tiktok: 'rgba(236,72,153,0.2)',
   };

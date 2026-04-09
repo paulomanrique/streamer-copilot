@@ -54,6 +54,11 @@ export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtube
     return () => clearInterval(timer);
   }, [hype]);
 
+  const resolveYouTubeCardLabel = (stream: YouTubeStreamInfo): string => {
+    if (youtubeStreams.length <= 1) return 'YouTube';
+    return stream.platform === 'youtube-v' ? 'YouTube Vertical' : 'YouTube Horizontal';
+  };
+
   return (
     <div className="border-b border-gray-800 p-4 shrink-0">
       <div className="flex items-center justify-between mb-3">
@@ -110,26 +115,19 @@ export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtube
                 followers={twitchLiveStats ? fmtNum(twitchLiveStats.followerCount) : undefined}
               />
             )}
-            {youtubeStreams.length >= 1 && (
+            {youtubeStreams.map((stream) => (
               <ViewerCard
-                label={`YouTube ${youtubeStreams[0].label}`}
+                key={stream.videoId}
+                label={resolveYouTubeCardLabel(stream)}
                 icon={ICONS.youtube}
-                classes="bg-red-500/10 border-red-500/20 text-red-300"
-                metaClass="text-red-400"
-                value={youtubeStreams[0].viewerCount !== null ? fmtNum(youtubeStreams[0].viewerCount) : '—'}
+                classes={stream.platform === 'youtube-v'
+                  ? 'bg-rose-400/10 border-rose-400/20 text-rose-300'
+                  : 'bg-red-500/10 border-red-500/20 text-red-300'}
+                metaClass={stream.platform === 'youtube-v' ? 'text-rose-400' : 'text-red-400'}
+                value={stream.viewerCount !== null ? fmtNum(stream.viewerCount) : '—'}
                 isLive
               />
-            )}
-            {youtubeStreams.length >= 2 && (
-              <ViewerCard
-                label={`YouTube ${youtubeStreams[1].label}`}
-                icon={ICONS.youtube}
-                classes="bg-rose-400/10 border-rose-400/20 text-rose-300"
-                metaClass="text-rose-400"
-                value={youtubeStreams[1].viewerCount !== null ? fmtNum(youtubeStreams[1].viewerCount) : '—'}
-                isLive
-              />
-            )}
+            ))}
           </div>
         )}
 

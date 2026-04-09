@@ -142,18 +142,23 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const YT_PLATFORMS: Array<'youtube' | 'youtube-v'> = ['youtube', 'youtube-v'];
   const SCHEDULED_SUPPORTED_TARGETS: PlatformId[] = ['twitch', 'youtube'];
 
-  const getYoutubeStreams = (): YouTubeStreamInfo[] =>
-    Array.from(youtubeScrapers.keys()).map((videoId) => {
+  const getYoutubeStreams = (): YouTubeStreamInfo[] => {
+    const totalStreams = youtubeScrapers.size;
+    return Array.from(youtubeScrapers.keys()).map((videoId) => {
       const data = youtubeStreamData.get(videoId);
+      const label = totalStreams > 1
+        ? (data?.platform === 'youtube-v' ? 'Vertical' : 'Horizontal')
+        : 'YouTube';
       return {
         videoId,
         platform: data?.platform ?? 'youtube',
         channelHandle: data?.channelHandle ?? null,
-        label: data?.label ?? '?',
+        label,
         viewerCount: data?.viewerCount ?? null,
         liveUrl: `https://www.youtube.com/watch?v=${videoId}`,
       };
     });
+  };
 
   const getTwitchCredentialsStore = async (): Promise<TwitchCredentialsStore | null> => {
     const snapshot = await profileStore.list();
