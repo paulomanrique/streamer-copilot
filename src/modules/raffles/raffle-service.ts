@@ -319,12 +319,6 @@ export class RaffleService implements CommandModule {
   private async finishRound(raffleId: string, entryId: string): Promise<void> {
     const pending = this.pendingAnimations.get(raffleId);
     if (!pending || pending.targetEntryId !== entryId) return;
-    this.pendingAnimations.delete(raffleId);
-    const timer = this.pendingTimers.get(raffleId);
-    if (timer) {
-      clearTimeout(timer);
-      this.pendingTimers.delete(raffleId);
-    }
 
     const raffle = this.requireRaffle(raffleId);
     const entries = this.options.repository.listEntries(raffleId);
@@ -344,6 +338,14 @@ export class RaffleService implements CommandModule {
       overlaySessionId: pending.sessionId,
       lastSpinAt: pending.startedAt,
     });
+
+    // Clear pending only after DB writes so the overlay sees a consistent state
+    this.pendingAnimations.delete(raffleId);
+    const timer = this.pendingTimers.get(raffleId);
+    if (timer) {
+      clearTimeout(timer);
+      this.pendingTimers.delete(raffleId);
+    }
 
     const round = this.options.repository.recordRound({
       raffleId,

@@ -454,6 +454,16 @@ export function RafflesPage() {
                 </div>
               </div>
 
+              {visibleSnapshot.raffle.status === 'completed' && visibleSnapshot.raffle.winnerEntryId ? (() => {
+                const winner = visibleSnapshot.entries.find((e) => e.id === visibleSnapshot.raffle.winnerEntryId);
+                return winner ? (
+                  <div className="mt-4 flex items-center gap-3 px-4 py-3 rounded-lg bg-yellow-500/10 border border-yellow-400/30">
+                    <span className="text-yellow-400 font-bold text-sm">Winner</span>
+                    <span className="text-yellow-100 font-semibold">{winner.displayName}</span>
+                    <span className="text-yellow-400/60 text-xs">{winner.platform}</span>
+                  </div>
+                ) : null;
+              })() : null}
               {topTwoEntries.length > 0 ? (
                 <div className="mt-4 flex gap-2 flex-wrap">
                   {topTwoEntries.map((entry) => (
@@ -486,7 +496,13 @@ export function RafflesPage() {
                           <td className="px-4 py-3 text-gray-400">{entry.platform}</td>
                           <td className="px-4 py-3 text-gray-400">{formatDateTime(entry.enteredAt)}</td>
                           <td className="px-4 py-3 text-gray-300">
-                            {entry.isWinner ? 'Winner' : entry.isEliminated ? `Eliminated #${entry.eliminationOrder ?? '—'}` : 'Active'}
+                            {entry.isWinner
+                              ? 'Winner'
+                              : entry.isEliminated
+                                ? `Eliminated #${entry.eliminationOrder ?? '—'}`
+                                : visibleSnapshot.raffle.status === 'completed' && visibleSnapshot.raffle.mode === 'survivor-final'
+                                  ? 'Runner-up'
+                                  : 'Active'}
                           </td>
                         </tr>
                       ))}
