@@ -34,7 +34,7 @@ describe('RaffleService', () => {
     repository = new RaffleRepository(db as never);
   });
 
-  it('registers one entry per platform:user pair', () => {
+  it('registers one entry per platform:user pair', async () => {
     const service = new RaffleService({
       repository,
       getOverlayInfo: (raffleId) => ({ raffleId, overlayUrl: 'http://overlay', stateUrl: 'http://overlay/state' }),
@@ -57,7 +57,7 @@ describe('RaffleService', () => {
       enabled: true,
     });
     const raffle = service.list()[0];
-    service.control({ raffleId: raffle.id, action: 'open_entries' });
+    await service.control({ raffleId: raffle.id, action: 'open_entries' });
 
     service.handle(createMessage(), 'everyone');
     service.handle(createMessage({ id: 'msg-2' }), 'everyone');
@@ -68,7 +68,7 @@ describe('RaffleService', () => {
     expect(snapshot.entries.map((entry) => entry.userKey).sort()).toEqual(['twitch:viewer-one', 'youtube:viewer-one']);
   });
 
-  it('ignores entries after the deadline has passed', () => {
+  it('ignores entries after the deadline has passed', async () => {
     const service = new RaffleService({
       repository,
       getOverlayInfo: (raffleId) => ({ raffleId, overlayUrl: 'http://overlay', stateUrl: 'http://overlay/state' }),
@@ -91,7 +91,7 @@ describe('RaffleService', () => {
       enabled: true,
     });
     const raffle = service.list()[0];
-    service.control({ raffleId: raffle.id, action: 'open_entries' });
+    await service.control({ raffleId: raffle.id, action: 'open_entries' });
 
     service.handle(createMessage(), 'everyone');
 
@@ -100,7 +100,7 @@ describe('RaffleService', () => {
     expect(snapshot.raffle.status).toBe('collecting');
   });
 
-  it('accepts staff trigger only for moderators and broadcasters', () => {
+  it('accepts staff trigger only for moderators and broadcasters', async () => {
     const service = new RaffleService({
       repository,
       getOverlayInfo: (raffleId) => ({ raffleId, overlayUrl: 'http://overlay', stateUrl: 'http://overlay/state' }),
@@ -123,7 +123,7 @@ describe('RaffleService', () => {
       enabled: true,
     });
     const raffle = service.list()[0];
-    service.control({ raffleId: raffle.id, action: 'open_entries' });
+    await service.control({ raffleId: raffle.id, action: 'open_entries' });
     service.handle(createMessage({ id: 'entry-1', author: 'alice' }), 'everyone');
 
     service.handle(createMessage({ id: 'staff-1', author: 'viewer', content: '!roll' }), 'everyone');
@@ -158,15 +158,15 @@ describe('RaffleService', () => {
       enabled: true,
     });
     const raffle = service.list()[0];
-    service.control({ raffleId: raffle.id, action: 'open_entries' });
+    await service.control({ raffleId: raffle.id, action: 'open_entries' });
     service.handle(createMessage({ author: 'alice' }), 'everyone');
     service.handle(createMessage({ id: 'msg-2', author: 'bob' }), 'everyone');
-    service.control({ raffleId: raffle.id, action: 'close_entries' });
+    await service.control({ raffleId: raffle.id, action: 'close_entries' });
 
-    service.control({ raffleId: raffle.id, action: 'spin' });
+    await service.control({ raffleId: raffle.id, action: 'spin' });
     expect(service.getSnapshot(raffle.id).raffle.status).toBe('spinning');
 
-    await vi.advanceTimersByTimeAsync(6_300);
+    await vi.advanceTimersByTimeAsync(8_000);
     const snapshot = service.getSnapshot(raffle.id);
     expect(snapshot.raffle.status).toBe('completed');
     expect(snapshot.entries.find((entry) => entry.isWinner)?.displayName).toBeTruthy();
@@ -198,32 +198,32 @@ describe('RaffleService', () => {
       enabled: true,
     });
     const raffle = service.list()[0];
-    service.control({ raffleId: raffle.id, action: 'open_entries' });
+    await service.control({ raffleId: raffle.id, action: 'open_entries' });
     for (const [index, name] of ['alice', 'bob', 'carol', 'dave'].entries()) {
       service.handle(createMessage({ id: `m-${index}`, author: name }), 'everyone');
     }
-    service.control({ raffleId: raffle.id, action: 'close_entries' });
+    await service.control({ raffleId: raffle.id, action: 'close_entries' });
 
-    service.control({ raffleId: raffle.id, action: 'spin' });
-    await vi.advanceTimersByTimeAsync(6_300);
+    await service.control({ raffleId: raffle.id, action: 'spin' });
+    await vi.advanceTimersByTimeAsync(8_000);
     let snapshot = service.getSnapshot(raffle.id);
     expect(snapshot.raffle.status).toBe('ready_to_spin');
 
-    service.control({ raffleId: raffle.id, action: 'spin' });
-    await vi.advanceTimersByTimeAsync(6_300);
+    await service.control({ raffleId: raffle.id, action: 'spin' });
+    await vi.advanceTimersByTimeAsync(8_000);
     snapshot = service.getSnapshot(raffle.id);
     expect(snapshot.raffle.status).toBe('paused_top2');
     expect(snapshot.raffle.top2EntryIds).toHaveLength(2);
 
-    service.control({ raffleId: raffle.id, action: 'finalize' });
-    await vi.advanceTimersByTimeAsync(6_300);
+    await service.control({ raffleId: raffle.id, action: 'finalize' });
+    await vi.advanceTimersByTimeAsync(8_000);
     snapshot = service.getSnapshot(raffle.id);
     expect(snapshot.raffle.status).toBe('completed');
     expect(snapshot.entries.filter((entry) => entry.isWinner)).toHaveLength(1);
     vi.useRealTimers();
   });
 
-  it('rejects invalid control transitions', () => {
+  it('rejects invalid control transitions', async () => {
     const service = new RaffleService({
       repository,
       getOverlayInfo: (raffleId) => ({ raffleId, overlayUrl: 'http://overlay', stateUrl: 'http://overlay/state' }),
@@ -247,7 +247,7 @@ describe('RaffleService', () => {
     });
     const raffle = service.list()[0];
 
-    expect(() => service.control({ raffleId: raffle.id, action: 'spin' })).toThrow('Spin can only run when the raffle is ready');
+    await expect(service.control({ raffleId: raffle.id, action: 'spin' })).rejects.toThrow('Spin can only run when the raffle is ready');
   });
 
   it('reset restores enrolled users after a completed raffle', async () => {
@@ -274,17 +274,17 @@ describe('RaffleService', () => {
       enabled: true,
     });
     const raffle = service.list()[0];
-    service.control({ raffleId: raffle.id, action: 'open_entries' });
+    await service.control({ raffleId: raffle.id, action: 'open_entries' });
     service.handle(createMessage({ id: 'msg-a', author: 'alice' }), 'everyone');
     service.handle(createMessage({ id: 'msg-b', author: 'bob' }), 'everyone');
-    service.control({ raffleId: raffle.id, action: 'close_entries' });
-    service.control({ raffleId: raffle.id, action: 'spin' });
-    await vi.advanceTimersByTimeAsync(6_300);
+    await service.control({ raffleId: raffle.id, action: 'close_entries' });
+    await service.control({ raffleId: raffle.id, action: 'spin' });
+    await vi.advanceTimersByTimeAsync(8_000);
 
     let snapshot = service.getSnapshot(raffle.id);
     expect(snapshot.raffle.status).toBe('completed');
 
-    service.control({ raffleId: raffle.id, action: 'reset' });
+    await service.control({ raffleId: raffle.id, action: 'reset' });
     snapshot = service.getSnapshot(raffle.id);
     expect(snapshot.raffle.status).toBe('draft');
     expect(snapshot.entries).toHaveLength(2);

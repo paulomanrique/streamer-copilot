@@ -281,8 +281,11 @@ export class RaffleService implements CommandModule {
     const isLastSurvivor = raffle.mode === 'survivor-final' && activeEntries.length <= 2;
     const resultType = requestedAction === 'finalize' || raffle.mode === 'single-winner' || isLastSurvivor ? 'winner' : 'eliminated';
     const participantCountAfter = resultType === 'winner' ? Math.max(activeEntries.length - 1, 0) : activeEntries.length - 1;
-    const nextStatus: RaffleStatus = resultType === 'winner' ? 'completed' : 'ready_to_spin';
-    const top2Entries: string[] = [];
+    const isTop2Pause = raffle.mode === 'survivor-final' && resultType === 'eliminated' && participantCountAfter === 2;
+    const nextStatus: RaffleStatus = resultType === 'winner' ? 'completed' : (isTop2Pause ? 'paused_top2' : 'ready_to_spin');
+    const top2Entries: string[] = isTop2Pause
+      ? activeEntries.filter((e) => e.id !== selectedEntry.id).map((e) => e.id)
+      : [];
 
     const durationMs = this.options.getSpinDurationMs
       ? await this.options.getSpinDurationMs(raffle)
