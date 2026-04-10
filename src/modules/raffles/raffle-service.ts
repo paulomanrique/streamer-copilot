@@ -50,6 +50,7 @@ interface RaffleServiceOptions {
   onAnnounceEliminated: (raffle: Raffle, eliminated: RaffleEntry) => Promise<void>;
   onAnnounceWinner: (raffle: Raffle, winner: RaffleEntry) => Promise<void>;
   onSoundEvent?: (raffle: Raffle, event: 'spin' | 'eliminated' | 'winner') => void;
+  getSpinDurationMs?: (raffle: Raffle) => Promise<number>;
   onLog?: (level: 'info' | 'warn' | 'error', message: string, metadata?: Record<string, unknown>) => void;
   now?: () => number;
   random?: () => number;
@@ -109,7 +110,7 @@ export class RaffleService implements CommandModule {
     return this.options.getOverlayInfo(raffleId);
   }
 
-  control(input: RaffleControlActionInput): RaffleSnapshot {
+  async control(input: RaffleControlActionInput): Promise<RaffleSnapshot> {
     this.syncDeadlines();
     const raffle = this.requireRaffle(input.raffleId);
 
@@ -121,10 +122,10 @@ export class RaffleService implements CommandModule {
         this.closeEntries(raffle);
         break;
       case 'spin':
-        this.startRound(raffle, 'spin');
+        await this.startRound(raffle, 'spin');
         break;
       case 'finalize':
-        this.startRound(raffle, 'finalize');
+        await this.startRound(raffle, 'finalize');
         break;
       case 'cancel':
         this.cancelRaffle(raffle);
@@ -147,15 +148,13 @@ export class RaffleService implements CommandModule {
     if (this.matchesStaffTrigger(raffle, message.content) && this.canUseStaffTrigger(permissionLevel)) {
       const action = this.resolveStaffAction(raffle.status);
       if (!action) return;
-      try {
-        this.control({ raffleId: raffle.id, action });
-      } catch (error) {
+      void this.control({ raffleId: raffle.id, action }).catch((error) => {
         this.log('warn', 'Failed to handle raffle staff trigger', {
           raffleId: raffle.id,
           action,
           error: error instanceof Error ? error.message : String(error),
         });
-      }
+      });
       return;
     }
 
@@ -257,7 +256,7 @@ export class RaffleService implements CommandModule {
     this.emitActiveState();
   }
 
-  private startRound(raffle: Raffle, requestedAction: 'spin' | 'finalize'): void {
+  private async startRound(raffle: Raffle, requestedAction: 'spin' | 'finalize'): Promise<void> {
     const entries = this.options.repository.listEntries(raffle.id);
     const activeEntries = entries.filter((entry) => !entry.isEliminated && !entry.isWinner);
     if (requestedAction === 'finalize') {
@@ -285,13 +284,17 @@ export class RaffleService implements CommandModule {
     const nextStatus: RaffleStatus = resultType === 'winner' ? 'completed' : 'ready_to_spin';
     const top2Entries: string[] = [];
 
+    const durationMs = this.options.getSpinDurationMs
+      ? await this.options.getSpinDurationMs(raffle)
+      : SPIN_DURATION_MS;
+
     const pending: PendingAnimation = {
       raffleId: raffle.id,
       sessionId: randomUUID(),
       targetEntryId: selectedEntry.id,
       targetEntryLabel: selectedEntry.displayName,
       targetRotationDeg: rotation,
-      durationMs: SPIN_DURATION_MS,
+      durationMs,
       startedAt,
       actionType,
       resultType,

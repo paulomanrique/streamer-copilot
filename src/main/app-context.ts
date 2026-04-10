@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { parseFile as parseAudioFile } from 'music-metadata';
 import type { OpenDialogOptions } from 'electron';
 
 import type { DatabaseHandle } from '../db/database.js';
@@ -85,6 +86,8 @@ interface AppContextOptions {
 }
 
 const CONTEXT_DIR = path.dirname(fileURLToPath(import.meta.url));
+// Maximum spin duration (corresponds to exactly 8 full rotations at reference speed).
+const MAX_SPIN_DURATION_MS = 8_000;
 
 // Resolves the absolute path for a bundled raffle sound.
 // In dev the public/ folder is served by Vite but the files live on disk there.
@@ -551,6 +554,17 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
             error: cause instanceof Error ? cause.message : String(cause),
           });
         }
+      }
+    },
+    getSpinDurationMs: async (raffle) => {
+      if (!raffle.spinSoundFile) return MAX_SPIN_DURATION_MS;
+      const filePath = resolveBundledSound('spinning', raffle.spinSoundFile);
+      try {
+        const meta = await parseAudioFile(filePath, { duration: true });
+        const soundDurationMs = (meta.format.duration ?? 0) * 1000;
+        return Math.min(soundDurationMs + 2_000, MAX_SPIN_DURATION_MS);
+      } catch {
+        return MAX_SPIN_DURATION_MS;
       }
     },
     onSoundEvent: (raffle, event) => {

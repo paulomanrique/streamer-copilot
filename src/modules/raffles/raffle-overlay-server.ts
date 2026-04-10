@@ -750,7 +750,11 @@ function applyState(state) {
 
   if (state.status === 'spinning' && state.sessionId && lastSessionId !== state.sessionId) {
     lastSessionId = state.sessionId;
-    var dur = (state.animation && state.animation.durationMs) ? state.animation.durationMs : 7000;
+    // MAX_SPIN_MS is the reference duration for exactly 8 full rotations.
+    // Shorter durations spin proportionally fewer rotations (min 1).
+    var MAX_SPIN_MS = 8000;
+    var dur = (state.animation && state.animation.durationMs) ? state.animation.durationMs : MAX_SPIN_MS;
+    var numRotations = Math.max(1, Math.round((Math.min(dur, MAX_SPIN_MS) / MAX_SPIN_MS) * 8));
 
     // Compute landing angle from targetEntryId + activeEntries
     var landingOffset = 0;
@@ -770,11 +774,11 @@ function applyState(state) {
     if (landingOffset < 60) landingOffset += 360;
 
     var prevRot = currentRotDeg;
-    var linearEnd = prevRot + 8 * 360;
+    var linearEnd = prevRot + numRotations * 360;
     var totalEnd = linearEnd + landingOffset;
     currentRotDeg = totalEnd;
 
-    // Phase 1 (82% of time): exactly 8 full rotations at constant speed
+    // Phase 1 (82% of time): numRotations full rotations at constant speed
     // Phase 2 (18% of time): ease-out deceleration to final position
     var anim = wheelEl.animate([
       { transform: 'rotate(' + prevRot + 'deg)', easing: 'linear', offset: 0 },

@@ -29,6 +29,7 @@
     "better-sqlite3": "^12.4.1",
     "electron-updater": "^6.8.3",
     "googleapis": "^171.4.0",
+    "music-metadata": "^11.12.3",
     "obs-websocket-js": "^5.0.8",
     "pusher-js": "^8.5.0",
     "react": "^19.0.0",
