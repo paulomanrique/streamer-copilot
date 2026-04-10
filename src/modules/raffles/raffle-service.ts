@@ -232,9 +232,8 @@ export class RaffleService implements CommandModule {
     if (activeEntries.length < minimum) {
       throw new Error(`At least ${minimum} participant(s) are required before closing entries`);
     }
-    const nextStatus = raffle.mode === 'survivor-final' && activeEntries.length === 2 ? 'paused_top2' : 'ready_to_spin';
-    this.options.repository.transitionStatus(raffle.id, nextStatus, {
-      top2EntryIds: nextStatus === 'paused_top2' ? activeEntries.map((entry) => entry.id) : [],
+    this.options.repository.transitionStatus(raffle.id, 'ready_to_spin', {
+      top2EntryIds: [],
     });
     this.emitActiveState();
   }
@@ -279,19 +278,11 @@ export class RaffleService implements CommandModule {
     const startedAt = new Date(this.now()).toISOString();
     const rotation = this.computeRotation(activeEntries, selectedEntry.id, roundNumber);
     const actionType: RaffleRoundActionType = requestedAction === 'finalize' ? 'finalize' : 'spin';
-    const resultType = requestedAction === 'finalize' || raffle.mode === 'single-winner' ? 'winner' : 'eliminated';
+    const isLastSurvivor = raffle.mode === 'survivor-final' && activeEntries.length <= 2;
+    const resultType = requestedAction === 'finalize' || raffle.mode === 'single-winner' || isLastSurvivor ? 'winner' : 'eliminated';
     const participantCountAfter = resultType === 'winner' ? Math.max(activeEntries.length - 1, 0) : activeEntries.length - 1;
-    const remainingAfter = activeEntries.length - 1;
-    const nextStatus: RaffleStatus =
-      resultType === 'winner'
-        ? 'completed'
-        : remainingAfter === 2
-          ? 'paused_top2'
-          : 'ready_to_spin';
-    const top2Entries =
-      nextStatus === 'paused_top2'
-        ? activeEntries.filter((entry) => entry.id !== selectedEntry.id).map((entry) => entry.id)
-        : [];
+    const nextStatus: RaffleStatus = resultType === 'winner' ? 'completed' : 'ready_to_spin';
+    const top2Entries: string[] = [];
 
     const pending: PendingAnimation = {
       raffleId: raffle.id,
