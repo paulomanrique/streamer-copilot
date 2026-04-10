@@ -7,7 +7,10 @@ on:
       - 'v*'
 
 permissions:
-  contents: read
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   package:
@@ -18,15 +21,41 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: macOS universal
-            os: macos-14
-            script: package:mac
-          - name: Windows NSIS
-            os: windows-2022
-            script: package:win
-          - name: Linux AppImage + deb
-            os: ubuntu-22.04
-            script: package:linux
+          - name: macOS arm64
+            os: macos-latest
+            platform: mac
+            arch_flag: '--arm64'
+            artifact_glob: release/*.dmg
+
+          - name: macOS x64
+            os: macos-latest
+            platform: mac
+            arch_flag: '--x64'
+            artifact_glob: release/*.dmg
+
+          - name: Windows x64
+            os: windows-latest
+            platform: win
+            arch_flag: '--x64'
+            artifact_glob: release/*.exe
+
+          - name: Windows arm64
+            os: windows-latest
+            platform: win
+            arch_flag: '--arm64'
+            artifact_glob: release/*.exe
+
+          - name: Linux x64
+            os: ubuntu-latest
+            platform: linux
+            arch_flag: '--x64'
+            artifact_glob: release/*.AppImage
+
+          - name: Linux arm64
+            os: ubuntu-24.04-arm
+            platform: linux
+            arch_flag: '--arm64'
+            artifact_glob: release/*.AppImage
 
     steps:
       - name: Checkout
@@ -35,18 +64,83 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libnotify-dev \
+            libnss3 \
+            libxss1 \
+            libxtst6 \
+            xauth \
+            xvfb \
+            python3 \
+            make \
+            g++
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Package
-        run: npm run ${{ matrix.script }}
+      - name: Set version from tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+
+      - name: Prepare macOS signing
+        if: matrix.platform == 'mac'
+        shell: bash
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          if [ -n "$MACOS_CERTIFICATE_P12" ] && [ -n "$MACOS_CERTIFICATE_PASSWORD" ]; then
+            {
+              echo "CSC_LINK<<EOF"
+              echo "$MACOS_CERTIFICATE_P12"
+              echo "EOF"
+              echo "CSC_KEY_PASSWORD=$MACOS_CERTIFICATE_PASSWORD"
+            } >> "$GITHUB_ENV"
+          else
+            echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+          fi
+
+          if [ -n "$APPLE_API_KEY_CONTENT" ] && [ -n "$APPLE_API_KEY_ID" ] && [ -n "$APPLE_API_ISSUER" ]; then
+            API_KEY_PATH="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
+            printf '%s' "$APPLE_API_KEY_CONTENT" > "$API_KEY_PATH"
+            chmod 600 "$API_KEY_PATH"
+            {
+              echo "APPLE_API_KEY=$API_KEY_PATH"
+              echo "APPLE_API_KEY_ID=$APPLE_API_KEY_ID"
+              echo "APPLE_API_ISSUER=$APPLE_API_ISSUER"
+            } >> "$GITHUB_ENV"
+          fi
+
+      - name: Package (tag release)
+        if: startsWith(github.ref, 'refs/tags/')
+        run: npm run build && npm run rebuild:native && npm exec electron-builder -- --${{ matrix.platform }} ${{ matrix.arch_flag }} --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package (manual build)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        run: npm run build && npm run rebuild:native && npm exec electron-builder -- --${{ matrix.platform }} ${{ matrix.arch_flag }} --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: streamer-copilot-${{ matrix.name }}
-          path: release/**
-          if-no-files-found: error
+          path: ${{ matrix.artifact_glob }}
+          if-no-files-found: ignore
+          retention-days: 30
