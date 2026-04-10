@@ -127,13 +127,13 @@ jobs:
 
       - name: Package (tag release)
         if: startsWith(github.ref, 'refs/tags/')
-        run: npm run build && npm run rebuild:native && npm exec electron-builder -- --${{ matrix.platform }} ${{ matrix.arch_flag }} --publish always
+        run: npm run build && npm run rebuild:native && npm run clean:release && npm exec electron-builder -- --${{ matrix.platform }} ${{ matrix.arch_flag }} --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Package (manual build)
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        run: npm run build && npm run rebuild:native && npm exec electron-builder -- --${{ matrix.platform }} ${{ matrix.arch_flag }} --publish never
+        run: npm run build && npm run rebuild:native && npm run clean:release && npm exec electron-builder -- --${{ matrix.platform }} ${{ matrix.arch_flag }} --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

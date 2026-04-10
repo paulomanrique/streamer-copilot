@@ -3,7 +3,10 @@
   "version": "0.0.1",
   "private": true,
   "description": "Desktop app for streamers with unified chat and automations",
-  "author": "Paulo Manrique",
+  "author": {
+    "name": "Paulo Manrique",
+    "email": "paulo@manriq.dev"
+  },
   "type": "module",
   "main": "dist/main/index.js",
   "scripts": {
@@ -14,6 +17,7 @@
     "build": "npm run build:renderer && npm run build:electron",
     "build:renderer": "vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
+    "clean:release": "node -e \"require('node:fs').rmSync('release', { recursive: true, force: true })\"",
     "start": "cross-env ELECTRON_RUN_AS_NODE= electron dist/main/index.js",
     "package": "npm run build && npm run rebuild:native && electron-builder --config electron-builder.yml",
     "package:mac": "npm run build && npm run rebuild:native && electron-builder --config electron-builder.yml --mac",
