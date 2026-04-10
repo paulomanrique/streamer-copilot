@@ -59,7 +59,7 @@ export const raffleCreateInputSchema = z.object({
   staffTriggerCommand: z.string().min(1).max(80),
   openAnnouncementTemplate: z.string().max(500).default(''),
   eliminationAnnouncementTemplate: z.string().max(500).default(''),
-  winnerAnnouncementTemplate: z.string().min(1).max(500),
+  winnerAnnouncementTemplate: z.string().max(500).default(''),
   enabled: z.boolean(),
 });
 

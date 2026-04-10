@@ -21,7 +21,7 @@ import type { CommandModule } from '../commands/command-dispatcher.js';
 import { type RaffleRepository, type RecordRoundInput } from './raffle-repository.js';
 
 const ACTIVE_STATUSES: RaffleStatus[] = ['collecting', 'ready_to_spin', 'spinning', 'paused_top2'];
-const SPIN_DURATION_MS = 6_200;
+const SPIN_DURATION_MS = 7_000;
 
 interface PendingAnimation {
   raffleId: string;
@@ -456,7 +456,7 @@ export class RaffleService implements CommandModule {
     );
     const arc = 360 / Math.max(entries.length, 1);
     const targetCenterDeg = index * arc + arc / 2;
-    const laps = 5 + roundNumber;
+    const laps = 8;
     return laps * 360 + (360 - targetCenterDeg);
   }
 

@@ -362,7 +362,6 @@ html, body {
   box-shadow:
     inset 0 0 20px rgba(0,0,0,0.35),
     0 0 20px rgba(0,0,0,0.3);
-  transition: transform 6200ms cubic-bezier(0.12, 0, 0.21, 1);
   background: var(--surface-2);
 }
 
@@ -573,6 +572,7 @@ var roundBadgeEl = document.getElementById('round-badge');
 var roundNumEl = document.getElementById('round-num');
 var lastSessionId = null;
 var lastEntriesKey = null;
+var currentRotDeg = 0;
 
 function statusLabel(status) {
   switch (status) {
@@ -750,10 +750,41 @@ function applyState(state) {
 
   if (state.status === 'spinning' && state.sessionId && lastSessionId !== state.sessionId) {
     lastSessionId = state.sessionId;
-    var dur = state.animation && state.animation.durationMs ? state.animation.durationMs : 6200;
-    var rot = state.animation && state.animation.targetRotationDeg != null ? state.animation.targetRotationDeg : 0;
-    wheelEl.style.transitionDuration = dur + 'ms';
-    wheelEl.style.transform = 'rotate(' + rot + 'deg)';
+    var dur = (state.animation && state.animation.durationMs) ? state.animation.durationMs : 7000;
+
+    // Compute landing angle from targetEntryId + activeEntries
+    var landingOffset = 0;
+    var entries2 = state.activeEntries || [];
+    var n2 = entries2.length;
+    if (n2 > 0 && state.animation && state.animation.targetEntryId) {
+      var targetIdx = -1;
+      for (var j = 0; j < n2; j++) {
+        if (entries2[j].id === state.animation.targetEntryId) { targetIdx = j; break; }
+      }
+      if (targetIdx >= 0) {
+        var arc2 = 360 / n2;
+        var targetCenter = targetIdx * arc2 + arc2 / 2;
+        landingOffset = (360 - targetCenter + 360) % 360;
+      }
+    }
+    if (landingOffset < 60) landingOffset += 360;
+
+    var prevRot = currentRotDeg;
+    var linearEnd = prevRot + 8 * 360;
+    var totalEnd = linearEnd + landingOffset;
+    currentRotDeg = totalEnd;
+
+    // Phase 1 (82% of time): exactly 8 full rotations at constant speed
+    // Phase 2 (18% of time): ease-out deceleration to final position
+    var anim = wheelEl.animate([
+      { transform: 'rotate(' + prevRot + 'deg)', easing: 'linear', offset: 0 },
+      { transform: 'rotate(' + linearEnd + 'deg)', easing: 'cubic-bezier(0, 0, 0.25, 1)', offset: 0.82 },
+      { transform: 'rotate(' + totalEnd + 'deg)', offset: 1 }
+    ], { duration: dur, fill: 'forwards' });
+    anim.addEventListener('finish', function() {
+      anim.commitStyles();
+      anim.cancel();
+    });
   } else if (state.status !== 'spinning') {
     lastSessionId = state.sessionId;
   }
