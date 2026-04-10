@@ -262,6 +262,9 @@ export interface Raffle {
   openAnnouncementTemplate: string;
   eliminationAnnouncementTemplate: string;
   winnerAnnouncementTemplate: string;
+  spinSoundFile: string | null;
+  eliminatedSoundFile: string | null;
+  winnerSoundFile: string | null;
   winnerEntryId: string | null;
   top2EntryIds: string[];
   entriesCount: number;
@@ -338,6 +341,9 @@ export interface RaffleCreateInput {
   openAnnouncementTemplate: string;
   eliminationAnnouncementTemplate: string;
   winnerAnnouncementTemplate: string;
+  spinSoundFile: string | null;
+  eliminatedSoundFile: string | null;
+  winnerSoundFile: string | null;
   enabled: boolean;
 }
 

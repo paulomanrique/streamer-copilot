@@ -60,6 +60,9 @@ export const raffleCreateInputSchema = z.object({
   openAnnouncementTemplate: z.string().max(500).default(''),
   eliminationAnnouncementTemplate: z.string().max(500).default(''),
   winnerAnnouncementTemplate: z.string().max(500).default(''),
+  spinSoundFile: z.string().max(200).nullable().default(null),
+  eliminatedSoundFile: z.string().max(200).nullable().default(null),
+  winnerSoundFile: z.string().max(200).nullable().default(null),
   enabled: z.boolean(),
 });
 

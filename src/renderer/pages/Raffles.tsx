@@ -28,6 +28,9 @@ const DEFAULT_FORM: RaffleCreateInput = {
   openAnnouncementTemplate: '',
   eliminationAnnouncementTemplate: '',
   winnerAnnouncementTemplate: 'Parabens {winner}, voce venceu o sorteio {title}!',
+  spinSoundFile: null,
+  eliminatedSoundFile: null,
+  winnerSoundFile: null,
   enabled: true,
 };
 
@@ -91,6 +94,9 @@ function createFormState(raffle: Raffle | null, platformOptions: PlatformOption[
     openAnnouncementTemplate: raffle.openAnnouncementTemplate,
     eliminationAnnouncementTemplate: raffle.eliminationAnnouncementTemplate,
     winnerAnnouncementTemplate: raffle.winnerAnnouncementTemplate,
+    spinSoundFile: raffle.spinSoundFile,
+    eliminatedSoundFile: raffle.eliminatedSoundFile,
+    winnerSoundFile: raffle.winnerSoundFile,
     enabled: raffle.enabled,
   };
 }
@@ -155,6 +161,7 @@ export function RafflesPage() {
   const [error, setError] = useState<string | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
+  const [availableSounds, setAvailableSounds] = useState<Record<'spinning' | 'eliminated' | 'winner', string[]>>({ spinning: [], eliminated: [], winner: [] });
 
   const selectedRaffle = useMemo(
     () => rows.find((raffle) => raffle.id === selectedRaffleId) ?? activeSnapshot?.raffle ?? null,
@@ -226,11 +233,13 @@ export function RafflesPage() {
   async function load(): Promise<void> {
     try {
       setError(null);
-      const [nextRows, active, nextPlatformOptions] = await Promise.all([
+      const [nextRows, active, nextPlatformOptions, sounds] = await Promise.all([
         window.copilot.listRaffles(),
         window.copilot.getActiveRaffle(),
         getConfiguredPlatformOptions(),
+        window.copilot.listRaffleSounds(),
       ]);
+      setAvailableSounds(sounds);
 
       setRows(nextRows);
       setPlatformOptions(nextPlatformOptions);
@@ -319,6 +328,9 @@ export function RafflesPage() {
         openAnnouncementTemplate: form.openAnnouncementTemplate.trim(),
         eliminationAnnouncementTemplate: form.eliminationAnnouncementTemplate.trim(),
         winnerAnnouncementTemplate: form.winnerAnnouncementTemplate.trim(),
+        spinSoundFile: form.spinSoundFile || null,
+        eliminatedSoundFile: form.eliminatedSoundFile || null,
+        winnerSoundFile: form.winnerSoundFile || null,
         enabled: form.enabled,
       };
 
@@ -725,6 +737,44 @@ export function RafflesPage() {
                   className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600"
                 />
                 <p className="text-xs text-gray-600 mt-1">Placeholders: <code>{'{winner}'}</code> and <code>{'{title}'}</code>.</p>
+              </div>
+
+              <div className="border-t border-gray-700 pt-4">
+                <p className="text-sm font-medium text-gray-300 mb-3">Sounds</p>
+                <div className="space-y-3">
+                  {(
+                    [
+                      { label: 'Spin sound', field: 'spinSoundFile' as const, event: 'spinning' as const },
+                      { label: 'Elimination sound', field: 'eliminatedSoundFile' as const, event: 'eliminated' as const },
+                      { label: 'Winner sound', field: 'winnerSoundFile' as const, event: 'winner' as const },
+                    ] as const
+                  ).map(({ label, field, event }) => (
+                    <div key={field} className="flex items-center gap-2">
+                      <label className="text-sm text-gray-400 w-36 shrink-0">{label}</label>
+                      <select
+                        value={form[field] ?? ''}
+                        onChange={(e) => updateForm(field, e.target.value || null)}
+                        className="flex-1 bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-1.5 focus:outline-none focus:border-violet-500"
+                      >
+                        <option value="">— none —</option>
+                        {availableSounds[event].map((filename) => (
+                          <option key={filename} value={filename}>{filename.replace(/\.[^.]+$/, '')}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        disabled={!form[field]}
+                        onClick={() => { if (form[field]) void window.copilot.previewRaffleSound(event, form[field]!); }}
+                        title="Preview"
+                        className="p-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <label className="inline-flex items-center gap-2 text-sm text-gray-300">

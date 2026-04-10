@@ -199,4 +199,13 @@ export const MIGRATIONS: SqlMigration[] = [
       ALTER TABLE raffles ADD COLUMN elimination_announcement_template TEXT NOT NULL DEFAULT '';
     `,
   },
+  {
+    version: 10,
+    name: 'raffle_sounds',
+    sql: `
+      ALTER TABLE raffles ADD COLUMN spin_sound_file TEXT;
+      ALTER TABLE raffles ADD COLUMN eliminated_sound_file TEXT;
+      ALTER TABLE raffles ADD COLUMN winner_sound_file TEXT;
+    `,
+  },
 ];

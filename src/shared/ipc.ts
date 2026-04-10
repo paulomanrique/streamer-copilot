@@ -75,6 +75,8 @@ export const IPC_CHANNELS = {
   rafflesState: 'raffles:state',
   rafflesEntry: 'raffles:entry',
   rafflesResult: 'raffles:result',
+  rafflesSoundsList: 'raffles:sounds-list',
+  rafflesSoundsPreview: 'raffles:sounds-preview',
   textList: 'text:list',
   textUpsert: 'text:upsert',
   textDelete: 'text:delete',
@@ -157,6 +159,8 @@ export interface CopilotApi {
   onRaffleState: (listener: (payload: RaffleSnapshot | null) => void) => () => void;
   onRaffleEntry: (listener: (payload: RaffleEntry) => void) => () => void;
   onRaffleResult: (listener: (payload: RaffleRoundResult) => void) => () => void;
+  listRaffleSounds: () => Promise<Record<'spinning' | 'eliminated' | 'winner', string[]>>;
+  previewRaffleSound: (event: 'spinning' | 'eliminated' | 'winner', filename: string) => Promise<void>;
   listTextCommands: () => Promise<TextCommand[]>;
   upsertTextCommand: (input: TextCommandUpsertInput) => Promise<TextCommand[]>;
   deleteTextCommand: (input: TextCommandDeleteInput) => Promise<TextCommand[]>;

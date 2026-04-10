@@ -75,6 +75,8 @@ const IPC_CHANNELS = {
   rafflesState: 'raffles:state',
   rafflesEntry: 'raffles:entry',
   rafflesResult: 'raffles:result',
+  rafflesSoundsList: 'raffles:sounds-list',
+  rafflesSoundsPreview: 'raffles:sounds-preview',
   textList: 'text:list',
   textUpsert: 'text:upsert',
   textDelete: 'text:delete',
@@ -168,6 +170,8 @@ const copilotApi: CopilotApi = {
     ipcRenderer.on(IPC_CHANNELS.rafflesResult, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.rafflesResult, wrappedListener); };
   },
+  listRaffleSounds: () => ipcRenderer.invoke(IPC_CHANNELS.rafflesSoundsList) as Promise<Record<'spinning' | 'eliminated' | 'winner', string[]>>,
+  previewRaffleSound: (event: 'spinning' | 'eliminated' | 'winner', filename: string) => ipcRenderer.invoke(IPC_CHANNELS.rafflesSoundsPreview, { event, filename }),
   listTextCommands: () => ipcRenderer.invoke(IPC_CHANNELS.textList) as Promise<TextCommand[]>,
   upsertTextCommand: (input: TextCommandUpsertInput) => ipcRenderer.invoke(IPC_CHANNELS.textUpsert, input),
   deleteTextCommand: (input: TextCommandDeleteInput) => ipcRenderer.invoke(IPC_CHANNELS.textDelete, input),

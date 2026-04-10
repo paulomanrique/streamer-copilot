@@ -49,6 +49,7 @@ interface RaffleServiceOptions {
   onAnnounceOpen: (raffle: Raffle) => Promise<void>;
   onAnnounceEliminated: (raffle: Raffle, eliminated: RaffleEntry) => Promise<void>;
   onAnnounceWinner: (raffle: Raffle, winner: RaffleEntry) => Promise<void>;
+  onSoundEvent?: (raffle: Raffle, event: 'spin' | 'eliminated' | 'winner') => void;
   onLog?: (level: 'info' | 'warn' | 'error', message: string, metadata?: Record<string, unknown>) => void;
   now?: () => number;
   random?: () => number;
@@ -308,6 +309,7 @@ export class RaffleService implements CommandModule {
       lastSpinAt: startedAt,
       top2EntryIds: raffle.top2EntryIds,
     });
+    this.options.onSoundEvent?.(raffle, 'spin');
     this.emitActiveState();
 
     const timer = setTimeout(() => {
@@ -369,6 +371,7 @@ export class RaffleService implements CommandModule {
     this.options.onState(nextSnapshot);
 
     const affectedEntry = nextSnapshot.entries.find((entry) => entry.id === entryId);
+    this.options.onSoundEvent?.(nextSnapshot.raffle, pending.resultType);
     if (pending.resultType === 'winner') {
       if (affectedEntry) {
         try {

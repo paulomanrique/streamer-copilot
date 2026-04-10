@@ -4,6 +4,7 @@ import { promises as fs } from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import type { OpenDialogOptions } from 'electron';
@@ -81,6 +82,39 @@ interface AppContextOptions {
   onGeneralSettingsChanged: (settings: import('../shared/types.js').GeneralSettings) => Promise<void> | void;
   stateHub: StateHub;
   userDataPath: string;
+}
+
+const CONTEXT_DIR = path.dirname(fileURLToPath(import.meta.url));
+
+// Resolves the absolute path for a bundled raffle sound.
+// In dev the public/ folder is served by Vite but the files live on disk there.
+// In production Vite copies public/ into dist/renderer/.
+function resolveBundledSound(event: 'spinning' | 'eliminated' | 'winner', filename: string): string {
+  const isDev = !!process.env.VITE_DEV_SERVER_URL;
+  const base = isDev
+    ? path.join(process.cwd(), 'public', 'sounds', 'raffles')
+    : path.join(CONTEXT_DIR, '..', 'renderer', 'sounds', 'raffles');
+  return path.join(base, event, filename);
+}
+
+async function listBundledSounds(): Promise<Record<'spinning' | 'eliminated' | 'winner', string[]>> {
+  const isDev = !!process.env.VITE_DEV_SERVER_URL;
+  const base = isDev
+    ? path.join(process.cwd(), 'public', 'sounds', 'raffles')
+    : path.join(CONTEXT_DIR, '..', 'renderer', 'sounds', 'raffles');
+
+  const events = ['spinning', 'eliminated', 'winner'] as const;
+  const result: Record<string, string[]> = {};
+  for (const event of events) {
+    try {
+      const dir = path.join(base, event);
+      const files = await fs.readdir(dir);
+      result[event] = files.filter((f) => /\.(mp3|wav|ogg)$/i.test(f)).sort();
+    } catch {
+      result[event] = [];
+    }
+  }
+  return result as Record<'spinning' | 'eliminated' | 'winner', string[]>;
 }
 
 export function createAppContext(options: AppContextOptions): () => Promise<void> {
@@ -519,6 +553,16 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         }
       }
     },
+    onSoundEvent: (raffle, event) => {
+      const soundFile =
+        event === 'spin' ? raffle.spinSoundFile
+        : event === 'eliminated' ? raffle.eliminatedSoundFile
+        : raffle.winnerSoundFile;
+      if (!soundFile) return;
+      const dir = event === 'spin' ? 'spinning' : event;
+      const filePath = resolveBundledSound(dir as 'spinning' | 'eliminated' | 'winner', soundFile);
+      options.stateHub.pushSoundPlay({ filePath });
+    },
     onLog: (level, message, metadata) => {
       if (level === 'error') logService.error('raffles', message, metadata);
       else if (level === 'warn') logService.warn('raffles', message, metadata);
@@ -598,6 +642,12 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.rafflesGetSnapshot, async (_, raw) => raffleService.getSnapshot(String(raw ?? '')));
   ipcMain.handle(IPC_CHANNELS.rafflesControl, async (_, raw) => raffleService.control(raffleControlActionInputSchema.parse(raw)));
   ipcMain.handle(IPC_CHANNELS.rafflesOverlayInfo, async (_, raw) => raffleService.getOverlayInfo(String(raw ?? '')));
+  ipcMain.handle(IPC_CHANNELS.rafflesSoundsList, async () => listBundledSounds());
+  ipcMain.handle(IPC_CHANNELS.rafflesSoundsPreview, async (_, raw) => {
+    const { event, filename } = raw as { event: 'spinning' | 'eliminated' | 'winner'; filename: string };
+    const filePath = resolveBundledSound(event, filename);
+    options.stateHub.pushSoundPlay({ filePath });
+  });
 
   ipcMain.handle(IPC_CHANNELS.textList, async () => textService.list());
   ipcMain.handle(IPC_CHANNELS.textUpsert, async (_, raw) => textService.upsert(textCommandUpsertInputSchema.parse(raw)));

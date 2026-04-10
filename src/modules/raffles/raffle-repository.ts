@@ -27,6 +27,9 @@ interface RaffleRow {
   open_announcement_template: string | null;
   elimination_announcement_template: string | null;
   winner_announcement_template: string;
+  spin_sound_file: string | null;
+  eliminated_sound_file: string | null;
+  winner_sound_file: string | null;
   winner_entry_id: string | null;
   top2_entry_ids_json: string;
   last_spin_at: string | null;
@@ -135,11 +138,14 @@ export class RaffleRepository {
             open_announcement_template,
             elimination_announcement_template,
             winner_announcement_template,
+            spin_sound_file,
+            eliminated_sound_file,
+            winner_sound_file,
             enabled,
             top2_entry_ids_json,
             created_at,
             updated_at
-          ) VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, '[]', datetime('now'), datetime('now'))
+          ) VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', datetime('now'), datetime('now'))
         `,
       )
       .run(
@@ -153,6 +159,9 @@ export class RaffleRepository {
         input.openAnnouncementTemplate,
         input.eliminationAnnouncementTemplate,
         input.winnerAnnouncementTemplate,
+        input.spinSoundFile ?? null,
+        input.eliminatedSoundFile ?? null,
+        input.winnerSoundFile ?? null,
         input.enabled ? 1 : 0,
       );
 
@@ -173,6 +182,9 @@ export class RaffleRepository {
               open_announcement_template = ?,
               elimination_announcement_template = ?,
               winner_announcement_template = ?,
+              spin_sound_file = ?,
+              eliminated_sound_file = ?,
+              winner_sound_file = ?,
               enabled = ?,
               updated_at = datetime('now')
           WHERE id = ?
@@ -188,6 +200,9 @@ export class RaffleRepository {
         input.openAnnouncementTemplate,
         input.eliminationAnnouncementTemplate,
         input.winnerAnnouncementTemplate,
+        input.spinSoundFile ?? null,
+        input.eliminatedSoundFile ?? null,
+        input.winnerSoundFile ?? null,
         input.enabled ? 1 : 0,
         input.id,
       );
@@ -459,6 +474,9 @@ export class RaffleRepository {
       openAnnouncementTemplate: row.open_announcement_template ?? '',
       eliminationAnnouncementTemplate: row.elimination_announcement_template ?? '',
       winnerAnnouncementTemplate: row.winner_announcement_template,
+      spinSoundFile: row.spin_sound_file ?? null,
+      eliminatedSoundFile: row.eliminated_sound_file ?? null,
+      winnerSoundFile: row.winner_sound_file ?? null,
       winnerEntryId: row.winner_entry_id,
       top2EntryIds: JSON.parse(row.top2_entry_ids_json || '[]') as string[],
       entriesCount: row.entries_count ?? 0,
