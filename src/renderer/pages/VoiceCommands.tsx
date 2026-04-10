@@ -14,6 +14,7 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
 
   // Existing singleton command
   const [commandId, setCommandId] = useState<string | undefined>(undefined);
+  const [commandLoaded, setCommandLoaded] = useState(false);
 
   // Form state
   const [enabled, setEnabled] = useState(true);
@@ -59,8 +60,10 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
           setTrigger(cmd.trigger);
           setSelectedVoiceName(cmd.language);
         }
+        setCommandLoaded(true);
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : 'Failed to load voice command');
+        setCommandLoaded(true);
       }
     };
 
@@ -81,13 +84,16 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
     void loadSoundTriggers();
   }, []);
 
-  // Auto-select first voice if none selected yet and voices loaded
+  // Sync selected voice only after both voices and the DB command have loaded.
+  // This prevents overwriting the saved voice when voices arrive before the DB load.
   useEffect(() => {
-    if (selectedVoiceName === '' && voices.length > 0) {
+    if (voices.length === 0 || !commandLoaded) return;
+    const match = voices.find((v) => v.name === selectedVoiceName);
+    if (!match) {
       const defaultVoice = voices.find((v) => v.default) ?? voices[0];
       setSelectedVoiceName(defaultVoice.name);
     }
-  }, [voices, selectedVoiceName]);
+  }, [voices, commandLoaded]);
 
   // ── Validation ───────────────────────────────────────────────────────
   const validateTrigger = (value: string): string | null => {

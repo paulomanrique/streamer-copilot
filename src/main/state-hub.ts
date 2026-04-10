@@ -76,8 +76,8 @@ export class StateHub {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.chatEvent, payload);
   }
 
-  pushTwitchStatus(status: TwitchConnectionStatus): void {
-    this.rendererWindow?.webContents.send(IPC_CHANNELS.twitchStatus, status);
+  pushTwitchStatus(status: TwitchConnectionStatus, channel?: string | null): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.twitchStatus, status, channel ?? null);
   }
 
   pushTwitchLiveStats(stats: TwitchLiveStats): void {

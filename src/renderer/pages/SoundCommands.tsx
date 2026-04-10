@@ -152,7 +152,7 @@ export function SoundCommandsPage() {
   return (
     <>
       <div className="p-6">
-        <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">Sound Commands</h2>
           <button
             type="button"
@@ -161,25 +161,6 @@ export function SoundCommandsPage() {
           >
             + New Command
           </button>
-        </div>
-        <p className="text-sm text-gray-400 mb-4">
-          Configure chat triggers that play copied audio files. Example:{' '}
-          <code className="text-violet-300 text-xs bg-gray-800 px-1 py-0.5 rounded">!cat</code>
-        </p>
-
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          <div className="bg-gray-800/40 rounded-xl border border-gray-700 p-4">
-            <p className="text-xs uppercase tracking-wider text-gray-500 mb-2">File Picker</p>
-            <p className="text-sm text-gray-300">Import `.mp3`, `.ogg`, or `.wav` and copy the asset into the app sounds folder.</p>
-          </div>
-          <div className="bg-gray-800/40 rounded-xl border border-gray-700 p-4">
-            <p className="text-xs uppercase tracking-wider text-gray-500 mb-2">Permissions</p>
-            <p className="text-sm text-gray-300">Use compact permission chips to define exactly who can trigger the command.</p>
-          </div>
-          <div className="bg-gray-800/40 rounded-xl border border-gray-700 p-4">
-            <p className="text-xs uppercase tracking-wider text-gray-500 mb-2">Test Action</p>
-            <p className="text-sm text-gray-300">Preview playback from the table before going live.</p>
-          </div>
         </div>
 
         <div className="bg-gray-800/40 rounded-xl border border-gray-700 overflow-hidden">

@@ -157,4 +157,46 @@ export const MIGRATIONS: SqlMigration[] = [
       ON raffle_rounds (raffle_id, round_number);
     `,
   },
+  {
+    version: 7,
+    name: 'create_chat_log',
+    sql: `
+      CREATE TABLE IF NOT EXISTS chat_sessions (
+        id TEXT PRIMARY KEY,
+        platform TEXT NOT NULL,
+        channel TEXT NOT NULL,
+        started_at TEXT NOT NULL DEFAULT (datetime('now')),
+        ended_at TEXT,
+        message_count INTEGER NOT NULL DEFAULT 0
+      );
+
+      CREATE TABLE IF NOT EXISTS chat_messages (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+        author TEXT NOT NULL,
+        content TEXT NOT NULL,
+        badges_json TEXT NOT NULL DEFAULT '[]',
+        avatar_url TEXT,
+        timestamp_label TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_chat_messages_session_created
+      ON chat_messages(session_id, created_at ASC);
+    `,
+  },
+  {
+    version: 8,
+    name: 'raffle_open_announcement',
+    sql: `
+      ALTER TABLE raffles ADD COLUMN open_announcement_template TEXT NOT NULL DEFAULT '';
+    `,
+  },
+  {
+    version: 9,
+    name: 'raffle_elimination_announcement',
+    sql: `
+      ALTER TABLE raffles ADD COLUMN elimination_announcement_template TEXT NOT NULL DEFAULT '';
+    `,
+  },
 ];

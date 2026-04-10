@@ -188,7 +188,7 @@ export function ScheduledMessagesPage() {
   return (
     <>
       <div className="p-6">
-        <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">Scheduled Messages</h2>
           <button
             type="button"
@@ -199,20 +199,6 @@ export function ScheduledMessagesPage() {
           >
             + New Message
           </button>
-        </div>
-        <p className="text-sm text-gray-400 mb-4">Messages automatically sent in chat at configured intervals.</p>
-
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          {[
-            { label: 'Interval', desc: 'Send on a fixed cadence in minutes.' },
-            { label: 'Random Window', desc: 'Add jitter so repeated promos feel less robotic.' },
-            { label: 'Targets', desc: 'Only connected targets can be saved. YouTube sends to active H/V streams.' },
-          ].map(({ label, desc }) => (
-            <div key={label} className="bg-gray-800/40 rounded-xl border border-gray-700 p-4">
-              <p className="text-xs uppercase tracking-wider text-gray-500 mb-2">{label}</p>
-              <p className="text-sm text-gray-300">{desc}</p>
-            </div>
-          ))}
         </div>
 
         {error ? <p className="mb-4 text-sm text-red-400">{error}</p> : null}

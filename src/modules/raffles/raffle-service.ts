@@ -46,6 +46,8 @@ interface RaffleServiceOptions {
   onState: (payload: RaffleSnapshot | null) => void;
   onEntry: (payload: RaffleEntry) => void;
   onResult: (payload: RaffleRoundResult) => void;
+  onAnnounceOpen: (raffle: Raffle) => Promise<void>;
+  onAnnounceEliminated: (raffle: Raffle, eliminated: RaffleEntry) => Promise<void>;
   onAnnounceWinner: (raffle: Raffle, winner: RaffleEntry) => Promise<void>;
   onLog?: (level: 'info' | 'warn' | 'error', message: string, metadata?: Record<string, unknown>) => void;
   now?: () => number;
@@ -212,6 +214,15 @@ export class RaffleService implements CommandModule {
       overlaySessionId: null,
     });
     this.emitActiveState();
+
+    if (raffle.openAnnouncementTemplate.trim()) {
+      void this.options.onAnnounceOpen(raffle).catch((error) => {
+        this.log('warn', 'Failed to send open announcement', {
+          raffleId: raffle.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
   }
 
   private closeEntries(raffle: Raffle): void {
@@ -364,13 +375,25 @@ export class RaffleService implements CommandModule {
     const nextSnapshot = this.getSnapshot(raffleId);
     this.options.onState(nextSnapshot);
 
+    const affectedEntry = nextSnapshot.entries.find((entry) => entry.id === entryId);
     if (pending.resultType === 'winner') {
-      const winner = nextSnapshot.entries.find((entry) => entry.id === entryId);
-      if (winner) {
+      if (affectedEntry) {
         try {
-          await this.options.onAnnounceWinner(nextSnapshot.raffle, winner);
+          await this.options.onAnnounceWinner(nextSnapshot.raffle, affectedEntry);
         } catch (error) {
           this.log('warn', 'Failed to announce raffle winner', {
+            raffleId,
+            entryId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    } else {
+      if (affectedEntry && nextSnapshot.raffle.eliminationAnnouncementTemplate.trim()) {
+        try {
+          await this.options.onAnnounceEliminated(nextSnapshot.raffle, affectedEntry);
+        } catch (error) {
+          this.log('warn', 'Failed to announce raffle elimination', {
             raffleId,
             entryId,
             error: error instanceof Error ? error.message : String(error),
@@ -396,7 +419,13 @@ export class RaffleService implements CommandModule {
       ? entries.find((entry) => entry.id === highlightedEntryId)?.displayName ?? null
       : null;
     const top2Entries = entries.filter((entry) => raffle.top2EntryIds.includes(entry.id));
-    const activeEntries = entries.filter((entry) => !entry.isEliminated && !entry.isWinner);
+    // Keep the winner visible on the wheel when the raffle is completed so the
+    // highlighted segment still exists. Eliminations only apply to survivor mode.
+    const activeEntries = entries.filter((entry) => {
+      if (entry.isEliminated) return false;
+      if (entry.isWinner && raffle.status !== 'completed') return false;
+      return true;
+    });
     return {
       raffleId: raffle.id,
       title: raffle.title,

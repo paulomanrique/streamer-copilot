@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
-import type { CopilotApi, RecentChatSnapshot } from '../shared/ipc.js';
+import type { CopilotApi, RecentChatSnapshot, ChatSession, ChatLogMessage } from '../shared/ipc.js';
 import type {
   ChatMessage,
   CloneProfileInput,
@@ -118,6 +118,10 @@ const IPC_CHANNELS = {
   youtubeGetSettings: 'youtube:get-settings',
   youtubeSaveSettings: 'youtube:save-settings',
   youtubeCheckLive: 'youtube:check-live',
+  chatLogListSessions: 'chatLog:list-sessions',
+  chatLogGetMessages: 'chatLog:get-messages',
+  chatLogExportSession: 'chatLog:export-session',
+  chatLogDeleteSession: 'chatLog:delete-session',
 } as const;
 
 const copilotApi: CopilotApi = {
@@ -234,8 +238,12 @@ const copilotApi: CopilotApi = {
   youtubeGetSettings: () => ipcRenderer.invoke(IPC_CHANNELS.youtubeGetSettings),
   youtubeSaveSettings: (settings) => ipcRenderer.invoke(IPC_CHANNELS.youtubeSaveSettings, settings),
   youtubeCheckLive: (handle) => ipcRenderer.invoke(IPC_CHANNELS.youtubeCheckLive, handle) as Promise<{ videoIds: string[] }>,
-  onTwitchStatus: (listener: (status: TwitchConnectionStatus) => void) => {
-    const wrappedListener = (_event: Electron.IpcRendererEvent, status: TwitchConnectionStatus) => listener(status);
+  chatLogListSessions: (filters?) => ipcRenderer.invoke(IPC_CHANNELS.chatLogListSessions, filters) as Promise<ChatSession[]>,
+  chatLogGetMessages: (sessionId, opts?) => ipcRenderer.invoke(IPC_CHANNELS.chatLogGetMessages, sessionId, opts) as Promise<ChatLogMessage[]>,
+  chatLogExportSession: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.chatLogExportSession, sessionId),
+  chatLogDeleteSession: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.chatLogDeleteSession, sessionId),
+  onTwitchStatus: (listener: (status: TwitchConnectionStatus, channel: string | null) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, status: TwitchConnectionStatus, channel: string | null) => listener(status, channel);
     ipcRenderer.on(IPC_CHANNELS.twitchStatus, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.twitchStatus, wrappedListener); };
   },

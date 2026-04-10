@@ -128,33 +128,48 @@ export class YouTubeScraper {
         
         function processElement(el) {
           if (!el || el.nodeType !== 1) return;
-          
+
           const tag = el.tagName.toLowerCase();
-          if (tag === 'yt-live-chat-text-message-renderer' || tag === 'yt-live-chat-paid-message-renderer') {
-            const id = el.getAttribute('id');
-            if (!id) return;
-            if (seenIds.has(id)) return;
-            seenIds.add(id);
+          const isChat = tag === 'yt-live-chat-text-message-renderer';
+          const isPaid = tag === 'yt-live-chat-paid-message-renderer';
+          const isMembership = tag === 'yt-live-chat-membership-item-renderer';
 
-            let author = el.querySelector('#author-name')?.textContent?.trim() || 'Anonymous';
-            if (author.startsWith('@')) author = author.substring(1);
+          if (!isChat && !isPaid && !isMembership) return;
 
-            const content = el.querySelector('#message')?.textContent?.trim() || '';
-            if (!content) return;
+          const id = el.getAttribute('id');
+          if (!id) return;
+          if (seenIds.has(id)) return;
+          seenIds.add(id);
 
-            const imgEl = el.querySelector('#author-photo img') || el.querySelector('img#img');
-            const avatarUrl = imgEl ? (imgEl.getAttribute('src') || imgEl.getAttribute('data-src')) : undefined;
+          let author = el.querySelector('#author-name')?.textContent?.trim() || 'Anonymous';
+          if (author.startsWith('@')) author = author.substring(1);
 
-            const badges = [];
-            const memberBadge = el.querySelector('yt-live-chat-author-badge-renderer[type="member"]');
-            if (memberBadge && memberBadge.children.length > 0) badges.push('member');
-            
-            if (el.querySelector('yt-live-chat-author-badge-renderer[type="moderator"]') || el.innerHTML.includes('M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm4.59-12.42L10 14.17l-2.59-2.58L6 13l4 4 8-8z')) {
-              badges.push('moderator');
-            }
+          let content = el.querySelector('#message')?.textContent?.trim() || '';
 
-            console.log('COPILOT_CHAT:' + JSON.stringify({ author, content, badges, avatarUrl }));
+          if (isMembership && !content) {
+            content = el.querySelector('#header-subtext')?.textContent?.trim() || 'Novo membro';
           }
+
+          if (isPaid && !content) {
+            const amount = el.querySelector('#purchase-amount')?.textContent?.trim();
+            content = amount ? 'Superchat: ' + amount : 'Superchat';
+          }
+
+          if (!content) return;
+
+          const imgEl = el.querySelector('#author-photo img') || el.querySelector('img#img');
+          const avatarUrl = imgEl ? (imgEl.getAttribute('src') || imgEl.getAttribute('data-src')) : undefined;
+
+          const badges = [];
+          const memberBadge = el.querySelector('yt-live-chat-author-badge-renderer[type="member"]');
+          if (memberBadge && memberBadge.children.length > 0) badges.push('member');
+          if (isMembership) badges.push('member');
+
+          if (el.querySelector('yt-live-chat-author-badge-renderer[type="moderator"]') || el.innerHTML.includes('M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm4.59-12.42L10 14.17l-2.59-2.58L6 13l4 4 8-8z')) {
+            badges.push('moderator');
+          }
+
+          console.log('COPILOT_CHAT:' + JSON.stringify({ author, content, badges, avatarUrl }));
         }
 
         function switchToLiveChat() {
@@ -184,7 +199,7 @@ export class YouTubeScraper {
               if (node.nodeType === 1) {
                 processElement(node);
                 // Deep search in case of batch updates
-                node.querySelectorAll?.('yt-live-chat-text-message-renderer, yt-live-chat-paid-message-renderer')
+                node.querySelectorAll?.('yt-live-chat-text-message-renderer, yt-live-chat-paid-message-renderer, yt-live-chat-membership-item-renderer')
                     .forEach(processElement);
               }
             });
@@ -195,7 +210,7 @@ export class YouTubeScraper {
         console.log('COPILOT_LOG: Body observer active');
 
         // Initial sweep
-        document.querySelectorAll('yt-live-chat-text-message-renderer, yt-live-chat-paid-message-renderer')
+        document.querySelectorAll('yt-live-chat-text-message-renderer, yt-live-chat-paid-message-renderer, yt-live-chat-membership-item-renderer')
                 .forEach(processElement);
 
         // Auto-switch and maintain

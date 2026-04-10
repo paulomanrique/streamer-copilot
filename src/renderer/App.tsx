@@ -60,6 +60,7 @@ export default function App() {
   const [voiceRate, setVoiceRate] = useState(1);
   const [voiceVolume, setVoiceVolume] = useState(0.8);
   const activeSoundsRef = useRef<HTMLAudioElement[]>([]);
+  const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
 
   const activeProfile = useMemo(
     () => profiles.find((profile) => profile.id === activeProfileId) ?? null,
@@ -127,6 +128,18 @@ export default function App() {
     });
   }, []);
 
+  // Keep a ref to the loaded voices list so the speak handler always has it,
+  // even if it fires before voices are cached in state.
+  useEffect(() => {
+    const load = () => {
+      const list = window.speechSynthesis.getVoices();
+      if (list.length > 0) voicesRef.current = list;
+    };
+    load();
+    window.speechSynthesis.addEventListener('voiceschanged', load);
+    return () => window.speechSynthesis.removeEventListener('voiceschanged', load);
+  }, []);
+
   useEffect(() => {
     const speak = (payload: VoiceSpeakPayload) => {
       if (!('speechSynthesis' in window) || typeof window.SpeechSynthesisUtterance !== 'function') {
@@ -135,13 +148,13 @@ export default function App() {
       }
 
       const utterance = new window.SpeechSynthesisUtterance(payload.text);
-      const allVoices = window.speechSynthesis.getVoices();
+      const allVoices = voicesRef.current.length > 0 ? voicesRef.current : window.speechSynthesis.getVoices();
       const matchedVoice = allVoices.find((v) => v.name === payload.lang);
       if (matchedVoice) {
         utterance.lang = matchedVoice.lang;  // must be set before .voice
         utterance.voice = matchedVoice;
       } else {
-        utterance.lang = payload.lang || languageCode;
+        utterance.lang = languageCode;
       }
       utterance.rate = voiceRate;
       utterance.volume = voiceVolume;
@@ -204,11 +217,9 @@ export default function App() {
   }, [setObsStats]);
 
   useEffect(() => {
-    const unsubStatus = window.copilot.onTwitchStatus((status) => {
+    const unsubStatus = window.copilot.onTwitchStatus((status, channel) => {
       setTwitchStatus(status);
-      void window.copilot.twitchGetCredentials().then((creds) => {
-        setTwitchChannel(creds?.channel ?? null);
-      });
+      setTwitchChannel(channel);
     });
     const unsubStats = window.copilot.onTwitchLiveStats(setTwitchLiveStats);
     const unsubYt = window.copilot.onYoutubeStatus(setYoutubeStreams);

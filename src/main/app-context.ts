@@ -10,6 +10,8 @@ import type { OpenDialogOptions } from 'electron';
 
 import type { DatabaseHandle } from '../db/database.js';
 import { ChatService } from '../modules/chat/chat-service.js';
+import { ChatLogRepository } from '../modules/chat-log/chat-log-repository.js';
+import { ChatLogService } from '../modules/chat-log/chat-log-service.js';
 import { LogRepository } from '../modules/logs/log-repository.js';
 import { LogService } from '../modules/logs/log-service.js';
 import { ObsService } from '../modules/obs/obs-service.js';
@@ -89,6 +91,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const obsSettingsStore = new ObsSettingsStore(appSettingsRepository);
   const logRepository = new LogRepository(options.databaseHandle.db);
   const logService = new LogService(logRepository);
+  const chatLogRepository = new ChatLogRepository(options.databaseHandle.db);
+  const chatLogService = new ChatLogService(chatLogRepository);
   const raffleRepository = new RaffleRepository(options.databaseHandle.db);
   const scheduledRepository = new ScheduledMessageRepository(options.databaseHandle.db);
   const soundRepository = new SoundCommandRepository(options.databaseHandle.db);
@@ -134,6 +138,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     },
   });
   let twitchStatus: TwitchConnectionStatus = 'disconnected';
+  let twitchChannel: string | null = null;
   let twitchStatsTimer: ReturnType<typeof setInterval> | null = null;
   const userAvatarCache = new Map<string, string>();
   const badgeCache = new Map<string, string>();
@@ -288,6 +293,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     for (const [videoId, scraper] of youtubeScrapers) {
       const updated = allLiveStreams.find((s) => s.videoId === videoId);
       if (!updated) {
+        const staleData = youtubeStreamData.get(videoId);
+        if (staleData) chatLogService.closeSession(staleData.platform);
         scraper.stop();
         youtubeScrapers.delete(videoId);
         youtubeStreamData.delete(videoId);
@@ -312,6 +319,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         channelHandle: allLiveStreams[i].channelHandle,
       });
       logService.info('youtube', `Auto-detected live (${platform}, label=${label}): ${videoId} — "${title}"`);
+      chatLogService.openSession(platform, videoId);
       const scraper = new YouTubeScraper({
         videoId,
         onMessage: (message) => {
@@ -411,9 +419,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     return entries.map((e) => badgeCache.get(e)).filter((url): url is string => Boolean(url));
   };
 
-  const setTwitchStatus = (status: TwitchConnectionStatus) => {
+  const setTwitchStatus = (status: TwitchConnectionStatus, channel?: string | null) => {
     twitchStatus = status;
-    options.stateHub.pushTwitchStatus(status);
+    if (channel !== undefined) twitchChannel = channel;
+    options.stateHub.pushTwitchStatus(status, twitchChannel);
     if (status === 'connected') {
       void (async () => {
         const store = await getTwitchCredentialsStore();
@@ -443,11 +452,63 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     onState: (payload) => options.stateHub.pushRaffleState(payload),
     onEntry: (payload) => options.stateHub.pushRaffleEntry(payload),
     onResult: (payload) => options.stateHub.pushRaffleResult(payload),
+    onAnnounceOpen: async (raffle) => {
+      const content = raffle.openAnnouncementTemplate
+        .replaceAll('{title}', raffle.title)
+        .replaceAll('{command}', raffle.entryCommand);
+      for (const target of resolveRaffleAnnouncementTargets(raffle.acceptedPlatforms)) {
+        try {
+          if (target === 'youtube' || target === 'youtube-v') {
+            const scraper = getYoutubeScraperByPlatform(target);
+            if (!scraper) throw new Error(`${target}: scraper not connected`);
+            await scraper.sendMessage(content);
+          } else {
+            await chatService.sendMessage(target, content);
+          }
+          await pushLocalOutboundMessage(target, content);
+        } catch (cause) {
+          logService.warn('raffles', 'Failed to send open announcement', {
+            raffleId: raffle.id,
+            platform: target,
+            error: cause instanceof Error ? cause.message : String(cause),
+          });
+        }
+      }
+    },
+    onAnnounceEliminated: async (raffle, eliminated) => {
+      const content = raffle.eliminationAnnouncementTemplate
+        .replaceAll('{eliminated}', eliminated.displayName)
+        .replaceAll('{title}', raffle.title);
+      for (const target of resolveRaffleAnnouncementTargets(raffle.acceptedPlatforms)) {
+        try {
+          if (target === 'youtube' || target === 'youtube-v') {
+            const scraper = getYoutubeScraperByPlatform(target);
+            if (!scraper) throw new Error(`${target}: scraper not connected`);
+            await scraper.sendMessage(content);
+          } else {
+            await chatService.sendMessage(target, content);
+          }
+          await pushLocalOutboundMessage(target, content);
+        } catch (cause) {
+          logService.warn('raffles', 'Failed to send elimination announcement', {
+            raffleId: raffle.id,
+            platform: target,
+            error: cause instanceof Error ? cause.message : String(cause),
+          });
+        }
+      }
+    },
     onAnnounceWinner: async (raffle, winner) => {
       const content = formatWinnerAnnouncement(raffle, winner.displayName);
       for (const target of resolveRaffleAnnouncementTargets(raffle.acceptedPlatforms)) {
         try {
-          await chatService.sendMessage(target, content);
+          if (target === 'youtube' || target === 'youtube-v') {
+            const scraper = getYoutubeScraperByPlatform(target);
+            if (!scraper) throw new Error(`${target}: scraper not connected`);
+            await scraper.sendMessage(content);
+          } else {
+            await chatService.sendMessage(target, content);
+          }
           await pushLocalOutboundMessage(target, content);
         } catch (cause) {
           logService.warn('raffles', 'Failed to send winner announcement', {
@@ -471,7 +532,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   const chatService = new ChatService({
     raffleService, soundService, textService, voiceService,
-    onMessage: (message) => options.stateHub.pushChatMessage(message),
+    onMessage: (message) => {
+      options.stateHub.pushChatMessage(message);
+      chatLogService.recordMessage(message);
+    },
     onEvent: (event) => options.stateHub.pushChatEvent(event),
   });
 
@@ -546,7 +610,22 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.voiceSetRendererCapabilities, async (_, raw) => { rendererSpeechSynthesisAvailable = rendererVoiceCapabilitiesSchema.parse(raw).speechSynthesisAvailable; });
 
   ipcMain.handle(IPC_CHANNELS.soundsList, async () => soundService.list());
-  ipcMain.handle(IPC_CHANNELS.soundsUpsert, async (_, raw) => soundService.upsert(soundCommandUpsertInputSchema.parse(raw)));
+  ipcMain.handle(IPC_CHANNELS.soundsUpsert, async (_, raw) => {
+    const input = soundCommandUpsertInputSchema.parse(raw);
+    const ext = path.extname(input.filePath);
+    const safeTrigger = input.trigger.replace(/^!+/, '').replace(/[^a-zA-Z0-9_\-]/g, '_') || 'sound';
+    const desiredPath = path.join(path.dirname(input.filePath), safeTrigger + ext);
+    let finalFilePath = input.filePath;
+    if (input.filePath !== desiredPath) {
+      try {
+        await fs.rename(input.filePath, desiredPath);
+        finalFilePath = desiredPath;
+      } catch {
+        // Keep original path if rename fails (e.g. file already at destination)
+      }
+    }
+    return soundService.upsert({ ...input, filePath: finalFilePath });
+  });
   ipcMain.handle(IPC_CHANNELS.soundsDelete, async (_, raw) => soundService.delete(soundCommandDeleteInputSchema.parse(raw).id));
   ipcMain.handle(IPC_CHANNELS.soundsPickFile, async (e) => {
     const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender)!, { properties: ['openFile'], filters: [{ name: 'Audio', extensions: ['mp3', 'ogg', 'wav'] }] });
@@ -573,17 +652,44 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
   ipcMain.handle(IPC_CHANNELS.logsList, async (_, raw) => logService.list(eventLogFiltersSchema.parse(raw)));
 
+  // Chat Log Handlers
+  ipcMain.handle(IPC_CHANNELS.chatLogListSessions, async (_, raw) => {
+    const filters = raw && typeof raw === 'object' && 'platform' in raw ? { platform: String((raw as Record<string, unknown>).platform) } : undefined;
+    return chatLogService.listSessions(filters);
+  });
+  ipcMain.handle(IPC_CHANNELS.chatLogGetMessages, async (_, sessionId, opts) => {
+    return chatLogService.getMessages(String(sessionId ?? ''), opts as { limit?: number; offset?: number } | undefined);
+  });
+  ipcMain.handle(IPC_CHANNELS.chatLogExportSession, async (e, sessionId) => {
+    const html = chatLogService.exportSessionHtml(String(sessionId ?? ''));
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const result = await dialog.showSaveDialog(win!, {
+      defaultPath: `chat-log-${sessionId}.html`,
+      filters: [{ name: 'HTML', extensions: ['html'] }],
+    });
+    if (!result.canceled && result.filePath) {
+      await fs.writeFile(result.filePath, html, 'utf-8');
+    }
+  });
+  ipcMain.handle(IPC_CHANNELS.chatLogDeleteSession, async (_, sessionId) => {
+    chatLogService.deleteSession(String(sessionId ?? ''));
+  });
+
   // Twitch Handlers
   ipcMain.handle(IPC_CHANNELS.twitchGetCredentials, async () => { const s = await getTwitchCredentialsStore(); return s ? s.load() : null; });
   ipcMain.handle(IPC_CHANNELS.twitchConnect, async (_, raw) => {
     const c = twitchCredentialsSchema.parse(raw);
     const s = await getTwitchCredentialsStore(); if (!s) throw new Error('No profile');
-    await s.save(c); setTwitchStatus('connecting');
+    await s.save(c); setTwitchStatus('connecting', c.channel);
     // Pre-load badges so first messages have badge images
     await loadTwitchBadges(c.channel, c.oauthToken.replace(/^oauth:/, ''));
+    chatLogService.openSession('twitch', c.channel);
     await chatService.replaceAdapter(createTwitchChatAdapter({ channels: [c.channel], username: c.username, password: c.oauthToken, onStatusChange: setTwitchStatus, resolveBadgeUrls }));
   });
-  ipcMain.handle(IPC_CHANNELS.twitchDisconnect, async () => { await chatService.removeAdapter('twitch'); setTwitchStatus('disconnected'); const s = await getTwitchCredentialsStore(); if (s) await s.clear(); });
+  ipcMain.handle(IPC_CHANNELS.twitchDisconnect, async () => {
+    chatLogService.closeSession('twitch');
+    await chatService.removeAdapter('twitch'); setTwitchStatus('disconnected', null); const s = await getTwitchCredentialsStore(); if (s) await s.clear();
+  });
   ipcMain.handle(IPC_CHANNELS.twitchGetStatus, async () => twitchStatus);
   ipcMain.handle(IPC_CHANNELS.twitchGetUserAvatars, async (_, logins) => {
     const list = Array.isArray(logins) ? logins.filter(l => typeof l === 'string') : [];
@@ -652,6 +758,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       const platform = YT_PLATFORMS[idx] ?? 'youtube-v';
       const label = String(idx + 1);
       youtubeStreamData.set(i.videoId, { label, viewerCount: null, platform, channelHandle: null });
+      chatLogService.openSession(platform, i.videoId);
       const scraper = new YouTubeScraper({
         videoId: i.videoId,
         onMessage: (m) => chatService.injectMessage({ id: `yt-${Date.now()}`, timestampLabel: fmt.format(new Date()), ...m, platform, streamLabel: label }),
@@ -663,6 +770,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     options.stateHub.pushYoutubeStatus(getYoutubeStreams());
   });
   ipcMain.handle(IPC_CHANNELS.youtubeDisconnect, async () => {
+    for (const [videoId] of youtubeScrapers) {
+      const data = youtubeStreamData.get(videoId);
+      if (data) chatLogService.closeSession(data.platform);
+    }
     for (const scraper of youtubeScrapers.values()) scraper.stop();
     youtubeScrapers.clear();
     youtubeStreamData.clear();
@@ -688,6 +799,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     try {
       const token = creds.oauthToken.replace(/^oauth:/, '');
       await loadTwitchBadges(creds.channel, token);
+      chatLogService.openSession('twitch', creds.channel);
+      twitchChannel = creds.channel;
       await chatService.replaceAdapter(createTwitchChatAdapter({
         channels: [creds.channel],
         username: creds.username,

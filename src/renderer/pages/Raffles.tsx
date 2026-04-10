@@ -25,6 +25,8 @@ const DEFAULT_FORM: RaffleCreateInput = {
   entryDeadlineAt: null,
   acceptedPlatforms: [],
   staffTriggerCommand: '!roll',
+  openAnnouncementTemplate: '',
+  eliminationAnnouncementTemplate: '',
   winnerAnnouncementTemplate: 'Parabens {winner}, voce venceu o sorteio {title}!',
   enabled: true,
 };
@@ -86,6 +88,8 @@ function createFormState(raffle: Raffle | null, platformOptions: PlatformOption[
     deadlineInput: toLocalInputValue(raffle.entryDeadlineAt),
     acceptedPlatforms: raffle.acceptedPlatforms.filter((platform) => defaultPlatforms.includes(platform)),
     staffTriggerCommand: raffle.staffTriggerCommand,
+    openAnnouncementTemplate: raffle.openAnnouncementTemplate,
+    eliminationAnnouncementTemplate: raffle.eliminationAnnouncementTemplate,
     winnerAnnouncementTemplate: raffle.winnerAnnouncementTemplate,
     enabled: raffle.enabled,
   };
@@ -168,7 +172,10 @@ export function RafflesPage() {
 
     const disconnectState = window.copilot.onRaffleState((payload) => {
       setActiveSnapshot(payload);
-      if (payload) setSelectedRaffleId((current) => current || payload.raffle.id);
+      if (payload) {
+        setSelectedRaffleId((current) => current || payload.raffle.id);
+        setSelectedSnapshot((current) => (current?.raffle.id === payload.raffle.id ? payload : current));
+      }
       void window.copilot.listRaffles().then(setRows).catch(() => {});
     });
     const disconnectEntry = window.copilot.onRaffleEntry((entry) => {
@@ -309,6 +316,8 @@ export function RafflesPage() {
         entryDeadlineAt: form.deadlineInput ? new Date(form.deadlineInput).toISOString() : null,
         acceptedPlatforms: form.acceptedPlatforms,
         staffTriggerCommand: form.staffTriggerCommand.trim(),
+        openAnnouncementTemplate: form.openAnnouncementTemplate.trim(),
+        eliminationAnnouncementTemplate: form.eliminationAnnouncementTemplate.trim(),
         winnerAnnouncementTemplate: form.winnerAnnouncementTemplate.trim(),
         enabled: form.enabled,
       };
@@ -375,91 +384,38 @@ export function RafflesPage() {
   return (
     <>
       <div className="p-6">
-        <div className="flex items-center justify-between mb-1">
-          <h2 className="text-lg font-semibold">Raffles</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold">Raffle</h2>
           <button
             type="button"
-            onClick={openCreate}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors"
+            onClick={rows[0] ? () => openEdit(rows[0]) : openCreate}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-sm font-medium transition-colors"
           >
-            + New Raffle
+            Edit Settings
           </button>
-        </div>
-        <p className="text-sm text-gray-400 mb-4">
-          Create giveaways with chat signups, run the wheel from the app, and publish the overlay to OBS as a Browser Source.
-        </p>
-
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          <div className="bg-gray-800/40 rounded-xl border border-gray-700 p-4">
-            <p className="text-xs uppercase tracking-wider text-gray-500 mb-2">Connections</p>
-            <p className="text-sm text-gray-300">
-              Accepted platforms come from what is already configured in <span className="text-violet-300">Connections</span>.
-            </p>
-          </div>
-          <div className="bg-gray-800/40 rounded-xl border border-gray-700 p-4">
-            <p className="text-xs uppercase tracking-wider text-gray-500 mb-2">Control</p>
-            <p className="text-sm text-gray-300">
-              Use app buttons or a moderator/broadcaster trigger command to close, spin, and finalize.
-            </p>
-          </div>
-          <div className="bg-gray-800/40 rounded-xl border border-gray-700 p-4">
-            <p className="text-xs uppercase tracking-wider text-gray-500 mb-2">OBS Overlay</p>
-            <p className="text-sm text-gray-300">
-              Copy the local URL into an OBS Browser Source and the wheel stays in sync with the active raffle.
-            </p>
-          </div>
         </div>
 
         {error ? <p className="mb-4 text-sm text-red-400">{error}</p> : null}
 
-        <div className="bg-gray-800/40 rounded-xl border border-gray-700 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-700 bg-gray-800/60">
-                {['Title', 'Entry', 'Mode', 'Platforms', 'Status', 'Entries', 'Deadline', 'Actions'].map((heading) => (
-                  <th key={heading} className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">{heading}</th>
+        {rows[0] ? (
+          <div className="bg-gray-800/40 rounded-xl border border-gray-700 p-4 flex items-center gap-4 mb-6">
+            <div className="flex-1 min-w-0">
+              <span className="text-gray-100 font-medium">{rows[0].title}</span>
+              <span className="ml-3 font-mono text-violet-300 text-sm">{rows[0].entryCommand}</span>
+              <span className="ml-3 text-gray-400 text-sm">{rows[0].mode === 'single-winner' ? 'Single winner' : 'Survivor final'}</span>
+              <div className="mt-1 flex gap-1 flex-wrap">
+                {rows[0].acceptedPlatforms.map((platform) => (
+                  <span key={platform} className="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{platform}</span>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.id} className={`border-b border-gray-800 hover:bg-gray-800/50 ${selectedRaffleId === row.id ? 'bg-gray-800/40' : ''}`}>
-                  <td className="px-4 py-3">
-                    <button type="button" onClick={() => setSelectedRaffleId(row.id)} className="text-left">
-                      <span className="block text-gray-100 font-medium">{row.title}</span>
-                      <span className="block text-xs text-gray-500">{row.staffTriggerCommand}</span>
-                    </button>
-                  </td>
-                  <td className="px-4 py-3 font-mono text-violet-300">{row.entryCommand}</td>
-                  <td className="px-4 py-3 text-gray-300">{row.mode === 'single-winner' ? 'Single winner' : 'Survivor final'}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-1 flex-wrap">
-                      {row.acceptedPlatforms.map((platform) => (
-                        <span key={platform} className="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">
-                          {platform}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-gray-300">{statusLabel(row.status)}</td>
-                  <td className="px-4 py-3 text-gray-400">{row.entriesCount} total · {row.activeEntriesCount} active</td>
-                  <td className="px-4 py-3 text-gray-400">{formatDateTime(row.entryDeadlineAt)}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      <button type="button" onClick={() => openEdit(row)} className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors">✏️</button>
-                      <button type="button" onClick={() => void deleteRaffle(row.id)} className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-red-700 text-gray-300 hover:text-white transition-colors">🗑️</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {rows.length === 0 ? (
-                <tr>
-                  <td className="px-4 py-4 text-sm text-gray-500" colSpan={8}>No raffles saved yet.</td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
+              </div>
+            </div>
+            <span className="text-sm text-gray-400">{statusLabel(rows[0].status)}</span>
+          </div>
+        ) : (
+          <div className="bg-gray-800/40 rounded-xl border border-gray-700 p-4 mb-6">
+            <p className="text-sm text-gray-500">No raffle configured yet. Click <strong className="text-gray-300">Edit Settings</strong> to set one up.</p>
+          </div>
+        )}
 
         {visibleSnapshot ? (
           <div className="mt-6 space-y-6">
@@ -610,12 +566,12 @@ export function RafflesPage() {
       {isModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="modal-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="relative bg-gray-900 border border-gray-700 rounded-xl w-full max-w-xl shadow-2xl">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700">
+          <div className="relative bg-gray-900 border border-gray-700 rounded-xl w-full max-w-xl shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700 shrink-0">
               <h3 className="font-semibold">{form.id ? 'Edit Raffle' : 'New Raffle'}</h3>
               <button type="button" onClick={closeModal} className="text-gray-400 hover:text-white">✕</button>
             </div>
-            <div className="p-5 space-y-4">
+            <div className="p-5 space-y-4 overflow-y-auto">
               <div>
                 <label className="block text-sm text-gray-400 mb-1.5">
                   Title <span className="text-violet-400">*</span>
@@ -719,11 +675,37 @@ export function RafflesPage() {
               </div>
 
               <div>
+                <label className="block text-sm text-gray-400 mb-1.5">Open Announcement</label>
+                <textarea
+                  value={form.openAnnouncementTemplate}
+                  onChange={(event) => updateForm('openAnnouncementTemplate', event.target.value)}
+                  rows={2}
+                  placeholder="Optional. Sent to chat when entries open."
+                  className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600"
+                />
+                <p className="text-xs text-gray-600 mt-1">Sent when the raffle opens. Placeholders: <code>{'{title}'}</code> and <code>{'{command}'}</code>.</p>
+              </div>
+
+              {form.mode === 'survivor-final' ? (
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1.5">Elimination Announcement</label>
+                  <textarea
+                    value={form.eliminationAnnouncementTemplate}
+                    onChange={(event) => updateForm('eliminationAnnouncementTemplate', event.target.value)}
+                    rows={2}
+                    placeholder="Optional. Sent to chat when a participant is eliminated."
+                    className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600"
+                  />
+                  <p className="text-xs text-gray-600 mt-1">Placeholders: <code>{'{eliminated}'}</code> and <code>{'{title}'}</code>.</p>
+                </div>
+              ) : null}
+
+              <div>
                 <label className="block text-sm text-gray-400 mb-1.5">Winner Announcement</label>
                 <textarea
                   value={form.winnerAnnouncementTemplate}
                   onChange={(event) => updateForm('winnerAnnouncementTemplate', event.target.value)}
-                  rows={3}
+                  rows={2}
                   className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600"
                 />
                 <p className="text-xs text-gray-600 mt-1">Placeholders: <code>{'{winner}'}</code> and <code>{'{title}'}</code>.</p>
@@ -737,7 +719,7 @@ export function RafflesPage() {
               {modalError ? <p className="text-sm text-red-400">{modalError}</p> : null}
             </div>
 
-            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-gray-700">
+            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-gray-700 shrink-0">
               <button type="button" onClick={closeModal} className="px-4 py-2 rounded bg-gray-700 text-sm text-gray-300 hover:bg-gray-600">
                 Cancel
               </button>

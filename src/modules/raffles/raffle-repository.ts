@@ -24,6 +24,8 @@ interface RaffleRow {
   entry_deadline_at: string | null;
   accepted_platforms_json: string;
   staff_trigger_command: string;
+  open_announcement_template: string | null;
+  elimination_announcement_template: string | null;
   winner_announcement_template: string;
   winner_entry_id: string | null;
   top2_entry_ids_json: string;
@@ -130,12 +132,14 @@ export class RaffleRepository {
             entry_deadline_at,
             accepted_platforms_json,
             staff_trigger_command,
+            open_announcement_template,
+            elimination_announcement_template,
             winner_announcement_template,
             enabled,
             top2_entry_ids_json,
             created_at,
             updated_at
-          ) VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, '[]', datetime('now'), datetime('now'))
+          ) VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, '[]', datetime('now'), datetime('now'))
         `,
       )
       .run(
@@ -146,6 +150,8 @@ export class RaffleRepository {
         input.entryDeadlineAt,
         JSON.stringify(input.acceptedPlatforms),
         input.staffTriggerCommand,
+        input.openAnnouncementTemplate,
+        input.eliminationAnnouncementTemplate,
         input.winnerAnnouncementTemplate,
         input.enabled ? 1 : 0,
       );
@@ -164,6 +170,8 @@ export class RaffleRepository {
               entry_deadline_at = ?,
               accepted_platforms_json = ?,
               staff_trigger_command = ?,
+              open_announcement_template = ?,
+              elimination_announcement_template = ?,
               winner_announcement_template = ?,
               enabled = ?,
               updated_at = datetime('now')
@@ -177,6 +185,8 @@ export class RaffleRepository {
         input.entryDeadlineAt,
         JSON.stringify(input.acceptedPlatforms),
         input.staffTriggerCommand,
+        input.openAnnouncementTemplate,
+        input.eliminationAnnouncementTemplate,
         input.winnerAnnouncementTemplate,
         input.enabled ? 1 : 0,
         input.id,
@@ -446,6 +456,8 @@ export class RaffleRepository {
       entryDeadlineAt: row.entry_deadline_at,
       acceptedPlatforms: JSON.parse(row.accepted_platforms_json) as PlatformId[],
       staffTriggerCommand: row.staff_trigger_command,
+      openAnnouncementTemplate: row.open_announcement_template ?? '',
+      eliminationAnnouncementTemplate: row.elimination_announcement_template ?? '',
       winnerAnnouncementTemplate: row.winner_announcement_template,
       winnerEntryId: row.winner_entry_id,
       top2EntryIds: JSON.parse(row.top2_entry_ids_json || '[]') as string[],

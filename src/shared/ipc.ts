@@ -44,6 +44,8 @@ import type {
   VoiceCommandUpsertInput,
   VoiceSpeakPayload,
 } from './types.js';
+import type { ChatSession, ChatLogMessage } from '../modules/chat-log/chat-log-service.js';
+export type { ChatSession, ChatLogMessage };
 
 export const IPC_CHANNELS = {
   appGetInfo: 'app:get-info',
@@ -116,6 +118,10 @@ export const IPC_CHANNELS = {
   youtubeGetSettings: 'youtube:get-settings',
   youtubeSaveSettings: 'youtube:save-settings',
   youtubeCheckLive: 'youtube:check-live',
+  chatLogListSessions: 'chatLog:list-sessions',
+  chatLogGetMessages: 'chatLog:get-messages',
+  chatLogExportSession: 'chatLog:export-session',
+  chatLogDeleteSession: 'chatLog:delete-session',
 } as const;
 
 export interface RecentChatSnapshot {
@@ -182,7 +188,7 @@ export interface CopilotApi {
   twitchConnect: (input: TwitchCredentials) => Promise<void>;
   twitchDisconnect: () => Promise<void>;
   twitchGetStatus: () => Promise<TwitchConnectionStatus>;
-  onTwitchStatus: (listener: (status: TwitchConnectionStatus) => void) => () => void;
+  onTwitchStatus: (listener: (status: TwitchConnectionStatus, channel: string | null) => void) => () => void;
   onTwitchLiveStats: (listener: (stats: TwitchLiveStats) => void) => () => void;
   onYoutubeStatus: (listener: (streams: import('./types.js').YouTubeStreamInfo[]) => void) => () => void;
   twitchGetUserAvatars: (logins: string[]) => Promise<Record<string, string>>;
@@ -195,4 +201,8 @@ export interface CopilotApi {
   youtubeGetSettings: () => Promise<import('./types.js').YouTubeSettings>;
   youtubeSaveSettings: (settings: import('./types.js').YouTubeSettings) => Promise<void>;
   youtubeCheckLive: (handle: string) => Promise<{ videoIds: string[] }>;
+  chatLogListSessions: (filters?: { platform?: string }) => Promise<ChatSession[]>;
+  chatLogGetMessages: (sessionId: string, opts?: { limit?: number; offset?: number }) => Promise<ChatLogMessage[]>;
+  chatLogExportSession: (sessionId: string) => Promise<void>;
+  chatLogDeleteSession: (sessionId: string) => Promise<void>;
 }

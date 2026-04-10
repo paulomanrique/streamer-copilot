@@ -259,6 +259,8 @@ export interface Raffle {
   entryDeadlineAt: string | null;
   acceptedPlatforms: PlatformId[];
   staffTriggerCommand: string;
+  openAnnouncementTemplate: string;
+  eliminationAnnouncementTemplate: string;
   winnerAnnouncementTemplate: string;
   winnerEntryId: string | null;
   top2EntryIds: string[];
@@ -333,6 +335,8 @@ export interface RaffleCreateInput {
   entryDeadlineAt: string | null;
   acceptedPlatforms: PlatformId[];
   staffTriggerCommand: string;
+  openAnnouncementTemplate: string;
+  eliminationAnnouncementTemplate: string;
   winnerAnnouncementTemplate: string;
   enabled: boolean;
 }

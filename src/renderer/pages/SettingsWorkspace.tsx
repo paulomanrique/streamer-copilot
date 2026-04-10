@@ -6,13 +6,14 @@ import { PlatformsSettingsPage } from './PlatformsSettings.js';
 import { SettingsProfilesPanel } from '../components/SettingsProfilesPanel.js';
 import { GeneralSettingsPage } from './GeneralSettings.js';
 import { ObsSettingsPage } from './ObsSettings.js';
+import { ChatLogsPage } from './ChatLogs.js';
 import { RafflesPage } from './Raffles.js';
 import { ScheduledMessagesPage } from './ScheduledMessages.js';
 import { SoundCommandsPage } from './SoundCommands.js';
 import { TextCommandsPage } from './TextCommands.js';
 import { VoiceCommandsPage } from './VoiceCommands.js';
 
-type SettingsView = 'general' | 'profiles' | 'platforms' | 'obs' | 'sound' | 'text' | 'voice' | 'scheduled' | 'raffles';
+type SettingsView = 'general' | 'profiles' | 'platforms' | 'obs' | 'sound' | 'text' | 'voice' | 'scheduled' | 'raffles' | 'chat-logs';
 
 interface SettingsWorkspaceProps {
   activeProfileId: string;
@@ -40,6 +41,39 @@ const SETTINGS_GROUPS: Array<{
   label: string;
   items: Array<{ id: SettingsView; label: string; icon: ReactElement }>;
 }> = [
+  {
+    label: 'App',
+    items: [
+      {
+        id: 'general',
+        label: 'General',
+        icon: (
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        ),
+      },
+      {
+        id: 'chat-logs',
+        label: 'Chat Logs',
+        icon: (
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+          </svg>
+        ),
+      },
+      {
+        id: 'profiles',
+        label: 'Profiles',
+        icon: (
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5V4H2v16h5m10 0v-2a4 4 0 00-8 0v2m8 0H9m8-10a4 4 0 11-8 0 4 4 0 018 0z" />
+          </svg>
+        ),
+      },
+    ],
+  },
   {
     label: 'Platforms',
     items: [
@@ -125,30 +159,6 @@ const SETTINGS_GROUPS: Array<{
       },
     ],
   },
-  {
-    label: 'App',
-    items: [
-      {
-        id: 'general',
-        label: 'General',
-        icon: (
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <circle cx="12" cy="12" r="3" />
-          </svg>
-        ),
-      },
-      {
-        id: 'profiles',
-        label: 'Profiles',
-        icon: (
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5V4H2v16h5m10 0v-2a4 4 0 00-8 0v2m8 0H9m8-10a4 4 0 11-8 0 4 4 0 018 0z" />
-          </svg>
-        ),
-      },
-    ],
-  },
 ];
 
 export function SettingsWorkspace(props: SettingsWorkspaceProps) {
@@ -185,7 +195,7 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
         </nav>
       </aside>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto">
         {currentView === 'general' ? <GeneralSettingsPage settings={props.generalSettings} onSave={props.onSaveGeneralSettings} /> : null}
         {currentView === 'profiles' ? (
           <SettingsProfilesPanel
@@ -217,6 +227,7 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
         ) : null}
         {currentView === 'scheduled' ? <ScheduledMessagesPage /> : null}
         {currentView === 'raffles' ? <RafflesPage /> : null}
+        {currentView === 'chat-logs' ? <ChatLogsPage /> : null}
       </div>
     </section>
   );
