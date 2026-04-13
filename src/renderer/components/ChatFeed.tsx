@@ -5,6 +5,9 @@ import type { ChatMessage, StreamEvent } from '../../shared/types.js';
 import { EventBanner } from './EventBanner.js';
 
 type FeedMode = 'all' | 'superchat';
+type OrderedFeedItem =
+  | { kind: 'message'; id: string; order: number; message: ChatMessage }
+  | { kind: 'event'; id: string; order: number; event: StreamEvent };
 
 interface ContextMenuState {
   visible: boolean;
@@ -189,6 +192,14 @@ function getPlatformDisplayName(platformId: string, connectedPlatforms: string[]
   return platformId;
 }
 
+function getReceivedOrder(item: ChatMessage | StreamEvent): number {
+  const withOrder = item as (ChatMessage | StreamEvent) & { receivedOrder?: number };
+  if (typeof withOrder.receivedOrder === 'number') return withOrder.receivedOrder;
+
+  const timestampPrefix = Number(item.id.match(/^\D*?(\d{10,})/)?.[1]);
+  return Number.isFinite(timestampPrefix) ? timestampPrefix : 0;
+}
+
 export function ChatFeed({ messages, events, connectedPlatforms }: ChatFeedProps) {
   const feedRef  = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -232,12 +243,20 @@ export function ChatFeed({ messages, events, connectedPlatforms }: ChatFeedProps
     (e) => allowedEventTypes.has(e.type) && platformFilter[platformKey(e.platform)] !== false,
   );
 
-  // Since store now appends to the end, and getRecent also returns them in chronological order,
-  // we just need to merge them and keep them in that order.
-  const items = [
-    ...visibleMessages.map((m) => ({ kind: 'message' as const, id: m.id, time: m.timestampLabel, message: m })),
-    ...visibleEvents.map((e)  => ({ kind: 'event'   as const, id: e.id, time: e.timestampLabel, event: e })),
-  ];
+  const items: OrderedFeedItem[] = [
+    ...visibleMessages.map((message) => ({
+      kind: 'message' as const,
+      id: message.id,
+      order: getReceivedOrder(message),
+      message,
+    })),
+    ...visibleEvents.map((event) => ({
+      kind: 'event' as const,
+      id: event.id,
+      order: getReceivedOrder(event),
+      event,
+    })),
+  ].sort((a, b) => a.order - b.order);
 
   // ── auto-scroll ────────────────────────────────────────────────────
   useEffect(() => {

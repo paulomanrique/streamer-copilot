@@ -17,6 +17,7 @@ const DEFAULT_OBS_STATS: ObsStatsSnapshot = {
 interface AppStore extends ProfilesSnapshot {
   chatMessages: ChatMessage[];
   chatEvents: StreamEvent[];
+  chatSequence: number;
   obsStats: ObsStatsSnapshot;
   twitchStatus: TwitchConnectionStatus;
   twitchChannel: string | null;
@@ -37,6 +38,7 @@ export const useAppStore = create<AppStore>((set) => ({
   activeProfileId: '',
   chatMessages: [],
   chatEvents: [],
+  chatSequence: 0,
   profiles: [],
   obsStats: DEFAULT_OBS_STATS,
   twitchStatus: 'disconnected',
@@ -53,21 +55,25 @@ export const useAppStore = create<AppStore>((set) => ({
       obsStats: typeof next === 'function' ? next(state.obsStats) : next,
     })),
   setChatSnapshot: (snapshot) =>
-    set({
-      chatMessages: snapshot.messages,
-      chatEvents: snapshot.events,
+    set((state) => {
+      let chatSequence = state.chatSequence;
+      return {
+        chatMessages: snapshot.messages.map((message) => ({ ...message, receivedOrder: chatSequence++ })),
+        chatEvents: snapshot.events.map((event) => ({ ...event, receivedOrder: chatSequence++ })),
+        chatSequence,
+      };
     }),
   appendChatMessage: (message) =>
     set((state) => {
-      const next = [...state.chatMessages, message];
+      const next = [...state.chatMessages, { ...message, receivedOrder: state.chatSequence }];
       if (next.length > 100) next.shift();
-      return { chatMessages: next };
+      return { chatMessages: next, chatSequence: state.chatSequence + 1 };
     }),
   appendChatEvent: (event) =>
     set((state) => {
-      const next = [...state.chatEvents, event];
+      const next = [...state.chatEvents, { ...event, receivedOrder: state.chatSequence }];
       if (next.length > 100) next.shift();
-      return { chatEvents: next };
+      return { chatEvents: next, chatSequence: state.chatSequence + 1 };
     }),
   setTwitchStatus: (status) => set({ twitchStatus: status }),
   setTwitchChannel: (channel) => set({ twitchChannel: channel }),
