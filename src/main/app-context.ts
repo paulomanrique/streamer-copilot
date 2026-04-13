@@ -22,8 +22,7 @@ import { RaffleDeadlineRunner } from '../modules/raffles/raffle-deadline-runner.
 import { RaffleOverlayServer } from '../modules/raffles/raffle-overlay-server.js';
 import { RaffleRepository } from '../modules/raffles/raffle-repository.js';
 import { RaffleService } from '../modules/raffles/raffle-service.js';
-import { ScheduledMessageRepository } from '../modules/scheduled/scheduled-repository.js';
-import { SchedulerService, type ScheduledRunState } from '../modules/scheduled/scheduler-service.js';
+import { SchedulerService, type ScheduledRunState, type ScheduledTask } from '../modules/scheduled/scheduler-service.js';
 import { AppSettingsRepository } from '../modules/settings/app-settings-repository.js';
 import { GeneralSettingsStore } from '../modules/settings/general-settings-store.js';
 import { ProfileStore } from '../modules/settings/profile-store.js';
@@ -58,8 +57,6 @@ import {
   soundCommandDeleteInputSchema,
   soundCommandUpsertInputSchema,
   soundPlayPayloadSchema,
-  scheduledMessageDeleteInputSchema,
-  scheduledMessageUpsertInputSchema,
   selectProfileInputSchema,
   textCommandDeleteInputSchema,
   textCommandUpsertInputSchema,
@@ -131,15 +128,17 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const chatLogRepository = new ChatLogRepository(options.databaseHandle.db);
   const chatLogService = new ChatLogService(chatLogRepository);
   const raffleRepository = new RaffleRepository(options.databaseHandle.db);
-  const scheduledRepository = new ScheduledMessageRepository(options.databaseHandle.db);
   const soundRepository = new SoundCommandRepository(options.databaseHandle.db);
   const textRepository = new TextCommandRepository(options.databaseHandle.db);
   const voiceRepository = new VoiceCommandRepository(options.databaseHandle.db);
   const schedulerService = new SchedulerService({
-    repository: scheduledRepository,
+    source: {
+      list: () => listCommandScheduleTasks(),
+      markSent: (id, sentAt) => markCommandScheduleSent(id, sentAt),
+    },
     onStatus: (items) => options.stateHub.pushScheduledStatus(items),
-    onDueMessage: (message) => dispatchScheduledMessageWithResult(message.message, message.targetPlatforms),
-    resolveEffectiveTargets: (message) => resolveDispatchTargets(message.targetPlatforms),
+    onDueTask: (task) => dispatchCommandScheduleWithResult(task),
+    resolveEffectiveTargets: (task) => resolveScheduledTaskTargets(task),
   });
   const soundService = new SoundService({
     repository: soundRepository,
@@ -649,13 +648,16 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     return saved;
   });
 
-  ipcMain.handle(IPC_CHANNELS.scheduledList, async () => schedulerService.list());
-  ipcMain.handle(IPC_CHANNELS.scheduledUpsert, async (_, raw) => schedulerService.upsert(scheduledMessageUpsertInputSchema.parse(raw)));
-  ipcMain.handle(IPC_CHANNELS.scheduledDelete, async (_, raw) => schedulerService.delete(scheduledMessageDeleteInputSchema.parse(raw).id));
-  ipcMain.handle(IPC_CHANNELS.scheduledGetAvailableTargets, async () => ({
-    supported: [...SCHEDULED_SUPPORTED_TARGETS],
-    connected: getConnectedScheduledTargets(),
-  }));
+  ipcMain.handle(IPC_CHANNELS.scheduledList, async () => []);
+  ipcMain.handle(IPC_CHANNELS.scheduledUpsert, async () => []);
+  ipcMain.handle(IPC_CHANNELS.scheduledDelete, async () => []);
+  ipcMain.handle(IPC_CHANNELS.scheduledGetAvailableTargets, async () => {
+    schedulerService.refreshStatus();
+    return {
+      supported: [...SCHEDULED_SUPPORTED_TARGETS],
+      connected: getConnectedScheduledTargets(),
+    };
+  });
 
   ipcMain.handle(IPC_CHANNELS.rafflesList, async () => raffleService.list());
   ipcMain.handle(IPC_CHANNELS.rafflesCreate, async (_, raw) => raffleService.create(raffleCreateInputSchema.parse(raw)));
@@ -673,8 +675,16 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
 
   ipcMain.handle(IPC_CHANNELS.textList, async () => textService.list());
-  ipcMain.handle(IPC_CHANNELS.textUpsert, async (_, raw) => textService.upsert(textCommandUpsertInputSchema.parse(raw)));
-  ipcMain.handle(IPC_CHANNELS.textDelete, async (_, raw) => textService.delete(textCommandDeleteInputSchema.parse(raw).id));
+  ipcMain.handle(IPC_CHANNELS.textUpsert, async (_, raw) => {
+    const result = textService.upsert(textCommandUpsertInputSchema.parse(raw));
+    schedulerService.refreshStatus();
+    return result;
+  });
+  ipcMain.handle(IPC_CHANNELS.textDelete, async (_, raw) => {
+    const result = textService.delete(textCommandDeleteInputSchema.parse(raw).id);
+    schedulerService.refreshStatus();
+    return result;
+  });
 
   ipcMain.handle(IPC_CHANNELS.voiceList, async () => voiceService.list());
   ipcMain.handle(IPC_CHANNELS.voiceUpsert, async (_, raw) => voiceService.upsert(voiceCommandUpsertInputSchema.parse(raw)));
@@ -686,8 +696,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.soundsUpsert, async (_, raw) => {
     const input = soundCommandUpsertInputSchema.parse(raw);
     const ext = path.extname(input.filePath);
-    const safeTrigger = input.trigger.replace(/^!+/, '').replace(/[^a-zA-Z0-9_\-]/g, '_') || 'sound';
-    const desiredPath = path.join(path.dirname(input.filePath), safeTrigger + ext);
+    const safeTrigger = (input.trigger ?? '').replace(/^!+/, '').replace(/[^a-zA-Z0-9_\-]/g, '_');
+    const desiredPath = safeTrigger ? path.join(path.dirname(input.filePath), safeTrigger + ext) : input.filePath;
     let finalFilePath = input.filePath;
     if (input.filePath !== desiredPath) {
       try {
@@ -697,9 +707,15 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         // Keep original path if rename fails (e.g. file already at destination)
       }
     }
-    return soundService.upsert({ ...input, filePath: finalFilePath });
+    const result = soundService.upsert({ ...input, filePath: finalFilePath });
+    schedulerService.refreshStatus();
+    return result;
   });
-  ipcMain.handle(IPC_CHANNELS.soundsDelete, async (_, raw) => soundService.delete(soundCommandDeleteInputSchema.parse(raw).id));
+  ipcMain.handle(IPC_CHANNELS.soundsDelete, async (_, raw) => {
+    const result = soundService.delete(soundCommandDeleteInputSchema.parse(raw).id);
+    schedulerService.refreshStatus();
+    return result;
+  });
   ipcMain.handle(IPC_CHANNELS.soundsPickFile, async (e) => {
     const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender)!, { properties: ['openFile'], filters: [{ name: 'Audio', extensions: ['mp3', 'ogg', 'wav'] }] });
     if (r.canceled) return null;
@@ -990,6 +1006,70 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       if (data?.platform === platform) return scraper;
     }
     return null;
+  }
+
+  function listCommandScheduleTasks(): ScheduledTask[] {
+    const textTasks = textRepository.list()
+      .filter((command) => command.enabled && command.schedule?.enabled)
+      .map((command) => ({
+        id: `text:${command.id}`,
+        intervalSeconds: command.schedule!.intervalSeconds,
+        randomWindowSeconds: command.schedule!.randomWindowSeconds,
+        targetPlatforms: command.schedule!.targetPlatforms,
+        enabled: true,
+        lastSentAt: command.schedule!.lastSentAt,
+      }));
+
+    const soundTasks = soundRepository.list()
+      .filter((command) => command.enabled && command.schedule?.enabled)
+      .map((command) => ({
+        id: `sound:${command.id}`,
+        intervalSeconds: command.schedule!.intervalSeconds,
+        randomWindowSeconds: command.schedule!.randomWindowSeconds,
+        targetPlatforms: [],
+        enabled: true,
+        lastSentAt: command.schedule!.lastSentAt,
+      }));
+
+    return [...textTasks, ...soundTasks];
+  }
+
+  function markCommandScheduleSent(id: string, sentAt: string): void {
+    const [kind, commandId] = splitScheduleTaskId(id);
+    if (kind === 'text') textRepository.markScheduleSent(commandId, sentAt);
+    if (kind === 'sound') soundRepository.markScheduleSent(commandId, sentAt);
+  }
+
+  function resolveScheduledTaskTargets(task: ScheduledTask): PlatformId[] {
+    if (task.id.startsWith('sound:')) return [];
+    return resolveDispatchTargets(task.targetPlatforms);
+  }
+
+  async function dispatchCommandScheduleWithResult(task: ScheduledTask): Promise<ScheduledRunState> {
+    const [kind, commandId] = splitScheduleTaskId(task.id);
+
+    if (kind === 'sound') {
+      const command = soundRepository.list().find((item) => item.id === commandId);
+      if (!command?.enabled || !command.schedule?.enabled) {
+        return { runAt: new Date().toISOString(), result: 'skipped', detail: 'Sound schedule is disabled or missing' };
+      }
+      options.stateHub.pushSoundPlay({ filePath: command.filePath });
+      logService.info('scheduled-sound', 'Played scheduled sound', { commandId, filePath: command.filePath });
+      return { runAt: new Date().toISOString(), result: 'sent', detail: 'played=[local]' };
+    }
+
+    const command = textRepository.list().find((item) => item.id === commandId);
+    if (!command?.enabled || !command.schedule?.enabled) {
+      return { runAt: new Date().toISOString(), result: 'skipped', detail: 'Text schedule is disabled or missing' };
+    }
+    return dispatchScheduledMessageWithResult(command.response, command.schedule.targetPlatforms);
+  }
+
+  function splitScheduleTaskId(id: string): ['text' | 'sound', string] {
+    const separatorIndex = id.indexOf(':');
+    const kind = id.slice(0, separatorIndex);
+    const commandId = id.slice(separatorIndex + 1);
+    return [kind === 'sound' ? 'sound' : 'text', commandId];
   }
 
   async function dispatchScheduledMessageWithResult(content: string, requestedTargets: PlatformId[]): Promise<ScheduledRunState> {

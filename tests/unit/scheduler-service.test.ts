@@ -1,19 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { ScheduledMessage } from '../../src/shared/types.js';
-import { SchedulerService } from '../../src/modules/scheduled/scheduler-service.js';
+import { SchedulerService, type ScheduledTask } from '../../src/modules/scheduled/scheduler-service.js';
 
 interface RepositoryLike {
-  list: () => ScheduledMessage[];
-  upsert: () => ScheduledMessage[];
-  delete: () => ScheduledMessage[];
+  list: () => ScheduledTask[];
   markSent: (id: string, sentAt: string) => void;
 }
 
-function createMessage(overrides: Partial<ScheduledMessage> = {}): ScheduledMessage {
+function createMessage(overrides: Partial<ScheduledTask> = {}): ScheduledTask {
   return {
     id: 'scheduled-1',
-    message: 'Follow the channel',
     intervalSeconds: 60,
     randomWindowSeconds: 0,
     targetPlatforms: ['twitch'],
@@ -23,11 +19,9 @@ function createMessage(overrides: Partial<ScheduledMessage> = {}): ScheduledMess
   };
 }
 
-function createRepository(messages: ScheduledMessage[]): RepositoryLike {
+function createRepository(messages: ScheduledTask[]): RepositoryLike {
   return {
     list: () => messages,
-    upsert: () => messages,
-    delete: () => messages,
     markSent: (id, sentAt) => {
       const target = messages.find((message) => message.id === id);
       if (target) target.lastSentAt = sentAt;
@@ -42,8 +36,8 @@ describe('SchedulerService', () => {
     const onDueMessage = vi.fn();
     const onStatus = vi.fn();
     const service = new SchedulerService({
-      repository: repository as never,
-      onDueMessage,
+      source: repository,
+      onDueTask: onDueMessage,
       onStatus,
       now: () => new Date('2026-04-08T07:00:30.000Z').getTime(),
     });
@@ -65,7 +59,7 @@ describe('SchedulerService', () => {
     const repository = createRepository(messages);
     const onStatus = vi.fn();
     const service = new SchedulerService({
-      repository: repository as never,
+      source: repository,
       onStatus,
       now: () => new Date('2026-04-08T07:00:10.000Z').getTime(),
     });
@@ -92,9 +86,9 @@ describe('SchedulerService', () => {
     const repository = createRepository(messages);
     const onDueMessage = vi.fn();
     const service = new SchedulerService({
-      repository: repository as never,
+      source: repository,
       onStatus: vi.fn(),
-      onDueMessage,
+      onDueTask: onDueMessage,
       now: () => new Date('2026-04-08T07:01:00.000Z').getTime(),
     });
 
@@ -109,9 +103,9 @@ describe('SchedulerService', () => {
     const repository = createRepository(messages);
     const onDueMessage = vi.fn();
     const service = new SchedulerService({
-      repository: repository as never,
+      source: repository,
       onStatus: vi.fn(),
-      onDueMessage,
+      onDueTask: onDueMessage,
       now: () => new Date('2026-04-08T07:00:10.000Z').getTime(),
     });
 
@@ -129,9 +123,9 @@ describe('SchedulerService', () => {
     const repository = createRepository(messages);
     const onDueMessage = vi.fn();
     const service = new SchedulerService({
-      repository: repository as never,
+      source: repository,
       onStatus: vi.fn(),
-      onDueMessage,
+      onDueTask: onDueMessage,
       now: () => new Date('2026-04-08T07:00:00.000Z').getTime(),
     });
 
@@ -146,9 +140,9 @@ describe('SchedulerService', () => {
     const repository = createRepository(messages);
     const onStatus = vi.fn();
     const service = new SchedulerService({
-      repository: repository as never,
+      source: repository,
       onStatus,
-      onDueMessage: async () => ({
+      onDueTask: async () => ({
         runAt: '2026-04-08T07:00:10.000Z',
         result: 'skipped',
         detail: 'No connected targets',

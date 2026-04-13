@@ -4,6 +4,8 @@ import { PERMISSION_LEVELS } from '../../shared/constants.js';
 import type {
   PermissionLevel,
   TextCommand,
+  ScheduledAvailableTargets,
+  ScheduledStatusItem,
   TextCommandUpsertInput,
 } from '../../shared/types.js';
 
@@ -12,8 +14,15 @@ const EMPTY_FORM: TextCommandUpsertInput = {
   response: '',
   permissions: ['everyone'],
   cooldownSeconds: 0,
+  commandEnabled: true,
+  schedule: null,
   enabled: true,
 };
+
+const SCHEDULE_PLATFORMS: { id: 'twitch' | 'youtube'; label: string }[] = [
+  { id: 'twitch', label: 'Twitch' },
+  { id: 'youtube', label: 'YouTube (H/V)' },
+];
 
 const PERMISSION_LABELS: Record<PermissionLevel, string> = {
   everyone: 'Everyone',
@@ -22,6 +31,13 @@ const PERMISSION_LABELS: Record<PermissionLevel, string> = {
   moderator: 'Moderators',
   broadcaster: 'Broadcaster',
 };
+
+function formatTime(value: string | null): string {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
 
 export function TextCommandsPage() {
   const triggerInputRef = useRef<HTMLInputElement | null>(null);
@@ -32,11 +48,18 @@ export function TextCommandsPage() {
   const [response, setResponse] = useState(EMPTY_FORM.response);
   const [levels, setLevels] = useState<PermissionLevel[]>(EMPTY_FORM.permissions);
   const [cooldownSeconds, setCooldownSeconds] = useState(EMPTY_FORM.cooldownSeconds);
+  const [commandEnabled, setCommandEnabled] = useState(EMPTY_FORM.commandEnabled);
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [scheduleIntervalMinutes, setScheduleIntervalMinutes] = useState(15);
+  const [scheduleRandomWindowMinutes, setScheduleRandomWindowMinutes] = useState(0);
+  const [schedulePlatforms, setSchedulePlatforms] = useState<('twitch' | 'youtube')[]>(['twitch', 'youtube']);
   const [enabled, setEnabled] = useState(EMPTY_FORM.enabled);
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [triggerError, setTriggerError] = useState<string | null>(null);
   const [occupiedTriggers, setOccupiedTriggers] = useState<Set<string>>(new Set());
+  const [statusById, setStatusById] = useState<Record<string, ScheduledStatusItem>>({});
+  const [availableTargets, setAvailableTargets] = useState<ScheduledAvailableTargets>({ supported: ['twitch', 'youtube'], connected: [] });
 
   useEffect(() => {
     const load = async () => {
@@ -49,6 +72,15 @@ export function TextCommandsPage() {
     };
 
     void load();
+
+    const disconnect = window.copilot.onScheduledStatus((items) => {
+      const next: Record<string, ScheduledStatusItem> = {};
+      for (const item of items) next[item.id] = item;
+      setStatusById(next);
+    });
+    void window.copilot.getScheduledAvailableTargets().then(setAvailableTargets).catch(() => null);
+
+    return () => disconnect();
   }, []);
 
   useEffect(() => {
@@ -61,11 +93,12 @@ export function TextCommandsPage() {
         ]);
         const skipId = draftId;
         const occupied = new Set<string>([
-          ...sounds.map((item) => item.trigger.toLowerCase()),
+          ...sounds.map((item) => item.trigger?.toLowerCase()).filter((item): item is string => Boolean(item)),
           ...voices.map((item) => item.trigger.toLowerCase()),
           ...texts
             .filter((item) => item.id !== skipId)
-            .map((item) => item.trigger.toLowerCase()),
+            .map((item) => item.trigger?.toLowerCase())
+            .filter((item): item is string => Boolean(item)),
         ]);
         setOccupiedTriggers(occupied);
       } catch {
@@ -77,6 +110,7 @@ export function TextCommandsPage() {
   }, [draftId, isModalOpen, rows]);
 
   const validateTrigger = (value: string): string | null => {
+    if (!commandEnabled) return null;
     const normalized = value.trim();
     if (!normalized.startsWith('!')) return 'Command must start with !';
     if (normalized.length < 2) return 'Command must have at least one character after !';
@@ -90,6 +124,11 @@ export function TextCommandsPage() {
     setResponse(EMPTY_FORM.response);
     setLevels(EMPTY_FORM.permissions);
     setCooldownSeconds(EMPTY_FORM.cooldownSeconds);
+    setCommandEnabled(EMPTY_FORM.commandEnabled);
+    setScheduleEnabled(false);
+    setScheduleIntervalMinutes(15);
+    setScheduleRandomWindowMinutes(0);
+    setSchedulePlatforms(['twitch', 'youtube']);
     setEnabled(EMPTY_FORM.enabled);
     setError(null);
     setTriggerError(null);
@@ -103,10 +142,15 @@ export function TextCommandsPage() {
 
   const openEdit = (command: TextCommand) => {
     setDraftId(command.id);
-    setTrigger(command.trigger);
+    setTrigger(command.trigger ?? '!');
     setResponse(command.response);
     setLevels(command.permissions);
     setCooldownSeconds(command.cooldownSeconds);
+    setCommandEnabled(command.commandEnabled);
+    setScheduleEnabled(Boolean(command.schedule?.enabled));
+    setScheduleIntervalMinutes(Math.round((command.schedule?.intervalSeconds ?? 900) / 60));
+    setScheduleRandomWindowMinutes(Math.round((command.schedule?.randomWindowSeconds ?? 0) / 60));
+    setSchedulePlatforms((command.schedule?.targetPlatforms.filter((item) => item === 'twitch' || item === 'youtube') as ('twitch' | 'youtube')[] | undefined) ?? ['twitch', 'youtube']);
     setEnabled(command.enabled);
     setError(null);
     setTriggerError(null);
@@ -114,7 +158,7 @@ export function TextCommandsPage() {
   };
 
   const saveCommand = async () => {
-    const nextError = validateTrigger(trigger);
+    const nextError = validateTrigger(trigger ?? '');
     if (nextError) {
       setTriggerError(nextError);
       triggerInputRef.current?.focus();
@@ -125,16 +169,37 @@ export function TextCommandsPage() {
       setError('Response text is required');
       return;
     }
+    if (!commandEnabled && !scheduleEnabled) {
+      setError('Enable command trigger or schedule');
+      return;
+    }
+    if (scheduleEnabled && schedulePlatforms.length === 0) {
+      setError('Select at least one schedule target');
+      return;
+    }
+    if (scheduleEnabled && scheduleIntervalMinutes < 1) {
+      setError('Schedule interval must be at least 1 minute');
+      return;
+    }
 
     setIsBusy(true);
 
     try {
       const commands = await window.copilot.upsertTextCommand({
         id: draftId,
-        trigger: trigger.trim(),
+        trigger: commandEnabled ? trigger?.trim() ?? null : null,
         response: response.trim(),
         permissions: levels,
         cooldownSeconds,
+        commandEnabled,
+        schedule: scheduleEnabled
+          ? {
+              intervalSeconds: scheduleIntervalMinutes * 60,
+              randomWindowSeconds: scheduleRandomWindowMinutes * 60,
+              targetPlatforms: schedulePlatforms,
+              enabled: true,
+            }
+          : null,
         enabled,
       });
       setRows(commands);
@@ -169,6 +234,12 @@ export function TextCommandsPage() {
     setLevels([...levels, level]);
   };
 
+  const toggleSchedulePlatform = (platform: 'twitch' | 'youtube') => {
+    setSchedulePlatforms((current) => (
+      current.includes(platform) ? current.filter((item) => item !== platform) : [...current, platform]
+    ));
+  };
+
   return (
     <>
       <div className="p-6">
@@ -193,10 +264,10 @@ export function TextCommandsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-700 bg-gray-800/60">
-                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Command</th>
+                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Modes</th>
                 <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Response</th>
                 <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Permissions</th>
-                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Cooldown</th>
+                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Schedule</th>
                 <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Active</th>
                 <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Actions</th>
               </tr>
@@ -204,7 +275,13 @@ export function TextCommandsPage() {
             <tbody>
               {rows.map((row) => (
                 <tr key={row.id} className="border-b border-gray-800 hover:bg-gray-800/50">
-                  <td className="px-4 py-3 font-mono text-violet-300">{row.trigger}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col gap-1">
+                      {row.commandEnabled && row.trigger ? <span className="font-mono text-violet-300">{row.trigger}</span> : null}
+                      {row.schedule?.enabled ? <span className="text-xs text-cyan-300">Scheduled</span> : null}
+                      {!row.commandEnabled && !row.schedule?.enabled ? <span className="text-xs text-gray-500">No mode</span> : null}
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-gray-300 max-w-xl truncate">{row.response}</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1 flex-wrap">
@@ -215,7 +292,13 @@ export function TextCommandsPage() {
                       ))}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-gray-400 text-sm">{row.cooldownSeconds}s</td>
+                  <td className="px-4 py-3 text-gray-400 text-sm">
+                    {row.schedule?.enabled ? (
+                      <span>{Math.round(row.schedule.intervalSeconds / 60)} min · next {formatTime(statusById[`text:${row.id}`]?.nextFireAt ?? null)}</span>
+                    ) : (
+                      <span>{row.cooldownSeconds}s cooldown</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <label className="toggle-switch">
                       <input type="checkbox" checked={row.enabled} readOnly />
@@ -263,18 +346,26 @@ export function TextCommandsPage() {
             <div className="p-5 space-y-4">
               <div>
                 <label className="block text-sm text-gray-400 mb-1.5">
-                  Command <span className="text-violet-400">*</span>
+                  Command trigger
+                </label>
+                <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer mb-2">
+                  <input type="checkbox" checked={commandEnabled} onChange={(event) => {
+                    setCommandEnabled(event.target.checked);
+                    if (!event.target.checked) setTriggerError(null);
+                  }} className="accent-violet-500" />
+                  Respond when chat sends this command
                 </label>
                 <input
                   ref={triggerInputRef}
                   type="text"
                   value={trigger}
+                  disabled={!commandEnabled}
                   onChange={(event) => {
                     setTrigger(event.target.value);
                     setTriggerError(validateTrigger(event.target.value));
                   }}
                   placeholder="!site"
-                  className={`w-full bg-gray-800 border rounded text-sm text-gray-300 px-3 py-2 focus:outline-none font-mono ${
+                  className={`w-full bg-gray-800 border rounded text-sm text-gray-300 px-3 py-2 focus:outline-none font-mono disabled:opacity-50 ${
                     triggerError ? 'border-red-500 focus:border-red-400' : 'border-gray-600 focus:border-violet-500'
                   }`}
                 />
@@ -324,9 +415,63 @@ export function TextCommandsPage() {
                   min={0}
                   max={3600}
                   value={cooldownSeconds}
+                  disabled={!commandEnabled}
                   onChange={(event) => setCooldownSeconds(Number(event.target.value))}
-                  className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
+                  className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 disabled:opacity-50"
                 />
+              </div>
+
+              <div className="rounded-lg border border-gray-700 bg-gray-800/40 p-3 space-y-3">
+                <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                  <input type="checkbox" checked={scheduleEnabled} onChange={(event) => setScheduleEnabled(event.target.checked)} className="accent-violet-500" />
+                  Send this response on a schedule
+                </label>
+                {scheduleEnabled ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-1.5">Interval (min)</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={scheduleIntervalMinutes}
+                          onChange={(event) => setScheduleIntervalMinutes(Number(event.target.value))}
+                          className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-1.5">Random Window (min)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={scheduleRandomWindowMinutes}
+                          onChange={(event) => setScheduleRandomWindowMinutes(Number(event.target.value))}
+                          className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-sm text-gray-400">Targets</p>
+                      {SCHEDULE_PLATFORMS.map(({ id, label }) => {
+                        const connected = availableTargets.connected.includes(id);
+                        return (
+                          <label key={id} className="flex items-center justify-between text-sm text-gray-300">
+                            <span>{label}</span>
+                            <span className="flex items-center gap-2">
+                              {!connected ? <span className="text-[11px] text-yellow-500">Disconnected</span> : null}
+                              <input
+                                type="checkbox"
+                                checked={schedulePlatforms.includes(id)}
+                                onChange={() => toggleSchedulePlatform(id)}
+                                className="accent-violet-500"
+                              />
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : null}
               </div>
 
               <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">

@@ -75,7 +75,7 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
     const loadSoundTriggers = async () => {
       try {
         const sounds = await window.copilot.listSoundCommands();
-        setSoundTriggers(new Set(sounds.map((s) => s.trigger.toLowerCase())));
+        setSoundTriggers(new Set(sounds.map((s) => s.trigger?.toLowerCase()).filter((trigger): trigger is string => Boolean(trigger))));
       } catch {
         // non-critical
       }

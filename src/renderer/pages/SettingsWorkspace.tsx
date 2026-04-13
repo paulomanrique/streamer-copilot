@@ -8,12 +8,11 @@ import { GeneralSettingsPage } from './GeneralSettings.js';
 import { ObsSettingsPage } from './ObsSettings.js';
 import { ChatLogsPage } from './ChatLogs.js';
 import { RafflesPage } from './Raffles.js';
-import { ScheduledMessagesPage } from './ScheduledMessages.js';
 import { SoundCommandsPage } from './SoundCommands.js';
 import { TextCommandsPage } from './TextCommands.js';
 import { VoiceCommandsPage } from './VoiceCommands.js';
 
-type SettingsView = 'general' | 'profiles' | 'platforms' | 'obs' | 'sound' | 'text' | 'voice' | 'scheduled' | 'raffles' | 'chat-logs';
+type SettingsView = 'general' | 'profiles' | 'platforms' | 'obs' | 'sound' | 'text' | 'voice' | 'raffles' | 'chat-logs';
 
 interface SettingsWorkspaceProps {
   activeProfileId: string;
@@ -133,15 +132,6 @@ const SETTINGS_GROUPS: Array<{
           </svg>
         ),
       },
-      {
-        id: 'scheduled',
-        label: 'Scheduled Messages',
-        icon: (
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        ),
-      },
     ],
   },
   {
@@ -225,7 +215,6 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
             onChangeVoiceVolume={props.onChangeVoiceVolume}
           />
         ) : null}
-        {currentView === 'scheduled' ? <ScheduledMessagesPage /> : null}
         {currentView === 'raffles' ? <RafflesPage /> : null}
         {currentView === 'chat-logs' ? <ChatLogsPage /> : null}
       </div>

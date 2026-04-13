@@ -158,6 +158,21 @@ export interface ScheduledAvailableTargets {
   connected: PlatformId[];
 }
 
+export interface CommandSchedule {
+  intervalSeconds: number;
+  randomWindowSeconds: number;
+  targetPlatforms: PlatformId[];
+  enabled: boolean;
+  lastSentAt: string | null;
+}
+
+export interface CommandScheduleUpsertInput {
+  intervalSeconds: number;
+  randomWindowSeconds: number;
+  targetPlatforms: PlatformId[];
+  enabled: boolean;
+}
+
 export interface VoiceCommand {
   id: string;
   trigger: string;
@@ -189,19 +204,23 @@ export interface VoiceSpeakPayload {
 
 export interface TextCommand {
   id: string;
-  trigger: string;
+  trigger: string | null;
   response: string;
   permissions: PermissionLevel[];
   cooldownSeconds: number;
+  commandEnabled: boolean;
+  schedule: CommandSchedule | null;
   enabled: boolean;
 }
 
 export interface TextCommandUpsertInput {
   id?: string;
-  trigger: string;
+  trigger: string | null;
   response: string;
   permissions: PermissionLevel[];
   cooldownSeconds: number;
+  commandEnabled: boolean;
+  schedule: CommandScheduleUpsertInput | null;
   enabled: boolean;
 }
 
@@ -220,19 +239,23 @@ export interface RendererVoiceCapabilities {
 
 export interface SoundCommand {
   id: string;
-  trigger: string;
+  trigger: string | null;
   filePath: string;
   permissions: PermissionLevel[];
   cooldownSeconds: number;
+  commandEnabled: boolean;
+  schedule: CommandSchedule | null;
   enabled: boolean;
 }
 
 export interface SoundCommandUpsertInput {
   id?: string;
-  trigger: string;
+  trigger: string | null;
   filePath: string;
   permissions: PermissionLevel[];
   cooldownSeconds: number;
+  commandEnabled: boolean;
+  schedule: CommandScheduleUpsertInput | null;
   enabled: boolean;
 }
 

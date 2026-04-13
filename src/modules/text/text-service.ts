@@ -60,6 +60,7 @@ export class TextService implements CommandModule {
     for (const command of commands) {
       const timestamp = this.now();
       if (!command.enabled) continue;
+      if (command.commandEnabled === false || !command.trigger) continue;
       if (!content.startsWith(command.trigger)) continue;
       if (!this.isAllowed(command.permissions, context.permissionLevel)) continue;
       if (!this.canRun(command, context.userId, timestamp)) continue;

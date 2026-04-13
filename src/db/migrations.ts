@@ -208,4 +208,23 @@ export const MIGRATIONS: SqlMigration[] = [
       ALTER TABLE raffles ADD COLUMN winner_sound_file TEXT;
     `,
   },
+  {
+    version: 11,
+    name: 'command_schedules',
+    sql: `
+      ALTER TABLE text_commands ADD COLUMN command_enabled INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE text_commands ADD COLUMN schedule_enabled INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE text_commands ADD COLUMN schedule_interval_seconds INTEGER;
+      ALTER TABLE text_commands ADD COLUMN schedule_random_window_seconds INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE text_commands ADD COLUMN schedule_target_platforms_json TEXT NOT NULL DEFAULT '["twitch","youtube"]';
+      ALTER TABLE text_commands ADD COLUMN schedule_last_sent_at TEXT;
+
+      ALTER TABLE sound_commands ADD COLUMN command_enabled INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE sound_commands ADD COLUMN schedule_enabled INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE sound_commands ADD COLUMN schedule_interval_seconds INTEGER;
+      ALTER TABLE sound_commands ADD COLUMN schedule_random_window_seconds INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE sound_commands ADD COLUMN schedule_target_platforms_json TEXT NOT NULL DEFAULT '[]';
+      ALTER TABLE sound_commands ADD COLUMN schedule_last_sent_at TEXT;
+    `,
+  },
 ];

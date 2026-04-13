@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { PERMISSION_LEVELS } from '../../shared/constants.js';
-import type { PermissionLevel, SoundCommand, SoundCommandUpsertInput } from '../../shared/types.js';
+import type { PermissionLevel, ScheduledStatusItem, SoundCommand, SoundCommandUpsertInput } from '../../shared/types.js';
 
 const EMPTY_FORM: SoundCommandUpsertInput = {
   trigger: '!',
   filePath: '',
   permissions: ['everyone'],
   cooldownSeconds: 0,
+  commandEnabled: true,
+  schedule: null,
   enabled: true,
 };
 
@@ -25,6 +27,13 @@ function getFileName(filePath: string): string {
   return segments[segments.length - 1] || filePath;
 }
 
+function formatTime(value: string | null): string {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
 export function SoundCommandsPage() {
   const triggerInputRef = useRef<HTMLInputElement | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -35,9 +44,14 @@ export function SoundCommandsPage() {
   const [filePath, setFilePath] = useState(EMPTY_FORM.filePath);
   const [cooldownSeconds, setCooldownSeconds] = useState(EMPTY_FORM.cooldownSeconds);
   const [userCooldownSeconds, setUserCooldownSeconds] = useState(30);
+  const [commandEnabled, setCommandEnabled] = useState(EMPTY_FORM.commandEnabled);
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [scheduleIntervalMinutes, setScheduleIntervalMinutes] = useState(15);
+  const [scheduleRandomWindowMinutes, setScheduleRandomWindowMinutes] = useState(0);
   const [enabled, setEnabled] = useState(EMPTY_FORM.enabled);
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [statusById, setStatusById] = useState<Record<string, ScheduledStatusItem>>({});
 
   useEffect(() => {
     const load = async () => {
@@ -50,6 +64,14 @@ export function SoundCommandsPage() {
     };
 
     void load();
+
+    const disconnect = window.copilot.onScheduledStatus((items) => {
+      const next: Record<string, ScheduledStatusItem> = {};
+      for (const item of items) next[item.id] = item;
+      setStatusById(next);
+    });
+
+    return () => disconnect();
   }, []);
 
   const resetForm = () => {
@@ -59,6 +81,10 @@ export function SoundCommandsPage() {
     setLevels(EMPTY_FORM.permissions);
     setCooldownSeconds(EMPTY_FORM.cooldownSeconds);
     setUserCooldownSeconds(30);
+    setCommandEnabled(EMPTY_FORM.commandEnabled);
+    setScheduleEnabled(false);
+    setScheduleIntervalMinutes(15);
+    setScheduleRandomWindowMinutes(0);
     setEnabled(EMPTY_FORM.enabled);
     setError(null);
   };
@@ -71,26 +97,58 @@ export function SoundCommandsPage() {
 
   const openEdit = (command: SoundCommand) => {
     setDraftId(command.id);
-    setTrigger(command.trigger);
+    setTrigger(command.trigger ?? '!');
     setFilePath(command.filePath);
     setLevels(command.permissions);
     setCooldownSeconds(command.cooldownSeconds);
     setUserCooldownSeconds(Math.max(command.cooldownSeconds, 5));
+    setCommandEnabled(command.commandEnabled);
+    setScheduleEnabled(Boolean(command.schedule?.enabled));
+    setScheduleIntervalMinutes(Math.round((command.schedule?.intervalSeconds ?? 900) / 60));
+    setScheduleRandomWindowMinutes(Math.round((command.schedule?.randomWindowSeconds ?? 0) / 60));
     setEnabled(command.enabled);
     setError(null);
     setIsModalOpen(true);
   };
 
   const saveCommand = async () => {
+    if (!commandEnabled && !scheduleEnabled) {
+      setError('Enable command trigger or schedule');
+      return;
+    }
+    if (commandEnabled) {
+      const normalizedTrigger = trigger?.trim() ?? '';
+      if (!normalizedTrigger.startsWith('!') || normalizedTrigger.length < 2) {
+        setError('Command must start with ! and include a trigger name');
+        return;
+      }
+    }
+    if (scheduleEnabled && scheduleIntervalMinutes < 1) {
+      setError('Schedule interval must be at least 1 minute');
+      return;
+    }
+    if (!filePath) {
+      setError('Pick a sound file before saving');
+      return;
+    }
     setIsBusy(true);
 
     try {
       const commands = await window.copilot.upsertSoundCommand({
         id: draftId,
-        trigger: trigger.trim(),
+        trigger: commandEnabled ? trigger?.trim() ?? null : null,
         filePath,
         permissions: levels,
         cooldownSeconds,
+        commandEnabled,
+        schedule: scheduleEnabled
+          ? {
+              intervalSeconds: scheduleIntervalMinutes * 60,
+              randomWindowSeconds: scheduleRandomWindowMinutes * 60,
+              targetPlatforms: [],
+              enabled: true,
+            }
+          : null,
         enabled,
       });
       setRows(commands);
@@ -167,10 +225,10 @@ export function SoundCommandsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-700 bg-gray-800/60">
-                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Command</th>
+                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Modes</th>
                 <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">File</th>
                 <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Permissions</th>
-                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Cooldown</th>
+                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Schedule</th>
                 <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Active</th>
                 <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Actions</th>
               </tr>
@@ -178,7 +236,13 @@ export function SoundCommandsPage() {
             <tbody>
               {rows.map((row) => (
                 <tr key={row.id} className="border-b border-gray-800 hover:bg-gray-800/50">
-                  <td className="px-4 py-3 font-mono text-violet-300">{row.trigger}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col gap-1">
+                      {row.commandEnabled && row.trigger ? <span className="font-mono text-violet-300">{row.trigger}</span> : null}
+                      {row.schedule?.enabled ? <span className="text-xs text-cyan-300">Scheduled</span> : null}
+                      {!row.commandEnabled && !row.schedule?.enabled ? <span className="text-xs text-gray-500">No mode</span> : null}
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-gray-300">{getFileName(row.filePath)}</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1 flex-wrap">
@@ -189,7 +253,13 @@ export function SoundCommandsPage() {
                       ))}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-gray-400 text-sm">{row.cooldownSeconds}s</td>
+                  <td className="px-4 py-3 text-gray-400 text-sm">
+                    {row.schedule?.enabled ? (
+                      <span>{Math.round(row.schedule.intervalSeconds / 60)} min · next {formatTime(statusById[`sound:${row.id}`]?.nextFireAt ?? null)}</span>
+                    ) : (
+                      <span>{row.cooldownSeconds}s cooldown</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <label className="toggle-switch">
                       <input type="checkbox" checked={row.enabled} readOnly />
@@ -244,15 +314,20 @@ export function SoundCommandsPage() {
             <div className="p-5 space-y-4">
               <div>
                 <label className="block text-sm text-gray-400 mb-1.5">
-                  Command <span className="text-violet-400">*</span>
+                  Command trigger
+                </label>
+                <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer mb-2">
+                  <input type="checkbox" checked={commandEnabled} onChange={(event) => setCommandEnabled(event.target.checked)} className="accent-violet-500" />
+                  Play when chat sends this command
                 </label>
                 <input
                   ref={triggerInputRef}
                   type="text"
                   value={trigger}
+                  disabled={!commandEnabled}
                   onChange={(event) => setTrigger(event.target.value)}
                   placeholder="!cat"
-                  className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600 font-mono"
+                  className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 placeholder-gray-600 font-mono disabled:opacity-50"
                 />
               </div>
               <div>
@@ -308,8 +383,9 @@ export function SoundCommandsPage() {
                     type="number"
                     min="0"
                     value={cooldownSeconds}
+                    disabled={!commandEnabled}
                     onChange={(event) => setCooldownSeconds(Number(event.target.value))}
-                    className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
+                    className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 disabled:opacity-50"
                   />
                 </div>
                 <div>
@@ -318,14 +394,45 @@ export function SoundCommandsPage() {
                     type="number"
                     min="0"
                     value={userCooldownSeconds}
+                    disabled={!commandEnabled}
                     onChange={(event) => setUserCooldownSeconds(Number(event.target.value))}
-                    className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
+                    className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 disabled:opacity-50"
                   />
                 </div>
               </div>
+              <div className="rounded-lg border border-gray-700 bg-gray-800/40 p-3 space-y-3">
+                <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                  <input type="checkbox" checked={scheduleEnabled} onChange={(event) => setScheduleEnabled(event.target.checked)} className="accent-violet-500" />
+                  Play this sound on a schedule
+                </label>
+                {scheduleEnabled ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1.5">Interval (min)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={scheduleIntervalMinutes}
+                        onChange={(event) => setScheduleIntervalMinutes(Number(event.target.value))}
+                        className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1.5">Random Window (min)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={scheduleRandomWindowMinutes}
+                        onChange={(event) => setScheduleRandomWindowMinutes(Number(event.target.value))}
+                        className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
+                      />
+                    </div>
+                  </div>
+                ) : null}
+              </div>
               <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
                 <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} className="accent-violet-500" />
-                Active command
+                Active
               </label>
               {error ? <p className="text-sm text-red-300">{error}</p> : null}
             </div>

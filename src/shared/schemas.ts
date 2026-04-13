@@ -100,11 +100,30 @@ export const voiceSpeakPayloadSchema = z.object({
 
 export const textCommandUpsertInputSchema = z.object({
   id: z.string().min(1).optional(),
-  trigger: z.string().min(1).max(80),
+  trigger: z.string().max(80).nullable(),
   response: z.string().min(1).max(500),
   permissions: z.array(permissionLevelSchema).min(1),
   cooldownSeconds: z.number().int().min(0).max(3600),
+  commandEnabled: z.boolean(),
+  schedule: z.object({
+    intervalSeconds: z.number().int().min(5),
+    randomWindowSeconds: z.number().int().min(0).max(3600),
+    targetPlatforms: z.array(scheduledTargetPlatformSchema).min(1),
+    enabled: z.boolean(),
+  }).nullable(),
   enabled: z.boolean(),
+}).superRefine((input, ctx) => {
+  const trigger = input.trigger?.trim() ?? '';
+  if (input.commandEnabled) {
+    if (!trigger.startsWith('!')) {
+      ctx.addIssue({ code: 'custom', path: ['trigger'], message: 'Command must start with !' });
+    } else if (trigger.length < 2) {
+      ctx.addIssue({ code: 'custom', path: ['trigger'], message: 'Command must have at least one character after !' });
+    }
+  }
+  if (!input.commandEnabled && !input.schedule?.enabled) {
+    ctx.addIssue({ code: 'custom', path: ['schedule'], message: 'Enable a command trigger or a schedule' });
+  }
 });
 
 export const textCommandDeleteInputSchema = z.object({
@@ -117,11 +136,30 @@ export const rendererVoiceCapabilitiesSchema = z.object({
 
 export const soundCommandUpsertInputSchema = z.object({
   id: z.string().min(1).optional(),
-  trigger: z.string().min(1).max(80),
+  trigger: z.string().max(80).nullable(),
   filePath: z.string().min(1),
   permissions: z.array(permissionLevelSchema).min(1),
   cooldownSeconds: z.number().int().min(0).max(3600),
+  commandEnabled: z.boolean(),
+  schedule: z.object({
+    intervalSeconds: z.number().int().min(5),
+    randomWindowSeconds: z.number().int().min(0).max(3600),
+    targetPlatforms: z.array(scheduledTargetPlatformSchema).default([]),
+    enabled: z.boolean(),
+  }).nullable(),
   enabled: z.boolean(),
+}).superRefine((input, ctx) => {
+  const trigger = input.trigger?.trim() ?? '';
+  if (input.commandEnabled) {
+    if (!trigger.startsWith('!')) {
+      ctx.addIssue({ code: 'custom', path: ['trigger'], message: 'Command must start with !' });
+    } else if (trigger.length < 2) {
+      ctx.addIssue({ code: 'custom', path: ['trigger'], message: 'Command must have at least one character after !' });
+    }
+  }
+  if (!input.commandEnabled && !input.schedule?.enabled) {
+    ctx.addIssue({ code: 'custom', path: ['schedule'], message: 'Enable a command trigger or a schedule' });
+  }
 });
 
 export const soundCommandDeleteInputSchema = z.object({
