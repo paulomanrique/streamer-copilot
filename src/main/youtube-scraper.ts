@@ -1,9 +1,10 @@
 import { BrowserWindow } from 'electron';
-import type { ChatMessage, ChatBadge } from '../shared/types.js';
+import type { ChatMessage, ChatBadge, StreamEvent } from '../shared/types.js';
 
 export interface YouTubeScraperOptions {
   videoId: string;
   onMessage: (message: Omit<ChatMessage, 'id' | 'timestampLabel'>) => void;
+  onEvent?: (event: Omit<StreamEvent, 'id' | 'timestampLabel'>) => void;
   onLog?: (message: string) => void;
 }
 
@@ -54,6 +55,19 @@ export class YouTubeScraper {
           });
         } catch (e) {
           this.options.onLog?.(`Failed to parse scraped message: ${String(e)}`);
+        }
+      } else if (message.startsWith('COPILOT_EVENT:')) {
+        try {
+          const raw = JSON.parse(message.substring('COPILOT_EVENT:'.length));
+          this.options.onEvent?.({
+            platform: 'youtube',
+            type: raw.type,
+            author: raw.author,
+            amount: raw.amount,
+            message: raw.message,
+          });
+        } catch (e) {
+          this.options.onLog?.(`Failed to parse scraped event: ${String(e)}`);
         }
       } else if (message.startsWith('COPILOT_LOG:')) {
         this.options.onLog?.(message.substring('COPILOT_LOG:'.length).trim());
@@ -132,9 +146,10 @@ export class YouTubeScraper {
           const tag = el.tagName.toLowerCase();
           const isChat = tag === 'yt-live-chat-text-message-renderer';
           const isPaid = tag === 'yt-live-chat-paid-message-renderer';
+          const isPaidSticker = tag === 'yt-live-chat-paid-sticker-renderer';
           const isMembership = tag === 'yt-live-chat-membership-item-renderer';
 
-          if (!isChat && !isPaid && !isMembership) return;
+          if (!isChat && !isPaid && !isPaidSticker && !isMembership) return;
 
           const id = el.getAttribute('id');
           if (!id) return;
@@ -155,6 +170,11 @@ export class YouTubeScraper {
             content = amount ? 'Superchat: ' + amount : 'Superchat';
           }
 
+          if (isPaidSticker && !content) {
+            const amount = el.querySelector('#purchase-amount')?.textContent?.trim();
+            content = amount ? 'Super Sticker: ' + amount : 'Super Sticker';
+          }
+
           if (!content) return;
 
           const imgEl = el.querySelector('#author-photo img') || el.querySelector('img#img');
@@ -169,7 +189,38 @@ export class YouTubeScraper {
             badges.push('moderator');
           }
 
+          if (isPaid || isPaidSticker) {
+            const amountText = el.querySelector('#purchase-amount')?.textContent?.trim() || '';
+            const message = el.querySelector('#message')?.textContent?.trim()
+              || (isPaidSticker ? 'Super Sticker' : amountText ? 'Super Chat' : 'Super Chat');
+
+            console.log('COPILOT_EVENT:' + JSON.stringify({
+              type: 'superchat',
+              author,
+              amount: parseAmount(amountText),
+              message: amountText ? message + ' (' + amountText + ')' : message,
+            }));
+            return;
+          }
+
           console.log('COPILOT_CHAT:' + JSON.stringify({ author, content, badges, avatarUrl }));
+        }
+
+        function parseAmount(raw) {
+          if (!raw) return 0;
+
+          const cleaned = raw.replace(/\\s/g, '').replace(/[^0-9,.-]/g, '');
+          if (!cleaned) return 0;
+
+          const comma = cleaned.lastIndexOf(',');
+          const dot = cleaned.lastIndexOf('.');
+          const separator = Math.max(comma, dot);
+          const normalized = separator >= 0
+            ? cleaned.slice(0, separator).replace(/[^0-9-]/g, '') + '.' + cleaned.slice(separator + 1).replace(/[^0-9]/g, '')
+            : cleaned.replace(/[^0-9-]/g, '');
+          const value = Number(normalized);
+
+          return Number.isFinite(value) ? value : 0;
         }
 
         function switchToLiveChat() {
@@ -199,7 +250,7 @@ export class YouTubeScraper {
               if (node.nodeType === 1) {
                 processElement(node);
                 // Deep search in case of batch updates
-                node.querySelectorAll?.('yt-live-chat-text-message-renderer, yt-live-chat-paid-message-renderer, yt-live-chat-membership-item-renderer')
+                node.querySelectorAll?.('yt-live-chat-text-message-renderer, yt-live-chat-paid-message-renderer, yt-live-chat-paid-sticker-renderer, yt-live-chat-membership-item-renderer')
                     .forEach(processElement);
               }
             });
@@ -210,7 +261,7 @@ export class YouTubeScraper {
         console.log('COPILOT_LOG: Body observer active');
 
         // Initial sweep
-        document.querySelectorAll('yt-live-chat-text-message-renderer, yt-live-chat-paid-message-renderer, yt-live-chat-membership-item-renderer')
+        document.querySelectorAll('yt-live-chat-text-message-renderer, yt-live-chat-paid-message-renderer, yt-live-chat-paid-sticker-renderer, yt-live-chat-membership-item-renderer')
                 .forEach(processElement);
 
         // Auto-switch and maintain

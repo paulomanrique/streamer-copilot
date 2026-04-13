@@ -368,6 +368,15 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
             streamLabel: label,
           });
         },
+        onEvent: (event) => {
+          chatService.injectEvent({
+            id: `yt-auto-event-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            timestampLabel: fmt.format(new Date()),
+            ...event,
+            platform,
+            streamLabel: label,
+          });
+        },
         onLog: (msg) => logService.info('youtube', msg),
       });
       youtubeScrapers.set(videoId, scraper);
@@ -826,6 +835,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       const scraper = new YouTubeScraper({
         videoId: i.videoId,
         onMessage: (m) => chatService.injectMessage({ id: `yt-${Date.now()}`, timestampLabel: fmt.format(new Date()), ...m, platform, streamLabel: label }),
+        onEvent: (e) => chatService.injectEvent({ id: `yt-event-${Date.now()}`, timestampLabel: fmt.format(new Date()), ...e, platform, streamLabel: label }),
         onLog: (msg) => logService.info('youtube', msg),
       });
       youtubeScrapers.set(i.videoId, scraper);

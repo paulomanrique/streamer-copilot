@@ -101,6 +101,14 @@ export class ChatService {
     this.handleMessage(message);
   }
 
+  /**
+   * Public entry point for events emitted by integrations that don't implement
+   * PlatformChatAdapter directly, such as the YouTube DOM scraper.
+   */
+  injectEvent(event: StreamEvent): void {
+    this.handleEvent(event);
+  }
+
   private handleMessage(message: ChatMessage): void {
     this.dispatcher.dispatch(message);
 
