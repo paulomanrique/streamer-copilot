@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { KickConnectionStatus, KickSettings, TikTokConnectionStatus, TikTokSettings, TwitchConnectionStatus, TwitchCredentials, YouTubeSettings, YouTubeStreamInfo } from '../../shared/types.js';
+import type { KickAuthStatus, KickConnectionStatus, KickSettings, TikTokConnectionStatus, TikTokSettings, TwitchConnectionStatus, TwitchCredentials, YouTubeSettings, YouTubeStreamInfo } from '../../shared/types.js';
 
 interface LiveCheckResult {
   handle: string;
@@ -105,6 +105,7 @@ export function PlatformsSettingsPage() {
   // Kick state
   const [kickStatus, setKickStatus] = useState<KickConnectionStatus>('disconnected');
   const [kickSlug, setKickSlug] = useState<string | null>(null);
+  const [kickAuth, setKickAuth] = useState<KickAuthStatus>({ channelSlug: null, expiresAt: null, scope: null, isAuthorized: false });
   const [kickSettings, setKickSettings] = useState<KickSettings>({
     channelInput: '',
     clientId: '',
@@ -114,7 +115,7 @@ export function PlatformsSettingsPage() {
 
   useEffect(() => {
     void (async () => {
-      const [currentStatus, creds, ytConnectedStatus, ytSavedSettings, tiktokCurrentStatus, tiktokSavedSettings, kickCurrentStatus, kickSavedSettings] = await Promise.all([
+      const [currentStatus, creds, ytConnectedStatus, ytSavedSettings, tiktokCurrentStatus, tiktokSavedSettings, kickCurrentStatus, kickSavedSettings, kickAuthStatus] = await Promise.all([
         window.copilot.twitchGetStatus(),
         window.copilot.twitchGetCredentials(),
         window.copilot.youtubeGetStatus(),
@@ -123,6 +124,7 @@ export function PlatformsSettingsPage() {
         window.copilot.tiktokGetSettings(),
         window.copilot.kickGetStatus(),
         window.copilot.kickGetSettings(),
+        window.copilot.kickGetAuthStatus(),
       ]);
       setStatus(currentStatus);
       setSavedCreds(creds);
@@ -134,6 +136,7 @@ export function PlatformsSettingsPage() {
       setTiktokApiKeyInput(tiktokSavedSettings.signApiKey);
       setKickStatus(kickCurrentStatus);
       setKickSettings(kickSavedSettings);
+      setKickAuth(kickAuthStatus);
     })();
 
     const unsubTwitch = window.copilot.onTwitchStatus((s) => setStatus(s));
@@ -340,6 +343,21 @@ export function PlatformsSettingsPage() {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Failed to connect to Kick');
     } finally { setIsBusy(false); }
+  };
+
+  const authorizeKick = async () => {
+    setIsBusy(true);
+    setError(null);
+    try {
+      await window.copilot.kickSaveSettings(kickSettings);
+      const { channelSlug } = await window.copilot.kickStartOAuth();
+      const authStatus = await window.copilot.kickGetAuthStatus();
+      setKickAuth({ ...authStatus, channelSlug: authStatus.channelSlug ?? channelSlug, isAuthorized: true });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Failed to authorize Kick chat');
+    } finally {
+      setIsBusy(false);
+    }
   };
 
   const disconnectKick = async () => {
@@ -684,6 +702,30 @@ export function PlatformsSettingsPage() {
                   placeholder="gaules or https://kick.com/gaules"
                   className="w-full bg-gray-900 border border-gray-700 rounded text-sm text-gray-200 px-3 py-1.5 focus:outline-none focus:border-green-500 font-mono"
                 />
+              </div>
+
+              <div className="rounded-lg border border-gray-700 bg-gray-900/60 px-3 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-200">Chat authorization</p>
+                    <p className="mt-1 text-[11px] leading-5 text-gray-400">
+                      Sign in once to send messages as your Kick user. Reading chat still works without authorization.
+                    </p>
+                    <p className="mt-2 text-[11px] text-gray-500">
+                      {kickAuth.isAuthorized && kickAuth.channelSlug
+                        ? `Authorized as ${kickAuth.channelSlug}`
+                        : 'No Kick user authorized yet'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void authorizeKick()}
+                    disabled={isBusy}
+                    className="shrink-0 rounded bg-green-700 px-3 py-1.5 text-[11px] font-medium text-white disabled:opacity-50"
+                  >
+                    {kickAuth.isAuthorized ? 'Re-authorize' : 'Authorize'}
+                  </button>
+                </div>
               </div>
 
               <div className="flex items-center gap-2 pt-1">

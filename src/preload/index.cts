@@ -3,6 +3,8 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { CopilotApi, RecentChatSnapshot, ChatSession, ChatLogMessage } from '../shared/ipc.js';
 import type {
   ChatMessage,
+  KickAuthStatus,
+  KickLiveStats,
   CloneProfileInput,
   TwitchLiveStats,
   CreateProfileInput,
@@ -114,6 +116,7 @@ const IPC_CHANNELS = {
   chatSendMessage: 'chat:send-message',
   logsList: 'logs:list',
   twitchLiveStats: 'twitch:live-stats',
+  kickLiveStats: 'kick:live-stats',
   twitchGetUserAvatars: 'twitch:get-user-avatars',
   twitchGetBadgeUrls: 'twitch:get-badge-urls',
   twitchGetCredentials: 'twitch:get-credentials',
@@ -122,6 +125,7 @@ const IPC_CHANNELS = {
   twitchGetStatus: 'twitch:get-status',
   twitchStatus: 'twitch:status',
   twitchStartOAuth: 'twitch:start-oauth',
+  kickStartOAuth: 'kick:start-oauth',
   youtubeConnect: 'youtube:connect',
   youtubeDisconnect: 'youtube:disconnect',
   youtubeGetStatus: 'youtube:get-status',
@@ -139,6 +143,7 @@ const IPC_CHANNELS = {
   kickConnect: 'kick:connect',
   kickDisconnect: 'kick:disconnect',
   kickGetStatus: 'kick:get-status',
+  kickGetAuthStatus: 'kick:get-auth-status',
   kickGetSettings: 'kick:get-settings',
   kickSaveSettings: 'kick:save-settings',
   kickStatus: 'kick:status',
@@ -263,6 +268,7 @@ const copilotApi: CopilotApi = {
   twitchGetUserAvatars: (logins: string[]) => ipcRenderer.invoke(IPC_CHANNELS.twitchGetUserAvatars, logins) as Promise<Record<string, string>>,
   twitchGetBadgeUrls: (badgeIds: string[]) => ipcRenderer.invoke(IPC_CHANNELS.twitchGetBadgeUrls, badgeIds) as Promise<Record<string, string>>,
   twitchStartOAuth: () => ipcRenderer.invoke(IPC_CHANNELS.twitchStartOAuth) as Promise<{ username: string; accessToken: string }>,
+  kickStartOAuth: () => ipcRenderer.invoke(IPC_CHANNELS.kickStartOAuth) as Promise<{ channelSlug: string }>,
   youtubeConnect: (input) => ipcRenderer.invoke(IPC_CHANNELS.youtubeConnect, input),
   youtubeDisconnect: () => ipcRenderer.invoke(IPC_CHANNELS.youtubeDisconnect),
   youtubeGetStatus: () => ipcRenderer.invoke(IPC_CHANNELS.youtubeGetStatus) as Promise<YouTubeStreamInfo[]>,
@@ -284,6 +290,7 @@ const copilotApi: CopilotApi = {
   kickConnect: (input: { channelInput: string; clientId: string; clientSecret: string }) => ipcRenderer.invoke(IPC_CHANNELS.kickConnect, input),
   kickDisconnect: () => ipcRenderer.invoke(IPC_CHANNELS.kickDisconnect) as Promise<void>,
   kickGetStatus: () => ipcRenderer.invoke(IPC_CHANNELS.kickGetStatus) as Promise<KickConnectionStatus>,
+  kickGetAuthStatus: () => ipcRenderer.invoke(IPC_CHANNELS.kickGetAuthStatus) as Promise<KickAuthStatus>,
   kickGetSettings: () => ipcRenderer.invoke(IPC_CHANNELS.kickGetSettings) as Promise<KickSettings>,
   kickSaveSettings: (settings: KickSettings) => ipcRenderer.invoke(IPC_CHANNELS.kickSaveSettings, settings),
   onKickStatus: (listener: (status: KickConnectionStatus, slug: string | null) => void) => {
@@ -314,6 +321,11 @@ const copilotApi: CopilotApi = {
     const wrappedListener = (_event: Electron.IpcRendererEvent, stats: TwitchLiveStats) => listener(stats);
     ipcRenderer.on(IPC_CHANNELS.twitchLiveStats, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.twitchLiveStats, wrappedListener); };
+  },
+  onKickLiveStats: (listener: (stats: KickLiveStats | null) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, stats: KickLiveStats | null) => listener(stats);
+    ipcRenderer.on(IPC_CHANNELS.kickLiveStats, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.kickLiveStats, wrappedListener); };
   },
   onYoutubeStatus: (listener: (streams: YouTubeStreamInfo[]) => void) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, streams: YouTubeStreamInfo[]) => listener(streams);

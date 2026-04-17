@@ -95,6 +95,11 @@ export class ChatService {
     };
   }
 
+  clearRecent(): void {
+    this.messages.length = 0;
+    this.events.length = 0;
+  }
+
   /**
    * Public entry point for messages that don't come through a registered adapter
    * (e.g. YouTube scraper, injected test messages). Goes through the same

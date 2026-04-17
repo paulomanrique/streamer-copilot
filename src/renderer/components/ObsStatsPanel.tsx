@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { KickConnectionStatus, ObsStatsSnapshot, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
+import type { KickConnectionStatus, KickLiveStats, ObsStatsSnapshot, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
 
 interface ObsStatsPanelProps {
   stats: ObsStatsSnapshot;
@@ -8,6 +8,7 @@ interface ObsStatsPanelProps {
   youtubeStreams: YouTubeStreamInfo[];
   kickStatus: KickConnectionStatus;
   kickSlug: string | null;
+  kickLiveStats: KickLiveStats | null;
 }
 
 
@@ -24,7 +25,7 @@ function fmtNum(n: number): string {
   return String(n);
 }
 
-export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtubeStreams, kickStatus, kickSlug }: ObsStatsPanelProps) {
+export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtubeStreams, kickStatus, kickSlug, kickLiveStats }: ObsStatsPanelProps) {
   const totalFrames = Math.max(1, stats.droppedFrames + stats.droppedFramesRender + 100);
   const connectionPct = Math.max(0, Math.min(100, (1 - stats.droppedFrames / totalFrames) * 100));
   const connectionTone = connectionPct >= 95 ? 'text-green-400' : connectionPct >= 80 ? 'text-yellow-400' : 'text-red-400';
@@ -114,7 +115,8 @@ export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtube
                 metaClass="text-purple-400"
                 value={twitchLiveStats ? fmtNum(twitchLiveStats.viewerCount) : '0'}
                 isLive={!!twitchLiveStats?.isLive}
-                followers={twitchLiveStats ? fmtNum(twitchLiveStats.followerCount) : undefined}
+                secondaryValue={twitchLiveStats ? fmtNum(twitchLiveStats.followerCount) : undefined}
+                secondaryLabel="followers"
               />
             )}
             {youtubeStreams.map((stream) => (
@@ -128,6 +130,8 @@ export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtube
                 metaClass={stream.platform === 'youtube-v' ? 'text-rose-400' : 'text-red-400'}
                 value={stream.viewerCount !== null ? fmtNum(stream.viewerCount) : '—'}
                 isLive
+                secondaryValue={stream.subscriberCount !== null ? fmtNum(stream.subscriberCount) : '—'}
+                secondaryLabel="subscribers"
               />
             ))}
             {kickStatus === 'connected' && (
@@ -136,9 +140,17 @@ export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtube
                 icon={ICONS.kick}
                 classes="bg-green-500/10 border-green-500/20 text-green-300"
                 metaClass="text-green-400"
-                value="Connected"
-                valueLabel="status"
-                isLive
+                value={kickLiveStats ? fmtNum(kickLiveStats.viewerCount) : '—'}
+                valueLabel="viewers"
+                isLive={kickLiveStats?.isLive ?? true}
+                secondaryValue={kickLiveStats?.followerCount !== null && kickLiveStats?.followerCount !== undefined
+                  ? fmtNum(kickLiveStats.followerCount)
+                  : kickLiveStats?.subscriberCount !== null && kickLiveStats?.subscriberCount !== undefined
+                    ? fmtNum(kickLiveStats.subscriberCount)
+                  : '—'}
+                secondaryLabel={kickLiveStats?.followerCount !== null && kickLiveStats?.followerCount !== undefined
+                  ? 'followers'
+                  : 'subscribers'}
               />
             )}
           </div>
@@ -180,7 +192,8 @@ function ViewerCard({
   metaClass,
   value,
   isLive,
-  followers,
+  secondaryValue,
+  secondaryLabel,
   valueLabel = 'viewers',
 }: {
   label: string;
@@ -189,7 +202,8 @@ function ViewerCard({
   metaClass: string;
   value: string;
   isLive?: boolean;
-  followers?: string;
+  secondaryValue?: string;
+  secondaryLabel?: string;
   valueLabel?: string;
 }) {
   return (
@@ -203,9 +217,9 @@ function ViewerCard({
       </div>
       <div className="text-base font-mono font-bold">{value}</div>
       <div className="text-xs text-gray-500 mt-0.5">{valueLabel}</div>
-      {followers !== undefined ? (
+      {secondaryValue !== undefined && secondaryLabel ? (
         <div className="text-xs mt-0.5">
-          <span className={metaClass}>{followers}</span> <span className="text-gray-500">followers</span>
+          <span className={metaClass}>{secondaryValue}</span> <span className="text-gray-500">{secondaryLabel}</span>
         </div>
       ) : null}
     </div>

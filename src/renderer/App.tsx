@@ -32,6 +32,7 @@ export default function App() {
     tiktokUsername,
     kickStatus,
     kickSlug,
+    kickLiveStats,
     setProfiles,
     setObsStats,
     setChatSnapshot,
@@ -47,6 +48,7 @@ export default function App() {
     setTiktokUsername,
     setKickStatus,
     setKickSlug,
+    setKickLiveStats,
   } = useAppStore();
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -100,6 +102,7 @@ export default function App() {
         setYoutubeStreams(ytInitialStatus);
         setTiktokStatus(tiktokInitialStatus);
         setKickStatus(kickInitialStatus);
+        if (kickInitialStatus !== 'connected') setKickLiveStats(null);
         setSelectorProfileId(snapshot.activeProfileId);
         setIsProfileSelectorOpen(true);
       } catch (cause) {
@@ -110,7 +113,7 @@ export default function App() {
     };
 
     void load();
-  }, [setChatSnapshot, setProfiles, setTwitchStatus, setTwitchChannel, setKickStatus]);
+  }, [setChatSnapshot, setProfiles, setTwitchStatus, setTwitchChannel, setKickStatus, setKickLiveStats]);
 
   useEffect(() => {
     if (!isLoading && !activeProfileId) {
@@ -237,9 +240,11 @@ export default function App() {
     const unsubKick = window.copilot.onKickStatus((status, slug) => {
       setKickStatus(status);
       setKickSlug(slug);
+      if (status !== 'connected') setKickLiveStats(null);
     });
-    return () => { unsubStatus(); unsubStats(); unsubYt(); unsubTiktok(); unsubKick(); };
-  }, [setTwitchStatus, setTwitchChannel, setTwitchLiveStats, setYoutubeStreams, setTiktokStatus, setTiktokUsername, setKickStatus, setKickSlug]);
+    const unsubKickStats = window.copilot.onKickLiveStats(setKickLiveStats);
+    return () => { unsubStatus(); unsubStats(); unsubYt(); unsubTiktok(); unsubKick(); unsubKickStats(); };
+  }, [setTwitchStatus, setTwitchChannel, setTwitchLiveStats, setYoutubeStreams, setTiktokStatus, setTiktokUsername, setKickStatus, setKickSlug, setKickLiveStats]);
 
   useEffect(() => {
     const disconnectMessage = window.copilot.onChatMessage((message) => {
@@ -258,7 +263,9 @@ export default function App() {
   const onSelectProfile = async (profileId: string) => {
     try {
       const snapshot = await window.copilot.selectProfile({ profileId });
+      const recentChat = await window.copilot.getRecentChat();
       setProfiles(snapshot);
+      setChatSnapshot(recentChat);
       setSelectorProfileId(snapshot.activeProfileId);
       setError(null);
       return snapshot;
@@ -420,6 +427,7 @@ export default function App() {
             tiktokUsername={tiktokUsername}
             kickStatus={kickStatus}
             kickSlug={kickSlug}
+            kickLiveStats={kickLiveStats}
           />
         ) : null}
 
@@ -437,6 +445,9 @@ export default function App() {
             youtubeStreams={youtubeStreams}
             tiktokStatus={tiktokStatus}
             tiktokUsername={tiktokUsername}
+            kickStatus={kickStatus}
+            kickSlug={kickSlug}
+            kickLiveStats={kickLiveStats}
           />
         ) : null}
 

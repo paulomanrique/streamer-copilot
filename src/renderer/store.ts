@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import type { ChatMessage, KickConnectionStatus, ObsStatsSnapshot, ProfilesSnapshot, StreamEvent, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../shared/types.js';
+import type { ChatMessage, KickConnectionStatus, KickLiveStats, ObsStatsSnapshot, ProfilesSnapshot, StreamEvent, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../shared/types.js';
 
 const DEFAULT_OBS_STATS: ObsStatsSnapshot = {
   connected: false,
@@ -27,6 +27,7 @@ interface AppStore extends ProfilesSnapshot {
   tiktokUsername: string | null;
   kickStatus: KickConnectionStatus;
   kickSlug: string | null;
+  kickLiveStats: KickLiveStats | null;
   setProfiles: (snapshot: ProfilesSnapshot) => void;
   setObsStats: (stats: ObsStatsSnapshot | ((current: ObsStatsSnapshot) => ObsStatsSnapshot)) => void;
   setChatSnapshot: (snapshot: { messages: ChatMessage[]; events: StreamEvent[] }) => void;
@@ -40,6 +41,7 @@ interface AppStore extends ProfilesSnapshot {
   setTiktokUsername: (username: string | null) => void;
   setKickStatus: (status: KickConnectionStatus) => void;
   setKickSlug: (slug: string | null) => void;
+  setKickLiveStats: (stats: KickLiveStats | null) => void;
 }
 
 export const useAppStore = create<AppStore>((set) => ({
@@ -57,6 +59,7 @@ export const useAppStore = create<AppStore>((set) => ({
   tiktokUsername: null,
   kickStatus: 'disconnected',
   kickSlug: null,
+  kickLiveStats: null,
   setProfiles: (snapshot) =>
     set({
       activeProfileId: snapshot.activeProfileId,
@@ -95,4 +98,5 @@ export const useAppStore = create<AppStore>((set) => ({
   setTiktokUsername: (username) => set({ tiktokUsername: username }),
   setKickStatus: (status) => set({ kickStatus: status }),
   setKickSlug: (slug) => set({ kickSlug: slug }),
+  setKickLiveStats: (stats) => set({ kickLiveStats: stats }),
 }));

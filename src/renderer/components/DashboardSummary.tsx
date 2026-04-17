@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 
-import type { ChatMessage, KickConnectionStatus, ObsStatsSnapshot, StreamEvent, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
+import type { ChatMessage, KickConnectionStatus, KickLiveStats, ObsStatsSnapshot, StreamEvent, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
 import { ChatFeed } from './ChatFeed.js';
 import { EventBanner } from './EventBanner.js';
 import { ObsStatsPanel } from './ObsStatsPanel.js';
@@ -19,9 +19,10 @@ interface DashboardSummaryProps {
   tiktokUsername: string | null;
   kickStatus: KickConnectionStatus;
   kickSlug: string | null;
+  kickLiveStats: KickLiveStats | null;
 }
 
-export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, obsStats, twitchStatus, twitchChannel, twitchLiveStats, youtubeStreams, tiktokStatus, tiktokUsername, kickStatus, kickSlug }: DashboardSummaryProps) {
+export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, obsStats, twitchStatus, twitchChannel, twitchLiveStats, youtubeStreams, tiktokStatus, tiktokUsername, kickStatus, kickSlug, kickLiveStats }: DashboardSummaryProps) {
   const visibleMessages = chatMessages;
   const visibleEvents = chatEvents;
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -86,6 +87,7 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
             youtubeStreams={youtubeStreams}
             kickStatus={kickStatus}
             kickSlug={kickSlug}
+            kickLiveStats={kickLiveStats}
           />
 
           <div className="flex flex-col flex-1 overflow-hidden p-4">

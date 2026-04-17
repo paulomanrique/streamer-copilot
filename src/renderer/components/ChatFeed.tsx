@@ -175,6 +175,39 @@ function renderContentWithLinks(content: string): ReactNode[] {
   return nodes;
 }
 
+function renderMessageContent(message: ChatMessage): ReactNode[] {
+  if (!message.contentParts?.length) {
+    return renderContentWithLinks(message.content);
+  }
+
+  const nodes: ReactNode[] = [];
+  let key = 0;
+
+  for (const part of message.contentParts) {
+    if (part.type === 'text') {
+      nodes.push(...renderContentWithLinks(part.text).map((node) => <span key={`part-${key++}`}>{node}</span>));
+      continue;
+    }
+
+    nodes.push(
+      part.imageUrl ? (
+        <img
+          key={`part-${key++}`}
+          src={part.imageUrl}
+          alt={part.name}
+          title={part.name}
+          className="mx-[1px] inline-block h-5 max-w-none align-text-bottom"
+          loading="lazy"
+        />
+      ) : (
+        <span key={`part-${key++}`}>{`:${part.name}:`}</span>
+      ),
+    );
+  }
+
+  return nodes;
+}
+
 function platformKey(platform: string): keyof typeof PLATFORM_META {
   if (platform === 'youtube-v') return 'youtube-v';
   if (platform in PLATFORM_META) return platform as keyof typeof PLATFORM_META;
@@ -211,6 +244,7 @@ export function ChatFeed({ messages, events, connectedPlatforms }: ChatFeedProps
   });
   const [inputValue,    setInputValue]    = useState('');
   const [inputPlatform, setInputPlatform] = useState(() => connectedPlatforms[0] ?? 'twitch');
+  const [sendError, setSendError] = useState<string | null>(null);
   const [avatarCache,   setAvatarCache]   = useState<Map<string, string>>(new Map());
   const [highlighted,   setHighlighted]   = useState<string | null>(null);
   const [isAtBottom,    setIsAtBottom]    = useState(true);
@@ -225,6 +259,12 @@ export function ChatFeed({ messages, events, connectedPlatforms }: ChatFeedProps
       setInputPlatform(connectedPlatforms[0]);
     }
   }, [connectedPlatforms, inputPlatform]);
+
+  useEffect(() => {
+    if (!sendError) return;
+    const timeout = window.setTimeout(() => setSendError(null), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [sendError]);
 
   // ── scroll management ──────────────────────────────────────────────
   const onScroll = () => {
@@ -333,14 +373,20 @@ export function ChatFeed({ messages, events, connectedPlatforms }: ChatFeedProps
     setCtxMenu({ visible: true, x: e.clientX, y: e.clientY, platform, author });
   };
 
-  const sendMessage = () => {
+  const sendMessage = async () => {
     const content = inputValue.trim();
     if (!content) return;
+    setSendError(null);
     setInputValue('');
-    void window.copilot.sendChatMessage({
-      platform: inputPlatform as import('../../shared/types.js').PlatformId,
-      content,
-    }).catch(() => null);
+    try {
+      await window.copilot.sendChatMessage({
+        platform: inputPlatform as import('../../shared/types.js').PlatformId,
+        content,
+      });
+    } catch (cause) {
+      setInputValue(content);
+      setSendError(cause instanceof Error ? cause.message : 'Failed to send message');
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -416,6 +462,11 @@ export function ChatFeed({ messages, events, connectedPlatforms }: ChatFeedProps
 
       {/* ── input ──────────────────────────────────────────────────── */}
       <div className="px-3 py-2 border-t border-gray-800 shrink-0">
+        {sendError ? (
+          <div className="mb-2 rounded border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+            {sendError}
+          </div>
+        ) : null}
         <div className="flex gap-2">
           {connectedPlatforms.length > 1 ? (
             <select
@@ -601,7 +652,7 @@ function ChatMessageRow({ message, avatarUrl, highlighted, hasMultipleYouTubeStr
           {message.platform !== 'twitch' && isMod ? <span className="text-xs text-emerald-400 font-semibold">MOD</span> : null}
         </div>
         <p className={`text-sm mt-0.5 break-words leading-snug ${isCommand ? 'text-violet-300 font-mono' : 'text-gray-300'}`}>
-          {renderContentWithLinks(message.content)}
+          {renderMessageContent(message)}
         </p>
       </div>
     </div>

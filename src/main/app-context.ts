@@ -36,6 +36,7 @@ import { VoiceCommandRepository } from '../modules/voice/voice-repository.js';
 import { VoiceService } from '../modules/voice/voice-service.js';
 import { createKickChatAdapter } from '../platforms/kick/adapter.js';
 import { KickSettingsStore } from '../platforms/kick/settings-store.js';
+import { KickTokenStore, type KickAuthSession, type KickAuthToken } from '../platforms/kick/token-store.js';
 import { TikTokSettingsStore } from '../platforms/tiktok/settings-store.js';
 import { createTikTokChatAdapter } from '../platforms/tiktok/adapter.js';
 import { TwitchCredentialsStore } from '../platforms/twitch/credentials-store.js';
@@ -78,10 +79,12 @@ import {
   youtubeConnectSchema,
   youtubeSettingsSchema,
 } from '../shared/schemas.js';
-import type { AppInfo, KickConnectionStatus, KickSettings, PlatformId, Raffle, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
+import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, PlatformId, Raffle, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
 
 const TWITCH_CLIENT_ID = 'vtwg8tzuv1nlip4qh9n6sxx2p76g0s';
 const TWITCH_REDIRECT_PORT = 32999;
+const KICK_REDIRECT_PORT = 33019;
+const KICK_REDIRECT_HOST = 'localhost';
 const KICK_CLIENT_ID = '01KPDVPG20B3QXSFBQQ3EFPH6P';
 const KICK_CLIENT_SECRET = '0dae2c68bdb3910d97b7ce91cabe6e774fc826301b0e06eb61f379a42679b863';
 import { StateHub } from './state-hub.js';
@@ -128,6 +131,15 @@ async function listBundledSounds(): Promise<Record<'spinning' | 'eliminated' | '
     }
   }
   return result as Record<'spinning' | 'eliminated' | 'winner', string[]>;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 export function createAppContext(options: AppContextOptions): () => Promise<void> {
@@ -208,12 +220,14 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   let twitchStatus: TwitchConnectionStatus = 'disconnected';
   let twitchChannel: string | null = null;
   let twitchStatsTimer: ReturnType<typeof setInterval> | null = null;
+  let kickStatsTimer: ReturnType<typeof setInterval> | null = null;
   const userAvatarCache = new Map<string, string>();
   const badgeCache = new Map<string, string>();
   const youtubeScrapers = new Map<string, YouTubeScraper>();
   const youtubeStreamData = new Map<string, {
     label: string;
     viewerCount: number | null;
+    subscriberCount: number | null;
     platform: 'youtube' | 'youtube-v';
     channelHandle: string | null;
   }>();
@@ -238,6 +252,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         channelHandle: data?.channelHandle ?? null,
         label,
         viewerCount: data?.viewerCount ?? null,
+        subscriberCount: data?.subscriberCount ?? null,
         liveUrl: `https://www.youtube.com/watch?v=${videoId}`,
       };
     });
@@ -303,6 +318,26 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     return new KickSettingsStore(active.directory);
   };
 
+  const getKickTokenStore = async (): Promise<KickTokenStore | null> => {
+    const snapshot = await profileStore.list();
+    const active = snapshot.profiles.find((p) => p.id === snapshot.activeProfileId);
+    if (!active) return null;
+    return new KickTokenStore(active.directory);
+  };
+
+  const getKickAuthStatus = async (): Promise<KickAuthStatus> => {
+    const tokenStore = await getKickTokenStore();
+    const session = await tokenStore?.load() ?? null;
+    const expiresAt = session?.token.expiresAt ?? null;
+
+    return {
+      channelSlug: session?.channelSlug ?? null,
+      expiresAt,
+      scope: session?.token.scope ?? null,
+      isAuthorized: !!session && typeof expiresAt === 'number' && expiresAt > Date.now(),
+    };
+  };
+
   const defaultKickSettings = (): KickSettings => ({
     channelInput: '',
     clientId: '',
@@ -310,10 +345,380 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     autoConnect: false,
   });
 
+  const resolveKickApiCredentials = async (input?: { clientId?: string; clientSecret?: string }): Promise<{ clientId: string; clientSecret: string; isUserConfigured: boolean }> => {
+    const inputClientId = input?.clientId?.trim() ?? '';
+    const inputClientSecret = input?.clientSecret?.trim() ?? '';
+    if (inputClientId && inputClientSecret) {
+      return { clientId: inputClientId, clientSecret: inputClientSecret, isUserConfigured: true };
+    }
+
+    const store = await getKickSettingsStore();
+    const settings = store ? await store.load() : defaultKickSettings();
+    const settingsClientId = settings.clientId.trim();
+    const settingsClientSecret = settings.clientSecret.trim();
+    if (settingsClientId && settingsClientSecret) {
+      return { clientId: settingsClientId, clientSecret: settingsClientSecret, isUserConfigured: true };
+    }
+
+    return {
+      clientId: KICK_CLIENT_ID,
+      clientSecret: KICK_CLIENT_SECRET,
+      isUserConfigured: false,
+    };
+  };
+
+  const startKickOAuth = async (clientId: string, clientSecret: string, fallbackChannelSlug?: string | null): Promise<KickAuthSession> => {
+    const importer = new Function('return import("@nekiro/kick-api")') as () => Promise<{
+      client?: new (options: { clientId: string; clientSecret: string; redirectUri: string }) => {
+        generatePKCEParams: () => { codeVerifier: string; codeChallenge: string; state?: string };
+        getAuthorizationUrl: (params: { codeVerifier: string; codeChallenge: string; state?: string }, scopes?: string[]) => string;
+        exchangeCodeForToken: (tokenRequest: { code: string; codeVerifier: string }) => Promise<{
+          accessToken: string;
+          tokenType: string;
+          expiresIn: number;
+          refreshToken?: string;
+          scope?: string;
+          expiresAt: number;
+        }>;
+        setToken: (token: KickAuthToken) => void;
+        channels: { getChannels: () => Promise<Array<{ slug?: string; broadcaster_user_id?: number }> | { slug?: string; broadcaster_user_id?: number }> };
+      };
+    }>;
+    const module = await importer();
+    const KickClient = module.client;
+    if (typeof KickClient !== 'function') {
+      throw new Error('Kick OAuth client is unavailable');
+    }
+
+    const redirectUri = `http://${KICK_REDIRECT_HOST}:${KICK_REDIRECT_PORT}/callback`;
+    const kickClient = new KickClient({ clientId, clientSecret, redirectUri });
+    const pkce = kickClient.generatePKCEParams();
+    const expectedState = pkce.state ?? '';
+    const authUrl = kickClient.getAuthorizationUrl(pkce, ['public', 'channel:read', 'chat:write']);
+
+    return new Promise((resolve, reject) => {
+      let finished = false;
+      let server: http.Server;
+
+      const timeout = setTimeout(() => {
+        finished = true;
+        server.close();
+        reject(new Error('Kick OAuth timed out'));
+      }, 120_000);
+
+      const cleanup = () => {
+        clearTimeout(timeout);
+        server.close();
+      };
+
+      server = http.createServer(async (req, res) => {
+        const url = new URL(req.url ?? '/', redirectUri);
+        if (url.pathname !== '/callback') {
+          res.writeHead(404);
+          res.end('Not found');
+          return;
+        }
+
+        const error = url.searchParams.get('error');
+        const code = url.searchParams.get('code');
+        const state = url.searchParams.get('state');
+        if (error) {
+          res.writeHead(400, { 'Content-Type': 'text/html' });
+          res.end(`<!DOCTYPE html><html><body style="background:#0b1220;color:#fff;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh"><div>Kick authorization failed: ${escapeHtml(error)}. You can close this tab.</div></body></html>`);
+          finished = true;
+          cleanup();
+          reject(new Error(`Kick authorization failed: ${error}`));
+          return;
+        }
+        if (!code) {
+          res.writeHead(400, { 'Content-Type': 'text/html' });
+          res.end('<!DOCTYPE html><html><body style="background:#0b1220;color:#fff;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh"><div>Kick authorization did not return a code. You can close this tab.</div></body></html>');
+          finished = true;
+          cleanup();
+          reject(new Error('Kick authorization did not return a code'));
+          return;
+        }
+        if (expectedState && state !== expectedState) {
+          res.writeHead(400, { 'Content-Type': 'text/html' });
+          res.end('<!DOCTYPE html><html><body style="background:#0b1220;color:#fff;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh"><div>Kick authorization state mismatch. You can close this tab.</div></body></html>');
+          finished = true;
+          cleanup();
+          reject(new Error('Kick authorization state mismatch'));
+          return;
+        }
+
+        try {
+          const token = await kickClient.exchangeCodeForToken({
+            code,
+            codeVerifier: pkce.codeVerifier,
+          });
+          kickClient.setToken(token);
+          let channel: { slug?: string; broadcaster_user_id?: number } | null = null;
+          try {
+            const channelResponse = await kickClient.channels.getChannels();
+            const channels = Array.isArray(channelResponse) ? channelResponse : [channelResponse];
+            channel = channels.find((entry) => entry && typeof entry === 'object' && typeof entry.slug === 'string') ?? null;
+          } catch {
+            // Tokens granted only chat:write cannot read the authorized channel.
+          }
+          if (!channel?.slug && fallbackChannelSlug) {
+            const fallbackChannel = await resolveKickChannelMetadata(fallbackChannelSlug, { clientId, clientSecret });
+            channel = fallbackChannel
+              ? { slug: fallbackChannel.slug, broadcaster_user_id: fallbackChannel.broadcasterUserId ?? undefined }
+              : { slug: fallbackChannelSlug };
+          }
+          finished = true;
+          cleanup();
+          if (!channel?.slug) {
+            res.writeHead(400, { 'Content-Type': 'text/html' });
+            res.end('<!DOCTYPE html><html><body style="background:#0b1220;color:#fff;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh"><div>Kick connected, but no authorized channel was returned. You can close this tab.</div></body></html>');
+            reject(new Error('Kick OAuth succeeded but no authorized channel was returned'));
+            return;
+          }
+          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.end('<!DOCTYPE html><html><body style="background:#0b1220;color:#fff;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh"><div>Kick connected. You can close this tab.</div></body></html>');
+          resolve({
+            token,
+            channelSlug: channel.slug,
+            broadcasterUserId: typeof channel.broadcaster_user_id === 'number' ? channel.broadcaster_user_id : null,
+          });
+        } catch (cause) {
+          res.writeHead(500, { 'Content-Type': 'text/html' });
+          res.end('<!DOCTYPE html><html><body style="background:#0b1220;color:#fff;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh"><div>Kick token exchange failed. You can close this tab.</div></body></html>');
+          finished = true;
+          cleanup();
+          reject(cause instanceof Error ? cause : new Error(String(cause)));
+        }
+      });
+
+      server.on('error', (cause) => {
+        finished = true;
+        clearTimeout(timeout);
+        reject(cause instanceof Error ? cause : new Error(String(cause)));
+      });
+
+      server.listen(KICK_REDIRECT_PORT, '127.0.0.1', () => {
+        void shell.openExternal(authUrl).catch((cause) => {
+          if (!finished) {
+            finished = true;
+            cleanup();
+            reject(cause instanceof Error ? cause : new Error(String(cause)));
+          }
+        });
+      });
+    });
+  };
+
+  const ensureKickAuthSession = async (
+    channelSlug: string,
+    credentials: { clientId: string; clientSecret: string; isUserConfigured: boolean },
+    interactive: boolean,
+  ): Promise<KickAuthSession | null> => {
+    const tokenStore = await getKickTokenStore();
+    const existing = tokenStore ? await tokenStore.load() : null;
+    if (
+      existing?.channelSlug === channelSlug
+      && typeof existing.broadcasterUserId === 'number'
+      && existing.token.expiresAt > Date.now()
+    ) {
+      return existing;
+    }
+
+    if (!interactive) {
+      return null;
+    }
+
+    const session = await startKickOAuth(credentials.clientId, credentials.clientSecret, channelSlug);
+    if (tokenStore) {
+      await tokenStore.save(session);
+    }
+
+    if (session.channelSlug !== channelSlug) {
+      throw new Error(`Kick authorization belongs to @${session.channelSlug}, but the configured channel is @${channelSlug}`);
+    }
+
+    return session;
+  };
+
   const setKickStatus = (status: KickConnectionStatus, slug?: string | null) => {
     kickStatus = status;
     if (slug !== undefined) kickSlug = slug;
     options.stateHub.pushKickStatus(status, kickSlug);
+    if (status !== 'connected') {
+      options.stateHub.pushKickLiveStats(null);
+    }
+  };
+
+  const fetchKickClientAccessToken = async (credentials: { clientId: string; clientSecret: string }): Promise<string | null> => {
+    try {
+      const response = await fetch('https://id.kick.com/oauth/token', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          accept: 'application/json',
+        },
+        body: new URLSearchParams({
+          grant_type: 'client_credentials',
+          client_id: credentials.clientId,
+          client_secret: credentials.clientSecret,
+        }),
+      });
+      if (!response.ok) return null;
+      const payload = (await response.json()) as { access_token?: string };
+      return typeof payload.access_token === 'string' && payload.access_token.trim() ? payload.access_token : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const resolveKickChannelMetadata = async (
+    channelSlug: string,
+    credentials: { clientId: string; clientSecret: string },
+  ): Promise<{ slug: string; broadcasterUserId: number | null } | null> => {
+    const token = await fetchKickClientAccessToken(credentials);
+    if (!token) return null;
+
+    try {
+      const response = await fetch(`https://api.kick.com/public/v1/channels?slug=${encodeURIComponent(channelSlug)}`, {
+        headers: {
+          accept: 'application/json',
+          authorization: `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) return null;
+
+      const payload = (await response.json()) as {
+        data?: Array<{
+          slug?: string;
+          broadcaster_user_id?: number;
+          id?: number;
+        }>;
+      };
+      const channel = payload.data?.[0];
+      if (!channel) return null;
+
+      return {
+        slug: typeof channel.slug === 'string' && channel.slug.trim() ? channel.slug : channelSlug,
+        broadcasterUserId: typeof channel.broadcaster_user_id === 'number'
+          ? channel.broadcaster_user_id
+          : typeof channel.id === 'number'
+            ? channel.id
+            : null,
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  const pollKickStats = async (
+    channelSlug: string,
+    credentials: { clientId: string; clientSecret: string },
+    authSession: KickAuthSession | null,
+  ): Promise<void> => {
+    try {
+      const token = await fetchKickClientAccessToken(credentials) ?? authSession?.token.accessToken;
+      if (!token) {
+        const fallback = await fetchKickLegacyStats(channelSlug);
+        if (fallback) options.stateHub.pushKickLiveStats(fallback);
+        return;
+      }
+
+      const response = await fetch(`https://api.kick.com/public/v1/channels?slug=${encodeURIComponent(channelSlug)}`, {
+        headers: {
+          accept: 'application/json',
+          authorization: `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) {
+        const fallback = await fetchKickLegacyStats(channelSlug);
+        if (fallback) options.stateHub.pushKickLiveStats(fallback);
+        return;
+      }
+
+      const payload = (await response.json()) as {
+        data?: Array<{
+          active_subscribers_count?: number;
+          follower_count?: number;
+          followers_count?: number;
+          followers?: number;
+          total_followers?: number;
+          stream?: {
+            is_live?: boolean;
+            viewer_count?: number;
+          };
+        }>;
+      };
+      const channel = payload.data?.[0];
+      if (!channel) {
+        const fallback = await fetchKickLegacyStats(channelSlug);
+        if (fallback) options.stateHub.pushKickLiveStats(fallback);
+        return;
+      }
+
+      const stats: KickLiveStats = {
+        viewerCount: channel.stream?.viewer_count ?? 0,
+        followerCount: channel.follower_count ?? channel.followers_count ?? channel.followers ?? channel.total_followers ?? null,
+        subscriberCount: typeof channel.active_subscribers_count === 'number' ? channel.active_subscribers_count : null,
+        isLive: channel.stream?.is_live ?? (channel.stream?.viewer_count ?? 0) > 0,
+      };
+      options.stateHub.pushKickLiveStats(stats);
+    } catch {
+      const fallback = await fetchKickLegacyStats(channelSlug);
+      if (fallback) options.stateHub.pushKickLiveStats(fallback);
+    }
+  };
+
+  const fetchKickLegacyStats = async (channelSlug: string): Promise<KickLiveStats | null> => {
+    try {
+      const response = await fetch(`https://kick.com/api/v2/channels/${encodeURIComponent(channelSlug)}`, {
+        headers: {
+          accept: 'application/json',
+          'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        },
+      });
+      if (!response.ok) return null;
+
+      const payload = (await response.json()) as {
+        followers_count?: number;
+        follower_count?: number;
+        followers?: number;
+        subscribers_count?: number;
+        subscriber_count?: number;
+        livestream?: {
+          viewer_count?: number;
+          viewers?: number;
+          is_live?: boolean;
+        } | null;
+      };
+
+      const viewerCount = payload.livestream?.viewer_count ?? payload.livestream?.viewers ?? 0;
+      return {
+        viewerCount,
+        followerCount: payload.followers_count ?? payload.follower_count ?? payload.followers ?? null,
+        subscriberCount: payload.subscribers_count ?? payload.subscriber_count ?? null,
+        isLive: payload.livestream?.is_live ?? viewerCount > 0,
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  const startKickStatsPoll = (
+    channelSlug: string,
+    credentials: { clientId: string; clientSecret: string },
+    authSession: KickAuthSession | null,
+  ) => {
+    if (kickStatsTimer) clearInterval(kickStatsTimer);
+    void pollKickStats(channelSlug, credentials, authSession);
+    kickStatsTimer = setInterval(() => void pollKickStats(channelSlug, credentials, authSession), 15_000);
+  };
+
+  const stopKickStatsPoll = () => {
+    if (kickStatsTimer) {
+      clearInterval(kickStatsTimer);
+      kickStatsTimer = null;
+    }
+    options.stateHub.pushKickLiveStats(null);
   };
 
   const setTiktokStatus = (status: TikTokConnectionStatus, username?: string | null) => {
@@ -326,6 +731,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     videoId: string;
     title: string;
     viewCount: number | null;
+    subscriberCount: number | null;
     channelHandle: string;
   }
 
@@ -360,7 +766,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       if (!response.ok) return [];
       const html = await response.text();
       const streams = extractYtLiveVideoIds(html);
-      return streams.map((stream) => ({ ...stream, channelHandle: normalizedHandle }));
+      const subscriberCount = extractYtSubscriberCount(html);
+      return streams.map((stream) => ({ ...stream, subscriberCount, channelHandle: normalizedHandle }));
     } catch { return []; }
   };
 
@@ -395,11 +802,71 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         const title = getYtText(record.title);
         const viewCountRaw = getYtText(record.viewCountText);
         const viewCount = viewCountRaw ? parseInt(viewCountRaw.replace(/[^0-9]/g, ''), 10) || null : null;
-        found.push({ videoId: record.videoId, title, viewCount, channelHandle: '' });
+        found.push({ videoId: record.videoId, title, viewCount, subscriberCount: null, channelHandle: '' });
       }
     }
     for (const value of Object.values(record)) findLiveVideoIds(value, found);
     return found;
+  }
+
+  function extractYtSubscriberCount(html: string): number | null {
+    const data = extractYtInitialData(html);
+    if (!data) return null;
+    return findYtSubscriberCount(data);
+  }
+
+  function findYtSubscriberCount(obj: unknown): number | null {
+    if (!obj || typeof obj !== 'object') return null;
+    if (Array.isArray(obj)) {
+      for (const item of obj) {
+        const found = findYtSubscriberCount(item);
+        if (found !== null) return found;
+      }
+      return null;
+    }
+
+    const record = obj as Record<string, unknown>;
+    const candidates: string[] = [];
+    if ('subscriberCountText' in record) candidates.push(getYtText(record.subscriberCountText));
+    if ('subscribersText' in record) candidates.push(getYtText(record.subscribersText));
+
+    for (const value of Object.values(record)) {
+      if (typeof value === 'string' && /subscriber|inscrito/i.test(value)) candidates.push(value);
+    }
+
+    for (const candidate of candidates) {
+      const parsed = parseCompactCount(candidate);
+      if (parsed !== null) return parsed;
+    }
+
+    for (const value of Object.values(record)) {
+      const found = findYtSubscriberCount(value);
+      if (found !== null) return found;
+    }
+    return null;
+  }
+
+  function parseCompactCount(raw: string): number | null {
+    const normalized = raw
+      .toLowerCase()
+      .replace(/\u00a0/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const match = normalized.match(/(\d+(?:[.,]\d+)?)(?:\s*)(mil|mi|bi|k|m|b)?/i);
+    if (!match) return null;
+
+    const value = Number(match[1].replace(',', '.'));
+    if (!Number.isFinite(value)) return null;
+
+    const suffix = match[2] ?? '';
+    const multiplier = suffix === 'k' || suffix === 'mil'
+      ? 1_000
+      : suffix === 'm' || suffix === 'mi'
+        ? 1_000_000
+        : suffix === 'b' || suffix === 'bi'
+          ? 1_000_000_000
+          : 1;
+    return Math.round(value * multiplier);
   }
 
   function extractYtLiveVideoIds(html: string): LiveStreamInfo[] {
@@ -432,22 +899,29 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         youtubeScrapers.delete(videoId);
         youtubeStreamData.delete(videoId);
         logService.info('youtube', `Stopped scraper for ${videoId} (no longer live)`);
-      } else if (updated.viewCount !== null) {
+      } else if (updated.viewCount !== null || updated.subscriberCount !== null) {
         const data = youtubeStreamData.get(videoId);
-        if (data) youtubeStreamData.set(videoId, { ...data, viewerCount: updated.viewCount });
+        if (data) {
+          youtubeStreamData.set(videoId, {
+            ...data,
+            viewerCount: updated.viewCount ?? data.viewerCount,
+            subscriberCount: updated.subscriberCount ?? data.subscriberCount,
+          });
+        }
       }
     }
 
     // Start scrapers for newly detected streams (up to 2)
     const fmt = new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' });
     for (let i = 0; i < Math.min(allLiveStreams.length, YT_PLATFORMS.length); i++) {
-      const { videoId, title, viewCount } = allLiveStreams[i];
+      const { videoId, title, viewCount, subscriberCount } = allLiveStreams[i];
       if (youtubeScrapers.has(videoId)) continue;
       const platform = YT_PLATFORMS[i];
       const label = getLabelFromTitle(title, i);
       youtubeStreamData.set(videoId, {
         label,
         viewerCount: viewCount,
+        subscriberCount,
         platform,
         channelHandle: allLiveStreams[i].channelHandle,
       });
@@ -728,7 +1202,12 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
 
   ipcMain.handle(IPC_CHANNELS.profilesList, async () => profileStore.list());
-  ipcMain.handle(IPC_CHANNELS.profilesSelect, async (_, raw) => profileStore.select(selectProfileInputSchema.parse(raw).profileId));
+  ipcMain.handle(IPC_CHANNELS.profilesSelect, async (_, raw) => {
+    const snapshot = await profileStore.select(selectProfileInputSchema.parse(raw).profileId);
+    chatService.clearRecent();
+    suggestionService.clearSessionEntries();
+    return snapshot;
+  });
   ipcMain.handle(IPC_CHANNELS.profilesCreate, async (_, raw) => { const i = createProfileInputSchema.parse(raw); return profileStore.create(i.name, i.directory); });
   ipcMain.handle(IPC_CHANNELS.profilesRename, async (_, raw) => { const i = renameProfileInputSchema.parse(raw); return profileStore.rename(i.profileId, i.name); });
   ipcMain.handle(IPC_CHANNELS.profilesClone, async (_, raw) => { const i = cloneProfileInputSchema.parse(raw); return profileStore.clone(i.profileId, i.name, i.directory); });
@@ -835,7 +1314,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.chatSendMessage, async (_, raw) => {
     const i = chatSendMessageSchema.parse(raw);
     await sendPlatformMessage(i.platform, i.content);
-    if (i.platform !== 'youtube' && i.platform !== 'youtube-v') {
+    if (i.platform !== 'youtube' && i.platform !== 'youtube-v' && i.platform !== 'kick') {
       await pushLocalOutboundMessage(i.platform, i.content);
     }
   });
@@ -977,7 +1456,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       const idx = youtubeScrapers.size;
       const platform = YT_PLATFORMS[idx] ?? 'youtube-v';
       const label = String(idx + 1);
-      youtubeStreamData.set(i.videoId, { label, viewerCount: null, platform, channelHandle: null });
+      youtubeStreamData.set(i.videoId, { label, viewerCount: null, subscriberCount: null, platform, channelHandle: null });
       chatLogService.openSession(platform, i.videoId);
       suggestionService.clearSessionEntries();
       const scraper = new YouTubeScraper({
@@ -1077,12 +1556,25 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const settings = kickSettingsSchema.parse(raw);
     await store.save(settings);
   });
+  ipcMain.handle(IPC_CHANNELS.kickStartOAuth, async () => {
+    const credentials = await resolveKickApiCredentials();
+    const store = await getKickSettingsStore();
+    const settings = store ? await store.load() : defaultKickSettings();
+    const fallbackChannelSlug = normalizeKickChannelInput(settings.channelInput);
+    const session = await startKickOAuth(credentials.clientId, credentials.clientSecret, fallbackChannelSlug);
+    const tokenStore = await getKickTokenStore();
+    await tokenStore?.save(session);
+    return { channelSlug: session.channelSlug };
+  });
   ipcMain.handle(IPC_CHANNELS.kickConnect, async (_, raw) => {
     const input = kickConnectSchema.parse(raw);
     const channelSlug = normalizeKickChannelInput(input.channelInput);
     if (!channelSlug) {
       throw new Error('Kick channel is required. Use slug or URL like https://kick.com/channel');
     }
+
+    const credentials = await resolveKickApiCredentials(input);
+    const authSession = await ensureKickAuthSession(channelSlug, credentials, false);
 
     setKickStatus('connecting', channelSlug);
     chatLogService.openSession('kick', channelSlug);
@@ -1091,11 +1583,15 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     try {
       await chatService.replaceAdapter(createKickChatAdapter({
         channelSlug,
-        clientId: KICK_CLIENT_ID,
-        clientSecret: KICK_CLIENT_SECRET,
+        broadcasterUserId: authSession?.broadcasterUserId,
+        clientId: credentials.clientId,
+        clientSecret: credentials.clientSecret,
+        oauthToken: authSession?.token,
       }));
       setKickStatus('connected', channelSlug);
+      startKickStatsPoll(channelSlug, credentials, authSession);
     } catch (cause) {
+      stopKickStatsPoll();
       setKickStatus('error', channelSlug);
       throw cause;
     }
@@ -1103,9 +1599,11 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.kickDisconnect, async () => {
     chatLogService.closeSession('kick');
     await chatService.removeAdapter('kick');
+    stopKickStatsPoll();
     setKickStatus('disconnected', null);
   });
   ipcMain.handle(IPC_CHANNELS.kickGetStatus, async () => kickStatus);
+  ipcMain.handle(IPC_CHANNELS.kickGetAuthStatus, async () => getKickAuthStatus());
 
   // Auto-reconnect Twitch from saved credentials on startup
   void (async () => {
@@ -1164,17 +1662,24 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const slug = normalizeKickChannelInput(settings.channelInput);
     if (!settings.autoConnect || !slug) return;
     try {
+      const tokenStore = await getKickTokenStore();
+      const authSession = tokenStore ? await tokenStore.load() : null;
+      const credentials = await resolveKickApiCredentials({ clientId: settings.clientId, clientSecret: settings.clientSecret });
       setKickStatus('connecting', slug);
       chatLogService.openSession('kick', slug);
       suggestionService.clearSessionEntries();
       await chatService.replaceAdapter(createKickChatAdapter({
         channelSlug: slug,
-        clientId: KICK_CLIENT_ID,
-        clientSecret: KICK_CLIENT_SECRET,
+        broadcasterUserId: authSession?.channelSlug === slug ? authSession.broadcasterUserId : null,
+        clientId: credentials.clientId,
+        clientSecret: credentials.clientSecret,
+        oauthToken: authSession?.channelSlug === slug ? authSession.token : undefined,
       }));
       setKickStatus('connected', slug);
+      startKickStatsPoll(slug, credentials, authSession?.channelSlug === slug ? authSession : null);
       logService.info('kick', 'Auto-reconnected from saved settings', { channelSlug: slug });
     } catch (cause) {
+      stopKickStatsPoll();
       setKickStatus('error', slug);
       logService.warn('kick', 'Auto-reconnect failed', { channelSlug: slug, error: cause instanceof Error ? cause.message : String(cause) });
     }
@@ -1191,6 +1696,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     raffleService.dispose();
     schedulerService.stop();
     stopTwitchStatsPoll();
+    stopKickStatsPoll();
     if (youtubeMonitorTimer) clearInterval(youtubeMonitorTimer);
     await Promise.allSettled([chatService.disconnectAll(), obsService.stop(), raffleOverlayServer.stop()]);
     Object.values(IPC_CHANNELS).forEach(c => ipcMain.removeHandler(c));
@@ -1209,6 +1715,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       const store = await getTwitchCredentialsStore();
       const creds = store ? await store.load() : null;
       if (creds?.username) author = creds.username;
+    } else if (platform === 'kick') {
+      const authStatus = await getKickAuthStatus();
+      if (authStatus.channelSlug) author = authStatus.channelSlug;
     }
 
     options.stateHub.pushChatMessage({
@@ -1224,12 +1733,40 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   async function sendPlatformMessage(platform: PlatformId, content: string): Promise<void> {
     if (platform === 'youtube' || platform === 'youtube-v') {
       const scraper = getYoutubeScraperByPlatform(platform);
-      if (!scraper) throw new Error(`${platform}: scraper not connected`);
-      await scraper.sendMessage(content);
+      if (!scraper) {
+        throw new Error('Log in to YouTube in Platforms before sending messages.');
+      }
+      try {
+        await scraper.sendMessage(content);
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        if (/login|not available|not ready|not connected/i.test(message)) {
+          throw new Error('Log in to YouTube in Platforms before sending messages.');
+        }
+        throw cause;
+      }
       return;
     }
 
-    await chatService.sendMessage(platform, content);
+    if (platform === 'kick') {
+      const authStatus = await getKickAuthStatus();
+      if (!authStatus.isAuthorized || !authStatus.channelSlug) {
+        throw new Error('Log in to Kick in Platforms before sending messages.');
+      }
+    }
+
+    try {
+      await chatService.sendMessage(platform, content);
+    } catch (cause) {
+      if (platform === 'kick') {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        if (/authorization|chat:write|oauth|forbidden|401|403/i.test(message)) {
+          throw new Error('Log in to Kick in Platforms before sending messages.');
+        }
+        throw new Error(message || 'Log in to Kick in Platforms before sending messages.');
+      }
+      throw cause;
+    }
   }
 
   function logTikTokConnectionError(message: string, username: string, hasSignApiKey: boolean, cause: unknown): void {

@@ -12,6 +12,7 @@ import type {
   StreamEvent,
   SuggestionSnapshot,
   KickConnectionStatus,
+  KickLiveStats,
   TikTokConnectionStatus,
   TwitchConnectionStatus,
   TwitchLiveStats,
@@ -101,5 +102,9 @@ export class StateHub {
 
   pushKickStatus(status: KickConnectionStatus, slug?: string | null): void {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.kickStatus, status, slug ?? null);
+  }
+
+  pushKickLiveStats(stats: KickLiveStats | null): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.kickLiveStats, stats);
   }
 }

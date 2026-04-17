@@ -1,78 +1,55 @@
-import type { ChatBadge, ChatMessage, StreamEvent } from '../../shared/types.js';
+import type { ChatMessage, ChatMessageContentPart, StreamEvent } from '../../shared/types.js';
 import type { PlatformChatAdapter } from '../base.js';
 
 type KickPayloadRecord = Record<string, unknown>;
-type PusherRuntime = {
-  subscribe: (channelName: string) => SubscribedChannelHandle;
-  unsubscribe: (channelName: string) => void;
-  disconnect: () => void;
+
+type BrowserWindowRuntime = {
+  destroy: () => void;
+  isDestroyed: () => boolean;
+  on?: (eventName: string, listener: (...args: unknown[]) => void) => void;
+  loadURL: (url: string, options?: { userAgent?: string }) => Promise<void>;
+  webContents: {
+    on: (eventName: string, listener: (...args: unknown[]) => void) => void;
+    executeJavaScript: (script: string, userGesture?: boolean) => Promise<unknown>;
+  };
 };
 
 export interface KickChatAdapterOptions {
   channelSlug?: string;
   chatroomId?: number | string;
+  broadcasterUserId?: number | null;
   apiBaseUrl?: string;
   pusherAppKey?: string;
   pusherCluster?: string;
   clientId?: string;
   clientSecret?: string;
+  oauthToken?: KickOAuthToken;
   fetchFn?: typeof fetch;
 }
 
-interface KickUserPayload {
-  username?: string;
-  role?: string | null;
-  verified?: boolean;
-  is_subscribed?: boolean;
-  months_subscribed?: number | null;
-  follower_badges?: unknown[];
-  profile_picture?: string | null;
+interface KickOAuthToken {
+  accessToken: string;
+  tokenType: string;
+  expiresIn: number;
+  refreshToken?: string;
+  scope?: string;
+  expiresAt: number;
 }
 
-interface KickMessagePayload {
-  id?: string | number;
-  message?: string;
-  content?: string;
-  created_at?: number | string | null;
-  chatroom_id?: string | number | null;
-  type?: string | null;
-  action?: string | null;
-  optional_message?: string | null;
-  replied_to?: unknown;
-}
-
-interface KickChatEventPayload {
-  message?: KickMessagePayload;
-  user?: KickUserPayload;
-  sender?: KickUserPayload;
-  broadcaster?: KickUserPayload;
-  data?: KickChatEventPayload;
-}
-
-interface SubscribedChannel {
-  name: string;
-  channel: SubscribedChannelHandle;
-}
-
-interface SubscribedChannelHandle {
-  bind_global?: (handler: (eventName: string, data: unknown) => void) => void;
-  bind: (eventName: string, handler: (data: unknown) => void) => void;
-  unbind_global?: () => void;
-  unbind?: (eventName?: string) => void;
-}
-
-const DEFAULT_PUSHER_APP_KEY = '32cbd69e4b950bf97679';
-const DEFAULT_PUSHER_CLUSTER = 'us2';
 const DEFAULT_API_BASE_URL = 'https://kick.com/api/v2';
+const DEFAULT_PUBLIC_API_BASE_URL = 'https://api.kick.com/public/v1';
+const DEFAULT_OAUTH_BASE_URL = 'https://id.kick.com';
+const DEFAULT_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+export const KICK_SESSION_PARTITION = 'persist:streamer-copilot-kick';
+export const KICK_BROWSER_USER_AGENT = DEFAULT_USER_AGENT;
 
 export class KickChatAdapter implements PlatformChatAdapter {
   readonly platform = 'kick' as const;
 
-  private pusher: PusherRuntime | null = null;
-  private readonly subscribedChannels: SubscribedChannel[] = [];
   private readonly messageHandlers = new Set<(message: ChatMessage) => void>();
   private readonly eventHandlers = new Set<(event: StreamEvent) => void>();
   private readonly seenMessageKeys = new Set<string>();
+  private window: BrowserWindowRuntime | null = null;
   private chatroomId: number | null = null;
   private connected = false;
 
@@ -80,39 +57,25 @@ export class KickChatAdapter implements PlatformChatAdapter {
 
   async connect(): Promise<void> {
     if (this.connected) return;
-
-    const chatroomId = await this.resolveChatroomId();
-    if (!chatroomId) {
-      throw new Error('Kick adapter could not resolve chatroom ID');
+    if (!this.options.channelSlug) {
+      throw new Error('Kick channel slug is required to load the popout chat');
     }
 
-    this.chatroomId = chatroomId;
-    this.pusher = await this.createPusherClient();
-    if (!this.pusher) {
-      throw new Error('Kick adapter could not initialize pusher client');
+    const browserWindow = await this.createBrowserWindow();
+    if (!browserWindow) {
+      throw new Error('Kick adapter could not create the scraper window');
     }
 
-    for (const channelName of this.getChannelNames(chatroomId)) {
-      const subscribedChannel = this.pusher.subscribe(channelName);
-      subscribedChannel.bind_global?.((eventName: string, data: unknown) =>
-        this.handleChannelEvent(channelName, eventName, data),
-      );
-      subscribedChannel.bind('App\\Events\\ChatMessageSentEvent', (data: unknown) =>
-        this.handleChannelEvent(channelName, 'App\\Events\\ChatMessageSentEvent', data),
-      );
-      subscribedChannel.bind('ChatMessageSentEvent', (data: unknown) =>
-        this.handleChannelEvent(channelName, 'ChatMessageSentEvent', data),
-      );
-      subscribedChannel.bind('chat.message.sent', (data: unknown) =>
-        this.handleChannelEvent(channelName, 'chat.message.sent', data),
-      );
-      this.subscribedChannels.push({ name: channelName, channel: subscribedChannel });
-    }
+    this.window = browserWindow;
+    browserWindow.webContents.on('console-message', (...args: unknown[]) => {
+      const raw = args[2];
+      const message = typeof raw === 'string' ? raw : '';
+      this.handleConsoleMessage(message);
+    });
 
-    if (this.subscribedChannels.length === 0) {
-      throw new Error('Kick adapter did not subscribe to any chat channel');
-    }
-
+    const kickUrl = `https://kick.com/popout/${encodeURIComponent(this.options.channelSlug)}/chat`;
+    await browserWindow.loadURL(kickUrl, { userAgent: DEFAULT_USER_AGENT });
+    await this.injectScraper();
     this.connected = true;
   }
 
@@ -121,20 +84,10 @@ export class KickChatAdapter implements PlatformChatAdapter {
     this.chatroomId = null;
     this.seenMessageKeys.clear();
 
-    for (const { channel, name } of this.subscribedChannels.splice(0)) {
-      try {
-        channel.unbind_global?.();
-        channel.unbind?.('App\\Events\\ChatMessageSentEvent');
-        channel.unbind?.('ChatMessageSentEvent');
-        channel.unbind?.('chat.message.sent');
-        this.pusher?.unsubscribe(name);
-      } catch {
-        // Best effort cleanup.
-      }
+    if (this.window && !this.window.isDestroyed()) {
+      this.window.destroy();
     }
-
-    this.pusher?.disconnect();
-    this.pusher = null;
+    this.window = null;
   }
 
   async sendMessage(content: string): Promise<void> {
@@ -142,12 +95,87 @@ export class KickChatAdapter implements PlatformChatAdapter {
       throw new Error('Kick adapter is not connected to a live chatroom');
     }
 
-    const client = await this.createSendClient();
-    if (!client) {
-      throw new Error('Kick adapter is missing bot credentials for chat posting');
+    const sentViaDom = await this.sendMessageThroughPopout(content);
+    if (sentViaDom) {
+      return;
     }
 
-    await client.postMessage(content);
+    const client = await this.createSendClient();
+    if (client) {
+      await client.postMessage(content);
+      return;
+    }
+
+    throw new Error('Kick chat sending requires Kick OAuth authorization with chat:write scope');
+  }
+
+  private async sendMessageThroughPopout(content: string): Promise<boolean> {
+    if (!this.window || this.window.isDestroyed()) return false;
+
+    const escaped = JSON.stringify(content);
+
+    try {
+      const sent = await this.window.webContents.executeJavaScript(
+        `(async () => {
+          const payload = ${escaped};
+          const input = document.querySelector('[data-testid="chat-input"][contenteditable="true"]');
+          const button = document.querySelector('#send-message-button');
+          if (!(input instanceof HTMLElement) || !(button instanceof HTMLElement)) {
+            return false;
+          }
+
+          const readValue = () => {
+            if (input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) {
+              return input.value.trim();
+            }
+            return (input.textContent || '').trim();
+          };
+
+          input.focus();
+          const selection = window.getSelection();
+          const range = document.createRange();
+          range.selectNodeContents(input);
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+
+          document.execCommand?.('insertText', false, payload);
+          input.textContent = payload;
+          input.dispatchEvent(new InputEvent('input', {
+            bubbles: true,
+            data: payload,
+            inputType: 'insertText',
+          }));
+
+          if (button.matches(':disabled') || button.getAttribute('aria-disabled') === 'true') {
+            return false;
+          }
+
+          button.click();
+
+          return await new Promise((resolve) => {
+            const startedAt = Date.now();
+            const poll = () => {
+              const current = readValue();
+              if (!current || current !== payload) {
+                resolve(true);
+                return;
+              }
+              if (Date.now() - startedAt > 1500) {
+                resolve(false);
+                return;
+              }
+              setTimeout(poll, 100);
+            };
+            setTimeout(poll, 100);
+          });
+        })()`,
+        true,
+      );
+
+      return sent === true;
+    } catch {
+      return false;
+    }
   }
 
   onMessage(handler: (message: ChatMessage) => void): () => void {
@@ -160,31 +188,278 @@ export class KickChatAdapter implements PlatformChatAdapter {
     return () => this.eventHandlers.delete(handler);
   }
 
-  private async createPusherClient(): Promise<PusherRuntime | null> {
+  private async createBrowserWindow(): Promise<BrowserWindowRuntime | null> {
     try {
-      const importer = new Function('return import("pusher-js")') as () => Promise<{
-        default?: new (key: string, options: Record<string, unknown>) => PusherRuntime;
+      const importer = new Function('return import("electron")') as () => Promise<{
+        BrowserWindow?: new (options: Record<string, unknown>) => BrowserWindowRuntime;
+        default?: { BrowserWindow?: new (options: Record<string, unknown>) => BrowserWindowRuntime };
       }>;
       const module = await importer();
-      const PusherCtor = module.default;
-      if (typeof PusherCtor !== 'function') return null;
-      return new PusherCtor(this.options.pusherAppKey ?? DEFAULT_PUSHER_APP_KEY, {
-        cluster: this.options.pusherCluster ?? DEFAULT_PUSHER_CLUSTER,
-        forceTLS: true,
-        enableStats: false,
+      const BrowserWindowCtor = module.BrowserWindow ?? module.default?.BrowserWindow;
+      if (typeof BrowserWindowCtor !== 'function') return null;
+
+      return new BrowserWindowCtor({
+        width: 460,
+        height: 760,
+        show: false,
+        autoHideMenuBar: true,
+        title: 'Kick Chat (Debug)',
+        webPreferences: {
+          partition: KICK_SESSION_PARTITION,
+          offscreen: true,
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: false,
+        },
       });
     } catch {
       return null;
     }
   }
 
+  private handleConsoleMessage(message: string): void {
+    if (!message) return;
+
+    if (message.startsWith('COPILOT_CHAT:')) {
+      try {
+        const raw = JSON.parse(message.slice('COPILOT_CHAT:'.length)) as {
+          id?: string;
+          author?: string;
+          content?: string;
+          contentParts?: ChatMessageContentPart[];
+          timestampLabel?: string;
+        };
+        const author = typeof raw.author === 'string' && raw.author.trim() ? raw.author.trim() : 'Kick user';
+        const content = typeof raw.content === 'string' ? raw.content.trim() : '';
+        if (!content) return;
+        const timestampLabel = typeof raw.timestampLabel === 'string' && raw.timestampLabel.trim()
+          ? raw.timestampLabel.trim()
+          : this.formatTimestamp(new Date());
+        const id = typeof raw.id === 'string' && raw.id.trim()
+          ? raw.id.trim()
+          : `${author}:${content}:${timestampLabel}`;
+
+        if (this.seenMessageKeys.has(id)) return;
+        this.seenMessageKeys.add(id);
+        this.emitMessage({
+          id,
+          platform: 'kick',
+          author,
+          content,
+          contentParts: Array.isArray(raw.contentParts) ? raw.contentParts : undefined,
+          badges: [],
+          timestampLabel,
+        });
+      } catch {
+        // Ignore malformed scraper logs.
+      }
+      return;
+    }
+
+    if (message.startsWith('COPILOT_EVENT:')) {
+      try {
+        const raw = JSON.parse(message.slice('COPILOT_EVENT:'.length)) as StreamEvent;
+        this.emitEvent(raw);
+      } catch {
+        // Ignore malformed scraper logs.
+      }
+    }
+  }
+
+  private async injectScraper(): Promise<void> {
+    if (!this.window || this.window.isDestroyed()) return;
+
+    const script = `
+      (() => {
+        if (window.__COPILOT_KICK_SCRAPER__) {
+          window.__COPILOT_KICK_SCRAPER__.scan?.();
+          return true;
+        }
+
+        const state = {
+          seen: new Set(),
+          messageRoot: null,
+          messageObserver: null,
+          bodyObserver: null,
+          connectionLogged: false,
+        };
+        window.__COPILOT_KICK_SCRAPER__ = state;
+
+        const normalizeText = (value) => (value || '').replace(/\s+/g, ' ').trim();
+
+        const log = (value) => {
+          console.log('COPILOT_LOG:' + value);
+        };
+
+        const emitChat = (payload) => {
+          console.log('COPILOT_CHAT:' + JSON.stringify(payload));
+        };
+
+        const acceptCookies = () => {
+          const buttons = Array.from(document.querySelectorAll('button'));
+          const button = buttons.find((candidate) => /accept all/i.test(candidate.textContent || ''));
+          button?.click();
+        };
+
+        const compactParts = (parts) => {
+          const next = [];
+          for (const part of parts) {
+            if (!part) continue;
+            if (part.type === 'text') {
+              const text = part.text.replace(/\s+/g, ' ');
+              if (!text) continue;
+              const previous = next[next.length - 1];
+              if (previous && previous.type === 'text') {
+                previous.text += text;
+              } else {
+                next.push({ type: 'text', text });
+              }
+              continue;
+            }
+            next.push(part);
+          }
+
+          if (next[0]?.type === 'text') next[0].text = next[0].text.replace(/^\s+/, '');
+          const last = next[next.length - 1];
+          if (last?.type === 'text') last.text = last.text.replace(/\s+$/, '');
+          return next.filter((part) => part.type !== 'text' || part.text.length > 0);
+        };
+
+        const extractEmotePart = (element) => {
+          if (!(element instanceof HTMLElement)) return null;
+          const emote = element.matches('[data-emote-name]')
+            ? element
+            : element.querySelector('[data-emote-name]');
+          const image = element instanceof HTMLImageElement
+            ? element
+            : element.querySelector('img');
+          const name = normalizeText(emote?.dataset?.emoteName || (image instanceof HTMLImageElement ? image.alt : ''));
+          if (!name) return null;
+          return {
+            type: 'emote',
+            name,
+            imageUrl: image instanceof HTMLImageElement ? (image.currentSrc || image.src || undefined) : undefined,
+          };
+        };
+
+        const extractContentParts = (contentNode) => {
+          if (!contentNode) return [];
+          const parts = [];
+
+          const visit = (node) => {
+            if (node.nodeType === Node.TEXT_NODE) {
+              parts.push({ type: 'text', text: node.textContent || '' });
+              return;
+            }
+            if (!(node instanceof HTMLElement)) return;
+
+            const emotePart = extractEmotePart(node);
+            if (emotePart) {
+              parts.push(emotePart);
+              return;
+            }
+
+            for (const child of node.childNodes) {
+              visit(child);
+            }
+          };
+
+          visit(contentNode);
+          return compactParts(parts);
+        };
+
+        const stringifyContent = (parts) => {
+          return normalizeText(parts.map((part) => part.type === 'text' ? part.text : ':' + part.name + ':').join(''));
+        };
+
+        const findMessageBody = (wrapper) => {
+          const containers = Array.from(wrapper.querySelectorAll('div'));
+          return containers.find((candidate) => candidate.querySelector('button.inline.font-bold[data-prevent-expand="true"]')) || null;
+        };
+
+        const processMessageNode = (node) => {
+          if (!(node instanceof HTMLElement)) return;
+          const wrapper = node.matches('[data-index]') ? node : node.closest('[data-index]');
+          if (!(wrapper instanceof HTMLElement)) return;
+          if (wrapper.dataset.index === '0') return;
+
+          const body = findMessageBody(wrapper) || wrapper;
+          const authorButton = body.querySelector('button.inline.font-bold[data-prevent-expand="true"]');
+          if (!(authorButton instanceof HTMLButtonElement)) return;
+
+          const timestampNode = body.querySelector('span.text-neutral');
+          const contentNode = Array.from(body.querySelectorAll('span')).find((candidate) => {
+            const className = typeof candidate.className === 'string' ? candidate.className : '';
+            return className.includes('font-normal');
+          });
+
+          const author = normalizeText(authorButton.textContent);
+          const contentParts = extractContentParts(contentNode);
+          const content = stringifyContent(contentParts);
+          const timestampLabel = normalizeText(timestampNode?.textContent) || new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+          if (!author || !content) return;
+
+          const replyContext = body.querySelector('button.w-full.min-w-0.shrink-0.truncate');
+          const replyText = normalizeText(replyContext?.textContent);
+          const id = normalizeText([timestampLabel, author, content, replyText].filter(Boolean).join('|'));
+          if (!id || state.seen.has(id)) return;
+          state.seen.add(id);
+
+          emitChat({ id, author, content, contentParts, timestampLabel });
+        };
+
+        const scan = () => {
+          acceptCookies();
+          const footerText = normalizeText(document.querySelector('#chatroom-footer')?.textContent);
+          if (footerText.includes('Connection to chat failed') && !state.connectionLogged) {
+            state.connectionLogged = true;
+            log('Kick popout reported a temporary chat connection failure.');
+          }
+
+          const root = document.querySelector('#chatroom-messages');
+          if (!(root instanceof HTMLElement)) return;
+
+          if (state.messageRoot !== root) {
+            state.messageObserver?.disconnect?.();
+            state.messageRoot = root;
+            state.messageObserver = new MutationObserver((mutations) => {
+              for (const mutation of mutations) {
+                for (const addedNode of mutation.addedNodes) {
+                  processMessageNode(addedNode);
+                  if (addedNode instanceof HTMLElement) {
+                    addedNode.querySelectorAll?.('[data-index]').forEach(processMessageNode);
+                  }
+                }
+              }
+            });
+            state.messageObserver.observe(root, { childList: true, subtree: true });
+          }
+
+          root.querySelectorAll('[data-index]').forEach(processMessageNode);
+        };
+
+        state.scan = scan;
+        state.bodyObserver = new MutationObserver(() => scan());
+        state.bodyObserver.observe(document.body, { childList: true, subtree: true });
+
+        scan();
+        setInterval(scan, 2000);
+        log('Kick DOM scraper injected');
+        return true;
+      })();
+    `;
+
+    await this.window.webContents.executeJavaScript(script, true);
+  }
+
   private async createSendClient(): Promise<{ postMessage: (content: string) => Promise<void> } | null> {
-    if (!this.options.clientId || !this.options.clientSecret) return null;
+    if (!this.options.clientId || !this.options.clientSecret || !this.options.oauthToken || !this.options.broadcasterUserId) return null;
 
     try {
       const importer = new Function('return import("@nekiro/kick-api")') as () => Promise<{
         client?: new (options: { clientId: string; clientSecret: string }) => {
-          chat: { postMessage: (input: { type: 'bot'; content: string }) => Promise<void> };
+          setToken?: (token: KickOAuthToken) => void;
+          chat: { postMessage: (input: { type: 'bot' | 'user'; content: string; broadcaster_user_id?: number }) => Promise<void> };
         };
       }>;
       const module = await importer();
@@ -194,9 +469,14 @@ export class KickChatAdapter implements PlatformChatAdapter {
         clientId: this.options.clientId,
         clientSecret: this.options.clientSecret,
       });
+      kickClient.setToken?.(this.options.oauthToken);
       return {
         postMessage: async (content: string) => {
-          await kickClient.chat.postMessage({ type: 'bot', content });
+          await kickClient.chat.postMessage({
+            type: 'user',
+            broadcaster_user_id: this.options.broadcasterUserId ?? undefined,
+            content,
+          });
         },
       };
     } catch {
@@ -212,17 +492,27 @@ export class KickChatAdapter implements PlatformChatAdapter {
     }
     if (!this.options.channelSlug) return null;
 
+    const officialApiId = await this.resolveChannelIdFromOfficialApi();
+    if (officialApiId !== null) {
+      return officialApiId;
+    }
+
     const fetchFn = this.options.fetchFn ?? fetch;
     const baseApi = this.options.apiBaseUrl ?? DEFAULT_API_BASE_URL;
     const slug = encodeURIComponent(this.options.channelSlug);
     const endpoints = [`${baseApi}/channels/${slug}/chatroom`, `${baseApi}/channels/${slug}`];
 
     for (const endpoint of endpoints) {
-      const response = await fetchFn(endpoint, {
-        headers: {
-          accept: 'application/json',
-        },
-      });
+      let response: Response;
+      try {
+        response = await fetchFn(endpoint, {
+          headers: {
+            accept: 'application/json',
+          },
+        });
+      } catch {
+        continue;
+      }
 
       if (!response.ok) {
         continue;
@@ -259,196 +549,68 @@ export class KickChatAdapter implements PlatformChatAdapter {
     return null;
   }
 
-  private getChannelNames(chatroomId: number): string[] {
-    const base = String(chatroomId);
-    return [`chatrooms.${base}.v2`, `chatroom_${base}`, `chatrooms.${base}`];
-  }
-
-  private handleChannelEvent(channelName: string, eventName: string, rawData: unknown): void {
-    if (eventName.startsWith('pusher:') || eventName.startsWith('pusher_internal:')) {
-      return;
+  private async resolveChannelIdFromOfficialApi(): Promise<number | null> {
+    if (!this.options.channelSlug || !this.options.clientId || !this.options.clientSecret) {
+      return null;
     }
 
-    const payload = this.unwrapPayload(rawData);
-    const message = this.buildChatMessage(channelName, eventName, payload);
-    if (message) {
-      const messageKey = message.id ?? `${message.author}:${message.content}:${message.timestampLabel}`;
-      if (this.seenMessageKeys.has(messageKey)) return;
-      this.seenMessageKeys.add(messageKey);
-      this.emitMessage(message);
-      return;
+    const fetchFn = this.options.fetchFn ?? fetch;
+    const token = await this.fetchOfficialAccessToken(fetchFn);
+    if (!token) return null;
+
+    const slug = encodeURIComponent(this.options.channelSlug);
+    let response: Response;
+    try {
+      response = await fetchFn(`${DEFAULT_PUBLIC_API_BASE_URL}/channels?slug=${slug}`, {
+        headers: {
+          accept: 'application/json',
+          authorization: `Bearer ${token}`,
+        },
+      });
+    } catch {
+      return null;
     }
 
-    const event = this.buildStreamEvent(channelName, eventName, payload);
-    if (event) {
-      this.emitEvent(event);
+    if (!response.ok) {
+      return null;
     }
+
+    const payload = (await response.json()) as KickPayloadRecord;
+    const wrappedData = Array.isArray(payload.data) ? payload.data : [];
+    const channel = wrappedData.find((entry) => typeof entry === 'object' && entry !== null);
+    const channelRecord = (channel ?? payload) as KickPayloadRecord;
+
+    return this.parseNumericId(channelRecord.broadcaster_user_id)
+      ?? this.parseNumericId(channelRecord.id)
+      ?? null;
   }
 
-  private buildChatMessage(channelName: string, eventName: string, payload: KickPayloadRecord): ChatMessage | null {
-    const eventPayload = this.extractChatEventPayload(payload);
-    const messagePayload = this.getObject(payload.message ?? eventPayload.message ?? payload);
-    const userPayload = this.getObject(payload.user ?? payload.sender ?? eventPayload.user ?? eventPayload.sender ?? eventPayload.broadcaster);
+  private async fetchOfficialAccessToken(fetchFn: typeof fetch): Promise<string | null> {
+    try {
+      const response = await fetchFn(`${DEFAULT_OAUTH_BASE_URL}/oauth/token`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          accept: 'application/json',
+        },
+        body: new URLSearchParams({
+          grant_type: 'client_credentials',
+          client_id: this.options.clientId ?? '',
+          client_secret: this.options.clientSecret ?? '',
+        }),
+      });
 
-    const content = this.extractMessageText(messagePayload, payload, eventPayload);
-    if (!content.trim()) return null;
-
-    const author = this.extractAuthor(userPayload);
-    const timestamp = this.extractTimestamp(messagePayload, payload);
-    const badges = this.extractBadges(userPayload);
-    const id = this.extractMessageId(messagePayload, payload, channelName, eventName, author, content, timestamp);
-
-    return {
-      id,
-      platform: 'kick',
-      author,
-      content,
-      badges,
-      timestampLabel: this.formatTimestamp(timestamp),
-    };
-  }
-
-  private buildStreamEvent(_channelName: string, eventName: string, payload: KickPayloadRecord): StreamEvent | null {
-    const eventType = this.mapEventType(eventName, payload);
-    if (!eventType) return null;
-
-    const author = this.extractAuthor(this.getObject(payload.user ?? payload.sender ?? payload.broadcaster));
-    const timestamp = this.extractTimestamp(this.getObject(payload.message ?? payload), payload);
-    const amount = this.extractAmount(payload);
-    const message = this.extractMessageText(this.getObject(payload.message ?? payload), payload, this.extractChatEventPayload(payload));
-
-    return {
-      id: this.extractMessageId(this.getObject(payload.message ?? payload), payload, eventName, eventType, author, message, timestamp),
-      platform: 'kick',
-      type: eventType,
-      author,
-      amount,
-      message: message || undefined,
-      timestampLabel: this.formatTimestamp(timestamp),
-    };
-  }
-
-  private mapEventType(eventName: string, payload: KickPayloadRecord): StreamEvent['type'] | null {
-    const normalized = eventName.toLowerCase();
-    const typeValue = typeof payload.type === 'string' ? payload.type.toLowerCase() : '';
-    const actionValue = typeof payload.action === 'string' ? payload.action.toLowerCase() : '';
-
-    if (normalized.includes('follow') || typeValue.includes('follow')) return 'follow';
-    if (normalized.includes('gift') || typeValue.includes('gift')) return 'gift';
-    if (normalized.includes('subscription') || typeValue.includes('subscription') || actionValue.includes('sub')) return 'subscription';
-    if (normalized.includes('raid') || typeValue.includes('raid')) return 'raid';
-    if (normalized.includes('cheer') || typeValue.includes('cheer') || normalized.includes('bit')) return 'cheer';
-    if (normalized.includes('superchat') || normalized.includes('super_chat') || typeValue.includes('superchat')) return 'superchat';
-
-    return null;
-  }
-
-  private extractChatEventPayload(payload: KickPayloadRecord): KickChatEventPayload {
-    const nested = this.getObject(payload.data);
-    return {
-      message: this.getObject(nested.message ?? payload.message) as KickMessagePayload | undefined,
-      user: this.getObject(nested.user ?? payload.user) as KickUserPayload | undefined,
-      sender: this.getObject(nested.sender ?? payload.sender) as KickUserPayload | undefined,
-      broadcaster: this.getObject(nested.broadcaster ?? payload.broadcaster) as KickUserPayload | undefined,
-      data: nested as KickChatEventPayload | undefined,
-    };
-  }
-
-  private extractAuthor(userPayload: KickPayloadRecord): string {
-    const username = userPayload.username;
-    if (typeof username === 'string' && username.trim()) return username.trim();
-    return 'Kick user';
-  }
-
-  private extractMessageText(messagePayload: KickPayloadRecord, payload: KickPayloadRecord, eventPayload: KickChatEventPayload): string {
-    const candidates = [
-      messagePayload.message,
-      messagePayload.content,
-      payload.message,
-      payload.content,
-      eventPayload?.message && typeof eventPayload.message.message === 'string' ? eventPayload.message.message : undefined,
-      payload.optional_message,
-    ];
-
-    for (const candidate of candidates) {
-      if (typeof candidate === 'string' && candidate.trim()) {
-        return candidate.trim();
+      if (!response.ok) {
+        return null;
       }
+
+      const payload = (await response.json()) as KickPayloadRecord;
+      return typeof payload.access_token === 'string' && payload.access_token.trim()
+        ? payload.access_token
+        : null;
+    } catch {
+      return null;
     }
-
-    return '';
-  }
-
-  private extractBadges(userPayload: KickPayloadRecord): ChatBadge[] {
-    const badges: ChatBadge[] = [];
-    const role = typeof userPayload.role === 'string' ? userPayload.role.toLowerCase() : '';
-    const isSubscribed = userPayload.is_subscribed === true || (typeof userPayload.months_subscribed === 'number' && userPayload.months_subscribed > 0);
-    const hasFollowerBadge = Array.isArray(userPayload.follower_badges) && userPayload.follower_badges.length > 0;
-
-    if (role.includes('mod')) badges.push('moderator');
-    if (role.includes('broadcaster')) {
-      badges.push('subscriber');
-    } else if (isSubscribed || hasFollowerBadge) {
-      badges.push('subscriber');
-    }
-
-    return [...new Set(badges)];
-  }
-
-  private extractTimestamp(messagePayload: KickPayloadRecord, payload: KickPayloadRecord): Date {
-    const raw = messagePayload.created_at ?? payload.created_at ?? payload.timestamp;
-    if (typeof raw === 'number' && Number.isFinite(raw)) {
-      return new Date(raw < 1_000_000_000_000 ? raw * 1000 : raw);
-    }
-    if (typeof raw === 'string') {
-      const parsed = Number(raw);
-      if (Number.isFinite(parsed)) {
-        return new Date(parsed < 1_000_000_000_000 ? parsed * 1000 : parsed);
-      }
-      const asDate = new Date(raw);
-      if (!Number.isNaN(asDate.getTime())) return asDate;
-    }
-    return new Date();
-  }
-
-  private extractAmount(payload: KickPayloadRecord): number | undefined {
-    const candidates = [
-      payload.amount,
-      payload.bits,
-      payload.total,
-      payload.value,
-      payload.message && typeof payload.message === 'object' ? (payload.message as KickPayloadRecord).amount : undefined,
-    ];
-
-    for (const candidate of candidates) {
-      const parsed = this.parseNumericId(candidate);
-      if (parsed !== null) return parsed;
-    }
-    return undefined;
-  }
-
-  private extractMessageId(
-    messagePayload: KickPayloadRecord,
-    payload: KickPayloadRecord,
-    scopeA: string,
-    scopeB: string,
-    author: string,
-    content: string,
-    timestamp: Date,
-  ): string {
-    const candidates = [
-      messagePayload.id,
-      payload.message_id,
-      payload.id,
-      payload.uuid,
-    ];
-
-    for (const candidate of candidates) {
-      if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
-      if (typeof candidate === 'number' && Number.isFinite(candidate)) return String(candidate);
-    }
-
-    return `${scopeA}:${scopeB}:${author}:${content}:${timestamp.getTime()}`;
   }
 
   private emitMessage(message: ChatMessage): void {
@@ -461,16 +623,6 @@ export class KickChatAdapter implements PlatformChatAdapter {
     for (const handler of this.eventHandlers) {
       handler(event);
     }
-  }
-
-  private unwrapPayload(rawData: unknown): KickPayloadRecord {
-    if (typeof rawData !== 'object' || rawData === null) return {};
-    const record = rawData as KickPayloadRecord;
-    return this.getObject(record.data ?? record);
-  }
-
-  private getObject(value: unknown): KickPayloadRecord {
-    return typeof value === 'object' && value !== null ? (value as KickPayloadRecord) : {};
   }
 
   private parseNumericId(value: unknown): number | null {

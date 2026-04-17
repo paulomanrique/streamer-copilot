@@ -29,11 +29,16 @@ export interface LanguageOption {
 export type PlatformId = 'twitch' | 'youtube' | 'youtube-v' | 'kick' | 'tiktok';
 
 export type ChatBadge = 'moderator' | 'subscriber' | 'member' | 'vip' | 'broadcaster' | (string & {});
+export type ChatMessageContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'emote'; name: string; imageUrl?: string };
+
 export interface ChatMessage {
   id: string;
   platform: PlatformId;
   author: string;
   content: string;
+  contentParts?: ChatMessageContentPart[];
   badges: ChatBadge[];
   timestampLabel: string;
   color?: string;
@@ -52,6 +57,13 @@ export interface TwitchLiveStats {
     goal: number;
     expiry: string; // ISO timestamp
   } | null;
+}
+
+export interface KickLiveStats {
+  viewerCount: number;
+  followerCount: number | null;
+  subscriberCount: number | null;
+  isLive: boolean;
 }
 
 export type StreamEventType = 'subscription' | 'superchat' | 'raid' | 'cheer' | 'follow' | 'gift';
@@ -73,6 +85,7 @@ export interface YouTubeStreamInfo {
   channelHandle: string | null;
   label: string;
   viewerCount: number | null;
+  subscriberCount: number | null;
   liveUrl: string;
 }
 
@@ -432,6 +445,13 @@ export interface KickSettings {
   clientId: string;
   clientSecret: string;
   autoConnect: boolean;
+}
+
+export interface KickAuthStatus {
+  channelSlug: string | null;
+  expiresAt: number | null;
+  scope: string | null;
+  isAuthorized: boolean;
 }
 
 export interface ProfileSummary {
