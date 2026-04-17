@@ -859,18 +859,41 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
   ipcMain.handle(IPC_CHANNELS.twitchStartOAuth, async () => {
     return new Promise((resolve, reject) => {
+      const OAUTH_TIMEOUT_MS = 120_000;
+      const timeout = setTimeout(() => { server.close(); reject(new Error('OAuth timed out')); }, OAUTH_TIMEOUT_MS);
+      const cleanup = () => { clearTimeout(timeout); server.close(); };
       const server = http.createServer(async (req, res) => {
         const url = new URL(req.url!, `http://localhost:${TWITCH_REDIRECT_PORT}`);
-        if (url.pathname === '/callback') { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end('<!DOCTYPE html><html><body style="background:#0e0e10;color:#fff;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh"><div>Connecting...<script>const t=new URLSearchParams(window.location.hash.substring(1)).get("access_token");if(t)fetch("/token?t="+t).then(()=>document.body.innerHTML="Connected! You can close this tab.")</script></div></body></html>'); return; }
+        if (url.pathname === '/callback') { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end('<!DOCTYPE html><html><body style="background:#0e0e10;color:#fff;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh"><div>Connecting...<script>const t=new URLSearchParams(window.location.hash.substring(1)).get("access_token");if(t){fetch("/token?t="+t).then(()=>document.body.innerHTML="Connected! You can close this tab.")}else{fetch("/token-error").then(()=>document.body.innerHTML="Authorization denied. You can close this tab.")}</script></div></body></html>'); return; }
+        if (url.pathname === '/token-error') { res.end('ok'); cleanup(); reject(new Error('OAuth authorization was denied')); return; }
         if (url.pathname === '/token') {
-          const t = url.searchParams.get('t'); res.end('ok'); server.close();
-          if (!t) return reject(new Error('No token'));
-          const r = await fetch('https://api.twitch.tv/helix/users', { headers: { Authorization: `Bearer ${t}`, 'Client-Id': TWITCH_CLIENT_ID } });
-          const d = await r.json(); const login = d.data?.[0]?.login;
-          if (!login) return reject(new Error('No login'));
-          resolve({ accessToken: t, username: login });
+          const t = url.searchParams.get('t');
+          res.end('ok');
+          if (!t) { cleanup(); return reject(new Error('No token')); }
+          try {
+            logService.info('twitch-oauth', 'Received token, fetching user info...');
+            const r = await fetch('https://api.twitch.tv/helix/users', { headers: { Authorization: `Bearer ${t}`, 'Client-Id': TWITCH_CLIENT_ID } });
+            if (!r.ok) {
+              const body = await r.text();
+              cleanup();
+              logService.error('twitch-oauth', `Helix API returned ${r.status}`, { body });
+              return reject(new Error(`Twitch API error: ${r.status}`));
+            }
+            const d = await r.json();
+            const login = d.data?.[0]?.login;
+            logService.info('twitch-oauth', `Helix response login: ${login ?? '(none)'}`);
+            cleanup();
+            if (!login) return reject(new Error('Failed to fetch Twitch username'));
+            resolve({ accessToken: t, username: login });
+          } catch (err) {
+            cleanup();
+            logService.error('twitch-oauth', 'OAuth token exchange failed', { error: err instanceof Error ? err.message : String(err) });
+            reject(err instanceof Error ? err : new Error(String(err)));
+          }
         }
-      }).listen(TWITCH_REDIRECT_PORT, '127.0.0.1', () => shell.openExternal(`https://id.twitch.tv/oauth2/authorize?client_id=${TWITCH_CLIENT_ID}&redirect_uri=http://localhost:${TWITCH_REDIRECT_PORT}/callback&response_type=token&scope=chat:read+chat:edit`));
+      });
+      server.on('error', (err) => { clearTimeout(timeout); reject(err); });
+      server.listen(TWITCH_REDIRECT_PORT, '127.0.0.1', () => shell.openExternal(`https://id.twitch.tv/oauth2/authorize?client_id=${TWITCH_CLIENT_ID}&redirect_uri=http://localhost:${TWITCH_REDIRECT_PORT}/callback&response_type=token&scope=chat:read+chat:edit`));
     });
   });
 
