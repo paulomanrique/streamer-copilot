@@ -994,18 +994,15 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
 
   // TikTok Handlers
-  ipcMain.handle(IPC_CHANNELS.tiktokGetSettings, async () => { const s = await getTiktokSettingsStore(); return s ? s.load() : { username: '', signApiKey: '', autoConnect: false }; });
+  ipcMain.handle(IPC_CHANNELS.tiktokGetSettings, async () => { const s = await getTiktokSettingsStore(); return s ? s.load() : { username: '', autoConnect: false }; });
   ipcMain.handle(IPC_CHANNELS.tiktokSaveSettings, async (_, raw) => { const s = await getTiktokSettingsStore(); if (s) await s.save(tiktokSettingsSchema.parse(raw)); });
   ipcMain.handle(IPC_CHANNELS.tiktokConnect, async (_, raw) => {
     const c = tiktokConnectSchema.parse(raw);
     setTiktokStatus('connecting', c.username);
     chatLogService.openSession('tiktok', c.username);
     suggestionService.clearSessionEntries();
-    const settingsStore = await getTiktokSettingsStore();
-    const settings = settingsStore ? await settingsStore.load() : null;
     await chatService.replaceAdapter(createTikTokChatAdapter({
       username: c.username,
-      signApiKey: settings?.signApiKey || undefined,
       onStatusChange: (status) => setTiktokStatus(status),
     }));
   });
@@ -1062,7 +1059,6 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       suggestionService.clearSessionEntries();
       await chatService.replaceAdapter(createTikTokChatAdapter({
         username: settings.username,
-        signApiKey: settings.signApiKey || undefined,
         onStatusChange: (status) => setTiktokStatus(status),
       }));
       logService.info('tiktok', 'Auto-reconnected from saved settings', { username: settings.username });

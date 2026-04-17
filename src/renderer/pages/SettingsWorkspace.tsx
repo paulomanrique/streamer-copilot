@@ -165,7 +165,7 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
   const [currentView, setCurrentView] = useState<SettingsView>('general');
 
   return (
-    <section className="h-full flex">
+    <section className="flex-1 min-h-0 flex">
       <aside className="w-56 bg-gray-900 border-r border-gray-800 flex flex-col shrink-0">
         <div className="px-4 py-3 border-b border-gray-800">
           <h2 className="text-sm font-semibold text-gray-300">Settings</h2>
