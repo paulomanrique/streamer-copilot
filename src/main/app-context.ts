@@ -157,7 +157,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     repository: textRepository,
     onRespond: async (payload) => {
       try {
-        await chatService.sendMessage(payload.platform, payload.content);
+        await sendPlatformMessage(payload.platform, payload.content);
         await pushLocalOutboundMessage(payload.platform, payload.content);
         logService.info('text-command', 'Sent response', { platform: payload.platform, content: payload.content });
       } catch (cause) {
@@ -793,7 +793,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.chatGetRecent, async () => chatService.getRecent());
   ipcMain.handle(IPC_CHANNELS.chatSendMessage, async (_, raw) => {
     const i = chatSendMessageSchema.parse(raw);
-    await chatService.sendMessage(i.platform, i.content);
+    await sendPlatformMessage(i.platform, i.content);
     await pushLocalOutboundMessage(i.platform, i.content);
   });
   ipcMain.handle(IPC_CHANNELS.logsList, async (_, raw) => logService.list(eventLogFiltersSchema.parse(raw)));
@@ -1108,6 +1108,17 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       badges: [],
       timestampLabel: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()),
     });
+  }
+
+  async function sendPlatformMessage(platform: PlatformId, content: string): Promise<void> {
+    if (platform === 'youtube' || platform === 'youtube-v') {
+      const scraper = getYoutubeScraperByPlatform(platform);
+      if (!scraper) throw new Error(`${platform}: scraper not connected`);
+      await scraper.sendMessage(content);
+      return;
+    }
+
+    await chatService.sendMessage(platform, content);
   }
 
   function formatWinnerAnnouncement(raffle: Raffle, winnerName: string): string {

@@ -219,6 +219,13 @@ export function ChatFeed({ messages, events, connectedPlatforms }: ChatFeedProps
   });
   const hasMultipleYouTubeStreams = connectedPlatforms.includes('youtube') && connectedPlatforms.includes('youtube-v');
 
+  useEffect(() => {
+    if (connectedPlatforms.length === 0) return;
+    if (!connectedPlatforms.includes(inputPlatform)) {
+      setInputPlatform(connectedPlatforms[0]);
+    }
+  }, [connectedPlatforms, inputPlatform]);
+
   // ── scroll management ──────────────────────────────────────────────
   const onScroll = () => {
     if (!feedRef.current) return;
