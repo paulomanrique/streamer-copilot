@@ -334,8 +334,8 @@ export function PlatformsSettingsPage() {
       await window.copilot.kickSaveSettings(kickSettings);
       await window.copilot.kickConnect({
         channelInput,
-        clientId: kickSettings.clientId.trim(),
-        clientSecret: kickSettings.clientSecret.trim(),
+        clientId: '',
+        clientSecret: '',
       });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Failed to connect to Kick');
@@ -684,31 +684,6 @@ export function PlatformsSettingsPage() {
                   placeholder="gaules or https://kick.com/gaules"
                   className="w-full bg-gray-900 border border-gray-700 rounded text-sm text-gray-200 px-3 py-1.5 focus:outline-none focus:border-green-500 font-mono"
                 />
-              </div>
-
-              <div>
-                <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider font-semibold">Client ID <span className="text-gray-600">(optional for read-only)</span></label>
-                <input
-                  type="text"
-                  value={kickSettings.clientId}
-                  onChange={(e) => setKickSettings({ ...kickSettings, clientId: e.target.value })}
-                  onBlur={() => void saveKickSettings(kickSettings)}
-                  placeholder="Kick bot client ID"
-                  className="w-full bg-gray-900 border border-gray-700 rounded text-sm text-gray-200 px-3 py-1.5 focus:outline-none focus:border-green-500 font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider font-semibold">Client Secret <span className="text-gray-600">(optional for read-only)</span></label>
-                <input
-                  type="password"
-                  value={kickSettings.clientSecret}
-                  onChange={(e) => setKickSettings({ ...kickSettings, clientSecret: e.target.value })}
-                  onBlur={() => void saveKickSettings(kickSettings)}
-                  placeholder="Kick bot client secret"
-                  className="w-full bg-gray-900 border border-gray-700 rounded text-sm text-gray-200 px-3 py-1.5 focus:outline-none focus:border-green-500 font-mono"
-                />
-                <p className="text-[10px] text-gray-600 mt-0.5">Required only to send chat messages as bot. Reading public chat works without credentials.</p>
               </div>
 
               <div className="flex items-center gap-2 pt-1">

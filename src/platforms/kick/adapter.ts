@@ -83,13 +83,13 @@ export class KickChatAdapter implements PlatformChatAdapter {
 
     const chatroomId = await this.resolveChatroomId();
     if (!chatroomId) {
-      return;
+      throw new Error('Kick adapter could not resolve chatroom ID');
     }
 
     this.chatroomId = chatroomId;
     this.pusher = await this.createPusherClient();
     if (!this.pusher) {
-      return;
+      throw new Error('Kick adapter could not initialize pusher client');
     }
 
     for (const channelName of this.getChannelNames(chatroomId)) {
@@ -107,6 +107,10 @@ export class KickChatAdapter implements PlatformChatAdapter {
         this.handleChannelEvent(channelName, 'chat.message.sent', data),
       );
       this.subscribedChannels.push({ name: channelName, channel: subscribedChannel });
+    }
+
+    if (this.subscribedChannels.length === 0) {
+      throw new Error('Kick adapter did not subscribe to any chat channel');
     }
 
     this.connected = true;
@@ -209,28 +213,47 @@ export class KickChatAdapter implements PlatformChatAdapter {
     if (!this.options.channelSlug) return null;
 
     const fetchFn = this.options.fetchFn ?? fetch;
-    const response = await fetchFn(`${this.options.apiBaseUrl ?? DEFAULT_API_BASE_URL}/channels/${encodeURIComponent(this.options.channelSlug)}/chatroom`, {
-      headers: {
-        accept: 'application/json',
-      },
-    });
+    const baseApi = this.options.apiBaseUrl ?? DEFAULT_API_BASE_URL;
+    const slug = encodeURIComponent(this.options.channelSlug);
+    const endpoints = [`${baseApi}/channels/${slug}/chatroom`, `${baseApi}/channels/${slug}`];
 
-    if (!response.ok) {
-      return null;
-    }
+    for (const endpoint of endpoints) {
+      const response = await fetchFn(endpoint, {
+        headers: {
+          accept: 'application/json',
+        },
+      });
 
-    const payload = (await response.json()) as KickPayloadRecord;
-    const candidates = [
-      payload.id,
-      payload.chatroom_id,
-      payload.chatroomId,
-      payload?.data && typeof payload.data === 'object' ? (payload.data as KickPayloadRecord).id : undefined,
-      payload?.data && typeof payload.data === 'object' ? (payload.data as KickPayloadRecord).chatroom_id : undefined,
-    ];
+      if (!response.ok) {
+        continue;
+      }
 
-    for (const candidate of candidates) {
-      const parsed = this.parseNumericId(candidate);
-      if (parsed !== null) return parsed;
+      const payload = (await response.json()) as KickPayloadRecord;
+      const chatroom = payload.chatroom && typeof payload.chatroom === 'object'
+        ? (payload.chatroom as KickPayloadRecord)
+        : undefined;
+      const livestream = payload.livestream && typeof payload.livestream === 'object'
+        ? (payload.livestream as KickPayloadRecord)
+        : undefined;
+      const data = payload.data && typeof payload.data === 'object'
+        ? (payload.data as KickPayloadRecord)
+        : undefined;
+
+      const candidates = [
+        payload.id,
+        payload.chatroom_id,
+        payload.chatroomId,
+        chatroom?.id,
+        chatroom?.chatroom_id,
+        livestream?.chatroom_id,
+        data?.id,
+        data?.chatroom_id,
+      ];
+
+      for (const candidate of candidates) {
+        const parsed = this.parseNumericId(candidate);
+        if (parsed !== null) return parsed;
+      }
     }
 
     return null;

@@ -82,6 +82,8 @@ import type { AppInfo, KickConnectionStatus, KickSettings, PlatformId, Raffle, T
 
 const TWITCH_CLIENT_ID = 'vtwg8tzuv1nlip4qh9n6sxx2p76g0s';
 const TWITCH_REDIRECT_PORT = 32999;
+const KICK_CLIENT_ID = '01KPDVPG20B3QXSFBQQ3EFPH6P';
+const KICK_CLIENT_SECRET = '0dae2c68bdb3910d97b7ce91cabe6e774fc826301b0e06eb61f379a42679b863';
 import { StateHub } from './state-hub.js';
 
 interface AppContextOptions {
@@ -1089,8 +1091,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     try {
       await chatService.replaceAdapter(createKickChatAdapter({
         channelSlug,
-        clientId: input.clientId.trim() || undefined,
-        clientSecret: input.clientSecret.trim() || undefined,
+        clientId: KICK_CLIENT_ID,
+        clientSecret: KICK_CLIENT_SECRET,
       }));
       setKickStatus('connected', channelSlug);
     } catch (cause) {
@@ -1167,8 +1169,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       suggestionService.clearSessionEntries();
       await chatService.replaceAdapter(createKickChatAdapter({
         channelSlug: slug,
-        clientId: settings.clientId.trim() || undefined,
-        clientSecret: settings.clientSecret.trim() || undefined,
+        clientId: KICK_CLIENT_ID,
+        clientSecret: KICK_CLIENT_SECRET,
       }));
       setKickStatus('connected', slug);
       logService.info('kick', 'Auto-reconnected from saved settings', { channelSlug: slug });

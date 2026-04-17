@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 
-import type { ChatMessage, ObsStatsSnapshot, StreamEvent, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
+import type { ChatMessage, KickConnectionStatus, ObsStatsSnapshot, StreamEvent, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
 import { ChatFeed } from './ChatFeed.js';
 import { EventBanner } from './EventBanner.js';
 import { ObsStatsPanel } from './ObsStatsPanel.js';
@@ -17,9 +17,11 @@ interface DashboardSummaryProps {
   youtubeStreams: YouTubeStreamInfo[];
   tiktokStatus: TikTokConnectionStatus;
   tiktokUsername: string | null;
+  kickStatus: KickConnectionStatus;
+  kickSlug: string | null;
 }
 
-export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, obsStats, twitchStatus, twitchChannel, twitchLiveStats, youtubeStreams, tiktokStatus, tiktokUsername }: DashboardSummaryProps) {
+export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, obsStats, twitchStatus, twitchChannel, twitchLiveStats, youtubeStreams, tiktokStatus, tiktokUsername, kickStatus, kickSlug }: DashboardSummaryProps) {
   const visibleMessages = chatMessages;
   const visibleEvents = chatEvents;
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -50,8 +52,9 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
     if (youtubeStreams.length >= 1) list.push('youtube');
     if (youtubeStreams.length >= 2) list.push('youtube-v');
     if (tiktokStatus === 'connected') list.push('tiktok');
+    if (kickStatus === 'connected') list.push('kick');
     return list;
-  }, [twitchStatus, youtubeStreams, tiktokStatus]);
+  }, [twitchStatus, youtubeStreams, tiktokStatus, kickStatus]);
 
   const filteredActivity = visibleEvents.filter((event) => enabledTypes[event.type] !== false);
 
@@ -81,6 +84,8 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
             twitchLiveStats={twitchLiveStats} 
             twitchConnected={twitchStatus === 'connected'} 
             youtubeStreams={youtubeStreams}
+            kickStatus={kickStatus}
+            kickSlug={kickSlug}
           />
 
           <div className="flex flex-col flex-1 overflow-hidden p-4">
@@ -157,6 +162,8 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
         youtubeStreams={youtubeStreams}
         tiktokStatus={tiktokStatus}
         tiktokUsername={tiktokUsername}
+        kickStatus={kickStatus}
+        kickSlug={kickSlug}
       />
     </section>
   );

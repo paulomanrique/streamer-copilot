@@ -1,4 +1,4 @@
-import type { TikTokConnectionStatus, TwitchConnectionStatus, YouTubeStreamInfo } from '../../shared/types.js';
+import type { KickConnectionStatus, TikTokConnectionStatus, TwitchConnectionStatus, YouTubeStreamInfo } from '../../shared/types.js';
 
 interface StatusBarProps {
   activeProfileName: string;
@@ -8,6 +8,8 @@ interface StatusBarProps {
   youtubeStreams: YouTubeStreamInfo[];
   tiktokStatus: TikTokConnectionStatus;
   tiktokUsername: string | null;
+  kickStatus: KickConnectionStatus;
+  kickSlug: string | null;
 }
 
 const TWITCH_DOT: Record<TwitchConnectionStatus, string> = {
@@ -24,7 +26,7 @@ const TWITCH_LABEL: Record<TwitchConnectionStatus, string> = {
   error: 'Error',
 };
 
-export function StatusBar({ activeProfileName, obsConnected, twitchStatus, twitchChannel, youtubeStreams, tiktokStatus, tiktokUsername }: StatusBarProps) {
+export function StatusBar({ activeProfileName, obsConnected, twitchStatus, twitchChannel, youtubeStreams, tiktokStatus, tiktokUsername, kickStatus, kickSlug }: StatusBarProps) {
   const twitchLabel = twitchStatus === 'connected' && twitchChannel
     ? `#${twitchChannel}`
     : TWITCH_LABEL[twitchStatus];
@@ -66,6 +68,13 @@ export function StatusBar({ activeProfileName, obsConnected, twitchStatus, twitc
         <span className={`w-2 h-2 rounded-full ${tiktokStatus === 'connected' ? 'bg-pink-500 pulse-dot' : tiktokStatus === 'connecting' ? 'bg-yellow-400 animate-pulse' : tiktokStatus === 'error' ? 'bg-red-500' : 'bg-gray-600'}`} />
         <span>
           TikTok: <span className="text-gray-300">{tiktokStatus === 'connected' && tiktokUsername ? `@${tiktokUsername}` : tiktokStatus === 'connecting' ? 'Connecting…' : tiktokStatus === 'error' ? 'Error' : 'Disconnected'}</span>
+        </span>
+      </div>
+
+      <div className="flex items-center gap-1.5 ml-2">
+        <span className={`w-2 h-2 rounded-full ${kickStatus === 'connected' ? 'bg-green-500 pulse-dot' : kickStatus === 'connecting' ? 'bg-yellow-400 animate-pulse' : kickStatus === 'error' ? 'bg-red-500' : 'bg-gray-600'}`} />
+        <span>
+          Kick: <span className="text-gray-300">{kickStatus === 'connected' ? (kickSlug ?? 'Connected') : kickStatus === 'connecting' ? 'Connecting…' : kickStatus === 'error' ? 'Error' : 'Disconnected'}</span>
         </span>
       </div>
 

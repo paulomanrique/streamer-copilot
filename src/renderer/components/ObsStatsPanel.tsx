@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import type { ObsStatsSnapshot, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
+import type { KickConnectionStatus, ObsStatsSnapshot, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
 
 interface ObsStatsPanelProps {
   stats: ObsStatsSnapshot;
   twitchLiveStats: TwitchLiveStats | null;
   twitchConnected: boolean;
   youtubeStreams: YouTubeStreamInfo[];
+  kickStatus: KickConnectionStatus;
+  kickSlug: string | null;
 }
 
 
@@ -22,7 +24,7 @@ function fmtNum(n: number): string {
   return String(n);
 }
 
-export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtubeStreams }: ObsStatsPanelProps) {
+export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtubeStreams, kickStatus, kickSlug }: ObsStatsPanelProps) {
   const totalFrames = Math.max(1, stats.droppedFrames + stats.droppedFramesRender + 100);
   const connectionPct = Math.max(0, Math.min(100, (1 - stats.droppedFrames / totalFrames) * 100));
   const connectionTone = connectionPct >= 95 ? 'text-green-400' : connectionPct >= 80 ? 'text-yellow-400' : 'text-red-400';
@@ -102,7 +104,7 @@ export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtube
           <span className="text-xs font-mono text-gray-300">{connectionPct.toFixed(1)}%</span>
         </div>
 
-        {(twitchConnected || youtubeStreams.length > 0) && (
+        {(twitchConnected || youtubeStreams.length > 0 || kickStatus === 'connected') && (
           <div className="col-span-4 grid grid-cols-2 gap-2">
             {twitchConnected && (
               <ViewerCard
@@ -128,6 +130,17 @@ export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtube
                 isLive
               />
             ))}
+            {kickStatus === 'connected' && (
+              <ViewerCard
+                label={kickSlug ? `Kick · ${kickSlug}` : 'Kick'}
+                icon={ICONS.kick}
+                classes="bg-green-500/10 border-green-500/20 text-green-300"
+                metaClass="text-green-400"
+                value="Connected"
+                valueLabel="status"
+                isLive
+              />
+            )}
           </div>
         )}
 
@@ -168,6 +181,7 @@ function ViewerCard({
   value,
   isLive,
   followers,
+  valueLabel = 'viewers',
 }: {
   label: string;
   icon: string;
@@ -176,6 +190,7 @@ function ViewerCard({
   value: string;
   isLive?: boolean;
   followers?: string;
+  valueLabel?: string;
 }) {
   return (
     <div className={`border rounded-lg p-2.5 text-center ${classes}`}>
@@ -187,7 +202,7 @@ function ViewerCard({
         {isLive ? <span className="text-[10px] text-red-400 font-bold ml-0.5">LIVE</span> : null}
       </div>
       <div className="text-base font-mono font-bold">{value}</div>
-      <div className="text-xs text-gray-500 mt-0.5">viewers</div>
+      <div className="text-xs text-gray-500 mt-0.5">{valueLabel}</div>
       {followers !== undefined ? (
         <div className="text-xs mt-0.5">
           <span className={metaClass}>{followers}</span> <span className="text-gray-500">followers</span>
