@@ -4,9 +4,7 @@ interface ProfileSelectorModalProps {
   open: boolean;
   profiles: ProfileSummary[];
   selectorProfileId: string;
-  skipPromptAgain: boolean;
   onChangeProfileId: (profileId: string) => void;
-  onChangeSkipPromptAgain: (checked: boolean) => void;
   onCreateProfile: () => void;
   onConfirm: () => void;
 }
@@ -15,9 +13,7 @@ export function ProfileSelectorModal({
   open,
   profiles,
   selectorProfileId,
-  skipPromptAgain,
   onChangeProfileId,
-  onChangeSkipPromptAgain,
   onCreateProfile,
   onConfirm,
 }: ProfileSelectorModalProps) {
@@ -52,17 +48,6 @@ export function ProfileSelectorModal({
             <p className="text-sm text-gray-400">No profiles exist yet. Create your first profile to continue.</p>
           )}
 
-          {hasProfiles ? (
-            <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={skipPromptAgain}
-                onChange={(event) => onChangeSkipPromptAgain(event.target.checked)}
-                className="accent-violet-500"
-              />
-              Do not ask me again
-            </label>
-          ) : null}
         </div>
         <div className="flex justify-end gap-3 px-5 py-4 border-t border-gray-700">
           {hasProfiles ? (

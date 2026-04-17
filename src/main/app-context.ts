@@ -959,10 +959,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     options.stateHub.pushYoutubeStatus([]);
   });
   ipcMain.handle(IPC_CHANNELS.youtubeGetStatus, async () => getYoutubeStreams());
-  ipcMain.handle(IPC_CHANNELS.youtubeOpenLogin, async (e) => {
-    const win = new BrowserWindow({ width: 600, height: 800, parent: BrowserWindow.fromWebContents(e.sender)!, modal: true, title: 'YouTube Login', autoHideMenuBar: true });
-    win.webContents.on('did-navigate', (_, u) => { const t = new URL(u); if (t.hostname.includes('youtube.com') && t.pathname === '/' && !u.includes('signin')) setTimeout(() => { if (!win.isDestroyed()) win.close(); }, 1500); });
-    await win.loadURL('https://accounts.google.com/ServiceLogin?service=youtube&continue=https://www.youtube.com/signin?action_handle_signin=true');
+  ipcMain.handle(IPC_CHANNELS.youtubeOpenLogin, async () => {
+    await shell.openExternal('https://accounts.google.com/ServiceLogin?service=youtube&continue=https://www.youtube.com/signin?action_handle_signin=true');
   });
   ipcMain.handle(IPC_CHANNELS.youtubeCheckLive, async (_, handle: unknown) => {
     const streams = await checkYouTubeLive(String(handle ?? ''));

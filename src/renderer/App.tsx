@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { AppInfo, GeneralSettings, PermissionLevel, ProfilesSnapshot, VoiceSpeakPayload } from '../shared/types.js';
-import { readSkipPromptPreference, shouldPromptProfileSelector } from './profile-startup.js';
 import { useAppStore } from './store.js';
 import { AppHeader } from './components/AppHeader.js';
 import { DashboardSummary } from './components/DashboardSummary.js';
@@ -12,7 +11,6 @@ import { StatusMessages } from './components/StatusMessages.js';
 import { ToastStack, type ToastItem } from './components/ToastStack.js';
 import { SettingsWorkspace } from './pages/SettingsWorkspace.js';
 
-const SKIP_PROFILE_SELECTOR_KEY = 'streamerCopilot.skipProfileSelector';
 const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   startOnLogin: false,
   minimizeToTray: true,
@@ -55,7 +53,6 @@ export default function App() {
   const [profileFormName, setProfileFormName] = useState('');
   const [profileFormDirectory, setProfileFormDirectory] = useState('');
   const [selectorProfileId, setSelectorProfileId] = useState('');
-  const [skipPromptAgain, setSkipPromptAgain] = useState(false);
   const [currentSection, setCurrentSection] = useState<AppSection>('dashboard');
   const [generalSettings, setGeneralSettings] = useState<GeneralSettings>(DEFAULT_GENERAL_SETTINGS);
   const [languageCode, setLanguageCode] = useState('en-US');
@@ -99,14 +96,7 @@ export default function App() {
         setYoutubeStreams(ytInitialStatus);
         setTiktokStatus(tiktokInitialStatus);
         setSelectorProfileId(snapshot.activeProfileId);
-        const skipPreference = readSkipPromptPreference(localStorage.getItem(SKIP_PROFILE_SELECTOR_KEY));
-        setSkipPromptAgain(skipPreference);
-        setIsProfileSelectorOpen(
-          shouldPromptProfileSelector({
-            forceOpen: snapshot.profiles.length === 0,
-            skipPromptPreference: skipPreference,
-          }),
-        );
+        setIsProfileSelectorOpen(true);
       } catch (cause) {
         pushError(cause instanceof Error ? cause.message : 'Failed to load initial data');
       } finally {
@@ -116,6 +106,12 @@ export default function App() {
 
     void load();
   }, [setChatSnapshot, setProfiles, setTwitchStatus, setTwitchChannel]);
+
+  useEffect(() => {
+    if (!isLoading && !activeProfileId) {
+      setIsProfileSelectorOpen(true);
+    }
+  }, [activeProfileId, isLoading]);
 
   useEffect(() => {
     if (toasts.length === 0) return undefined;
@@ -383,13 +379,11 @@ export default function App() {
     const selected = await onSelectProfile(targetProfileId);
     if (!selected) return;
 
-    if (skipPromptAgain) localStorage.setItem(SKIP_PROFILE_SELECTOR_KEY, '1');
-    else localStorage.removeItem(SKIP_PROFILE_SELECTOR_KEY);
-
     setIsProfileSelectorOpen(false);
   };
 
   const activeProfileName = activeProfile?.name ?? '-';
+  const hasActiveProfile = Boolean(activeProfileId);
 
   const saveGeneralSettings = async (settings: GeneralSettings) => {
     try {
@@ -405,20 +399,22 @@ export default function App() {
   return (
     <main className="h-screen overflow-hidden bg-gray-950 text-gray-200 flex flex-col">
       <section className="w-screen flex-1 min-h-0 bg-gray-950 flex flex-col">
-        <AppHeader
-          appInfo={appInfo}
-          currentSection={currentSection}
-          onChangeSection={setCurrentSection}
-          twitchChannel={twitchChannel}
-          twitchLiveStats={twitchLiveStats}
-          youtubeStreams={youtubeStreams}
-          tiktokStatus={tiktokStatus}
-          tiktokUsername={tiktokUsername}
-        />
+        {hasActiveProfile ? (
+          <AppHeader
+            appInfo={appInfo}
+            currentSection={currentSection}
+            onChangeSection={setCurrentSection}
+            twitchChannel={twitchChannel}
+            twitchLiveStats={twitchLiveStats}
+            youtubeStreams={youtubeStreams}
+            tiktokStatus={tiktokStatus}
+            tiktokUsername={tiktokUsername}
+          />
+        ) : null}
 
         <StatusMessages isLoading={isLoading} error={error} />
 
-        {currentSection === 'dashboard' ? (
+        {hasActiveProfile && currentSection === 'dashboard' ? (
           <DashboardSummary
             activeProfileName={activeProfileName}
             chatEvents={chatEvents}
@@ -433,7 +429,7 @@ export default function App() {
           />
         ) : null}
 
-        {currentSection === 'settings' ? (
+        {hasActiveProfile && currentSection === 'settings' ? (
           <SettingsWorkspace
             activeProfileId={activeProfileId}
             activeProfileName={activeProfileName}
@@ -459,12 +455,10 @@ export default function App() {
       </section>
 
       <ProfileSelectorModal
-        open={isProfileSelectorOpen}
+        open={isProfileSelectorOpen || (!isLoading && !hasActiveProfile)}
         profiles={profiles}
         selectorProfileId={selectorProfileId}
-        skipPromptAgain={skipPromptAgain}
         onChangeProfileId={setSelectorProfileId}
-        onChangeSkipPromptAgain={setSkipPromptAgain}
         onCreateProfile={openCreateProfileModal}
         onConfirm={() => void confirmProfileSelector()}
       />

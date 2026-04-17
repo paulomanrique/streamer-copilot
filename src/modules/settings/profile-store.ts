@@ -29,8 +29,8 @@ export class ProfileStore {
 
   async list(): Promise<ProfilesSnapshot> {
     const state = await this.readState();
-    await this.ensureProfileFiles(state);
-    return state;
+    await this.ensureProfileFiles(state, { createMissingDirectories: false });
+    return await this.withAvailableActiveProfile(state);
   }
 
   async select(profileId: string): Promise<ProfilesSnapshot> {
@@ -40,13 +40,14 @@ export class ProfileStore {
     if (!target) {
       throw new Error(`Profile not found: ${profileId}`);
     }
+    await this.assertProfileDirectoryAvailable(target);
 
     const now = new Date().toISOString();
     target.lastUsedAt = now;
     state.activeProfileId = profileId;
 
     await this.writeState(state);
-    await this.ensureProfileFiles(state);
+    await this.ensureProfileFiles(state, { createMissingDirectories: false });
 
     return state;
   }
@@ -70,7 +71,7 @@ export class ProfileStore {
     state.activeProfileId = profileId;
 
     await this.writeState(state);
-    await this.ensureProfileFiles(state);
+    await this.ensureProfileFiles(state, { createMissingDirectories: true });
     return state;
   }
 
@@ -100,7 +101,7 @@ export class ProfileStore {
     this.assertUniqueName(state, normalizedName);
     this.assertUniqueDirectory(state, normalizedDirectory);
 
-    await this.ensureProfileFiles(state);
+    await this.ensureProfileFiles(state, { createMissingDirectories: false });
     await fs.mkdir(normalizedDirectory, { recursive: true });
 
     const files = Object.values(PROFILE_CONFIG_FILES);
@@ -184,9 +185,17 @@ export class ProfileStore {
     return { activeProfileId, profiles };
   }
 
-  private async ensureProfileFiles(state: ProfileState): Promise<void> {
+  private async ensureProfileFiles(
+    state: ProfileState,
+    options: { createMissingDirectories: boolean },
+  ): Promise<void> {
     for (const profile of state.profiles) {
-      await fs.mkdir(profile.directory, { recursive: true });
+      if (options.createMissingDirectories) {
+        await fs.mkdir(profile.directory, { recursive: true });
+      } else {
+        const isAvailable = await this.profileDirectoryExists(profile.directory);
+        if (!isAvailable) continue;
+      }
 
       const files = [
         { fileName: PROFILE_CONFIG_FILES.settings, defaultContent: EMPTY_OBJECT },
@@ -205,6 +214,32 @@ export class ProfileStore {
           await fs.writeFile(filePath, file.defaultContent, 'utf-8');
         }
       }
+    }
+  }
+
+  private async withAvailableActiveProfile(state: ProfileState): Promise<ProfileState> {
+    if (!state.activeProfileId) return state;
+
+    const activeProfile = state.profiles.find((profile) => profile.id === state.activeProfileId);
+    if (!activeProfile) return { ...state, activeProfileId: '' };
+
+    const isAvailable = await this.profileDirectoryExists(activeProfile.directory);
+    return isAvailable ? state : { ...state, activeProfileId: '' };
+  }
+
+  private async assertProfileDirectoryAvailable(profile: ProfileRecord): Promise<void> {
+    const isAvailable = await this.profileDirectoryExists(profile.directory);
+    if (!isAvailable) {
+      throw new Error(`Profile directory is not available: ${profile.directory}`);
+    }
+  }
+
+  private async profileDirectoryExists(directory: string): Promise<boolean> {
+    try {
+      const stat = await fs.stat(directory);
+      return stat.isDirectory();
+    } catch {
+      return false;
     }
   }
 

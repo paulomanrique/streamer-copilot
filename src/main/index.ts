@@ -22,6 +22,9 @@ const __dirname = path.dirname(__filename);
 const DIST_ROOT = path.resolve(__dirname, '..');
 const PRELOAD_PATH = path.join(DIST_ROOT, 'preload', 'index.cjs');
 const RENDERER_INDEX_PATH = path.join(DIST_ROOT, 'renderer', 'index.html');
+const USER_DATA_DIR_NAME = 'streamer-copilot';
+
+app.setName(USER_DATA_DIR_NAME);
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -76,6 +79,8 @@ async function createMainWindow(): Promise<void> {
 }
 
 app.whenReady().then(async () => {
+  await migrateLegacyProfilesIfNeeded();
+
   protocol.handle('copilot-local', (request) => {
     const filePath = request.url.slice('copilot-local://'.length);
     return net.fetch(`file://${filePath}`);
@@ -113,6 +118,35 @@ app.whenReady().then(async () => {
     }
   });
 });
+
+async function migrateLegacyProfilesIfNeeded(): Promise<void> {
+  const currentUserDataPath = app.getPath('userData');
+  const legacyUserDataPath = path.join(app.getPath('appData'), 'Electron');
+  if (path.resolve(currentUserDataPath) === path.resolve(legacyUserDataPath)) return;
+
+  const currentProfilesPath = path.join(currentUserDataPath, 'profiles.json');
+  const legacyProfilesPath = path.join(legacyUserDataPath, 'profiles.json');
+
+  const [currentHasProfiles, legacyHasProfiles] = await Promise.all([
+    profilesFileHasProfiles(currentProfilesPath),
+    profilesFileHasProfiles(legacyProfilesPath),
+  ]);
+
+  if (currentHasProfiles || !legacyHasProfiles) return;
+
+  await fs.mkdir(currentUserDataPath, { recursive: true });
+  await fs.copyFile(legacyProfilesPath, currentProfilesPath);
+}
+
+async function profilesFileHasProfiles(filePath: string): Promise<boolean> {
+  try {
+    const content = await fs.readFile(filePath, 'utf-8');
+    const parsed = JSON.parse(content) as { profiles?: unknown[] };
+    return Array.isArray(parsed.profiles) && parsed.profiles.length > 0;
+  } catch {
+    return false;
+  }
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
