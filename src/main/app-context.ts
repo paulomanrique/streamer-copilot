@@ -6,7 +6,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
-import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { BrowserWindow, dialog, ipcMain, net, shell } from 'electron';
 import { parseFile as parseAudioFile } from 'music-metadata';
 import type { OpenDialogOptions } from 'electron';
 
@@ -283,7 +283,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       const rawHandle = handleMatch ? handleMatch[1] : handle;
       const normalizedHandle = rawHandle.startsWith('@') ? rawHandle : `@${rawHandle}`;
       const url = `https://www.youtube.com/${normalizedHandle}/streams`;
-      const response = await fetch(url, {
+      const response = await net.fetch(url, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
           'Accept-Language': 'en-US,en;q=0.9',
@@ -424,7 +424,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   const pollTwitchStats = async (channel: string, accessToken: string): Promise<void> => {
     try {
-      const userRes = await fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(channel)}`, {
+      const userRes = await net.fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(channel)}`, {
         headers: { Authorization: `Bearer ${accessToken}`, 'Client-Id': TWITCH_CLIENT_ID }
       });
       const userData = (await userRes.json()) as { data?: Array<{ id: string }> };
@@ -432,9 +432,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       if (!userId) return;
 
       const [streamRes, followersRes, hypeRes] = await Promise.all([
-        fetch(`https://api.twitch.tv/helix/streams?user_id=${userId}`, { headers: { Authorization: `Bearer ${accessToken}`, 'Client-Id': TWITCH_CLIENT_ID } }),
-        fetch(`https://api.twitch.tv/helix/channels/followers?broadcaster_id=${userId}`, { headers: { Authorization: `Bearer ${accessToken}`, 'Client-Id': TWITCH_CLIENT_ID } }),
-        fetch(`https://api.twitch.tv/helix/hypetrain/events?broadcaster_id=${userId}`, { headers: { Authorization: `Bearer ${accessToken}`, 'Client-Id': TWITCH_CLIENT_ID } }),
+        net.fetch(`https://api.twitch.tv/helix/streams?user_id=${userId}`, { headers: { Authorization: `Bearer ${accessToken}`, 'Client-Id': TWITCH_CLIENT_ID } }),
+        net.fetch(`https://api.twitch.tv/helix/channels/followers?broadcaster_id=${userId}`, { headers: { Authorization: `Bearer ${accessToken}`, 'Client-Id': TWITCH_CLIENT_ID } }),
+        net.fetch(`https://api.twitch.tv/helix/hypetrain/events?broadcaster_id=${userId}`, { headers: { Authorization: `Bearer ${accessToken}`, 'Client-Id': TWITCH_CLIENT_ID } }),
       ]);
 
       const [streamData, followersData, hypeData] = await Promise.all([
@@ -468,13 +468,13 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const loadTwitchBadges = async (channel: string, token: string): Promise<void> => {
     try {
       const h = { Authorization: `Bearer ${token}`, 'Client-Id': TWITCH_CLIENT_ID };
-      const userRes = await fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(channel)}`, { headers: h });
+      const userRes = await net.fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(channel)}`, { headers: h });
       const userData = (await userRes.json()) as { data?: Array<{ id: string }> };
       const broadcasterId = userData.data?.[0]?.id;
       const urls = ['https://api.twitch.tv/helix/chat/badges/global'];
       if (broadcasterId) urls.push(`https://api.twitch.tv/helix/chat/badges?broadcaster_id=${broadcasterId}`);
       const jsons = await Promise.all(
-        urls.map(async (url) => (await fetch(url, { headers: h })).json() as Promise<{ data?: Array<{ set_id: string; versions: Array<{ id: string; image_url_2x: string }> }> }>),
+        urls.map(async (url) => (await net.fetch(url, { headers: h })).json() as Promise<{ data?: Array<{ set_id: string; versions: Array<{ id: string; image_url_2x: string }> }> }>),
       );
       for (const json of jsons) {
         for (const set of json.data ?? []) {
@@ -826,7 +826,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       const s = await getTwitchCredentialsStore(); const c = s ? await s.load() : null;
       if (c) {
         try {
-          const res = await fetch(`https://api.twitch.tv/helix/users?${uncached.map(l => `login=${encodeURIComponent(l)}`).join('&')}`, { headers: { Authorization: `Bearer ${c.oauthToken.replace(/^oauth:/,'')}`, 'Client-Id': TWITCH_CLIENT_ID } });
+          const res = await net.fetch(`https://api.twitch.tv/helix/users?${uncached.map(l => `login=${encodeURIComponent(l)}`).join('&')}`, { headers: { Authorization: `Bearer ${c.oauthToken.replace(/^oauth:/,'')}`, 'Client-Id': TWITCH_CLIENT_ID } });
           const d = await res.json(); (d.data ?? []).forEach((u: any) => userAvatarCache.set(u.login.toLowerCase(), u.profile_image_url));
           uncached.forEach(l => { if (!userAvatarCache.has(l.toLowerCase())) userAvatarCache.set(l.toLowerCase(), ''); });
         } catch {}
@@ -843,12 +843,12 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       if (c) {
         try {
           const h = { Authorization: `Bearer ${c.oauthToken.replace(/^oauth:/,'')}`, 'Client-Id': TWITCH_CLIENT_ID };
-          const g = await fetch('https://api.twitch.tv/helix/chat/badges/global', { headers: h });
+          const g = await net.fetch('https://api.twitch.tv/helix/chat/badges/global', { headers: h });
           const gd = await g.json(); (gd.data ?? []).forEach((set: any) => set.versions.forEach((v: any) => badgeCache.set(`${set.set_id}/${v.id}`, v.image_url_1x)));
-          const u = await fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(c.channel)}`, { headers: h });
+          const u = await net.fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(c.channel)}`, { headers: h });
           const ud = await u.json(); const uid = ud.data?.[0]?.id;
           if (uid) {
-            const ch = await fetch(`https://api.twitch.tv/helix/chat/badges?broadcaster_id=${uid}`, { headers: h });
+            const ch = await net.fetch(`https://api.twitch.tv/helix/chat/badges?broadcaster_id=${uid}`, { headers: h });
             const cd = await ch.json(); (cd.data ?? []).forEach((set: any) => set.versions.forEach((v: any) => badgeCache.set(`${set.set_id}/${v.id}`, v.image_url_1x)));
           }
         } catch {}
@@ -872,7 +872,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
           if (!t) { cleanup(); return reject(new Error('No token')); }
           try {
             logService.info('twitch-oauth', 'Received token, fetching user info...');
-            const r = await fetch('https://api.twitch.tv/helix/users', { headers: { Authorization: `Bearer ${t}`, 'Client-Id': TWITCH_CLIENT_ID } });
+            const r = await net.fetch('https://api.twitch.tv/helix/users', { headers: { Authorization: `Bearer ${t}`, 'Client-Id': TWITCH_CLIENT_ID } });
             if (!r.ok) {
               const body = await r.text();
               cleanup();
