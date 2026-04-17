@@ -4,6 +4,7 @@ import type { PlatformChatAdapter } from '../base.js';
 
 export interface TikTokAdapterOptions {
   username: string;
+  signApiKey?: string;
   onStatusChange?: (status: TikTokConnectionStatus) => void;
 }
 
@@ -105,8 +106,12 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
       const connectionOptions: Record<string, unknown> = {
         enableExtendedGiftInfo: true,
         processInitialData: false,
-        disableEulerFallbacks: true,
+        disableEulerFallbacks: !this.options.signApiKey,
       };
+
+      if (this.options.signApiKey) {
+        connectionOptions.signApiKey = this.options.signApiKey;
+      }
 
       return new ConnectionCtor(this.options.username, connectionOptions);
     } catch {
