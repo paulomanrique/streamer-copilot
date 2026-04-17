@@ -37,6 +37,7 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
 
     const conn = await this.createConnection();
     if (!conn) {
+      this.options.onError?.(new Error('Failed to create TikTokLiveConnection'));
       this.options.onStatusChange?.('error');
       return;
     }
@@ -103,7 +104,10 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
         default?: { TikTokLiveConnection?: new (username: string, options?: Record<string, unknown>) => TikTokConnection };
       };
       const ConnectionCtor = module.TikTokLiveConnection ?? module.default?.TikTokLiveConnection;
-      if (typeof ConnectionCtor !== 'function') return null;
+      if (typeof ConnectionCtor !== 'function') {
+        this.options.onError?.(new Error('tiktok-live-connector did not export TikTokLiveConnection'));
+        return null;
+      }
 
       const connectionOptions: Record<string, unknown> = {
         enableExtendedGiftInfo: true,
@@ -116,7 +120,8 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
       }
 
       return new ConnectionCtor(this.options.username, connectionOptions);
-    } catch {
+    } catch (cause) {
+      this.options.onError?.(cause);
       return null;
     }
   }

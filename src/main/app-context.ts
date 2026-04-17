@@ -1017,14 +1017,11 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     suggestionService.clearSessionEntries();
     const settingsStore = await getTiktokSettingsStore();
     const settings = settingsStore ? await settingsStore.load() : null;
+    logService.info('tiktok', 'Connecting', { username: c.username, hasSignApiKey: Boolean(settings?.signApiKey) });
     await chatService.replaceAdapter(createTikTokChatAdapter({
       username: c.username,
       signApiKey: settings?.signApiKey || undefined,
-      onError: (cause) => logService.error('tiktok', 'Connection error', {
-        username: c.username,
-        hasSignApiKey: Boolean(settings?.signApiKey),
-        error: cause instanceof Error ? cause.message : String(cause),
-      }),
+      onError: (cause) => logTikTokConnectionError('Connection error', c.username, Boolean(settings?.signApiKey), cause),
       onStatusChange: (status) => setTiktokStatus(status),
     }));
   });
@@ -1082,11 +1079,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       await chatService.replaceAdapter(createTikTokChatAdapter({
         username: settings.username,
         signApiKey: settings.signApiKey || undefined,
-        onError: (cause) => logService.error('tiktok', 'Auto-reconnect connection error', {
-          username: settings.username,
-          hasSignApiKey: Boolean(settings.signApiKey),
-          error: cause instanceof Error ? cause.message : String(cause),
-        }),
+        onError: (cause) => logTikTokConnectionError('Auto-reconnect connection error', settings.username, Boolean(settings.signApiKey), cause),
         onStatusChange: (status) => setTiktokStatus(status),
       }));
       logService.info('tiktok', 'Auto-reconnected from saved settings', { username: settings.username });
@@ -1145,6 +1138,18 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }
 
     await chatService.sendMessage(platform, content);
+  }
+
+  function logTikTokConnectionError(message: string, username: string, hasSignApiKey: boolean, cause: unknown): void {
+    const metadata = {
+      username,
+      hasSignApiKey,
+      errorName: cause instanceof Error ? cause.name : undefined,
+      error: cause instanceof Error ? cause.message : String(cause),
+      stack: cause instanceof Error ? cause.stack : undefined,
+    };
+    logService.error('tiktok', message, metadata);
+    console.error(`[tiktok] ${message}`, metadata);
   }
 
   function formatWinnerAnnouncement(raffle: Raffle, winnerName: string): string {
