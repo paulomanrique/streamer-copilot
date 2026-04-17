@@ -27,6 +27,10 @@ const MODE_LABELS: Record<SuggestionListMode, string> = {
   session: 'Session (clears on connect)',
 };
 
+function mapEntryCounts(lists: SuggestionList[]): Record<string, number> {
+  return Object.fromEntries(lists.map((list) => [list.id, list.entryCount]));
+}
+
 export function SuggestionsPage() {
   const triggerInputRef = useRef<HTMLInputElement | null>(null);
   const [rows, setRows] = useState<SuggestionList[]>([]);
@@ -52,6 +56,7 @@ export function SuggestionsPage() {
       try {
         const lists = await window.copilot.listSuggestionLists();
         setRows(lists);
+        setEntryCounts(mapEntryCounts(lists));
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : 'Failed to load suggestion lists');
       }
@@ -133,6 +138,7 @@ export function SuggestionsPage() {
       };
       const updated = await window.copilot.upsertSuggestionList(input);
       setRows(updated);
+      setEntryCounts(mapEntryCounts(updated));
       setIsModalOpen(false);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Failed to save');
@@ -146,6 +152,7 @@ export function SuggestionsPage() {
     try {
       const updated = await window.copilot.deleteSuggestionList({ id });
       setRows(updated);
+      setEntryCounts(mapEntryCounts(updated));
       if (expandedListId === id) {
         setExpandedListId(null);
         setEntries([]);

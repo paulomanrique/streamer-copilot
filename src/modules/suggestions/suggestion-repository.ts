@@ -14,6 +14,7 @@ interface SuggestionListRow {
   cooldown_seconds: number;
   user_cooldown_seconds: number;
   enabled: number;
+  entry_count: number;
 }
 
 interface SuggestionEntryRow {
@@ -41,7 +42,8 @@ export class SuggestionRepository {
     const rows = this.db
       .prepare(
         `SELECT id, title, trigger, mode, allow_duplicates, permissions_json,
-                cooldown_seconds, user_cooldown_seconds, enabled
+                cooldown_seconds, user_cooldown_seconds, enabled,
+                (SELECT COUNT(*) FROM suggestion_entries e WHERE e.list_id = suggestion_lists.id) AS entry_count
          FROM suggestion_lists
          ORDER BY created_at ASC, id ASC`,
       )
@@ -153,6 +155,7 @@ export class SuggestionRepository {
       cooldownSeconds: row.cooldown_seconds,
       userCooldownSeconds: row.user_cooldown_seconds,
       enabled: row.enabled === 1,
+      entryCount: row.entry_count,
     };
   }
 

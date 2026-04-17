@@ -475,6 +475,7 @@ export interface SuggestionList {
   cooldownSeconds: number;
   userCooldownSeconds: number;
   enabled: boolean;
+  entryCount: number;
 }
 
 export interface SuggestionEntry {

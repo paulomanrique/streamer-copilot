@@ -14,6 +14,7 @@ function makeList(overrides: Partial<SuggestionList> = {}): SuggestionList {
     cooldownSeconds: 0,
     userCooldownSeconds: 0,
     enabled: true,
+    entryCount: 0,
     ...overrides,
   };
 }
