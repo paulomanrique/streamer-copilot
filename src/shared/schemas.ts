@@ -203,6 +203,16 @@ export const youtubeSettingsSchema = z.object({
   autoConnect: z.boolean(),
 });
 
+export const tiktokConnectSchema = z.object({
+  username: z.string().min(1).max(80),
+});
+
+export const tiktokSettingsSchema = z.object({
+  username: z.string().max(80),
+  signApiKey: z.string().max(200),
+  autoConnect: z.boolean(),
+});
+
 export const eventLogFiltersSchema = z
   .object({
     level: z.union([eventLogLevelSchema, z.literal('all')]).optional(),

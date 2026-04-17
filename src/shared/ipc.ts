@@ -120,6 +120,13 @@ export const IPC_CHANNELS = {
   youtubeGetSettings: 'youtube:get-settings',
   youtubeSaveSettings: 'youtube:save-settings',
   youtubeCheckLive: 'youtube:check-live',
+  tiktokConnect: 'tiktok:connect',
+  tiktokDisconnect: 'tiktok:disconnect',
+  tiktokGetStatus: 'tiktok:get-status',
+  tiktokGetSettings: 'tiktok:get-settings',
+  tiktokSaveSettings: 'tiktok:save-settings',
+  tiktokStatus: 'tiktok:status',
+  tiktokCheckLive: 'tiktok:check-live',
   chatLogListSessions: 'chatLog:list-sessions',
   chatLogGetMessages: 'chatLog:get-messages',
   chatLogExportSession: 'chatLog:export-session',
@@ -205,6 +212,13 @@ export interface CopilotApi {
   youtubeGetSettings: () => Promise<import('./types.js').YouTubeSettings>;
   youtubeSaveSettings: (settings: import('./types.js').YouTubeSettings) => Promise<void>;
   youtubeCheckLive: (handle: string) => Promise<{ videoIds: string[] }>;
+  tiktokConnect: (input: { username: string }) => Promise<void>;
+  tiktokDisconnect: () => Promise<void>;
+  tiktokGetStatus: () => Promise<import('./types.js').TikTokConnectionStatus>;
+  tiktokGetSettings: () => Promise<import('./types.js').TikTokSettings>;
+  tiktokSaveSettings: (settings: import('./types.js').TikTokSettings) => Promise<void>;
+  onTiktokStatus: (listener: (status: import('./types.js').TikTokConnectionStatus, username: string | null) => void) => () => void;
+  tiktokCheckLive: (username: string) => Promise<{ isLive: boolean }>;
   chatLogListSessions: (filters?: { platform?: string }) => Promise<ChatSession[]>;
   chatLogGetMessages: (sessionId: string, opts?: { limit?: number; offset?: number }) => Promise<ChatLogMessage[]>;
   chatLogExportSession: (sessionId: string) => Promise<void>;

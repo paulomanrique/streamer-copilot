@@ -33,6 +33,8 @@ import { TextService } from '../modules/text/text-service.js';
 import { VoiceCommandRepository } from '../modules/voice/voice-repository.js';
 import { VoiceService } from '../modules/voice/voice-service.js';
 import { createKickChatAdapter } from '../platforms/kick/adapter.js';
+import { TikTokSettingsStore } from '../platforms/tiktok/settings-store.js';
+import { createTikTokChatAdapter } from '../platforms/tiktok/adapter.js';
 import { TwitchCredentialsStore } from '../platforms/twitch/credentials-store.js';
 import { createTwitchChatAdapter } from '../platforms/twitch/adapter.js';
 import { createYouTubeChatAdapter } from '../platforms/youtube/adapter.js';
@@ -60,6 +62,8 @@ import {
   selectProfileInputSchema,
   textCommandDeleteInputSchema,
   textCommandUpsertInputSchema,
+  tiktokConnectSchema,
+  tiktokSettingsSchema,
   twitchCredentialsSchema,
   voiceCommandDeleteInputSchema,
   voiceCommandUpsertInputSchema,
@@ -67,7 +71,7 @@ import {
   youtubeConnectSchema,
   youtubeSettingsSchema,
 } from '../shared/schemas.js';
-import type { AppInfo, PlatformId, Raffle, TwitchConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../shared/types.js';
+import type { AppInfo, PlatformId, Raffle, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../shared/types.js';
 
 const TWITCH_CLIENT_ID = 'vtwg8tzuv1nlip4qh9n6sxx2p76g0s';
 const TWITCH_REDIRECT_PORT = 32999;
@@ -223,6 +227,22 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const active = snapshot.profiles.find((p) => p.id === snapshot.activeProfileId);
     if (!active) return null;
     return new YouTubeSettingsStore(active.directory);
+  };
+
+  const getTiktokSettingsStore = async (): Promise<TikTokSettingsStore | null> => {
+    const snapshot = await profileStore.list();
+    const active = snapshot.profiles.find((p) => p.id === snapshot.activeProfileId);
+    if (!active) return null;
+    return new TikTokSettingsStore(active.directory);
+  };
+
+  let tiktokStatus: TikTokConnectionStatus = 'disconnected';
+  let tiktokUsername: string | null = null;
+
+  const setTiktokStatus = (status: TikTokConnectionStatus, username?: string | null) => {
+    tiktokStatus = status;
+    if (username !== undefined) tiktokUsername = username;
+    options.stateHub.pushTiktokStatus(status, tiktokUsername);
   };
 
   interface LiveStreamInfo {
@@ -880,6 +900,35 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     return { videoIds: streams.map((s) => s.videoId) };
   });
 
+  // TikTok Handlers
+  ipcMain.handle(IPC_CHANNELS.tiktokGetSettings, async () => { const s = await getTiktokSettingsStore(); return s ? s.load() : { username: '', signApiKey: '', autoConnect: false }; });
+  ipcMain.handle(IPC_CHANNELS.tiktokSaveSettings, async (_, raw) => { const s = await getTiktokSettingsStore(); if (s) await s.save(tiktokSettingsSchema.parse(raw)); });
+  ipcMain.handle(IPC_CHANNELS.tiktokConnect, async (_, raw) => {
+    const c = tiktokConnectSchema.parse(raw);
+    setTiktokStatus('connecting', c.username);
+    chatLogService.openSession('tiktok', c.username);
+    const settingsStore = await getTiktokSettingsStore();
+    const settings = settingsStore ? await settingsStore.load() : null;
+    await chatService.replaceAdapter(createTikTokChatAdapter({
+      username: c.username,
+      signApiKey: settings?.signApiKey || undefined,
+      onStatusChange: (status) => setTiktokStatus(status),
+    }));
+  });
+  ipcMain.handle(IPC_CHANNELS.tiktokDisconnect, async () => {
+    chatLogService.closeSession('tiktok');
+    await chatService.removeAdapter('tiktok');
+    setTiktokStatus('disconnected', null);
+  });
+  ipcMain.handle(IPC_CHANNELS.tiktokGetStatus, async () => tiktokStatus);
+  ipcMain.handle(IPC_CHANNELS.tiktokCheckLive, async (_, username: unknown) => {
+    const u = String(username ?? '').replace(/^@/, '');
+    if (!u) return { isLive: false };
+    const adapter = createTikTokChatAdapter({ username: u });
+    const isLive = await adapter.fetchIsLive();
+    return { isLive };
+  });
+
   // Auto-reconnect Twitch from saved credentials on startup
   void (async () => {
     const store = await getTwitchCredentialsStore();
@@ -905,6 +954,27 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   })();
 
   startYoutubeMonitor();
+
+  // Auto-reconnect TikTok from saved settings on startup
+  void (async () => {
+    const store = await getTiktokSettingsStore();
+    if (!store) return;
+    const settings = await store.load();
+    if (!settings.autoConnect || !settings.username) return;
+    try {
+      setTiktokStatus('connecting', settings.username);
+      chatLogService.openSession('tiktok', settings.username);
+      await chatService.replaceAdapter(createTikTokChatAdapter({
+        username: settings.username,
+        signApiKey: settings.signApiKey || undefined,
+        onStatusChange: (status) => setTiktokStatus(status),
+      }));
+      logService.info('tiktok', 'Auto-reconnected from saved settings', { username: settings.username });
+    } catch (cause) {
+      logService.warn('tiktok', 'Auto-reconnect failed', { error: cause instanceof Error ? cause.message : String(cause) });
+    }
+  })();
+
   void raffleOverlayServer.start();
   raffleDeadlineRunner.start();
   schedulerService.start();

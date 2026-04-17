@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { TwitchConnectionStatus, TwitchCredentials, YouTubeSettings, YouTubeStreamInfo } from '../../shared/types.js';
+import type { TikTokConnectionStatus, TikTokSettings, TwitchConnectionStatus, TwitchCredentials, YouTubeSettings, YouTubeStreamInfo } from '../../shared/types.js';
 
 interface LiveCheckResult {
   handle: string;
@@ -21,6 +21,27 @@ const STATUS_COLOR: Record<TwitchConnectionStatus, string> = {
 };
 
 const STATUS_DOT: Record<TwitchConnectionStatus, string> = {
+  disconnected: 'bg-gray-500',
+  connecting: 'bg-yellow-400 animate-pulse',
+  connected: 'bg-green-400',
+  error: 'bg-red-500',
+};
+
+const TIKTOK_STATUS_LABEL: Record<TikTokConnectionStatus, string> = {
+  disconnected: 'Disconnected',
+  connecting: 'Connecting…',
+  connected: 'Connected',
+  error: 'Connection error',
+};
+
+const TIKTOK_STATUS_COLOR: Record<TikTokConnectionStatus, string> = {
+  disconnected: 'text-gray-400',
+  connecting: 'text-yellow-400',
+  connected: 'text-green-400',
+  error: 'text-red-400',
+};
+
+const TIKTOK_STATUS_DOT: Record<TikTokConnectionStatus, string> = {
   disconnected: 'bg-gray-500',
   connecting: 'bg-yellow-400 animate-pulse',
   connected: 'bg-green-400',
@@ -51,26 +72,42 @@ export function PlatformsSettingsPage() {
   const [checkingHandle, setCheckingHandle] = useState<string | null>(null);
   const [liveCheckResult, setLiveCheckResult] = useState<LiveCheckResult | null>(null);
 
+  // TikTok state
+  const [tiktokStatus, setTiktokStatus] = useState<TikTokConnectionStatus>('disconnected');
+  const [tiktokSettings, setTiktokSettings] = useState<TikTokSettings>({ username: '', signApiKey: '', autoConnect: false });
+  const [tiktokUsernameInput, setTiktokUsernameInput] = useState('');
+  const [tiktokApiKeyInput, setTiktokApiKeyInput] = useState('');
+  const [tiktokCheckingLive, setTiktokCheckingLive] = useState(false);
+  const [tiktokLiveResult, setTiktokLiveResult] = useState<boolean | null>(null);
+
   useEffect(() => {
     void (async () => {
-      const [currentStatus, creds, ytConnectedStatus, ytSavedSettings] = await Promise.all([
+      const [currentStatus, creds, ytConnectedStatus, ytSavedSettings, tiktokCurrentStatus, tiktokSavedSettings] = await Promise.all([
         window.copilot.twitchGetStatus(),
         window.copilot.twitchGetCredentials(),
         window.copilot.youtubeGetStatus(),
         window.copilot.youtubeGetSettings(),
+        window.copilot.tiktokGetStatus(),
+        window.copilot.tiktokGetSettings(),
       ]);
       setStatus(currentStatus);
       setSavedCreds(creds);
       setYtStreams(ytConnectedStatus);
       setYtSettings(ytSavedSettings);
+      setTiktokStatus(tiktokCurrentStatus);
+      setTiktokSettings(tiktokSavedSettings);
+      setTiktokUsernameInput(tiktokSavedSettings.username);
+      setTiktokApiKeyInput(tiktokSavedSettings.signApiKey);
     })();
 
     const unsubTwitch = window.copilot.onTwitchStatus((s) => setStatus(s));
     const unsubYt = window.copilot.onYoutubeStatus((s) => setYtStreams(s));
+    const unsubTiktok = window.copilot.onTiktokStatus((s) => setTiktokStatus(s));
 
     return () => {
       unsubTwitch();
       unsubYt();
+      unsubTiktok();
     };
   }, []);
 
@@ -186,6 +223,44 @@ export function PlatformsSettingsPage() {
     } finally {
       setCheckingHandle(null);
     }
+  };
+
+  // ── TikTok Actions ────────────────────────────────────────────────
+  const saveTiktokSettings = async (next: TikTokSettings) => {
+    setTiktokSettings(next);
+    await window.copilot.tiktokSaveSettings(next);
+  };
+
+  const connectTiktok = async () => {
+    const username = tiktokUsernameInput.trim().replace(/^@/, '');
+    if (!username) { setError('TikTok username is required'); return; }
+    setIsBusy(true);
+    setError(null);
+    try {
+      await saveTiktokSettings({ username, signApiKey: tiktokApiKeyInput.trim(), autoConnect: tiktokSettings.autoConnect });
+      await window.copilot.tiktokConnect({ username });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Failed to connect to TikTok');
+    } finally { setIsBusy(false); }
+  };
+
+  const disconnectTiktok = async () => {
+    setIsBusy(true);
+    try {
+      await window.copilot.tiktokDisconnect();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Failed to disconnect TikTok');
+    } finally { setIsBusy(false); }
+  };
+
+  const checkTiktokLive = async () => {
+    const username = tiktokUsernameInput.trim().replace(/^@/, '');
+    if (!username) return;
+    setTiktokCheckingLive(true);
+    try {
+      const result = await window.copilot.tiktokCheckLive(username);
+      setTiktokLiveResult(result.isLive);
+    } finally { setTiktokCheckingLive(false); }
   };
 
   return (
@@ -379,6 +454,99 @@ export function PlatformsSettingsPage() {
           <div className="mt-4 pt-4 border-t border-gray-700/50">
              <button type="button" onClick={() => void window.copilot.youtubeOpenLogin()} className="text-[10px] text-gray-500 hover:text-gray-400 underline decoration-gray-500/30 underline-offset-2">YouTube Login (for members chat)</button>
           </div>
+        </div>
+
+        {/* TikTok */}
+        <div className="px-5 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-pink-600/20 flex items-center justify-center shrink-0">
+                <svg className="w-4 h-4 text-pink-400" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1v-3.51a6.37 6.37 0 0 0-.79-.05A6.34 6.34 0 0 0 3.15 15.17a6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V8.75a8.18 8.18 0 0 0 4.76 1.52V6.84a4.84 4.84 0 0 1-1-.15z"/>
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-medium">TikTok Live</p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className={`w-1.5 h-1.5 rounded-full ${TIKTOK_STATUS_DOT[tiktokStatus]}`} />
+                  <span className={`text-xs ${TIKTOK_STATUS_COLOR[tiktokStatus]}`}>
+                    {TIKTOK_STATUS_LABEL[tiktokStatus]}
+                    {tiktokStatus === 'connected' && tiktokSettings.username ? ` · @${tiktokSettings.username}` : ''}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {tiktokStatus === 'connected' ? (
+              <button type="button" onClick={() => void disconnectTiktok()} className="text-xs px-3 py-1.5 rounded bg-gray-700 text-gray-300">Disconnect</button>
+            ) : tiktokStatus !== 'connecting' ? (
+              <button type="button" disabled={isBusy || !tiktokUsernameInput.trim()} onClick={() => void connectTiktok()} className="text-xs px-3 py-1.5 rounded bg-pink-600 text-white disabled:opacity-50">Connect</button>
+            ) : null}
+          </div>
+
+          {tiktokStatus !== 'connected' && (
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">TikTok Username <span className="text-pink-400">*</span></label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={tiktokUsernameInput}
+                    onChange={(e) => { setTiktokUsernameInput(e.target.value); setTiktokLiveResult(null); }}
+                    onKeyDown={(e) => e.key === 'Enter' && void connectTiktok()}
+                    placeholder="@username"
+                    className="flex-1 bg-gray-900 border border-gray-700 rounded text-sm text-gray-200 px-3 py-1.5 focus:outline-none focus:border-pink-500 font-mono"
+                  />
+                  <button
+                    type="button"
+                    disabled={tiktokCheckingLive || !tiktokUsernameInput.trim()}
+                    onClick={() => void checkTiktokLive()}
+                    className="text-[10px] px-2 py-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-40 flex items-center gap-1"
+                  >
+                    {tiktokCheckingLive ? (
+                      <svg className="w-2.5 h-2.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                      </svg>
+                    ) : (
+                      <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                      </svg>
+                    )}
+                    Check
+                  </button>
+                </div>
+                {tiktokLiveResult !== null && (
+                  <p className={`text-[10px] mt-1 ${tiktokLiveResult ? 'text-green-400' : 'text-gray-500'}`}>
+                    {tiktokLiveResult ? '● Live now!' : '○ Not currently live'}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider font-semibold">Sign API Key <span className="text-gray-600">(optional)</span></label>
+                <input
+                  type="password"
+                  value={tiktokApiKeyInput}
+                  onChange={(e) => setTiktokApiKeyInput(e.target.value)}
+                  placeholder="EulerStream API key"
+                  className="w-full bg-gray-900 border border-gray-700 rounded text-sm text-gray-200 px-3 py-1.5 focus:outline-none focus:border-pink-500 font-mono"
+                />
+                <p className="text-[10px] text-gray-600 mt-0.5">Improves connection reliability. Get one at eulerstream.com</p>
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="tiktok-auto-connect"
+                  checked={tiktokSettings.autoConnect}
+                  onChange={(e) => void saveTiktokSettings({ ...tiktokSettings, username: tiktokUsernameInput.trim().replace(/^@/, ''), signApiKey: tiktokApiKeyInput.trim(), autoConnect: e.target.checked })}
+                  className="accent-pink-500"
+                />
+                <label htmlFor="tiktok-auto-connect" className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold cursor-pointer">Auto-connect on startup</label>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Kick — coming soon */}

@@ -10,6 +10,7 @@ import type {
   ScheduledStatusItem,
   SoundPlayPayload,
   StreamEvent,
+  TikTokConnectionStatus,
   TwitchConnectionStatus,
   TwitchLiveStats,
   VoiceSpeakPayload,
@@ -86,5 +87,9 @@ export class StateHub {
 
   pushYoutubeStatus(streams: YouTubeStreamInfo[]): void {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.youtubeGetStatus, streams);
+  }
+
+  pushTiktokStatus(status: TikTokConnectionStatus, username?: string | null): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.tiktokStatus, status, username ?? null);
   }
 }

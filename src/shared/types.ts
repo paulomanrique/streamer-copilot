@@ -417,6 +417,14 @@ export interface YouTubeSettings {
   autoConnect: boolean;
 }
 
+export type TikTokConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+
+export interface TikTokSettings {
+  username: string;
+  signApiKey: string;
+  autoConnect: boolean;
+}
+
 export interface ProfileSummary {
   id: string;
   name: string;

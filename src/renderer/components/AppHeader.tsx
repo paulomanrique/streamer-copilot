@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import logoUrl from '../assets/logo.svg';
-import type { AppInfo, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
+import type { AppInfo, TikTokConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
 import type { AppSection } from './SectionTabs.js';
 
 interface AppHeaderProps {
@@ -12,10 +12,13 @@ interface AppHeaderProps {
   twitchChannel: string | null;
   twitchLiveStats: TwitchLiveStats | null;
   youtubeStreams: YouTubeStreamInfo[];
+  tiktokStatus: TikTokConnectionStatus;
+  tiktokUsername: string | null;
 }
 
 const TWITCH_ICON = 'M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z';
 const YOUTUBE_ICON = 'M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z';
+const TIKTOK_ICON = 'M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1v-3.51a6.37 6.37 0 0 0-.79-.05A6.34 6.34 0 0 0 3.15 15.17a6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V8.75a8.18 8.18 0 0 0 4.76 1.52V6.84a4.84 4.84 0 0 1-1-.15z';
 
 export function AppHeader({
   appInfo,
@@ -25,11 +28,13 @@ export function AppHeader({
   twitchChannel,
   twitchLiveStats,
   youtubeStreams,
+  tiktokStatus,
+  tiktokUsername,
 }: AppHeaderProps) {
   const [liveOpen, setLiveOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const appName = appInfo?.appName ?? 'Streamer Copilot';
-  const isAnyLive = Boolean(twitchLiveStats?.isLive) || youtubeStreams.length > 0;
+  const isAnyLive = Boolean(twitchLiveStats?.isLive) || youtubeStreams.length > 0 || tiktokStatus === 'connected';
   const liveLinks = [
     ...(twitchLiveStats?.isLive && twitchChannel
       ? [{
@@ -59,8 +64,18 @@ export function AppHeader({
         ? 'bg-rose-600/30 hover:bg-rose-600/50 text-rose-300'
         : 'bg-red-600/30 hover:bg-red-600/50 text-red-300',
     });
-    }),
-  ];
+    }),    ...(tiktokStatus === 'connected' && tiktokUsername
+      ? [{
+          id: 'tiktok',
+          label: `TikTok @${tiktokUsername}`,
+          url: `tiktok.com/@${tiktokUsername}/live`,
+          full: `https://www.tiktok.com/@${tiktokUsername}/live`,
+          icon: TIKTOK_ICON,
+          color: 'text-pink-400',
+          border: 'border-pink-500/30',
+          btnBg: 'bg-pink-600/30 hover:bg-pink-600/50 text-pink-300',
+        }]
+      : []),  ];
 
   const copyLink = (id: string, url: string) => {
     navigator.clipboard.writeText(url).catch(() => null);

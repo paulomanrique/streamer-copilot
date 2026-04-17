@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 
-import type { ChatMessage, ObsStatsSnapshot, StreamEvent, TwitchConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
+import type { ChatMessage, ObsStatsSnapshot, StreamEvent, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
 import { ChatFeed } from './ChatFeed.js';
 import { EventBanner } from './EventBanner.js';
 import { ObsStatsPanel } from './ObsStatsPanel.js';
@@ -15,9 +15,11 @@ interface DashboardSummaryProps {
   twitchChannel: string | null;
   twitchLiveStats: TwitchLiveStats | null;
   youtubeStreams: YouTubeStreamInfo[];
+  tiktokStatus: TikTokConnectionStatus;
+  tiktokUsername: string | null;
 }
 
-export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, obsStats, twitchStatus, twitchChannel, twitchLiveStats, youtubeStreams }: DashboardSummaryProps) {
+export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, obsStats, twitchStatus, twitchChannel, twitchLiveStats, youtubeStreams, tiktokStatus, tiktokUsername }: DashboardSummaryProps) {
   const visibleMessages = chatMessages;
   const visibleEvents = chatEvents;
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -47,8 +49,9 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
     if (twitchStatus === 'connected') list.push('twitch');
     if (youtubeStreams.length >= 1) list.push('youtube');
     if (youtubeStreams.length >= 2) list.push('youtube-v');
+    if (tiktokStatus === 'connected') list.push('tiktok');
     return list;
-  }, [twitchStatus, youtubeStreams]);
+  }, [twitchStatus, youtubeStreams, tiktokStatus]);
 
   const filteredActivity = visibleEvents.filter((event) => enabledTypes[event.type] !== false);
 
@@ -152,6 +155,8 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
         twitchStatus={twitchStatus}
         twitchChannel={twitchChannel}
         youtubeStreams={youtubeStreams}
+        tiktokStatus={tiktokStatus}
+        tiktokUsername={tiktokUsername}
       />
     </section>
   );

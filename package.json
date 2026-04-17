@@ -38,6 +38,7 @@
     "pusher-js": "^8.5.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "tiktok-live-connector": "^2.1.1-beta1",
     "tmi.js": "^1.8.5",
     "zod": "^4.1.5",
     "zustand": "^5.0.8"
