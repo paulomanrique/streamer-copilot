@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import type { ChatMessage, PlatformId, StreamEvent, TwitchConnectionStatus } from '../../shared/types.js';
 import type { PlatformChatAdapter } from '../base.js';
 
@@ -406,8 +407,8 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
 
   private async loadTmiModule(): Promise<unknown | null> {
     try {
-      const importer = new Function('return import("tmi.js")') as () => Promise<unknown>;
-      return await importer();
+      const require = createRequire(import.meta.url);
+      return require('tmi.js');
     } catch {
       return null;
     }

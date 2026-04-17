@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import type { ChatMessage, StreamEvent, StreamEventType, TikTokConnectionStatus } from '../../shared/types.js';
 import type { PlatformChatAdapter } from '../base.js';
 
@@ -94,12 +95,11 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
 
   private async createConnection(): Promise<TikTokConnection | null> {
     try {
-      const importer = new Function('return import("tiktok-live-connector")') as () => Promise<{
+      const require = createRequire(import.meta.url);
+      const module = require('tiktok-live-connector') as {
         TikTokLiveConnection?: new (username: string, options?: Record<string, unknown>) => TikTokConnection;
         default?: { TikTokLiveConnection?: new (username: string, options?: Record<string, unknown>) => TikTokConnection };
-      }>;
-
-      const module = await importer();
+      };
       const ConnectionCtor = module.TikTokLiveConnection ?? module.default?.TikTokLiveConnection;
       if (typeof ConnectionCtor !== 'function') return null;
 
