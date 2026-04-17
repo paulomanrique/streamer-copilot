@@ -959,8 +959,32 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     options.stateHub.pushYoutubeStatus([]);
   });
   ipcMain.handle(IPC_CHANNELS.youtubeGetStatus, async () => getYoutubeStreams());
-  ipcMain.handle(IPC_CHANNELS.youtubeOpenLogin, async () => {
-    await shell.openExternal('https://accounts.google.com/ServiceLogin?service=youtube&continue=https://www.youtube.com/signin?action_handle_signin=true');
+  ipcMain.handle(IPC_CHANNELS.youtubeOpenLogin, async (event) => {
+    const parent = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+    const win = new BrowserWindow({
+      width: 600,
+      height: 800,
+      parent,
+      modal: Boolean(parent),
+      title: 'YouTube Login',
+      autoHideMenuBar: true,
+    });
+
+    win.webContents.on('did-navigate', (_, url) => {
+      const target = new URL(url);
+      if (target.hostname.includes('youtube.com') && target.pathname === '/' && !url.includes('signin')) {
+        setTimeout(() => {
+          if (!win.isDestroyed()) win.close();
+        }, 1500);
+      }
+    });
+
+    try {
+      await win.loadURL('https://accounts.google.com/ServiceLogin?service=youtube&continue=https://www.youtube.com/signin?action_handle_signin=true');
+    } catch (cause) {
+      const code = cause && typeof cause === 'object' && 'code' in cause ? String(cause.code) : '';
+      if (code !== 'ERR_ABORTED' && code !== 'ERR_FAILED') throw cause;
+    }
   });
   ipcMain.handle(IPC_CHANNELS.youtubeCheckLive, async (_, handle: unknown) => {
     const streams = await checkYouTubeLive(String(handle ?? ''));
