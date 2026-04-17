@@ -8,6 +8,7 @@ function makeList(overrides: Partial<SuggestionList> = {}): SuggestionList {
     id: 'list-1',
     title: 'Game Suggestions',
     trigger: '!jogo',
+    feedbackTemplate: '',
     mode: 'session',
     allowDuplicates: false,
     permissions: ['everyone'],
@@ -72,10 +73,12 @@ function createService(
   repo: MockRepository,
   onState?: (payload: SuggestionSnapshot) => void,
   now?: () => number,
+  onFeedback?: ReturnType<typeof vi.fn>,
 ) {
   return new SuggestionService({
     repository: repo as never,
     onState: onState ?? vi.fn(),
+    onFeedback: onFeedback ?? vi.fn(),
     now,
   });
 }
@@ -139,6 +142,19 @@ describe('SuggestionService', () => {
       expect(repo.addEntry).toHaveBeenCalledWith(
         expect.objectContaining({ content: 'Pac Man' }),
       );
+    });
+
+    it('sends configured feedback after saving a suggestion', () => {
+      const repo = createMockRepo([makeList({ feedbackTemplate: 'Thanks for the suggestion, {username}' })]);
+      const onFeedback = vi.fn();
+      const service = createService(repo, vi.fn(), undefined, onFeedback);
+
+      service.handle(makeMessage({ author: 'viewer1' }), 'everyone');
+
+      expect(onFeedback).toHaveBeenCalledWith({
+        platform: 'twitch',
+        content: 'Thanks for the suggestion, viewer1',
+      });
     });
   });
 

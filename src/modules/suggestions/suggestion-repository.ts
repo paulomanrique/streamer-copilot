@@ -8,6 +8,7 @@ interface SuggestionListRow {
   id: string;
   title: string;
   trigger: string;
+  feedback_template: string;
   mode: string;
   allow_duplicates: number;
   permissions_json: string;
@@ -41,7 +42,7 @@ export class SuggestionRepository {
   listLists(): SuggestionList[] {
     const rows = this.db
       .prepare(
-        `SELECT id, title, trigger, mode, allow_duplicates, permissions_json,
+        `SELECT id, title, trigger, feedback_template, mode, allow_duplicates, permissions_json,
                 cooldown_seconds, user_cooldown_seconds, enabled,
                 (SELECT COUNT(*) FROM suggestion_entries e WHERE e.list_id = suggestion_lists.id) AS entry_count
          FROM suggestion_lists
@@ -57,12 +58,13 @@ export class SuggestionRepository {
     this.db
       .prepare(
         `INSERT INTO suggestion_lists (
-           id, title, trigger, mode, allow_duplicates, permissions_json,
+           id, title, trigger, feedback_template, mode, allow_duplicates, permissions_json,
            cooldown_seconds, user_cooldown_seconds, enabled, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
          ON CONFLICT(id) DO UPDATE SET
            title = excluded.title,
            trigger = excluded.trigger,
+           feedback_template = excluded.feedback_template,
            mode = excluded.mode,
            allow_duplicates = excluded.allow_duplicates,
            permissions_json = excluded.permissions_json,
@@ -75,6 +77,7 @@ export class SuggestionRepository {
         nextId,
         input.title.trim(),
         input.trigger.trim(),
+        input.feedbackTemplate.trim(),
         input.mode,
         input.allowDuplicates ? 1 : 0,
         JSON.stringify(input.permissions),
@@ -149,6 +152,7 @@ export class SuggestionRepository {
       id: row.id,
       title: row.title,
       trigger: row.trigger,
+      feedbackTemplate: row.feedback_template,
       mode: row.mode as SuggestionList['mode'],
       allowDuplicates: row.allow_duplicates === 1,
       permissions: JSON.parse(row.permissions_json) as PermissionLevel[],

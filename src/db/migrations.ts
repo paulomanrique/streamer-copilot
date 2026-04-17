@@ -263,4 +263,11 @@ export const MIGRATIONS: SqlMigration[] = [
       ON suggestion_entries (list_id, user_key);
     `,
   },
+  {
+    version: 13,
+    name: 'suggestion_feedback_template',
+    sql: `
+      ALTER TABLE suggestion_lists ADD COLUMN feedback_template TEXT NOT NULL DEFAULT '';
+    `,
+  },
 ];

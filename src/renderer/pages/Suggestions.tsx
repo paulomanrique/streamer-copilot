@@ -6,6 +6,7 @@ import type { PermissionLevel, SuggestionEntry, SuggestionList, SuggestionListMo
 const EMPTY_FORM: SuggestionListUpsertInput = {
   title: '',
   trigger: '!',
+  feedbackTemplate: '',
   mode: 'session',
   allowDuplicates: false,
   permissions: ['everyone'],
@@ -38,6 +39,7 @@ export function SuggestionsPage() {
   const [draftId, setDraftId] = useState<string | undefined>(undefined);
   const [title, setTitle] = useState(EMPTY_FORM.title);
   const [trigger, setTrigger] = useState(EMPTY_FORM.trigger);
+  const [feedbackTemplate, setFeedbackTemplate] = useState(EMPTY_FORM.feedbackTemplate);
   const [mode, setMode] = useState<SuggestionListMode>(EMPTY_FORM.mode);
   const [allowDuplicates, setAllowDuplicates] = useState(EMPTY_FORM.allowDuplicates);
   const [levels, setLevels] = useState<PermissionLevel[]>(EMPTY_FORM.permissions);
@@ -77,6 +79,7 @@ export function SuggestionsPage() {
     setDraftId(undefined);
     setTitle(EMPTY_FORM.title);
     setTrigger(EMPTY_FORM.trigger);
+    setFeedbackTemplate(EMPTY_FORM.feedbackTemplate);
     setMode(EMPTY_FORM.mode);
     setAllowDuplicates(EMPTY_FORM.allowDuplicates);
     setLevels([...EMPTY_FORM.permissions]);
@@ -96,6 +99,7 @@ export function SuggestionsPage() {
     setDraftId(list.id);
     setTitle(list.title);
     setTrigger(list.trigger);
+    setFeedbackTemplate(list.feedbackTemplate);
     setMode(list.mode);
     setAllowDuplicates(list.allowDuplicates);
     setLevels([...list.permissions]);
@@ -129,6 +133,7 @@ export function SuggestionsPage() {
         id: draftId,
         title: title.trim(),
         trigger: trimmedTrigger,
+        feedbackTemplate: feedbackTemplate.trim(),
         mode,
         allowDuplicates,
         permissions: levels,
@@ -356,6 +361,19 @@ export function SuggestionsPage() {
                   className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white text-sm font-mono focus:border-purple-500 focus:outline-none"
                 />
                 <p className="text-xs text-gray-500 mt-1">Viewers type: <code className="text-purple-300">{trigger || '!cmd'} Pacman</code></p>
+              </div>
+
+              {/* Feedback */}
+              <div>
+                <label className="block text-sm text-gray-300 mb-1">Feedback</label>
+                <input
+                  type="text"
+                  value={feedbackTemplate}
+                  onChange={(e) => setFeedbackTemplate(e.target.value)}
+                  placeholder="Thanks for the suggestion, {username}"
+                  className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white text-sm focus:border-purple-500 focus:outline-none"
+                />
+                <p className="text-xs text-gray-500 mt-1">Use <code className="text-purple-300">{'{username}'}</code> for the viewer name.</p>
               </div>
 
               {/* Mode */}

@@ -468,6 +468,7 @@ export interface SuggestionList {
   id: string;
   title: string;
   trigger: string;
+  feedbackTemplate: string;
   mode: SuggestionListMode;
   allowDuplicates: boolean;
   permissions: PermissionLevel[];
@@ -491,6 +492,7 @@ export interface SuggestionListUpsertInput {
   id?: string;
   title: string;
   trigger: string;
+  feedbackTemplate: string;
   mode: SuggestionListMode;
   allowDuplicates: boolean;
   permissions: PermissionLevel[];

@@ -185,6 +185,20 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const suggestionService = new SuggestionService({
     repository: suggestionRepository,
     onState: (payload) => options.stateHub.pushSuggestionState(payload),
+    onFeedback: async (payload) => {
+      if (!payload.content) return;
+      try {
+        await sendPlatformMessage(payload.platform, payload.content);
+        await pushLocalOutboundMessage(payload.platform, payload.content);
+        logService.info('suggestion', 'Sent feedback', { platform: payload.platform, content: payload.content });
+      } catch (cause) {
+        logService.error('suggestion', 'Failed to send feedback', {
+          platform: payload.platform,
+          content: payload.content,
+          error: cause instanceof Error ? cause.message : String(cause),
+        });
+      }
+    },
   });
   let twitchStatus: TwitchConnectionStatus = 'disconnected';
   let twitchChannel: string | null = null;
