@@ -6,6 +6,7 @@ export interface TikTokAdapterOptions {
   username: string;
   signApiKey?: string;
   onStatusChange?: (status: TikTokConnectionStatus) => void;
+  onError?: (error: unknown) => void;
 }
 
 type TikTokConnection = {
@@ -47,9 +48,10 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
       await conn.connect();
       this.connected = true;
       this.options.onStatusChange?.('connected');
-    } catch {
+    } catch (cause) {
       this.connected = false;
       this.connection = null;
+      this.options.onError?.(cause);
       this.options.onStatusChange?.('error');
     }
   }
@@ -170,7 +172,8 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
     });
 
     // Error
-    conn.on('error', () => {
+    conn.on('error', (cause: unknown) => {
+      this.options.onError?.(cause);
       // Don't disconnect on transient errors — only update status if fatal
     });
   }

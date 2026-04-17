@@ -1020,6 +1020,11 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     await chatService.replaceAdapter(createTikTokChatAdapter({
       username: c.username,
       signApiKey: settings?.signApiKey || undefined,
+      onError: (cause) => logService.error('tiktok', 'Connection error', {
+        username: c.username,
+        hasSignApiKey: Boolean(settings?.signApiKey),
+        error: cause instanceof Error ? cause.message : String(cause),
+      }),
       onStatusChange: (status) => setTiktokStatus(status),
     }));
   });
@@ -1077,6 +1082,11 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       await chatService.replaceAdapter(createTikTokChatAdapter({
         username: settings.username,
         signApiKey: settings.signApiKey || undefined,
+        onError: (cause) => logService.error('tiktok', 'Auto-reconnect connection error', {
+          username: settings.username,
+          hasSignApiKey: Boolean(settings.signApiKey),
+          error: cause instanceof Error ? cause.message : String(cause),
+        }),
         onStatusChange: (status) => setTiktokStatus(status),
       }));
       logService.info('tiktok', 'Auto-reconnected from saved settings', { username: settings.username });
