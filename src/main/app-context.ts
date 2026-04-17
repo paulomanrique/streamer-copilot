@@ -794,7 +794,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.chatSendMessage, async (_, raw) => {
     const i = chatSendMessageSchema.parse(raw);
     await sendPlatformMessage(i.platform, i.content);
-    await pushLocalOutboundMessage(i.platform, i.content);
+    if (i.platform !== 'youtube' && i.platform !== 'youtube-v') {
+      await pushLocalOutboundMessage(i.platform, i.content);
+    }
   });
   ipcMain.handle(IPC_CHANNELS.logsList, async (_, raw) => logService.list(eventLogFiltersSchema.parse(raw)));
 
