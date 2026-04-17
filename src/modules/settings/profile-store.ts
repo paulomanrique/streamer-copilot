@@ -29,7 +29,6 @@ export class ProfileStore {
 
   async list(): Promise<ProfilesSnapshot> {
     const state = await this.readState();
-    await this.ensureProfileFiles(state, { createMissingDirectories: false });
     return await this.withAvailableActiveProfile(state);
   }
 
@@ -47,7 +46,6 @@ export class ProfileStore {
     state.activeProfileId = profileId;
 
     await this.writeState(state);
-    await this.ensureProfileFiles(state, { createMissingDirectories: false });
 
     return state;
   }

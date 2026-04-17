@@ -77,13 +77,12 @@ export default function App() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [info, snapshot, recentChat, nextGeneralSettings, twitchInitialStatus, twitchCreds, ytInitialStatus, tiktokInitialStatus] = await Promise.all([
+        const [info, snapshot, recentChat, nextGeneralSettings, twitchInitialStatus, ytInitialStatus, tiktokInitialStatus] = await Promise.all([
           window.copilot.getAppInfo(),
           window.copilot.listProfiles(),
           window.copilot.getRecentChat(),
           window.copilot.getGeneralSettings(),
           window.copilot.twitchGetStatus(),
-          window.copilot.twitchGetCredentials(),
           window.copilot.youtubeGetStatus(),
           window.copilot.tiktokGetStatus(),
         ]);
@@ -92,7 +91,7 @@ export default function App() {
         setChatSnapshot(recentChat);
         setGeneralSettings(nextGeneralSettings);
         setTwitchStatus(twitchInitialStatus);
-        setTwitchChannel(twitchCreds?.channel ?? null);
+        setTwitchChannel(null);
         setYoutubeStreams(ytInitialStatus);
         setTiktokStatus(tiktokInitialStatus);
         setSelectorProfileId(snapshot.activeProfileId);
