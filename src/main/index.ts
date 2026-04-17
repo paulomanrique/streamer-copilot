@@ -23,6 +23,7 @@ const DIST_ROOT = path.resolve(__dirname, '..');
 const PRELOAD_PATH = path.join(DIST_ROOT, 'preload', 'index.cjs');
 const RENDERER_INDEX_PATH = path.join(DIST_ROOT, 'renderer', 'index.html');
 const USER_DATA_DIR_NAME = 'streamer-copilot';
+const APP_ICON_FILE = 'icon.png';
 
 app.setName(USER_DATA_DIR_NAME);
 
@@ -45,6 +46,7 @@ async function createMainWindow(): Promise<void> {
     minHeight: 680,
     show: false,
     backgroundColor: '#0b1020',
+    icon: getAppIconPath(),
     webPreferences: {
       preload: PRELOAD_PATH,
       contextIsolation: true,
@@ -80,6 +82,7 @@ async function createMainWindow(): Promise<void> {
 
 app.whenReady().then(async () => {
   await migrateLegacyProfilesIfNeeded();
+  setDockIcon();
 
   protocol.handle('copilot-local', (request) => {
     const filePath = request.url.slice('copilot-local://'.length);
@@ -184,9 +187,7 @@ app.on('before-quit', (event) => {
 function ensureTray(): void {
   if (tray) return;
 
-  const icon = nativeImage.createFromDataURL(
-    'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDE2IDE2Ij48cmVjdCB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHJ4PSIzIiBmaWxsPSIjN2MzYWVkIi8+PHRleHQgeD0iOC41IiB5PSIxMS4yIiBmb250LXNpemU9IjcuNSIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmZmZmIj5TQzwvdGV4dD48L3N2Zz4=',
-  );
+  const icon = nativeImage.createFromPath(getAppIconPath()).resize({ width: 16, height: 16 });
   tray = new Tray(icon);
   tray.setToolTip('Streamer Copilot');
   tray.setContextMenu(
@@ -216,6 +217,17 @@ function ensureTray(): void {
       mainWindow.focus();
     }
   });
+}
+
+function setDockIcon(): void {
+  if (process.platform !== 'darwin') return;
+  app.dock?.setIcon(nativeImage.createFromPath(getAppIconPath()));
+}
+
+function getAppIconPath(): string {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, APP_ICON_FILE)
+    : path.join(process.cwd(), 'build', APP_ICON_FILE);
 }
 
 async function applyGeneralSettings(settings: import('../shared/types.js').GeneralSettings): Promise<void> {

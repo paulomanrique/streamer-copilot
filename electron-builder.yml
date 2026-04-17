@@ -5,6 +5,9 @@ directories:
 files:
   - dist/**/*
   - package.json
+extraResources:
+  - from: build/icon.png
+    to: icon.png
 asar: true
 compression: maximum
 artifactName: ${productName}-${version}-${os}-${arch}.${ext}
@@ -13,14 +16,17 @@ publish:
   owner: paulomanrique
   repo: streamer-copilot
 mac:
+  icon: build/icon.icns
   category: public.app-category.utilities
   target:
     - dmg
     - zip
 win:
+  icon: build/icon.ico
   target:
     - nsis
 linux:
+  icon: build/icon.png
   maintainer: Paulo Manrique <paulo@manriq.dev>
   target:
     - AppImage
