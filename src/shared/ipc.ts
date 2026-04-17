@@ -221,7 +221,7 @@ export interface CopilotApi {
   youtubeGetStatus: () => Promise<import('./types.js').YouTubeStreamInfo[]>;
   youtubeOpenLogin: () => Promise<void>;
   youtubeGetSettings: () => Promise<import('./types.js').YouTubeSettings>;
-  youtubeSaveSettings: (settings: import('./types.js').YouTubeSettings) => Promise<void>;
+  youtubeSaveSettings: (settings: import('./types.js').YouTubeSettings) => Promise<import('./types.js').YouTubeSettings>;
   youtubeCheckLive: (handle: string) => Promise<{ videoIds: string[] }>;
   tiktokConnect: (input: { username: string }) => Promise<void>;
   tiktokDisconnect: () => Promise<void>;

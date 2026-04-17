@@ -71,6 +71,7 @@ export function PlatformsSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [checkingHandle, setCheckingHandle] = useState<string | null>(null);
   const [liveCheckResult, setLiveCheckResult] = useState<LiveCheckResult | null>(null);
+  const [isSavingYtSettings, setIsSavingYtSettings] = useState(false);
 
   // TikTok state
   const [tiktokStatus, setTiktokStatus] = useState<TikTokConnectionStatus>('disconnected');
@@ -177,13 +178,26 @@ export function PlatformsSettingsPage() {
 
   // ── YouTube Actions ───────────────────────────────────────────────
   const saveYtSettings = async (next: YouTubeSettings) => {
+    const previous = ytSettings;
     setYtSettings(next);
-    await window.copilot.youtubeSaveSettings(next);
+    setIsSavingYtSettings(true);
+    setError(null);
+    try {
+      const saved = await window.copilot.youtubeSaveSettings(next);
+      setYtSettings(saved);
+      return saved;
+    } catch (cause) {
+      setYtSettings(previous);
+      setError(cause instanceof Error ? cause.message : 'Failed to save YouTube settings');
+      throw cause;
+    } finally {
+      setIsSavingYtSettings(false);
+    }
   };
 
-  const addYouTubeChannel = () => {
+  const addYouTubeChannel = async () => {
     const handle = newChannelHandle.trim();
-    if (!handle) return;
+    if (!handle || isSavingYtSettings) return;
     const next: YouTubeSettings = {
       ...ytSettings,
       channels: [
@@ -191,24 +205,26 @@ export function PlatformsSettingsPage() {
         { id: crypto.randomUUID(), handle, enabled: true }
       ]
     };
-    void saveYtSettings(next);
+    await saveYtSettings(next);
     setNewChannelHandle('');
   };
 
-  const removeYouTubeChannel = (id: string) => {
+  const removeYouTubeChannel = async (id: string) => {
+    if (isSavingYtSettings) return;
     const next: YouTubeSettings = {
       ...ytSettings,
       channels: ytSettings.channels.filter(c => c.id !== id)
     };
-    void saveYtSettings(next);
+    await saveYtSettings(next);
   };
 
-  const toggleYouTubeChannel = (id: string) => {
+  const toggleYouTubeChannel = async (id: string) => {
+    if (isSavingYtSettings) return;
     const next: YouTubeSettings = {
       ...ytSettings,
       channels: ytSettings.channels.map(c => c.id === id ? { ...c, enabled: !c.enabled } : c)
     };
-    void saveYtSettings(next);
+    await saveYtSettings(next);
   };
 
   const disconnectYoutube = async () => {
@@ -396,17 +412,22 @@ export function PlatformsSettingsPage() {
                 placeholder="Channel handle (e.g. @MrBeast)"
                 value={newChannelHandle}
                 onChange={(e) => setNewChannelHandle(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && addYouTubeChannel()}
+                disabled={isSavingYtSettings}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void addYouTubeChannel();
+                }}
                 className="flex-1 bg-gray-900 border border-gray-700 rounded text-sm text-gray-200 px-3 py-1.5 focus:outline-none focus:border-red-500"
               />
-              <button type="button" onClick={addYouTubeChannel} className="px-3 py-1.5 rounded bg-gray-700 text-xs font-medium hover:bg-gray-600">Add</button>
+              <button type="button" disabled={isSavingYtSettings} onClick={() => void addYouTubeChannel()} className="px-3 py-1.5 rounded bg-gray-700 text-xs font-medium hover:bg-gray-600 disabled:opacity-60">
+                {isSavingYtSettings ? 'Saving…' : 'Add'}
+              </button>
             </div>
 
             <div className="space-y-1.5">
               {ytSettings.channels.map(c => (
                 <div key={c.id} className="flex items-center justify-between p-2 bg-gray-900/50 rounded border border-gray-700/50">
                   <div className="flex items-center gap-2">
-                    <input type="checkbox" checked={c.enabled} onChange={() => toggleYouTubeChannel(c.id)} className="accent-red-500" />
+                    <input type="checkbox" checked={c.enabled} disabled={isSavingYtSettings} onChange={() => void toggleYouTubeChannel(c.id)} className="accent-red-500" />
                     <span className={`text-xs font-mono ${c.enabled ? 'text-gray-200' : 'text-gray-500'}`}>{c.handle}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
@@ -428,7 +449,7 @@ export function PlatformsSettingsPage() {
                       )}
                       Check
                     </button>
-                    <button type="button" onClick={() => removeYouTubeChannel(c.id)} className="text-gray-500 hover:text-red-400">
+                    <button type="button" disabled={isSavingYtSettings} onClick={() => void removeYouTubeChannel(c.id)} className="text-gray-500 hover:text-red-400 disabled:opacity-40">
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
                     </button>
                   </div>
@@ -444,7 +465,8 @@ export function PlatformsSettingsPage() {
                 type="checkbox" 
                 id="yt-auto-connect" 
                 checked={ytSettings.autoConnect} 
-                onChange={(e) => saveYtSettings({ ...ytSettings, autoConnect: e.target.checked })}
+                disabled={isSavingYtSettings}
+                onChange={(e) => void saveYtSettings({ ...ytSettings, autoConnect: e.target.checked })}
                 className="accent-red-500"
               />
               <label htmlFor="yt-auto-connect" className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold cursor-pointer">Auto-connect when live detected</label>

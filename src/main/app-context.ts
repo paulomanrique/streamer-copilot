@@ -75,7 +75,7 @@ import {
   youtubeConnectSchema,
   youtubeSettingsSchema,
 } from '../shared/schemas.js';
-import type { AppInfo, PlatformId, Raffle, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../shared/types.js';
+import type { AppInfo, PlatformId, Raffle, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
 
 const TWITCH_CLIENT_ID = 'vtwg8tzuv1nlip4qh9n6sxx2p76g0s';
 const TWITCH_REDIRECT_PORT = 32999;
@@ -236,6 +236,33 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const active = snapshot.profiles.find((p) => p.id === snapshot.activeProfileId);
     if (!active) return null;
     return new YouTubeSettingsStore(active.directory);
+  };
+
+  let youtubeSettingsWrite = Promise.resolve();
+
+  const defaultYoutubeSettings = (): YouTubeSettings => ({
+    channels: [],
+    autoConnect: true,
+  });
+
+  const loadYoutubeSettings = async (): Promise<YouTubeSettings> => {
+    await youtubeSettingsWrite.catch(() => undefined);
+    const store = await getYoutubeSettingsStore();
+    return store ? store.load() : defaultYoutubeSettings();
+  };
+
+  const saveYoutubeSettings = async (raw: unknown): Promise<YouTubeSettings> => {
+    const settings = youtubeSettingsSchema.parse(raw);
+    const store = await getYoutubeSettingsStore();
+    if (!store) throw new Error('No active profile');
+
+    youtubeSettingsWrite = youtubeSettingsWrite
+      .catch(() => undefined)
+      .then(() => store.save(settings));
+
+    await youtubeSettingsWrite;
+    startYoutubeMonitor();
+    return settings;
   };
 
   const getTiktokSettingsStore = async (): Promise<TikTokSettingsStore | null> => {
@@ -898,8 +925,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
 
   // YouTube Handlers
-  ipcMain.handle(IPC_CHANNELS.youtubeGetSettings, async () => { const s = await getYoutubeSettingsStore(); return s ? s.load() : { channels: [], autoConnect: true }; });
-  ipcMain.handle(IPC_CHANNELS.youtubeSaveSettings, async (_, raw) => { const s = await getYoutubeSettingsStore(); if (s) { await s.save(youtubeSettingsSchema.parse(raw)); startYoutubeMonitor(); } });
+  ipcMain.handle(IPC_CHANNELS.youtubeGetSettings, async () => loadYoutubeSettings());
+  ipcMain.handle(IPC_CHANNELS.youtubeSaveSettings, async (_, raw) => saveYoutubeSettings(raw));
   ipcMain.handle(IPC_CHANNELS.youtubeConnect, async (_, raw) => {
     const i = youtubeConnectSchema.parse(raw);
     const fmt = new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' });
