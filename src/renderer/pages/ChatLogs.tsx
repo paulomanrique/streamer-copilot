@@ -104,6 +104,12 @@ export function ChatLogsPage() {
   };
 
   const handleDelete = async (session: ChatSession) => {
+    const platform = PLATFORM_LABELS[session.platform] ?? session.platform;
+    const confirmed = window.confirm(
+      `Delete this chat log?\n\n${platform} · ${session.channel}\n${formatDate(session.startedAt)}\n${session.messageCount.toLocaleString()} messages\n\nThis cannot be undone.`,
+    );
+    if (!confirmed) return;
+
     setDeletingId(session.id);
     try {
       await window.copilot.chatLogDeleteSession(session.id);
