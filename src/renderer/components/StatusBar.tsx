@@ -1,4 +1,5 @@
 import type { KickConnectionStatus, TikTokConnectionStatus, TwitchConnectionStatus, YouTubeStreamInfo } from '../../shared/types.js';
+import { useI18n } from '../i18n/I18nProvider.js';
 
 interface StatusBarProps {
   activeProfileName: string;
@@ -19,17 +20,15 @@ const TWITCH_DOT: Record<TwitchConnectionStatus, string> = {
   error: 'bg-red-500',
 };
 
-const TWITCH_LABEL: Record<TwitchConnectionStatus, string> = {
-  disconnected: 'Disconnected',
-  connecting: 'Connecting…',
-  connected: 'Connected',
-  error: 'Error',
-};
-
 export function StatusBar({ activeProfileName, obsConnected, twitchStatus, twitchChannel, youtubeStreams, tiktokStatus, tiktokUsername, kickStatus, kickSlug }: StatusBarProps) {
+  const { messages, t } = useI18n();
+  const statusLabel = (status: TwitchConnectionStatus | TikTokConnectionStatus | KickConnectionStatus) => {
+    if (status === 'connecting') return t('Connecting...');
+    return messages.common.status[status] ?? status;
+  };
   const twitchLabel = twitchStatus === 'connected' && twitchChannel
     ? `#${twitchChannel}`
-    : TWITCH_LABEL[twitchStatus];
+    : statusLabel(twitchStatus);
   const liveYoutubeChannels = Array.from(
     new Set(
       youtubeStreams
@@ -39,7 +38,7 @@ export function StatusBar({ activeProfileName, obsConnected, twitchStatus, twitc
   );
   const youtubeLabel = liveYoutubeChannels.length > 0
     ? liveYoutubeChannels.join(', ')
-    : 'Offline';
+    : messages.common.status.offline;
 
   return (
     <footer className="h-8 bg-gray-900 border-t border-gray-800 flex items-center px-4 gap-4 shrink-0 text-xs text-gray-500">
@@ -53,7 +52,7 @@ export function StatusBar({ activeProfileName, obsConnected, twitchStatus, twitc
       <div className="flex items-center gap-1.5 ml-2">
         <span className={`w-2 h-2 rounded-full ${obsConnected ? 'bg-cyan-500' : 'bg-gray-600'}`} />
         <span>
-          OBS: <span className="text-gray-300">{obsConnected ? 'Connected' : 'Offline'}</span>
+          OBS: <span className="text-gray-300">{obsConnected ? messages.common.status.connected : messages.common.status.offline}</span>
         </span>
       </div>
 
@@ -67,21 +66,21 @@ export function StatusBar({ activeProfileName, obsConnected, twitchStatus, twitc
       <div className="flex items-center gap-1.5 ml-2">
         <span className={`w-2 h-2 rounded-full ${tiktokStatus === 'connected' ? 'bg-pink-500 pulse-dot' : tiktokStatus === 'connecting' ? 'bg-yellow-400 animate-pulse' : tiktokStatus === 'error' ? 'bg-red-500' : 'bg-gray-600'}`} />
         <span>
-          TikTok: <span className="text-gray-300">{tiktokStatus === 'connected' && tiktokUsername ? `@${tiktokUsername}` : tiktokStatus === 'connecting' ? 'Connecting…' : tiktokStatus === 'error' ? 'Error' : 'Disconnected'}</span>
+          TikTok: <span className="text-gray-300">{tiktokStatus === 'connected' && tiktokUsername ? `@${tiktokUsername}` : statusLabel(tiktokStatus)}</span>
         </span>
       </div>
 
       <div className="flex items-center gap-1.5 ml-2">
         <span className={`w-2 h-2 rounded-full ${kickStatus === 'connected' ? 'bg-green-500 pulse-dot' : kickStatus === 'connecting' ? 'bg-yellow-400 animate-pulse' : kickStatus === 'error' ? 'bg-red-500' : 'bg-gray-600'}`} />
         <span>
-          Kick: <span className="text-gray-300">{kickStatus === 'connected' ? (kickSlug ?? 'Connected') : kickStatus === 'connecting' ? 'Connecting…' : kickStatus === 'error' ? 'Error' : 'Disconnected'}</span>
+          Kick: <span className="text-gray-300">{kickStatus === 'connected' ? (kickSlug ?? messages.common.status.connected) : statusLabel(kickStatus)}</span>
         </span>
       </div>
 
       <div className="flex items-center gap-1.5">
         <span className="w-2 h-2 rounded-full bg-violet-500" />
         <span>
-          Profile: <span className="text-gray-300">{activeProfileName}</span>
+          {t('Profile')}: <span className="text-gray-300">{activeProfileName}</span>
         </span>
       </div>
     </footer>

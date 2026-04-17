@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
-import { PROFILE_CONFIG_FILES } from '../../shared/constants.js';
-import type { ProfilesSnapshot } from '../../shared/types.js';
+import { DEFAULT_APP_LANGUAGE, PROFILE_CONFIG_FILES } from '../../shared/constants.js';
+import type { AppLanguage, ProfileSettings, ProfileSummary, ProfilesSnapshot } from '../../shared/types.js';
 
 interface ProfileRecord {
   id: string;
@@ -17,7 +17,9 @@ interface ProfileState {
   profiles: ProfileRecord[];
 }
 
-const EMPTY_OBJECT = '{}\n';
+const DEFAULT_PROFILE_SETTINGS: ProfileSettings = {
+  appLanguage: DEFAULT_APP_LANGUAGE,
+};
 const EMPTY_ARRAY = '[]\n';
 
 export class ProfileStore {
@@ -29,7 +31,8 @@ export class ProfileStore {
 
   async list(): Promise<ProfilesSnapshot> {
     const state = await this.readState();
-    return await this.withAvailableActiveProfile(state);
+    const availableState = await this.withAvailableActiveProfile(state);
+    return await this.toSnapshot(availableState);
   }
 
   async select(profileId: string): Promise<ProfilesSnapshot> {
@@ -47,10 +50,10 @@ export class ProfileStore {
 
     await this.writeState(state);
 
-    return state;
+    return await this.toSnapshot(state);
   }
 
-  async create(name: string, directory: string): Promise<ProfilesSnapshot> {
+  async create(name: string, directory: string, appLanguage: AppLanguage): Promise<ProfilesSnapshot> {
     const state = await this.readState();
     const normalizedName = name.trim();
     const normalizedDirectory = path.resolve(directory);
@@ -70,7 +73,8 @@ export class ProfileStore {
 
     await this.writeState(state);
     await this.ensureProfileFiles(state, { createMissingDirectories: true });
-    return state;
+    await this.writeProfileSettings(normalizedDirectory, { appLanguage });
+    return await this.toSnapshot(state);
   }
 
   async rename(profileId: string, name: string): Promise<ProfilesSnapshot> {
@@ -85,7 +89,7 @@ export class ProfileStore {
     target.name = normalizedName;
 
     await this.writeState(state);
-    return state;
+    return await this.toSnapshot(state);
   }
 
   async clone(profileId: string, name: string, directory: string): Promise<ProfilesSnapshot> {
@@ -119,7 +123,7 @@ export class ProfileStore {
     state.activeProfileId = cloneId;
 
     await this.writeState(state);
-    return state;
+    return await this.toSnapshot(state);
   }
 
   async delete(profileId: string): Promise<ProfilesSnapshot> {
@@ -138,7 +142,19 @@ export class ProfileStore {
     }
 
     await this.writeState(state);
-    return state;
+    return await this.toSnapshot(state);
+  }
+
+  async getSettings(): Promise<ProfileSettings> {
+    const activeProfile = await this.getActiveProfile();
+    return await this.readProfileSettings(activeProfile.directory);
+  }
+
+  async saveSettings(settings: ProfileSettings): Promise<ProfileSettings> {
+    const activeProfile = await this.getActiveProfile();
+    const nextSettings = this.normalizeProfileSettings(settings);
+    await this.writeProfileSettings(activeProfile.directory, nextSettings);
+    return nextSettings;
   }
 
   private async readState(): Promise<ProfileState> {
@@ -196,7 +212,7 @@ export class ProfileStore {
       }
 
       const files = [
-        { fileName: PROFILE_CONFIG_FILES.settings, defaultContent: EMPTY_OBJECT },
+        { fileName: PROFILE_CONFIG_FILES.settings, defaultContent: `${JSON.stringify(DEFAULT_PROFILE_SETTINGS, null, 2)}\n` },
         { fileName: PROFILE_CONFIG_FILES.soundCommands, defaultContent: EMPTY_ARRAY },
         { fileName: PROFILE_CONFIG_FILES.textCommands, defaultContent: EMPTY_ARRAY },
         { fileName: PROFILE_CONFIG_FILES.voiceCommands, defaultContent: EMPTY_ARRAY },
@@ -223,6 +239,67 @@ export class ProfileStore {
 
     const isAvailable = await this.profileDirectoryExists(activeProfile.directory);
     return isAvailable ? state : { ...state, activeProfileId: '' };
+  }
+
+  private async toSnapshot(state: ProfileState): Promise<ProfilesSnapshot> {
+    const profiles: ProfileSummary[] = await Promise.all(
+      state.profiles.map(async (profile) => {
+        const settings = await this.readProfileSettingsIfAvailable(profile.directory);
+        return {
+          ...profile,
+          appLanguage: settings.appLanguage,
+        };
+      }),
+    );
+
+    return {
+      activeProfileId: state.activeProfileId,
+      profiles,
+    };
+  }
+
+  private async getActiveProfile(): Promise<ProfileRecord> {
+    const state = await this.readState();
+    const activeProfile = state.profiles.find((profile) => profile.id === state.activeProfileId);
+    if (!activeProfile) throw new Error('No active profile');
+    await this.assertProfileDirectoryAvailable(activeProfile);
+    return activeProfile;
+  }
+
+  private async readProfileSettingsIfAvailable(directory: string): Promise<ProfileSettings> {
+    const isAvailable = await this.profileDirectoryExists(directory);
+    if (!isAvailable) return { ...DEFAULT_PROFILE_SETTINGS };
+    return await this.readProfileSettings(directory);
+  }
+
+  private async readProfileSettings(directory: string): Promise<ProfileSettings> {
+    try {
+      const content = await fs.readFile(path.join(directory, PROFILE_CONFIG_FILES.settings), 'utf-8');
+      return this.normalizeProfileSettings(JSON.parse(content));
+    } catch {
+      return { ...DEFAULT_PROFILE_SETTINGS };
+    }
+  }
+
+  private async writeProfileSettings(directory: string, settings: ProfileSettings): Promise<void> {
+    await fs.mkdir(directory, { recursive: true });
+    const nextSettings = this.normalizeProfileSettings(settings);
+    await fs.writeFile(
+      path.join(directory, PROFILE_CONFIG_FILES.settings),
+      `${JSON.stringify(nextSettings, null, 2)}\n`,
+      'utf-8',
+    );
+  }
+
+  private normalizeProfileSettings(raw: unknown): ProfileSettings {
+    const input = raw && typeof raw === 'object' ? raw as Partial<ProfileSettings> : {};
+    return {
+      appLanguage: this.normalizeAppLanguage(input.appLanguage),
+    };
+  }
+
+  private normalizeAppLanguage(value: unknown): AppLanguage {
+    return value === 'en-US' || value === 'pt-BR' ? value : DEFAULT_APP_LANGUAGE;
   }
 
   private async assertProfileDirectoryAvailable(profile: ProfileRecord): Promise<void> {

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type { ReactElement } from 'react';
 
-import type { GeneralSettings, ObsStatsSnapshot, PermissionLevel, ProfileSummary } from '../../shared/types.js';
+import type { AppLanguage, GeneralSettings, ObsStatsSnapshot, PermissionLevel, ProfileSettings, ProfileSummary } from '../../shared/types.js';
+import { useI18n } from '../i18n/I18nProvider.js';
 import { PlatformsSettingsPage } from './PlatformsSettings.js';
 import { SettingsProfilesPanel } from '../components/SettingsProfilesPanel.js';
 import { GeneralSettingsPage } from './GeneralSettings.js';
@@ -26,6 +27,8 @@ interface SettingsWorkspaceProps {
   onSelectProfile: (profileId: string) => void;
   generalSettings: GeneralSettings;
   onSaveGeneralSettings: (settings: GeneralSettings) => Promise<void>;
+  appLanguage: AppLanguage;
+  onSaveProfileSettings: (settings: ProfileSettings) => Promise<ProfileSettings>;
   languageCode: string;
   permissionLevels: PermissionLevel[];
   onChangeLanguageCode: (code: string) => void;
@@ -37,10 +40,12 @@ interface SettingsWorkspaceProps {
   obsStats: ObsStatsSnapshot;
 }
 
-const SETTINGS_GROUPS: Array<{
+type SettingsGroup = {
   label: string;
   items: Array<{ id: SettingsView; label: string; icon: ReactElement }>;
-}> = [
+};
+
+const SETTINGS_GROUPS: SettingsGroup[] = [
   {
     label: 'App',
     items: [
@@ -162,19 +167,41 @@ const SETTINGS_GROUPS: Array<{
 ];
 
 export function SettingsWorkspace(props: SettingsWorkspaceProps) {
+  const { messages } = useI18n();
   const [currentView, setCurrentView] = useState<SettingsView>('general');
+
+  const labelForGroup = (label: string) => ({
+    App: messages.settings.app,
+    Platforms: messages.settings.platforms,
+    Commands: messages.settings.commands,
+    Automations: messages.settings.automations,
+    Integrations: messages.settings.integrations,
+  }[label] ?? label);
+
+  const labelForItem = (id: SettingsView, label: string) => ({
+    general: messages.settings.general,
+    'chat-logs': messages.settings.chatLogs,
+    profiles: messages.profile.profiles,
+    platforms: messages.settings.connections,
+    sound: messages.settings.soundCommands,
+    voice: messages.settings.voiceTts,
+    text: messages.settings.textCommands,
+    raffles: messages.settings.raffles,
+    suggestions: messages.settings.suggestions,
+    obs: 'OBS Studio',
+  }[id] ?? label);
 
   return (
     <section className="flex-1 min-h-0 flex">
       <aside className="w-56 bg-gray-900 border-r border-gray-800 flex flex-col shrink-0">
         <div className="px-4 py-3 border-b border-gray-800">
-          <h2 className="text-sm font-semibold text-gray-300">Settings</h2>
+          <h2 className="text-sm font-semibold text-gray-300">{messages.settings.title}</h2>
         </div>
 
         <nav className="flex-1 overflow-y-auto py-2">
           {SETTINGS_GROUPS.map((group) => (
             <div key={group.label} className="px-3 pb-1">
-              <p className="text-xs text-gray-600 uppercase tracking-wider px-2 py-1">{group.label}</p>
+              <p className="text-xs text-gray-600 uppercase tracking-wider px-2 py-1">{labelForGroup(group.label)}</p>
               {group.items.map((item) => (
                 <button
                   key={item.id}
@@ -187,7 +214,7 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
                   }
                 >
                   {item.icon}
-                  {item.label}
+                  {labelForItem(item.id, item.label)}
                 </button>
               ))}
             </div>
@@ -196,7 +223,14 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
       </aside>
 
       <div className="flex-1 min-h-0 overflow-y-auto">
-        {currentView === 'general' ? <GeneralSettingsPage settings={props.generalSettings} onSave={props.onSaveGeneralSettings} /> : null}
+        {currentView === 'general' ? (
+          <GeneralSettingsPage
+            settings={props.generalSettings}
+            onSave={props.onSaveGeneralSettings}
+            appLanguage={props.appLanguage}
+            onSaveProfileSettings={props.onSaveProfileSettings}
+          />
+        ) : null}
         {currentView === 'profiles' ? (
           <SettingsProfilesPanel
             activeProfileId={props.activeProfileId}
@@ -207,10 +241,6 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
             onCloneProfile={props.onCloneProfile}
             onDeleteProfile={props.onDeleteProfile}
             onSelectProfile={props.onSelectProfile}
-            languageCode={props.languageCode}
-            permissionLevels={props.permissionLevels}
-            onChangeLanguageCode={props.onChangeLanguageCode}
-            onChangePermissionLevels={props.onChangePermissionLevels}
           />
         ) : null}
         {currentView === 'platforms' ? <PlatformsSettingsPage /> : null}

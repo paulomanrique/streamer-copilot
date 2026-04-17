@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { KickConnectionStatus, KickLiveStats, ObsStatsSnapshot, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
+import { useI18n } from '../i18n/I18nProvider.js';
 
 interface ObsStatsPanelProps {
   stats: ObsStatsSnapshot;
@@ -26,10 +27,11 @@ function fmtNum(n: number): string {
 }
 
 export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtubeStreams, kickStatus, kickSlug, kickLiveStats }: ObsStatsPanelProps) {
+  const { messages, t } = useI18n();
   const totalFrames = Math.max(1, stats.droppedFrames + stats.droppedFramesRender + 100);
   const connectionPct = Math.max(0, Math.min(100, (1 - stats.droppedFrames / totalFrames) * 100));
   const connectionTone = connectionPct >= 95 ? 'text-green-400' : connectionPct >= 80 ? 'text-yellow-400' : 'text-red-400';
-  const connectionLabel = connectionPct >= 95 ? 'Good' : connectionPct >= 80 ? 'Fair' : 'Poor';
+  const connectionLabel = connectionPct >= 95 ? t('Good') : connectionPct >= 80 ? t('Fair') : t('Poor');
   const connectionBar = connectionPct >= 95 ? 'bg-green-500' : connectionPct >= 80 ? 'bg-yellow-500' : 'bg-red-500';
 
   const hype = twitchLiveStats?.hypeTrain;
@@ -68,35 +70,35 @@ export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtube
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-gray-200">OBS Studio</h2>
           <span className={`text-xs font-medium ${stats.connected ? 'text-cyan-400' : 'text-gray-500'}`}>
-            {stats.connected ? 'CONNECTED' : 'OFFLINE'}
+            {stats.connected ? t('CONNECTED') : t('OFFLINE')}
           </span>
         </div>
         <span className="text-xs text-gray-500">
-          Scene: <span className="text-gray-300">{stats.sceneName}</span>
+          {t('Scene')}: <span className="text-gray-300">{stats.sceneName}</span>
         </span>
       </div>
 
       <div className="grid grid-cols-4 gap-2">
         <div className="bg-gray-800/60 rounded-lg p-2.5 text-center">
           <div className="text-base font-mono font-bold text-violet-400">{stats.uptimeLabel}</div>
-          <div className="text-xs text-gray-500 mt-0.5">Time</div>
+          <div className="text-xs text-gray-500 mt-0.5">{t('Time')}</div>
         </div>
         <div className="bg-gray-800/60 rounded-lg p-2.5 text-center">
           <div className="text-base font-mono font-bold text-red-400">{stats.droppedFrames}</div>
-          <div className="text-xs text-gray-500 mt-0.5 leading-tight">Dropped Frames<br />(network)</div>
+          <div className="text-xs text-gray-500 mt-0.5 leading-tight">{t('Dropped Frames')}<br />({t('network')})</div>
         </div>
         <div className="bg-gray-800/60 rounded-lg p-2.5 text-center">
           <div className="text-base font-mono font-bold text-orange-400">{stats.droppedFrames}</div>
-          <div className="text-xs text-gray-500 mt-0.5 leading-tight">Dropped Frames<br />(encoder)</div>
+          <div className="text-xs text-gray-500 mt-0.5 leading-tight">{t('Dropped Frames')}<br />({t('encoder')})</div>
         </div>
         <div className="bg-gray-800/60 rounded-lg p-2.5 text-center">
           <div className="text-base font-mono font-bold text-yellow-400">{stats.droppedFramesRender}</div>
-          <div className="text-xs text-gray-500 mt-0.5 leading-tight">Dropped Frames<br />(render)</div>
+          <div className="text-xs text-gray-500 mt-0.5 leading-tight">{t('Dropped Frames')}<br />({t('render')})</div>
         </div>
 
         <div className="col-span-4 bg-gray-800/60 rounded-lg px-3 py-2 flex items-center gap-3">
           <div className="flex items-center gap-1.5 shrink-0">
-            <span className="text-xs text-gray-500">Connection</span>
+            <span className="text-xs text-gray-500">{t('Connection')}</span>
             <span className={`text-xs font-semibold ${connectionTone}`}>● {connectionLabel}</span>
           </div>
           <div className="flex-1 bg-gray-700 rounded-full h-1.5 overflow-hidden">
@@ -116,7 +118,7 @@ export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtube
                 value={twitchLiveStats ? fmtNum(twitchLiveStats.viewerCount) : '0'}
                 isLive={!!twitchLiveStats?.isLive}
                 secondaryValue={twitchLiveStats ? fmtNum(twitchLiveStats.followerCount) : undefined}
-                secondaryLabel="followers"
+                secondaryLabel={t('followers')}
               />
             )}
             {youtubeStreams.map((stream) => (
@@ -131,7 +133,7 @@ export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtube
                 value={stream.viewerCount !== null ? fmtNum(stream.viewerCount) : '—'}
                 isLive
                 secondaryValue={stream.subscriberCount !== null ? fmtNum(stream.subscriberCount) : '—'}
-                secondaryLabel="subscribers"
+                secondaryLabel={t('subscribers')}
               />
             ))}
             {kickStatus === 'connected' && (
@@ -141,7 +143,7 @@ export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtube
                 classes="bg-green-500/10 border-green-500/20 text-green-300"
                 metaClass="text-green-400"
                 value={kickLiveStats ? fmtNum(kickLiveStats.viewerCount) : '—'}
-                valueLabel="viewers"
+                valueLabel={t('viewers')}
                 isLive={kickLiveStats?.isLive ?? true}
                 secondaryValue={kickLiveStats?.followerCount !== null && kickLiveStats?.followerCount !== undefined
                   ? fmtNum(kickLiveStats.followerCount)
@@ -149,8 +151,8 @@ export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtube
                     ? fmtNum(kickLiveStats.subscriberCount)
                   : '—'}
                 secondaryLabel={kickLiveStats?.followerCount !== null && kickLiveStats?.followerCount !== undefined
-                  ? 'followers'
-                  : 'subscribers'}
+                  ? t('followers')
+                  : t('subscribers')}
               />
             )}
           </div>
@@ -162,7 +164,7 @@ export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtube
             <div className="flex items-center justify-between mb-1.5">
               <div className="flex items-center gap-2">
                 <span className="text-base leading-none">🚂</span>
-                <span className="text-[10px] font-bold text-purple-200 uppercase tracking-widest">Hype Train lvl {hype.level}</span>
+                <span className="text-[10px] font-bold text-purple-200 uppercase tracking-widest">{t('Hype Train lvl')} {hype.level}</span>
               </div>
               <span className="text-[10px] font-mono font-bold text-purple-300 bg-purple-500/20 px-1.5 py-0.5 rounded border border-purple-500/20">
                 {timeLeft}
@@ -176,7 +178,7 @@ export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtube
             </div>
             <div className="flex justify-between mt-1.5 text-[9px] font-bold text-gray-500 uppercase tracking-tighter">
               <span className="text-purple-400/80">{hype.progress.toLocaleString()} pts</span>
-              <span>Goal: {hype.goal.toLocaleString()}</span>
+              <span>{t('Goal')}: {hype.goal.toLocaleString()}</span>
             </div>
           </div>
         )}

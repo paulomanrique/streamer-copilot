@@ -645,13 +645,13 @@ function ChatMessageRow({ message, avatarUrl, highlighted, hasMultipleYouTubeStr
           {/* Member Star */}
           {isSub ? <span className="text-yellow-400 text-xs leading-none">★</span> : null}
 
-          <span className="font-semibold text-sm" style={{ color: authorColor }}>
+          <span className="font-semibold text-sm" style={{ color: authorColor }} data-no-i18n="true">
             {message.platform === 'youtube' || message.platform === 'youtube-v' ? `@${message.author}` : message.author}
           </span>
 
           {message.platform !== 'twitch' && isMod ? <span className="text-xs text-emerald-400 font-semibold">MOD</span> : null}
         </div>
-        <p className={`text-sm mt-0.5 break-words leading-snug ${isCommand ? 'text-violet-300 font-mono' : 'text-gray-300'}`}>
+        <p className={`text-sm mt-0.5 break-words leading-snug ${isCommand ? 'text-violet-300 font-mono' : 'text-gray-300'}`} data-no-i18n="true">
           {renderMessageContent(message)}
         </p>
       </div>

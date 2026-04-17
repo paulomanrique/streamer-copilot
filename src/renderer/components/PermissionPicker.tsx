@@ -1,14 +1,7 @@
 import { PERMISSION_LEVELS } from '../../shared/constants.js';
 import type { PermissionLevel } from '../../shared/types.js';
+import { useI18n } from '../i18n/I18nProvider.js';
 import { styles } from './app-styles.js';
-
-const PERMISSION_LABELS: Record<PermissionLevel, string> = {
-  everyone: 'Everyone',
-  follower: 'Followers',
-  subscriber: 'Subscribers',
-  moderator: 'Moderators',
-  broadcaster: 'Broadcaster',
-};
 
 interface PermissionPickerProps {
   label?: string;
@@ -21,6 +14,7 @@ export function PermissionPicker({
   selectedLevels,
   onChange,
 }: PermissionPickerProps) {
+  const { messages, t } = useI18n();
   const toggleLevel = (level: PermissionLevel) => {
     if (selectedLevels.includes(level)) {
       const nextLevels = selectedLevels.filter((item) => item !== level);
@@ -36,9 +30,9 @@ export function PermissionPicker({
       <div style={styles.previewHeader}>
         <div>
           <h3 style={styles.sectionTitle}>{label}</h3>
-          <p style={styles.helper}>Reusable checkbox-chip group for sound and voice command forms.</p>
+          <p style={styles.helper}>{t('Reusable checkbox-chip group for sound and voice command forms.')}</p>
         </div>
-        <span style={styles.selectionPill}>{selectedLevels.length} selected</span>
+        <span style={styles.selectionPill}>{selectedLevels.length} {t('selected')}</span>
       </div>
 
       <div style={styles.pickerSurface}>
@@ -50,11 +44,11 @@ export function PermissionPicker({
               style={selectedLevels.includes(level) ? styles.chipActive : styles.chip}
               onClick={() => toggleLevel(level)}
             >
-              {PERMISSION_LABELS[level]}
+              {messages.common.permissionLevel[level]}
             </button>
           ))}
         </div>
-        <p style={styles.helper}>Selected values: {selectedLevels.join(', ')}</p>
+        <p style={styles.helper}>{t('Selected values')}: {selectedLevels.map((level) => messages.common.permissionLevel[level]).join(', ')}</p>
       </div>
     </section>
   );

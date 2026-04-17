@@ -1,4 +1,4 @@
-import type { LanguageOption, PermissionLevel } from './types.js';
+import type { AppLanguage, LanguageOption, PermissionLevel } from './types.js';
 
 export const APP_NAME = 'Streamer Copilot';
 
@@ -9,6 +9,13 @@ export const PROFILE_CONFIG_FILES = {
   voiceCommands: 'commands.voice.json',
   scheduled: 'scheduled.json',
 } as const;
+
+export const DEFAULT_APP_LANGUAGE: AppLanguage = 'pt-BR';
+
+export const APP_LANGUAGE_OPTIONS: Array<{ code: AppLanguage; label: string; nativeLabel: string }> = [
+  { code: 'pt-BR', label: 'Portuguese', nativeLabel: 'Portugues' },
+  { code: 'en-US', label: 'English', nativeLabel: 'English' },
+];
 
 export const PERMISSION_LEVELS: PermissionLevel[] = [
   'everyone',

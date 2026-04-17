@@ -1,0 +1,110 @@
+import type { AppLanguage, PermissionLevel } from '../../shared/types.js';
+
+export interface TranslationMessages {
+  common: {
+    appLanguageName: Record<AppLanguage, string>;
+    permissionLevel: Record<PermissionLevel, string>;
+    platform: Record<string, string>;
+    status: Record<string, string>;
+    save: string;
+    saving: string;
+    cancel: string;
+    close: string;
+    choose: string;
+    create: string;
+    delete: string;
+    edit: string;
+    clone: string;
+    rename: string;
+    enabled: string;
+    disabled: string;
+    active: string;
+    inactive: string;
+    loading: string;
+    search: string;
+    none: string;
+    optional: string;
+    required: string;
+    yes: string;
+    no: string;
+    copied: string;
+  };
+  profile: {
+    createTitle: string;
+    renameTitle: string;
+    cloneTitle: string;
+    name: string;
+    directory: string;
+    appLanguage: string;
+    createProfile: string;
+    createFirstProfile: string;
+    continueWithProfile: string;
+    saveName: string;
+    cloneProfile: string;
+    newProfile: string;
+    profiles: string;
+    noProfiles: string;
+    selectProfile: string;
+    chooseProfileDescription: string;
+    deleteConfirm: (name: string) => string;
+  };
+  settings: {
+    title: string;
+    general: string;
+    app: string;
+    chatLogs: string;
+    platforms: string;
+    connections: string;
+    commands: string;
+    soundCommands: string;
+    voiceTts: string;
+    textCommands: string;
+    automations: string;
+    raffles: string;
+    suggestions: string;
+    integrations: string;
+    generalTitle: string;
+    generalDescription: string;
+    appLanguageTitle: string;
+    appLanguageDescription: string;
+    startOnLogin: string;
+    startOnLoginDescription: string;
+    minimizeToTray: string;
+    minimizeToTrayDescription: string;
+    eventNotifications: string;
+    eventNotificationsDescription: string;
+    diagnosticLog: string;
+    openLogsFolder: string;
+    saveSettings: string;
+    settingsSaved: string;
+  };
+  dashboard: Record<string, string>;
+  chat: Record<string, string>;
+  platforms: Record<string, string>;
+  obs: Record<string, string>;
+  commands: Record<string, string>;
+  raffles: Record<string, string>;
+  suggestions: Record<string, string>;
+  logs: Record<string, string>;
+  errors: {
+    rendererError: string;
+    failedToLoadInitialData: string;
+    failedToSelectProfile: string;
+    failedToCreateProfile: string;
+    failedToRenameProfile: string;
+    failedToCloneProfile: string;
+    failedToDeleteProfile: string;
+    failedToSaveGeneralSettings: string;
+    failedToSaveProfileSettings: string;
+    speechUnavailable: string;
+    failedToPlaySound: (filePath: string) => string;
+  };
+  ui: Record<string, string>;
+}
+
+export interface I18nContextValue {
+  language: AppLanguage;
+  setLanguage: (language: AppLanguage) => void;
+  messages: TranslationMessages;
+  t: (text: string) => string;
+}

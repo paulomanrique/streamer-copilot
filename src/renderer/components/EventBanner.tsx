@@ -1,4 +1,5 @@
 import type { StreamEvent } from '../../shared/types.js';
+import { useI18n } from '../i18n/I18nProvider.js';
 
 const PLATFORM_META: Record<string, { bg: string; text: string; icon: string; label: string }> = {
   twitch: {
@@ -57,6 +58,7 @@ interface EventBannerProps {
 }
 
 export function EventBanner({ event, variant = 'chat' }: EventBannerProps) {
+  const { t } = useI18n();
   const baseMeta = PLATFORM_META[event.platform] ?? PLATFORM_META.twitch;
   const platform = baseMeta;
 
@@ -75,10 +77,10 @@ export function EventBanner({ event, variant = 'chat' }: EventBannerProps) {
         </span>
 
         <span className="leading-relaxed min-w-0">
-          <span className={`font-semibold ${ACTIVITY_AUTHOR_CLASS[event.type]}`}>{event.author}</span>
+          <span className={`font-semibold ${ACTIVITY_AUTHOR_CLASS[event.type]}`} data-no-i18n="true">{event.author}</span>
           {' '}
-          <span className="text-gray-400">{buildEventAction(event)}</span>
-          {event.message ? <span className="text-gray-500"> — "{event.message}"</span> : null}
+          <span className="text-gray-400">{buildEventAction(event, t)}</span>
+          {event.message ? <span className="text-gray-500" data-no-i18n="true"> — "{event.message}"</span> : null}
         </span>
       </div>
     );
@@ -91,8 +93,8 @@ export function EventBanner({ event, variant = 'chat' }: EventBannerProps) {
       <div className="flex items-center gap-2">
         <span className="text-lg">{EVENT_ICONS[event.type]}</span>
         <div>
-          <p className="text-sm text-gray-200">{buildEventTitle(event)}</p>
-          {event.message ? <p className="text-xs text-gray-400 mt-0.5">"{event.message}"</p> : null}
+          <p className="text-sm text-gray-200">{buildEventTitle(event, t)}</p>
+          {event.message ? <p className="text-xs text-gray-400 mt-0.5" data-no-i18n="true">"{event.message}"</p> : null}
         </div>
         <span className="ml-auto text-xs text-gray-500">{event.timestampLabel}</span>
       </div>
@@ -111,38 +113,38 @@ function getBorderColor(platform: string): string {
   return map[platform] ?? 'rgba(55,65,81,0.5)';
 }
 
-function buildEventAction(event: StreamEvent): string {
+function buildEventAction(event: StreamEvent, t: (text: string) => string): string {
   switch (event.type) {
     case 'subscription':
       return (event.amount ?? 1) > 1
-        ? `resubscribed for ${event.amount} months!`
-        : 'subscribed!';
-    case 'superchat': return `sent $${(event.amount ?? 0).toFixed(2)}`;
-    case 'raid': return `raided with ${event.amount ?? 0} viewers`;
-    case 'follow': return 'started following';
-    case 'cheer': return `cheered ${event.amount ?? 0} bits`;
+        ? `${t('resubscribed for')} ${event.amount} ${t('months')}!`
+        : t('subscribed!');
+    case 'superchat': return `${t('sent')} $${(event.amount ?? 0).toFixed(2)}`;
+    case 'raid': return `${t('raided with')} ${event.amount ?? 0} ${t('viewers')}`;
+    case 'follow': return t('started following');
+    case 'cheer': return `${t('cheered')} ${event.amount ?? 0} bits`;
     case 'gift':
       return (event.amount ?? 1) > 1
-        ? `gifted ${event.amount} subs to the community`
-        : `gifted a sub${event.message ? ` ${event.message}` : ''}`;
+        ? `${t('gifted')} ${event.amount} ${t('subs to the community')}`
+        : `${t('gifted a sub')}${event.message ? ` ${event.message}` : ''}`;
     default: return '';
   }
 }
 
-function buildEventTitle(event: StreamEvent): string {
+function buildEventTitle(event: StreamEvent, t: (text: string) => string): string {
   switch (event.type) {
     case 'subscription':
       return (event.amount ?? 1) > 1
-        ? `${event.author} resubscribed for ${event.amount} months!`
-        : `${event.author} subscribed!`;
-    case 'superchat': return `${event.author} sent a Super Chat of $${(event.amount ?? 0).toFixed(2)}`;
-    case 'raid': return `${event.author} raided with ${event.amount ?? 0} viewers!`;
-    case 'follow': return `${event.author} started following`;
-    case 'cheer': return `${event.author} cheered ${event.amount ?? 0} bits!`;
+        ? `${event.author} ${t('resubscribed for')} ${event.amount} ${t('months')}!`
+        : `${event.author} ${t('subscribed!')}`;
+    case 'superchat': return `${event.author} ${t('sent a Super Chat of')} $${(event.amount ?? 0).toFixed(2)}`;
+    case 'raid': return `${event.author} ${t('raided with')} ${event.amount ?? 0} ${t('viewers')}!`;
+    case 'follow': return `${event.author} ${t('started following')}`;
+    case 'cheer': return `${event.author} ${t('cheered')} ${event.amount ?? 0} bits!`;
     case 'gift':
       return (event.amount ?? 1) > 1
-        ? `${event.author} gifted ${event.amount} subs to the community!`
-        : `${event.author} gifted a sub${event.message ? ` ${event.message}` : ''}`;
+        ? `${event.author} ${t('gifted')} ${event.amount} ${t('subs to the community')}!`
+        : `${event.author} ${t('gifted a sub')}${event.message ? ` ${event.message}` : ''}`;
     default: return event.author;
   }
 }

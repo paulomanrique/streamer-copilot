@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 
 import { LANGUAGE_OPTIONS } from '../../shared/constants.js';
 import type { LanguageOption } from '../../shared/types.js';
+import { useI18n } from '../i18n/I18nProvider.js';
 import { styles } from './app-styles.js';
 
 interface LanguagePickerProps {
@@ -15,6 +16,7 @@ export function LanguagePicker({
   selectedCode,
   onChange,
 }: LanguagePickerProps) {
+  const { t } = useI18n();
   const [query, setQuery] = useState('');
 
   const selectedLanguage = useMemo(
@@ -38,7 +40,7 @@ export function LanguagePicker({
       <div style={styles.previewHeader}>
         <div>
           <h3 style={styles.sectionTitle}>{label}</h3>
-          <p style={styles.helper}>Searchable BCP-47 picker for TTS settings and voice command forms.</p>
+          <p style={styles.helper}>{t('Searchable BCP-47 picker for TTS settings and voice command forms.')}</p>
         </div>
         <span style={styles.selectionPill}>{selectedLanguage.code}</span>
       </div>
@@ -47,7 +49,7 @@ export function LanguagePicker({
         <input
           type="search"
           value={query}
-          placeholder="Search by code or language name"
+          placeholder={t('Search by code or language name')}
           style={styles.searchInput}
           onChange={(event) => setQuery(event.target.value)}
         />

@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import logoUrl from '../assets/logo.svg';
 import type { AppInfo, KickConnectionStatus, KickLiveStats, TikTokConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
+import { useI18n } from '../i18n/I18nProvider.js';
 import type { AppSection } from './SectionTabs.js';
 
 interface AppHeaderProps {
@@ -38,6 +39,7 @@ export function AppHeader({
   kickSlug,
   kickLiveStats,
 }: AppHeaderProps) {
+  const { messages, t } = useI18n();
   const [liveOpen, setLiveOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const appName = appInfo?.appName ?? 'Streamer Copilot';
@@ -130,7 +132,7 @@ export function AppHeader({
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h7"/>
             </svg>
-            Dashboard
+            {t('Dashboard')}
           </button>
           <button type="button" onClick={() => onChangeSection('settings')}
             className={currentSection === 'settings'
@@ -140,7 +142,7 @@ export function AppHeader({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
               <circle cx="12" cy="12" r="3"/>
             </svg>
-            Settings
+            {messages.settings.title}
           </button>
         </nav>
 
@@ -149,7 +151,7 @@ export function AppHeader({
           {onOpenProfileSelector ? (
             <button type="button" onClick={onOpenProfileSelector}
               className="px-3 py-1.5 rounded text-sm font-medium text-gray-400 hover:text-white transition-colors">
-              Profiles
+              {messages.profile.profiles}
             </button>
           ) : null}
           <button
@@ -161,7 +163,7 @@ export function AppHeader({
               : 'flex items-center gap-1.5 px-3 py-1.5 rounded bg-gray-700/60 text-gray-400 text-sm font-medium opacity-60 cursor-not-allowed'}
           >
             <span className={`w-2 h-2 rounded-full ${isAnyLive ? 'pulse-dot bg-white' : 'bg-gray-400'}`} />
-            {isAnyLive ? 'Live' : 'Offline'}
+            {isAnyLive ? messages.common.status.live : messages.common.status.offline}
           </button>
         </div>
       </header>
@@ -175,7 +177,7 @@ export function AppHeader({
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700">
               <div className="flex items-center gap-2">
                 <span className="pulse-dot w-2 h-2 rounded-full bg-red-500" />
-                <h3 className="font-semibold text-gray-100">Live Links</h3>
+                <h3 className="font-semibold text-gray-100">{t('Live Links')}</h3>
               </div>
               <button type="button" onClick={() => setLiveOpen(false)}
                 className="text-gray-400 hover:text-white transition-colors text-lg leading-none">✕</button>
@@ -183,11 +185,11 @@ export function AppHeader({
 
             {/* body */}
             <div className="p-5 space-y-3">
-              <p className="text-xs text-gray-500 mb-4">Copy links to share each live output on social media.</p>
+              <p className="text-xs text-gray-500 mb-4">{t('Copy links to share each live output on social media.')}</p>
 
               {liveLinks.length === 0 ? (
                 <div className="text-sm text-gray-500 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5">
-                  No live outputs detected.
+                  {t('No live outputs detected.')}
                 </div>
               ) : null}
 
@@ -202,14 +204,14 @@ export function AppHeader({
                   </div>
                   <button type="button" onClick={() => copyLink(id, full)}
                     className={`shrink-0 text-xs px-2 py-1 rounded transition-colors ${btnBg}`}>
-                    {copiedId === id ? '✓' : 'Copy'}
+                    {copiedId === id ? '✓' : t('Copy')}
                   </button>
                 </div>
               ))}
 
               <button type="button" onClick={copyAll} disabled={liveLinks.length === 0}
                 className="w-full py-2 rounded bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 text-sm border border-violet-600/30 transition-colors mt-1 disabled:opacity-40 disabled:cursor-not-allowed">
-                {copiedId === 'all' ? '✓ Copied!' : 'Copy all links'}
+                {copiedId === 'all' ? `✓ ${t('Copied!')}` : t('Copy all links')}
               </button>
             </div>
           </div>

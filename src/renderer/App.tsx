@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { AppInfo, GeneralSettings, PermissionLevel, ProfilesSnapshot, VoiceSpeakPayload } from '../shared/types.js';
+import { DEFAULT_APP_LANGUAGE } from '../shared/constants.js';
+import type { AppInfo, AppLanguage, GeneralSettings, PermissionLevel, ProfileSettings, ProfilesSnapshot, VoiceSpeakPayload } from '../shared/types.js';
 import { useAppStore } from './store.js';
+import { I18nProvider } from './i18n/I18nProvider.js';
+import { messages } from './i18n/messages.js';
 import { AppHeader } from './components/AppHeader.js';
 import { DashboardSummary } from './components/DashboardSummary.js';
 import { ProfileFormModal } from './components/ProfileFormModal.js';
@@ -58,9 +61,11 @@ export default function App() {
   const [profileFormMode, setProfileFormMode] = useState<ProfileFormMode>('create');
   const [profileFormName, setProfileFormName] = useState('');
   const [profileFormDirectory, setProfileFormDirectory] = useState('');
+  const [profileFormLanguage, setProfileFormLanguage] = useState<AppLanguage>(DEFAULT_APP_LANGUAGE);
   const [selectorProfileId, setSelectorProfileId] = useState('');
   const [currentSection, setCurrentSection] = useState<AppSection>('dashboard');
   const [generalSettings, setGeneralSettings] = useState<GeneralSettings>(DEFAULT_GENERAL_SETTINGS);
+  const [appLanguage, setAppLanguage] = useState<AppLanguage>(DEFAULT_APP_LANGUAGE);
   const [languageCode, setLanguageCode] = useState('en-US');
   const [permissionLevels, setPermissionLevels] = useState<PermissionLevel[]>(['everyone', 'moderator']);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -77,7 +82,14 @@ export default function App() {
   const pushError = (message: string) => {
     const toastId = Date.now() + Math.floor(Math.random() * 1000);
     setError(message);
-    setToasts((current) => [...current, { id: toastId, title: 'Renderer error', message }]);
+    setToasts((current) => [...current, { id: toastId, title: messages[appLanguage].errors.rendererError, message }]);
+  };
+
+  const getActiveProfileFromSnapshot = (snapshot: ProfilesSnapshot) =>
+    snapshot.profiles.find((profile) => profile.id === snapshot.activeProfileId) ?? null;
+
+  const applyAppLanguageFromSnapshot = (snapshot: ProfilesSnapshot) => {
+    setAppLanguage(getActiveProfileFromSnapshot(snapshot)?.appLanguage ?? DEFAULT_APP_LANGUAGE);
   };
 
   useEffect(() => {
@@ -95,6 +107,7 @@ export default function App() {
         ]);
         setAppInfo(info);
         setProfiles(snapshot);
+        applyAppLanguageFromSnapshot(snapshot);
         setChatSnapshot(recentChat);
         setGeneralSettings(nextGeneralSettings);
         setTwitchStatus(twitchInitialStatus);
@@ -106,7 +119,7 @@ export default function App() {
         setSelectorProfileId(snapshot.activeProfileId);
         setIsProfileSelectorOpen(true);
       } catch (cause) {
-        pushError(cause instanceof Error ? cause.message : 'Failed to load initial data');
+        pushError(cause instanceof Error ? cause.message : messages[appLanguage].errors.failedToLoadInitialData);
       } finally {
         setIsLoading(false);
       }
@@ -265,12 +278,13 @@ export default function App() {
       const snapshot = await window.copilot.selectProfile({ profileId });
       const recentChat = await window.copilot.getRecentChat();
       setProfiles(snapshot);
+      applyAppLanguageFromSnapshot(snapshot);
       setChatSnapshot(recentChat);
       setSelectorProfileId(snapshot.activeProfileId);
       setError(null);
       return snapshot;
     } catch (cause) {
-      pushError(cause instanceof Error ? cause.message : 'Failed to select profile');
+      pushError(cause instanceof Error ? cause.message : messages[appLanguage].errors.failedToSelectProfile);
       return null;
     }
   };
@@ -278,11 +292,12 @@ export default function App() {
   const applyProfilesSnapshot = (snapshot: ProfilesSnapshot) => {
     setProfiles(snapshot);
     setSelectorProfileId(snapshot.activeProfileId);
+    applyAppLanguageFromSnapshot(snapshot);
   };
 
-  const createProfile = async (name: string, directory: string) => {
+  const createProfile = async (name: string, directory: string, appLanguage: AppLanguage) => {
     try {
-      const snapshot = await window.copilot.createProfile({ name: name.trim(), directory });
+      const snapshot = await window.copilot.createProfile({ name: name.trim(), directory, appLanguage });
       applyProfilesSnapshot(snapshot);
       setSelectorProfileId(snapshot.activeProfileId);
       setIsProfileFormOpen(false);
@@ -290,7 +305,7 @@ export default function App() {
       setProfileFormName('');
       setError(null);
     } catch (cause) {
-      pushError(cause instanceof Error ? cause.message : 'Failed to create profile');
+      pushError(cause instanceof Error ? cause.message : messages[appLanguage].errors.failedToCreateProfile);
       throw cause;
     }
   };
@@ -305,7 +320,7 @@ export default function App() {
       setProfileFormName('');
       setError(null);
     } catch (cause) {
-      pushError(cause instanceof Error ? cause.message : 'Failed to rename profile');
+      pushError(cause instanceof Error ? cause.message : messages[appLanguage].errors.failedToRenameProfile);
       throw cause;
     }
   };
@@ -325,7 +340,7 @@ export default function App() {
       setProfileFormName('');
       setError(null);
     } catch (cause) {
-      pushError(cause instanceof Error ? cause.message : 'Failed to clone profile');
+      pushError(cause instanceof Error ? cause.message : messages[appLanguage].errors.failedToCloneProfile);
       throw cause;
     }
   };
@@ -333,7 +348,7 @@ export default function App() {
   const deleteActiveProfile = async () => {
     if (!activeProfileId) return;
     const current = profiles.find((profile) => profile.id === activeProfileId);
-    const confirmed = confirm(`Delete profile "${current?.name ?? activeProfileId}"?`);
+    const confirmed = confirm(messages[appLanguage].profile.deleteConfirm(current?.name ?? activeProfileId));
     if (!confirmed) return;
 
     try {
@@ -341,7 +356,7 @@ export default function App() {
       applyProfilesSnapshot(snapshot);
       setError(null);
     } catch (cause) {
-      pushError(cause instanceof Error ? cause.message : 'Failed to delete profile');
+      pushError(cause instanceof Error ? cause.message : messages[appLanguage].errors.failedToDeleteProfile);
     }
   };
 
@@ -349,6 +364,7 @@ export default function App() {
     setProfileFormMode('create');
     setProfileFormName('');
     setProfileFormDirectory('');
+    setProfileFormLanguage(DEFAULT_APP_LANGUAGE);
     setIsProfileFormOpen(true);
   };
 
@@ -357,6 +373,7 @@ export default function App() {
     setProfileFormMode('rename');
     setProfileFormName(activeProfile.name);
     setProfileFormDirectory('');
+    setProfileFormLanguage(appLanguage);
     setIsProfileFormOpen(true);
   };
 
@@ -365,6 +382,7 @@ export default function App() {
     setProfileFormMode('clone');
     setProfileFormName(`${activeProfile.name} copy`);
     setProfileFormDirectory('');
+    setProfileFormLanguage(appLanguage);
     setIsProfileFormOpen(true);
   };
 
@@ -376,7 +394,7 @@ export default function App() {
 
   const submitProfileForm = async (name: string) => {
     if (profileFormMode === 'create') {
-      await createProfile(name, profileFormDirectory);
+      await createProfile(name, profileFormDirectory, profileFormLanguage);
       return;
     }
 
@@ -407,12 +425,31 @@ export default function App() {
       setGeneralSettings(saved);
       setError(null);
     } catch (cause) {
-      pushError(cause instanceof Error ? cause.message : 'Failed to save general settings');
+      pushError(cause instanceof Error ? cause.message : messages[appLanguage].errors.failedToSaveGeneralSettings);
+      throw cause;
+    }
+  };
+
+  const saveProfileSettings = async (settings: ProfileSettings) => {
+    try {
+      const saved = await window.copilot.saveProfileSettings(settings);
+      setAppLanguage(saved.appLanguage);
+      setProfiles({
+        activeProfileId,
+        profiles: profiles.map((profile) =>
+          profile.id === activeProfileId ? { ...profile, appLanguage: saved.appLanguage } : profile,
+        ),
+      });
+      setError(null);
+      return saved;
+    } catch (cause) {
+      pushError(cause instanceof Error ? cause.message : messages[appLanguage].errors.failedToSaveProfileSettings);
       throw cause;
     }
   };
 
   return (
+    <I18nProvider language={appLanguage} setLanguage={setAppLanguage}>
     <main className="h-screen overflow-hidden bg-gray-950 text-gray-200 flex flex-col">
       <section className="w-screen flex-1 min-h-0 bg-gray-950 flex flex-col">
         {hasActiveProfile ? (
@@ -463,6 +500,8 @@ export default function App() {
             onSelectProfile={(profileId) => void onSelectProfile(profileId)}
             generalSettings={generalSettings}
             onSaveGeneralSettings={saveGeneralSettings}
+            appLanguage={appLanguage}
+            onSaveProfileSettings={saveProfileSettings}
             languageCode={languageCode}
             permissionLevels={permissionLevels}
             onChangeLanguageCode={setLanguageCode}
@@ -491,7 +530,9 @@ export default function App() {
         initialName={profileFormName}
         requireDirectory={profileFormMode !== 'rename'}
         selectedDirectory={profileFormDirectory}
+        selectedLanguage={profileFormLanguage}
         onChangeSelectedDirectory={setProfileFormDirectory}
+        onChangeSelectedLanguage={setProfileFormLanguage}
         onPickDirectory={pickProfileDirectory}
         onClose={() => setIsProfileFormOpen(false)}
         onSubmit={submitProfileForm}
@@ -499,5 +540,6 @@ export default function App() {
 
       <ToastStack toasts={toasts} />
     </main>
+    </I18nProvider>
   );
 }

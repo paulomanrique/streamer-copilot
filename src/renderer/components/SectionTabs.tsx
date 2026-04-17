@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n/I18nProvider.js';
 import { styles } from './app-styles.js';
 
 export type AppSection = 'dashboard' | 'settings';
@@ -8,6 +9,7 @@ interface SectionTabsProps {
 }
 
 export function SectionTabs({ currentSection, onChangeSection }: SectionTabsProps) {
+  const { messages, t } = useI18n();
   return (
     <nav style={styles.sectionTabs}>
       <button
@@ -15,14 +17,14 @@ export function SectionTabs({ currentSection, onChangeSection }: SectionTabsProp
         style={currentSection === 'dashboard' ? styles.tabButtonActive : styles.tabButton}
         onClick={() => onChangeSection('dashboard')}
       >
-        Dashboard
+        {t('Dashboard')}
       </button>
       <button
         type="button"
         style={currentSection === 'settings' ? styles.tabButtonActive : styles.tabButton}
         onClick={() => onChangeSection('settings')}
       >
-        Settings
+        {messages.settings.title}
       </button>
     </nav>
   );

@@ -54,6 +54,7 @@ import {
   eventLogFiltersSchema,
   generalSettingsSchema,
   obsConnectionSettingsSchema,
+  profileSettingsSchema,
   raffleControlActionInputSchema,
   raffleCreateInputSchema,
   raffleDeleteInputSchema,
@@ -1208,7 +1209,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     suggestionService.clearSessionEntries();
     return snapshot;
   });
-  ipcMain.handle(IPC_CHANNELS.profilesCreate, async (_, raw) => { const i = createProfileInputSchema.parse(raw); return profileStore.create(i.name, i.directory); });
+  ipcMain.handle(IPC_CHANNELS.profilesCreate, async (_, raw) => { const i = createProfileInputSchema.parse(raw); return profileStore.create(i.name, i.directory, i.appLanguage); });
   ipcMain.handle(IPC_CHANNELS.profilesRename, async (_, raw) => { const i = renameProfileInputSchema.parse(raw); return profileStore.rename(i.profileId, i.name); });
   ipcMain.handle(IPC_CHANNELS.profilesClone, async (_, raw) => { const i = cloneProfileInputSchema.parse(raw); return profileStore.clone(i.profileId, i.name, i.directory); });
   ipcMain.handle(IPC_CHANNELS.profilesDelete, async (_, raw) => profileStore.delete(deleteProfileInputSchema.parse(raw).profileId));
@@ -1216,6 +1217,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender)!, { properties: ['openDirectory', 'createDirectory'] });
     return r.canceled ? null : r.filePaths[0];
   });
+  ipcMain.handle(IPC_CHANNELS.profilesGetSettings, async () => profileStore.getSettings());
+  ipcMain.handle(IPC_CHANNELS.profilesSaveSettings, async (_, raw) => profileStore.saveSettings(profileSettingsSchema.parse(raw)));
 
   ipcMain.handle(IPC_CHANNELS.generalGetSettings, async () => generalSettingsStore.load());
   ipcMain.handle(IPC_CHANNELS.generalSaveSettings, async (_, raw) => {

@@ -13,6 +13,7 @@ import type {
   ObsConnectionSettings,
   ObsStatsSnapshot,
   PlatformId,
+  ProfileSettings,
   ProfilesSnapshot,
   Raffle,
   RaffleControlActionInput,
@@ -66,6 +67,8 @@ export const IPC_CHANNELS = {
   profilesClone: 'profiles:clone',
   profilesDelete: 'profiles:delete',
   profilesPickDirectory: 'profiles:pick-directory',
+  profilesGetSettings: 'profiles:get-settings',
+  profilesSaveSettings: 'profiles:save-settings',
   generalGetSettings: 'general:get-settings',
   generalSaveSettings: 'general:save-settings',
   scheduledList: 'scheduled:list',
@@ -172,6 +175,8 @@ export interface CopilotApi {
   cloneProfile: (input: CloneProfileInput) => Promise<ProfilesSnapshot>;
   deleteProfile: (input: DeleteProfileInput) => Promise<ProfilesSnapshot>;
   pickProfileDirectory: () => Promise<string | null>;
+  getProfileSettings: () => Promise<ProfileSettings>;
+  saveProfileSettings: (settings: ProfileSettings) => Promise<ProfileSettings>;
   getGeneralSettings: () => Promise<GeneralSettings>;
   saveGeneralSettings: (input: GeneralSettings) => Promise<GeneralSettings>;
   listScheduledMessages: () => Promise<ScheduledMessage[]>;

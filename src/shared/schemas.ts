@@ -6,6 +6,7 @@ const permissionLevelSchema = z.enum(['everyone', 'follower', 'subscriber', 'mod
 const eventLogLevelSchema = z.enum(['info', 'warn', 'error']);
 const raffleModeSchema = z.enum(['single-winner', 'survivor-final']);
 const raffleControlActionSchema = z.enum(['open_entries', 'close_entries', 'spin', 'finalize', 'cancel', 'reset']);
+export const appLanguageSchema = z.enum(['pt-BR', 'en-US']);
 
 export const selectProfileInputSchema = z.object({
   profileId: z.string().min(1),
@@ -14,6 +15,11 @@ export const selectProfileInputSchema = z.object({
 export const createProfileInputSchema = z.object({
   name: z.string().min(1).max(80),
   directory: z.string().min(1),
+  appLanguage: appLanguageSchema,
+});
+
+export const profileSettingsSchema = z.object({
+  appLanguage: appLanguageSchema,
 });
 
 export const renameProfileInputSchema = z.object({

@@ -1,4 +1,5 @@
-import type { PermissionLevel, ProfileSummary } from '../../shared/types.js';
+import type { ProfileSummary } from '../../shared/types.js';
+import { useI18n } from '../i18n/I18nProvider.js';
 import { ProfileList } from './ProfileList.js';
 
 interface SettingsProfilesPanelProps {
@@ -10,10 +11,6 @@ interface SettingsProfilesPanelProps {
   onCloneProfile: () => void;
   onDeleteProfile: () => void;
   onSelectProfile: (profileId: string) => void;
-  languageCode: string;
-  permissionLevels: PermissionLevel[];
-  onChangeLanguageCode: (code: string) => void;
-  onChangePermissionLevels: (levels: PermissionLevel[]) => void;
 }
 
 export function SettingsProfilesPanel({
@@ -25,16 +22,17 @@ export function SettingsProfilesPanel({
   onDeleteProfile,
   onSelectProfile,
 }: SettingsProfilesPanelProps) {
+  const { messages } = useI18n();
   return (
     <div id="settings-profiles" className="p-6">
       <div className="flex items-center justify-between mb-1">
-        <h2 className="text-lg font-semibold">Profiles</h2>
+        <h2 className="text-lg font-semibold">{messages.profile.profiles}</h2>
         <button
           type="button"
           onClick={onCreateProfile}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors"
         >
-          + New Profile
+          {messages.profile.newProfile}
         </button>
       </div>
       <div className="bg-gray-800/40 rounded-xl border border-gray-700 overflow-x-auto">

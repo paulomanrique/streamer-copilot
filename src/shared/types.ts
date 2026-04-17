@@ -12,6 +12,12 @@ export interface GeneralSettings {
   eventNotifications: boolean;
 }
 
+export type AppLanguage = 'pt-BR' | 'en-US';
+
+export interface ProfileSettings {
+  appLanguage: AppLanguage;
+}
+
 export type PermissionLevel = 'everyone' | 'follower' | 'subscriber' | 'moderator' | 'broadcaster';
 
 export interface CommandPermission {
@@ -459,6 +465,7 @@ export interface ProfileSummary {
   name: string;
   directory: string;
   lastUsedAt: string;
+  appLanguage: AppLanguage;
 }
 
 export interface ProfilesSnapshot {
@@ -473,6 +480,7 @@ export interface SelectProfileInput {
 export interface CreateProfileInput {
   name: string;
   directory: string;
+  appLanguage: AppLanguage;
 }
 
 export interface RenameProfileInput {
