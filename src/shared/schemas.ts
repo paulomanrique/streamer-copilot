@@ -166,6 +166,29 @@ export const soundCommandDeleteInputSchema = z.object({
   id: z.string().min(1),
 });
 
+export const suggestionListUpsertInputSchema = z.object({
+  id: z.string().min(1).optional(),
+  title: z.string().min(1).max(120),
+  trigger: z.string().min(2).max(80),
+  mode: z.enum(['global', 'session']),
+  allowDuplicates: z.boolean(),
+  permissions: z.array(permissionLevelSchema).min(1),
+  cooldownSeconds: z.number().int().min(0).max(3600),
+  userCooldownSeconds: z.number().int().min(0).max(3600),
+  enabled: z.boolean(),
+}).superRefine((input, ctx) => {
+  const trigger = input.trigger.trim();
+  if (!trigger.startsWith('!')) {
+    ctx.addIssue({ code: 'custom', path: ['trigger'], message: 'Command must start with !' });
+  } else if (trigger.length < 2) {
+    ctx.addIssue({ code: 'custom', path: ['trigger'], message: 'Command must have at least one character after !' });
+  }
+});
+
+export const suggestionListDeleteInputSchema = z.object({
+  id: z.string().min(1),
+});
+
 export const soundPlayPayloadSchema = z.object({
   filePath: z.string().min(1),
 });
@@ -241,6 +264,8 @@ export type TextCommandDeleteInputSchema = z.infer<typeof textCommandDeleteInput
 export type RendererVoiceCapabilitiesSchema = z.infer<typeof rendererVoiceCapabilitiesSchema>;
 export type SoundCommandUpsertInputSchema = z.infer<typeof soundCommandUpsertInputSchema>;
 export type SoundCommandDeleteInputSchema = z.infer<typeof soundCommandDeleteInputSchema>;
+export type SuggestionListUpsertInputSchema = z.infer<typeof suggestionListUpsertInputSchema>;
+export type SuggestionListDeleteInputSchema = z.infer<typeof suggestionListDeleteInputSchema>;
 export type SoundPlayPayloadSchema = z.infer<typeof soundPlayPayloadSchema>;
 export type ObsConnectionSettingsSchema = z.infer<typeof obsConnectionSettingsSchema>;
 export type EventLogFiltersSchema = z.infer<typeof eventLogFiltersSchema>;

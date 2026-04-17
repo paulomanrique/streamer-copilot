@@ -27,6 +27,11 @@ import type {
   SoundCommandDeleteInput,
   SoundCommandUpsertInput,
   SoundPlayPayload,
+  SuggestionEntry,
+  SuggestionList,
+  SuggestionListDeleteInput,
+  SuggestionListUpsertInput,
+  SuggestionSnapshot,
   TextCommand,
   TextCommandDeleteInput,
   TextCommandUpsertInput,
@@ -131,6 +136,12 @@ export const IPC_CHANNELS = {
   chatLogGetMessages: 'chatLog:get-messages',
   chatLogExportSession: 'chatLog:export-session',
   chatLogDeleteSession: 'chatLog:delete-session',
+  suggestionsList: 'suggestions:list',
+  suggestionsUpsert: 'suggestions:upsert',
+  suggestionsDelete: 'suggestions:delete',
+  suggestionsEntries: 'suggestions:entries',
+  suggestionsClearEntries: 'suggestions:clear-entries',
+  suggestionsState: 'suggestions:state',
 } as const;
 
 export interface RecentChatSnapshot {
@@ -223,4 +234,10 @@ export interface CopilotApi {
   chatLogGetMessages: (sessionId: string, opts?: { limit?: number; offset?: number }) => Promise<ChatLogMessage[]>;
   chatLogExportSession: (sessionId: string) => Promise<void>;
   chatLogDeleteSession: (sessionId: string) => Promise<void>;
+  listSuggestionLists: () => Promise<SuggestionList[]>;
+  upsertSuggestionList: (input: SuggestionListUpsertInput) => Promise<SuggestionList[]>;
+  deleteSuggestionList: (input: SuggestionListDeleteInput) => Promise<SuggestionList[]>;
+  getSuggestionEntries: (listId: string) => Promise<SuggestionEntry[]>;
+  clearSuggestionEntries: (listId: string) => Promise<SuggestionEntry[]>;
+  onSuggestionState: (listener: (payload: SuggestionSnapshot) => void) => () => void;
 }

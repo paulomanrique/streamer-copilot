@@ -227,4 +227,40 @@ export const MIGRATIONS: SqlMigration[] = [
       ALTER TABLE sound_commands ADD COLUMN schedule_last_sent_at TEXT;
     `,
   },
+  {
+    version: 12,
+    name: 'create_suggestions',
+    sql: `
+      CREATE TABLE IF NOT EXISTS suggestion_lists (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        trigger TEXT NOT NULL,
+        mode TEXT NOT NULL DEFAULT 'session',
+        allow_duplicates INTEGER NOT NULL DEFAULT 0,
+        permissions_json TEXT NOT NULL DEFAULT '["everyone"]',
+        cooldown_seconds INTEGER NOT NULL DEFAULT 0,
+        user_cooldown_seconds INTEGER NOT NULL DEFAULT 0,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS suggestion_entries (
+        id TEXT PRIMARY KEY,
+        list_id TEXT NOT NULL,
+        platform TEXT NOT NULL,
+        user_key TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (list_id) REFERENCES suggestion_lists(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_suggestion_entries_list
+      ON suggestion_entries (list_id, created_at ASC);
+
+      CREATE INDEX IF NOT EXISTS idx_suggestion_entries_user
+      ON suggestion_entries (list_id, user_key);
+    `,
+  },
 ];

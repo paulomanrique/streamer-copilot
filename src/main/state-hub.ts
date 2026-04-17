@@ -10,6 +10,7 @@ import type {
   ScheduledStatusItem,
   SoundPlayPayload,
   StreamEvent,
+  SuggestionSnapshot,
   TikTokConnectionStatus,
   TwitchConnectionStatus,
   TwitchLiveStats,
@@ -55,6 +56,10 @@ export class StateHub {
 
   pushSoundPlay(payload: SoundPlayPayload): void {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.soundsPlay, payload);
+  }
+
+  pushSuggestionState(payload: SuggestionSnapshot): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.suggestionsState, payload);
   }
 
   pushObsStats(payload: ObsStatsSnapshot): void {

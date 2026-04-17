@@ -4,12 +4,14 @@ import type { PlatformChatAdapter } from '../../platforms/base.js';
 import { CommandDispatcher } from '../commands/command-dispatcher.js';
 import { RaffleService } from '../raffles/raffle-service.js';
 import { SoundService } from '../sounds/sound-service.js';
+import { SuggestionService } from '../suggestions/suggestion-service.js';
 import { TextService } from '../text/text-service.js';
 import { VoiceService } from '../voice/voice-service.js';
 
 interface ChatServiceOptions {
   raffleService: RaffleService;
   soundService: SoundService;
+  suggestionService: SuggestionService;
   textService: TextService;
   voiceService: VoiceService;
   onMessage: (message: ChatMessage) => void;
@@ -30,6 +32,7 @@ export class ChatService {
     this.dispatcher.register(options.textService);
     this.dispatcher.register(options.voiceService);
     this.dispatcher.register(options.raffleService);
+    this.dispatcher.register(options.suggestionService);
   }
 
   registerAdapter(adapter: PlatformChatAdapter): void {

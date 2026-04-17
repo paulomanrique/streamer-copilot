@@ -38,6 +38,11 @@ import type {
   SoundCommandUpsertInput,
   SoundPlayPayload,
   StreamEvent,
+  SuggestionEntry,
+  SuggestionList,
+  SuggestionListDeleteInput,
+  SuggestionListUpsertInput,
+  SuggestionSnapshot,
   TikTokConnectionStatus,
   TikTokSettings,
   TwitchConnectionStatus,
@@ -133,6 +138,12 @@ const IPC_CHANNELS = {
   chatLogGetMessages: 'chatLog:get-messages',
   chatLogExportSession: 'chatLog:export-session',
   chatLogDeleteSession: 'chatLog:delete-session',
+  suggestionsList: 'suggestions:list',
+  suggestionsUpsert: 'suggestions:upsert',
+  suggestionsDelete: 'suggestions:delete',
+  suggestionsEntries: 'suggestions:entries',
+  suggestionsClearEntries: 'suggestions:clear-entries',
+  suggestionsState: 'suggestions:state',
 } as const;
 
 const copilotApi: CopilotApi = {
@@ -266,6 +277,16 @@ const copilotApi: CopilotApi = {
   chatLogGetMessages: (sessionId, opts?) => ipcRenderer.invoke(IPC_CHANNELS.chatLogGetMessages, sessionId, opts) as Promise<ChatLogMessage[]>,
   chatLogExportSession: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.chatLogExportSession, sessionId),
   chatLogDeleteSession: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.chatLogDeleteSession, sessionId),
+  listSuggestionLists: () => ipcRenderer.invoke(IPC_CHANNELS.suggestionsList) as Promise<SuggestionList[]>,
+  upsertSuggestionList: (input: SuggestionListUpsertInput) => ipcRenderer.invoke(IPC_CHANNELS.suggestionsUpsert, input),
+  deleteSuggestionList: (input: SuggestionListDeleteInput) => ipcRenderer.invoke(IPC_CHANNELS.suggestionsDelete, input),
+  getSuggestionEntries: (listId: string) => ipcRenderer.invoke(IPC_CHANNELS.suggestionsEntries, listId) as Promise<SuggestionEntry[]>,
+  clearSuggestionEntries: (listId: string) => ipcRenderer.invoke(IPC_CHANNELS.suggestionsClearEntries, listId) as Promise<SuggestionEntry[]>,
+  onSuggestionState: (listener: (payload: SuggestionSnapshot) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: SuggestionSnapshot) => listener(payload);
+    ipcRenderer.on(IPC_CHANNELS.suggestionsState, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.suggestionsState, wrappedListener); };
+  },
   onTwitchStatus: (listener: (status: TwitchConnectionStatus, channel: string | null) => void) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, status: TwitchConnectionStatus, channel: string | null) => listener(status, channel);
     ipcRenderer.on(IPC_CHANNELS.twitchStatus, wrappedListener);

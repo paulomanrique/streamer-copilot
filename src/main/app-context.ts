@@ -28,6 +28,8 @@ import { GeneralSettingsStore } from '../modules/settings/general-settings-store
 import { ProfileStore } from '../modules/settings/profile-store.js';
 import { SoundCommandRepository } from '../modules/sounds/sound-repository.js';
 import { SoundService } from '../modules/sounds/sound-service.js';
+import { SuggestionRepository } from '../modules/suggestions/suggestion-repository.js';
+import { SuggestionService } from '../modules/suggestions/suggestion-service.js';
 import { TextCommandRepository } from '../modules/text/text-repository.js';
 import { TextService } from '../modules/text/text-service.js';
 import { VoiceCommandRepository } from '../modules/voice/voice-repository.js';
@@ -59,6 +61,8 @@ import {
   soundCommandDeleteInputSchema,
   soundCommandUpsertInputSchema,
   soundPlayPayloadSchema,
+  suggestionListDeleteInputSchema,
+  suggestionListUpsertInputSchema,
   selectProfileInputSchema,
   textCommandDeleteInputSchema,
   textCommandUpsertInputSchema,
@@ -135,6 +139,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const soundRepository = new SoundCommandRepository(options.databaseHandle.db);
   const textRepository = new TextCommandRepository(options.databaseHandle.db);
   const voiceRepository = new VoiceCommandRepository(options.databaseHandle.db);
+  const suggestionRepository = new SuggestionRepository(options.databaseHandle.db);
   const schedulerService = new SchedulerService({
     source: {
       list: () => listCommandScheduleTasks(),
@@ -176,6 +181,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
       void speakWithOsFallback(payload.text);
     },
+  });
+  const suggestionService = new SuggestionService({
+    repository: suggestionRepository,
+    onState: (payload) => options.stateHub.pushSuggestionState(payload),
   });
   let twitchStatus: TwitchConnectionStatus = 'disconnected';
   let twitchChannel: string | null = null;
@@ -376,6 +385,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       });
       logService.info('youtube', `Auto-detected live (${platform}, label=${label}): ${videoId} — "${title}"`);
       chatLogService.openSession(platform, videoId);
+      suggestionService.clearSessionEntries();
       const scraper = new YouTubeScraper({
         videoId,
         onMessage: (message) => {
@@ -617,7 +627,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
 
   const chatService = new ChatService({
-    raffleService, soundService, textService, voiceService,
+    raffleService, soundService, textService, voiceService, suggestionService,
     onMessage: (message) => {
       options.stateHub.pushChatMessage(message);
       chatLogService.recordMessage(message);
@@ -784,6 +794,13 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     chatLogService.deleteSession(String(sessionId ?? ''));
   });
 
+  // Suggestions Handlers
+  ipcMain.handle(IPC_CHANNELS.suggestionsList, async () => suggestionService.listLists());
+  ipcMain.handle(IPC_CHANNELS.suggestionsUpsert, async (_, raw) => suggestionService.upsertList(suggestionListUpsertInputSchema.parse(raw)));
+  ipcMain.handle(IPC_CHANNELS.suggestionsDelete, async (_, raw) => suggestionService.deleteList(suggestionListDeleteInputSchema.parse(raw).id));
+  ipcMain.handle(IPC_CHANNELS.suggestionsEntries, async (_, listId) => suggestionService.getEntries(String(listId ?? '')));
+  ipcMain.handle(IPC_CHANNELS.suggestionsClearEntries, async (_, listId) => suggestionService.clearEntries(String(listId ?? '')));
+
   // Twitch Handlers
   ipcMain.handle(IPC_CHANNELS.twitchGetCredentials, async () => { const s = await getTwitchCredentialsStore(); return s ? s.load() : null; });
   ipcMain.handle(IPC_CHANNELS.twitchConnect, async (_, raw) => {
@@ -793,6 +810,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     // Pre-load badges so first messages have badge images
     await loadTwitchBadges(c.channel, c.oauthToken.replace(/^oauth:/, ''));
     chatLogService.openSession('twitch', c.channel);
+    suggestionService.clearSessionEntries();
     await chatService.replaceAdapter(createTwitchChatAdapter({ channels: [c.channel], username: c.username, password: c.oauthToken, onStatusChange: setTwitchStatus, resolveBadgeUrls }));
   });
   ipcMain.handle(IPC_CHANNELS.twitchDisconnect, async () => {
@@ -868,6 +886,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       const label = String(idx + 1);
       youtubeStreamData.set(i.videoId, { label, viewerCount: null, platform, channelHandle: null });
       chatLogService.openSession(platform, i.videoId);
+      suggestionService.clearSessionEntries();
       const scraper = new YouTubeScraper({
         videoId: i.videoId,
         onMessage: (m) => chatService.injectMessage({ id: `yt-${Date.now()}`, timestampLabel: fmt.format(new Date()), ...m, platform, streamLabel: label }),
@@ -907,6 +926,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const c = tiktokConnectSchema.parse(raw);
     setTiktokStatus('connecting', c.username);
     chatLogService.openSession('tiktok', c.username);
+    suggestionService.clearSessionEntries();
     const settingsStore = await getTiktokSettingsStore();
     const settings = settingsStore ? await settingsStore.load() : null;
     await chatService.replaceAdapter(createTikTokChatAdapter({
@@ -939,6 +959,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       const token = creds.oauthToken.replace(/^oauth:/, '');
       await loadTwitchBadges(creds.channel, token);
       chatLogService.openSession('twitch', creds.channel);
+      suggestionService.clearSessionEntries();
       twitchChannel = creds.channel;
       await chatService.replaceAdapter(createTwitchChatAdapter({
         channels: [creds.channel],
@@ -964,6 +985,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     try {
       setTiktokStatus('connecting', settings.username);
       chatLogService.openSession('tiktok', settings.username);
+      suggestionService.clearSessionEntries();
       await chatService.replaceAdapter(createTikTokChatAdapter({
         username: settings.username,
         signApiKey: settings.signApiKey || undefined,

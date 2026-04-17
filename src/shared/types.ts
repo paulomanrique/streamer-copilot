@@ -460,3 +460,50 @@ export interface CloneProfileInput {
 export interface DeleteProfileInput {
   profileId: string;
 }
+
+// --- Suggestions ---
+
+export type SuggestionListMode = 'global' | 'session';
+
+export interface SuggestionList {
+  id: string;
+  title: string;
+  trigger: string;
+  mode: SuggestionListMode;
+  allowDuplicates: boolean;
+  permissions: PermissionLevel[];
+  cooldownSeconds: number;
+  userCooldownSeconds: number;
+  enabled: boolean;
+}
+
+export interface SuggestionEntry {
+  id: string;
+  listId: string;
+  platform: PlatformId;
+  userKey: string;
+  displayName: string;
+  content: string;
+  createdAt: string;
+}
+
+export interface SuggestionListUpsertInput {
+  id?: string;
+  title: string;
+  trigger: string;
+  mode: SuggestionListMode;
+  allowDuplicates: boolean;
+  permissions: PermissionLevel[];
+  cooldownSeconds: number;
+  userCooldownSeconds: number;
+  enabled: boolean;
+}
+
+export interface SuggestionListDeleteInput {
+  id: string;
+}
+
+export interface SuggestionSnapshot {
+  list: SuggestionList;
+  entries: SuggestionEntry[];
+}
