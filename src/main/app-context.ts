@@ -35,6 +35,7 @@ import { TextService } from '../modules/text/text-service.js';
 import { VoiceCommandRepository } from '../modules/voice/voice-repository.js';
 import { VoiceService } from '../modules/voice/voice-service.js';
 import { createKickChatAdapter } from '../platforms/kick/adapter.js';
+import { KickSettingsStore } from '../platforms/kick/settings-store.js';
 import { TikTokSettingsStore } from '../platforms/tiktok/settings-store.js';
 import { createTikTokChatAdapter } from '../platforms/tiktok/adapter.js';
 import { TwitchCredentialsStore } from '../platforms/twitch/credentials-store.js';
@@ -63,6 +64,8 @@ import {
   soundPlayPayloadSchema,
   suggestionListDeleteInputSchema,
   suggestionListUpsertInputSchema,
+  kickConnectSchema,
+  kickSettingsSchema,
   selectProfileInputSchema,
   textCommandDeleteInputSchema,
   textCommandUpsertInputSchema,
@@ -75,7 +78,7 @@ import {
   youtubeConnectSchema,
   youtubeSettingsSchema,
 } from '../shared/schemas.js';
-import type { AppInfo, PlatformId, Raffle, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
+import type { AppInfo, KickConnectionStatus, KickSettings, PlatformId, Raffle, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
 
 const TWITCH_CLIENT_ID = 'vtwg8tzuv1nlip4qh9n6sxx2p76g0s';
 const TWITCH_REDIRECT_PORT = 32999;
@@ -288,6 +291,28 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   let tiktokStatus: TikTokConnectionStatus = 'disconnected';
   let tiktokUsername: string | null = null;
+  let kickStatus: KickConnectionStatus = 'disconnected';
+  let kickSlug: string | null = null;
+
+  const getKickSettingsStore = async (): Promise<KickSettingsStore | null> => {
+    const snapshot = await profileStore.list();
+    const active = snapshot.profiles.find((p) => p.id === snapshot.activeProfileId);
+    if (!active) return null;
+    return new KickSettingsStore(active.directory);
+  };
+
+  const defaultKickSettings = (): KickSettings => ({
+    channelInput: '',
+    clientId: '',
+    clientSecret: '',
+    autoConnect: false,
+  });
+
+  const setKickStatus = (status: KickConnectionStatus, slug?: string | null) => {
+    kickStatus = status;
+    if (slug !== undefined) kickSlug = slug;
+    options.stateHub.pushKickStatus(status, kickSlug);
+  };
 
   const setTiktokStatus = (status: TikTokConnectionStatus, username?: string | null) => {
     tiktokStatus = status;
@@ -1039,6 +1064,47 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     return { isLive };
   });
 
+  // Kick Handlers
+  ipcMain.handle(IPC_CHANNELS.kickGetSettings, async () => {
+    const store = await getKickSettingsStore();
+    return store ? store.load() : defaultKickSettings();
+  });
+  ipcMain.handle(IPC_CHANNELS.kickSaveSettings, async (_, raw) => {
+    const store = await getKickSettingsStore();
+    if (!store) throw new Error('No active profile');
+    const settings = kickSettingsSchema.parse(raw);
+    await store.save(settings);
+  });
+  ipcMain.handle(IPC_CHANNELS.kickConnect, async (_, raw) => {
+    const input = kickConnectSchema.parse(raw);
+    const channelSlug = normalizeKickChannelInput(input.channelInput);
+    if (!channelSlug) {
+      throw new Error('Kick channel is required. Use slug or URL like https://kick.com/channel');
+    }
+
+    setKickStatus('connecting', channelSlug);
+    chatLogService.openSession('kick', channelSlug);
+    suggestionService.clearSessionEntries();
+
+    try {
+      await chatService.replaceAdapter(createKickChatAdapter({
+        channelSlug,
+        clientId: input.clientId.trim() || undefined,
+        clientSecret: input.clientSecret.trim() || undefined,
+      }));
+      setKickStatus('connected', channelSlug);
+    } catch (cause) {
+      setKickStatus('error', channelSlug);
+      throw cause;
+    }
+  });
+  ipcMain.handle(IPC_CHANNELS.kickDisconnect, async () => {
+    chatLogService.closeSession('kick');
+    await chatService.removeAdapter('kick');
+    setKickStatus('disconnected', null);
+  });
+  ipcMain.handle(IPC_CHANNELS.kickGetStatus, async () => kickStatus);
+
   // Auto-reconnect Twitch from saved credentials on startup
   void (async () => {
     const store = await getTwitchCredentialsStore();
@@ -1085,6 +1151,30 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       logService.info('tiktok', 'Auto-reconnected from saved settings', { username: settings.username });
     } catch (cause) {
       logService.warn('tiktok', 'Auto-reconnect failed', { error: cause instanceof Error ? cause.message : String(cause) });
+    }
+  })();
+
+  // Auto-reconnect Kick from saved settings on startup
+  void (async () => {
+    const store = await getKickSettingsStore();
+    if (!store) return;
+    const settings = await store.load();
+    const slug = normalizeKickChannelInput(settings.channelInput);
+    if (!settings.autoConnect || !slug) return;
+    try {
+      setKickStatus('connecting', slug);
+      chatLogService.openSession('kick', slug);
+      suggestionService.clearSessionEntries();
+      await chatService.replaceAdapter(createKickChatAdapter({
+        channelSlug: slug,
+        clientId: settings.clientId.trim() || undefined,
+        clientSecret: settings.clientSecret.trim() || undefined,
+      }));
+      setKickStatus('connected', slug);
+      logService.info('kick', 'Auto-reconnected from saved settings', { channelSlug: slug });
+    } catch (cause) {
+      setKickStatus('error', slug);
+      logService.warn('kick', 'Auto-reconnect failed', { channelSlug: slug, error: cause instanceof Error ? cause.message : String(cause) });
     }
   })();
 
@@ -1342,4 +1432,24 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   function readCsvEnv(v: string | undefined): string[] | undefined { return v ? v.split(',').map(i => i.trim()).filter(Boolean) : undefined; }
   function readSingleValueAsArray(v: string | undefined): string[] | undefined { return v?.trim() ? [v.trim()] : undefined; }
+
+  function normalizeKickChannelInput(raw: string): string | null {
+    const value = raw.trim();
+    if (!value) return null;
+    const fromAt = value.replace(/^@+/, '').trim();
+    if (/^https?:\/\//i.test(fromAt)) {
+      try {
+        const parsed = new URL(fromAt);
+        if (!parsed.hostname.toLowerCase().includes('kick.com')) return null;
+        const [first] = parsed.pathname.split('/').filter(Boolean);
+        if (!first) return null;
+        const blocked = new Set(['categories', 'search', 'following', 'settings', 'messages']);
+        if (blocked.has(first.toLowerCase())) return null;
+        return first.toLowerCase();
+      } catch {
+        return null;
+      }
+    }
+    return fromAt.split('/').filter(Boolean)[0]?.toLowerCase() ?? null;
+  }
 }

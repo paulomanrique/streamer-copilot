@@ -43,6 +43,8 @@ import type {
   SuggestionListDeleteInput,
   SuggestionListUpsertInput,
   SuggestionSnapshot,
+  KickConnectionStatus,
+  KickSettings,
   TikTokConnectionStatus,
   TikTokSettings,
   TwitchConnectionStatus,
@@ -134,6 +136,12 @@ const IPC_CHANNELS = {
   tiktokSaveSettings: 'tiktok:save-settings',
   tiktokStatus: 'tiktok:status',
   tiktokCheckLive: 'tiktok:check-live',
+  kickConnect: 'kick:connect',
+  kickDisconnect: 'kick:disconnect',
+  kickGetStatus: 'kick:get-status',
+  kickGetSettings: 'kick:get-settings',
+  kickSaveSettings: 'kick:save-settings',
+  kickStatus: 'kick:status',
   chatLogListSessions: 'chatLog:list-sessions',
   chatLogGetMessages: 'chatLog:get-messages',
   chatLogExportSession: 'chatLog:export-session',
@@ -273,6 +281,16 @@ const copilotApi: CopilotApi = {
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.tiktokStatus, wrappedListener); };
   },
   tiktokCheckLive: (username: string) => ipcRenderer.invoke(IPC_CHANNELS.tiktokCheckLive, username) as Promise<{ isLive: boolean }>,
+  kickConnect: (input: { channelInput: string; clientId: string; clientSecret: string }) => ipcRenderer.invoke(IPC_CHANNELS.kickConnect, input),
+  kickDisconnect: () => ipcRenderer.invoke(IPC_CHANNELS.kickDisconnect) as Promise<void>,
+  kickGetStatus: () => ipcRenderer.invoke(IPC_CHANNELS.kickGetStatus) as Promise<KickConnectionStatus>,
+  kickGetSettings: () => ipcRenderer.invoke(IPC_CHANNELS.kickGetSettings) as Promise<KickSettings>,
+  kickSaveSettings: (settings: KickSettings) => ipcRenderer.invoke(IPC_CHANNELS.kickSaveSettings, settings),
+  onKickStatus: (listener: (status: KickConnectionStatus, slug: string | null) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, status: KickConnectionStatus, slug: string | null) => listener(status, slug);
+    ipcRenderer.on(IPC_CHANNELS.kickStatus, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.kickStatus, wrappedListener); };
+  },
   chatLogListSessions: (filters?) => ipcRenderer.invoke(IPC_CHANNELS.chatLogListSessions, filters) as Promise<ChatSession[]>,
   chatLogGetMessages: (sessionId, opts?) => ipcRenderer.invoke(IPC_CHANNELS.chatLogGetMessages, sessionId, opts) as Promise<ChatLogMessage[]>,
   chatLogExportSession: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.chatLogExportSession, sessionId),

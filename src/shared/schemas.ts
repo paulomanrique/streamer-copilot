@@ -237,6 +237,19 @@ export const tiktokSettingsSchema = z.object({
   autoConnect: z.boolean(),
 });
 
+export const kickConnectSchema = z.object({
+  channelInput: z.string().min(1).max(400),
+  clientId: z.string().max(200).default(''),
+  clientSecret: z.string().max(200).default(''),
+});
+
+export const kickSettingsSchema = z.object({
+  channelInput: z.string().max(400),
+  clientId: z.string().max(200),
+  clientSecret: z.string().max(200),
+  autoConnect: z.boolean(),
+});
+
 export const eventLogFiltersSchema = z
   .object({
     level: z.union([eventLogLevelSchema, z.literal('all')]).optional(),
@@ -270,3 +283,5 @@ export type SuggestionListDeleteInputSchema = z.infer<typeof suggestionListDelet
 export type SoundPlayPayloadSchema = z.infer<typeof soundPlayPayloadSchema>;
 export type ObsConnectionSettingsSchema = z.infer<typeof obsConnectionSettingsSchema>;
 export type EventLogFiltersSchema = z.infer<typeof eventLogFiltersSchema>;
+export type KickConnectSchema = z.infer<typeof kickConnectSchema>;
+export type KickSettingsSchema = z.infer<typeof kickSettingsSchema>;

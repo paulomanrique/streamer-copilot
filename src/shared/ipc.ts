@@ -44,6 +44,8 @@ import type {
   SelectProfileInput,
   TwitchConnectionStatus,
   TwitchCredentials,
+  KickConnectionStatus,
+  KickSettings,
   VoiceCommand,
   VoiceCommandDeleteInput,
   VoiceCommandUpsertInput,
@@ -132,6 +134,12 @@ export const IPC_CHANNELS = {
   tiktokSaveSettings: 'tiktok:save-settings',
   tiktokStatus: 'tiktok:status',
   tiktokCheckLive: 'tiktok:check-live',
+  kickConnect: 'kick:connect',
+  kickDisconnect: 'kick:disconnect',
+  kickGetStatus: 'kick:get-status',
+  kickGetSettings: 'kick:get-settings',
+  kickSaveSettings: 'kick:save-settings',
+  kickStatus: 'kick:status',
   chatLogListSessions: 'chatLog:list-sessions',
   chatLogGetMessages: 'chatLog:get-messages',
   chatLogExportSession: 'chatLog:export-session',
@@ -230,6 +238,12 @@ export interface CopilotApi {
   tiktokSaveSettings: (settings: import('./types.js').TikTokSettings) => Promise<void>;
   onTiktokStatus: (listener: (status: import('./types.js').TikTokConnectionStatus, username: string | null) => void) => () => void;
   tiktokCheckLive: (username: string) => Promise<{ isLive: boolean }>;
+  kickConnect: (input: { channelInput: string; clientId: string; clientSecret: string }) => Promise<void>;
+  kickDisconnect: () => Promise<void>;
+  kickGetStatus: () => Promise<KickConnectionStatus>;
+  kickGetSettings: () => Promise<KickSettings>;
+  kickSaveSettings: (settings: KickSettings) => Promise<void>;
+  onKickStatus: (listener: (status: KickConnectionStatus, slug: string | null) => void) => () => void;
   chatLogListSessions: (filters?: { platform?: string }) => Promise<ChatSession[]>;
   chatLogGetMessages: (sessionId: string, opts?: { limit?: number; offset?: number }) => Promise<ChatLogMessage[]>;
   chatLogExportSession: (sessionId: string) => Promise<void>;

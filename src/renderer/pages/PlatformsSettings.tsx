@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { TikTokConnectionStatus, TikTokSettings, TwitchConnectionStatus, TwitchCredentials, YouTubeSettings, YouTubeStreamInfo } from '../../shared/types.js';
+import type { KickConnectionStatus, KickSettings, TikTokConnectionStatus, TikTokSettings, TwitchConnectionStatus, TwitchCredentials, YouTubeSettings, YouTubeStreamInfo } from '../../shared/types.js';
 
 interface LiveCheckResult {
   handle: string;
@@ -48,6 +48,27 @@ const TIKTOK_STATUS_DOT: Record<TikTokConnectionStatus, string> = {
   error: 'bg-red-500',
 };
 
+const KICK_STATUS_LABEL: Record<KickConnectionStatus, string> = {
+  disconnected: 'Disconnected',
+  connecting: 'Connecting…',
+  connected: 'Connected',
+  error: 'Connection error',
+};
+
+const KICK_STATUS_COLOR: Record<KickConnectionStatus, string> = {
+  disconnected: 'text-gray-400',
+  connecting: 'text-yellow-400',
+  connected: 'text-green-400',
+  error: 'text-red-400',
+};
+
+const KICK_STATUS_DOT: Record<KickConnectionStatus, string> = {
+  disconnected: 'bg-gray-500',
+  connecting: 'bg-yellow-400 animate-pulse',
+  connected: 'bg-green-400',
+  error: 'bg-red-500',
+};
+
 type Step = 'idle' | 'waiting-browser' | 'confirm-channel';
 
 export function PlatformsSettingsPage() {
@@ -81,15 +102,27 @@ export function PlatformsSettingsPage() {
   const [tiktokCheckingLive, setTiktokCheckingLive] = useState(false);
   const [tiktokLiveResult, setTiktokLiveResult] = useState<boolean | null>(null);
 
+  // Kick state
+  const [kickStatus, setKickStatus] = useState<KickConnectionStatus>('disconnected');
+  const [kickSlug, setKickSlug] = useState<string | null>(null);
+  const [kickSettings, setKickSettings] = useState<KickSettings>({
+    channelInput: '',
+    clientId: '',
+    clientSecret: '',
+    autoConnect: false,
+  });
+
   useEffect(() => {
     void (async () => {
-      const [currentStatus, creds, ytConnectedStatus, ytSavedSettings, tiktokCurrentStatus, tiktokSavedSettings] = await Promise.all([
+      const [currentStatus, creds, ytConnectedStatus, ytSavedSettings, tiktokCurrentStatus, tiktokSavedSettings, kickCurrentStatus, kickSavedSettings] = await Promise.all([
         window.copilot.twitchGetStatus(),
         window.copilot.twitchGetCredentials(),
         window.copilot.youtubeGetStatus(),
         window.copilot.youtubeGetSettings(),
         window.copilot.tiktokGetStatus(),
         window.copilot.tiktokGetSettings(),
+        window.copilot.kickGetStatus(),
+        window.copilot.kickGetSettings(),
       ]);
       setStatus(currentStatus);
       setSavedCreds(creds);
@@ -99,16 +132,23 @@ export function PlatformsSettingsPage() {
       setTiktokSettings(tiktokSavedSettings);
       setTiktokUsernameInput(tiktokSavedSettings.username);
       setTiktokApiKeyInput(tiktokSavedSettings.signApiKey);
+      setKickStatus(kickCurrentStatus);
+      setKickSettings(kickSavedSettings);
     })();
 
     const unsubTwitch = window.copilot.onTwitchStatus((s) => setStatus(s));
     const unsubYt = window.copilot.onYoutubeStatus((s) => setYtStreams(s));
     const unsubTiktok = window.copilot.onTiktokStatus((s) => setTiktokStatus(s));
+    const unsubKick = window.copilot.onKickStatus((s, slug) => {
+      setKickStatus(s);
+      setKickSlug(slug);
+    });
 
     return () => {
       unsubTwitch();
       unsubYt();
       unsubTiktok();
+      unsubKick();
     };
   }, []);
 
@@ -277,6 +317,38 @@ export function PlatformsSettingsPage() {
       const result = await window.copilot.tiktokCheckLive(username);
       setTiktokLiveResult(result.isLive);
     } finally { setTiktokCheckingLive(false); }
+  };
+
+  // ── Kick Actions ────────────────────────────────────────────────
+  const saveKickSettings = async (next: KickSettings) => {
+    setKickSettings(next);
+    await window.copilot.kickSaveSettings(next);
+  };
+
+  const connectKick = async () => {
+    const channelInput = kickSettings.channelInput.trim();
+    if (!channelInput) { setError('Kick channel slug or URL is required'); return; }
+    setIsBusy(true);
+    setError(null);
+    try {
+      await window.copilot.kickSaveSettings(kickSettings);
+      await window.copilot.kickConnect({
+        channelInput,
+        clientId: kickSettings.clientId.trim(),
+        clientSecret: kickSettings.clientSecret.trim(),
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Failed to connect to Kick');
+    } finally { setIsBusy(false); }
+  };
+
+  const disconnectKick = async () => {
+    setIsBusy(true);
+    try {
+      await window.copilot.kickDisconnect();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Failed to disconnect Kick');
+    } finally { setIsBusy(false); }
   };
 
   return (
@@ -571,16 +643,90 @@ export function PlatformsSettingsPage() {
           )}
         </div>
 
-        {/* Kick — coming soon */}
-        <div className="px-5 py-4 opacity-50">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-green-600/20 flex items-center justify-center shrink-0">
-              <svg className="w-4 h-4 text-green-400" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M2 2h4v8l4-4h4l-6 6 6 6h-4l-4-4v4H2V2zm14 0h4v20h-4z"/>
-              </svg>
+        {/* Kick */}
+        <div className="px-5 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-green-600/20 flex items-center justify-center shrink-0">
+                <svg className="w-4 h-4 text-green-400" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M2 2h4v8l4-4h4l-6 6 6 6h-4l-4-4v4H2V2zm14 0h4v20h-4z"/>
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-medium">Kick</p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className={`w-1.5 h-1.5 rounded-full ${KICK_STATUS_DOT[kickStatus]}`} />
+                  <span className={`text-xs ${KICK_STATUS_COLOR[kickStatus]}`}>
+                    {KICK_STATUS_LABEL[kickStatus]}
+                    {kickStatus === 'connected' && kickSlug ? ` · ${kickSlug}` : ''}
+                  </span>
+                </div>
+              </div>
             </div>
-            <div><p className="text-sm font-medium">Kick</p><p className="text-xs text-gray-500">Coming soon</p></div>
+
+            {kickStatus === 'connected' ? (
+              <button type="button" onClick={() => void disconnectKick()} className="text-xs px-3 py-1.5 rounded bg-gray-700 text-gray-300">Disconnect</button>
+            ) : kickStatus !== 'connecting' ? (
+              <button type="button" disabled={isBusy || !kickSettings.channelInput.trim()} onClick={() => void connectKick()} className="text-xs px-3 py-1.5 rounded bg-green-600 text-white disabled:opacity-50">Connect</button>
+            ) : null}
           </div>
+
+          {kickStatus !== 'connected' && (
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Kick channel slug or URL <span className="text-green-400">*</span></label>
+                <input
+                  type="text"
+                  value={kickSettings.channelInput}
+                  onChange={(e) => setKickSettings({ ...kickSettings, channelInput: e.target.value })}
+                  onBlur={() => void saveKickSettings(kickSettings)}
+                  onKeyDown={(e) => e.key === 'Enter' && void connectKick()}
+                  placeholder="gaules or https://kick.com/gaules"
+                  className="w-full bg-gray-900 border border-gray-700 rounded text-sm text-gray-200 px-3 py-1.5 focus:outline-none focus:border-green-500 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider font-semibold">Client ID <span className="text-gray-600">(optional for read-only)</span></label>
+                <input
+                  type="text"
+                  value={kickSettings.clientId}
+                  onChange={(e) => setKickSettings({ ...kickSettings, clientId: e.target.value })}
+                  onBlur={() => void saveKickSettings(kickSettings)}
+                  placeholder="Kick bot client ID"
+                  className="w-full bg-gray-900 border border-gray-700 rounded text-sm text-gray-200 px-3 py-1.5 focus:outline-none focus:border-green-500 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider font-semibold">Client Secret <span className="text-gray-600">(optional for read-only)</span></label>
+                <input
+                  type="password"
+                  value={kickSettings.clientSecret}
+                  onChange={(e) => setKickSettings({ ...kickSettings, clientSecret: e.target.value })}
+                  onBlur={() => void saveKickSettings(kickSettings)}
+                  placeholder="Kick bot client secret"
+                  className="w-full bg-gray-900 border border-gray-700 rounded text-sm text-gray-200 px-3 py-1.5 focus:outline-none focus:border-green-500 font-mono"
+                />
+                <p className="text-[10px] text-gray-600 mt-0.5">Required only to send chat messages as bot. Reading public chat works without credentials.</p>
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="kick-auto-connect"
+                  checked={kickSettings.autoConnect}
+                  onChange={(e) => {
+                    const next = { ...kickSettings, autoConnect: e.target.checked };
+                    setKickSettings(next);
+                    void saveKickSettings(next);
+                  }}
+                  className="accent-green-500"
+                />
+                <label htmlFor="kick-auto-connect" className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold cursor-pointer">Auto-connect on startup</label>
+              </div>
+            </div>
+          )}
         </div>
 
       </div>

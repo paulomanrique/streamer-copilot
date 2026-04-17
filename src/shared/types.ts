@@ -425,6 +425,15 @@ export interface TikTokSettings {
   autoConnect: boolean;
 }
 
+export type KickConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+
+export interface KickSettings {
+  channelInput: string;
+  clientId: string;
+  clientSecret: string;
+  autoConnect: boolean;
+}
+
 export interface ProfileSummary {
   id: string;
   name: string;
