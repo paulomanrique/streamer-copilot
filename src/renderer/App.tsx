@@ -450,7 +450,7 @@ export default function App() {
 
   return (
     <I18nProvider language={appLanguage} setLanguage={setAppLanguage}>
-    <main className="h-screen overflow-hidden bg-gray-950 text-gray-200 flex flex-col">
+    <main key={appLanguage} className="h-screen overflow-hidden bg-gray-950 text-gray-200 flex flex-col">
       <section className="w-screen flex-1 min-h-0 bg-gray-950 flex flex-col">
         {hasActiveProfile ? (
           <AppHeader

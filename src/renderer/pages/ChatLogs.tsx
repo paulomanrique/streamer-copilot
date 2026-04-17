@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChatLogMessage, ChatSession } from '../../shared/ipc.js';
+import { useI18n } from '../i18n/I18nProvider.js';
 
 const PLATFORM_LABELS: Record<string, string> = {
   twitch: 'Twitch',
@@ -37,6 +38,7 @@ function formatDuration(startedAt: string, endedAt: string | null): string {
 }
 
 export function ChatLogsPage() {
+  const { t } = useI18n();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [platformFilter, setPlatformFilter] = useState<string | null>(null);
   const [selectedSession, setSelectedSession] = useState<ChatSession | null>(null);
@@ -54,9 +56,9 @@ export function ChatLogsPage() {
       const data = await window.copilot.chatLogListSessions(platformFilter ? { platform: platformFilter } : undefined);
       setSessions(data);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Failed to load sessions');
+      setError(cause instanceof Error ? cause.message : t('Failed to load sessions'));
     }
-  }, [platformFilter]);
+  }, [platformFilter, t]);
 
   useEffect(() => {
     void loadSessions();
@@ -74,11 +76,11 @@ export function ChatLogsPage() {
       setHasMore(data.length === PAGE_SIZE);
       setOffset(newOffset + data.length);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Failed to load messages');
+      setError(cause instanceof Error ? cause.message : t('Failed to load messages'));
     } finally {
       setLoadingMessages(false);
     }
-  }, []);
+  }, [t]);
 
   const selectSession = useCallback(
     (session: ChatSession) => {
@@ -97,7 +99,7 @@ export function ChatLogsPage() {
     try {
       await window.copilot.chatLogExportSession(selectedSession.id);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Export failed');
+      setError(cause instanceof Error ? cause.message : t('Export failed'));
     } finally {
       setExporting(false);
     }
@@ -106,7 +108,7 @@ export function ChatLogsPage() {
   const handleDelete = async (session: ChatSession) => {
     const platform = PLATFORM_LABELS[session.platform] ?? session.platform;
     const confirmed = window.confirm(
-      `Delete this chat log?\n\n${platform} · ${session.channel}\n${formatDate(session.startedAt)}\n${session.messageCount.toLocaleString()} messages\n\nThis cannot be undone.`,
+      `${t('Delete this chat log?')}\n\n${platform} · ${session.channel}\n${formatDate(session.startedAt)}\n${session.messageCount.toLocaleString()} ${t('messages')}\n\n${t('This cannot be undone.')}`,
     );
     if (!confirmed) return;
 
@@ -119,7 +121,7 @@ export function ChatLogsPage() {
       }
       await loadSessions();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Delete failed');
+      setError(cause instanceof Error ? cause.message : t('Delete failed'));
     } finally {
       setDeletingId(null);
     }
@@ -279,7 +281,7 @@ export function ChatLogsPage() {
                     {messages.map((msg) => (
                       <div key={msg.id} className="flex items-baseline gap-2 py-0.5 group hover:bg-gray-800/30 rounded px-1 -mx-1">
                         <span className="text-xs text-gray-600 shrink-0 tabular-nums w-12">{msg.timestampLabel}</span>
-                        <span className="text-xs font-semibold text-violet-400 shrink-0">{msg.author}</span>
+                        <span className="text-xs font-semibold text-violet-400 shrink-0" data-no-i18n="true">{msg.author}</span>
                         {msg.badges.length > 0 && (
                           <span className="flex gap-1">
                             {msg.badges.map((b) => (
@@ -287,7 +289,7 @@ export function ChatLogsPage() {
                             ))}
                           </span>
                         )}
-                        <span className="text-sm text-gray-200 break-words min-w-0">{msg.content}</span>
+                        <span className="text-sm text-gray-200 break-words min-w-0" data-no-i18n="true">{msg.content}</span>
                       </div>
                     ))}
                     <div ref={messagesEndRef} />
