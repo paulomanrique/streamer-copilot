@@ -1,34 +1,77 @@
 # Streamer Copilot
 
-Desktop Electron app for stream automation: unified chat, sound and voice commands, scheduled messages, OBS stats, tray behavior, startup preferences, packaging, and update delivery.
+**Seu painel de comando para lives em varias plataformas.** Streamer Copilot e um app desktop para centralizar chat, automatizar comandos, disparar sons e voz, acompanhar o OBS e rodar sorteios sem trocar de janela durante a transmissao.
 
-## Status
+[![Latest release](https://img.shields.io/github/v/release/paulomanrique/streamer-copilot?label=latest%20release)](https://github.com/paulomanrique/streamer-copilot/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/paulomanrique/streamer-copilot/total?label=downloads)](https://github.com/paulomanrique/streamer-copilot/releases)
+[![Package workflow](https://github.com/paulomanrique/streamer-copilot/actions/workflows/package.yml/badge.svg)](https://github.com/paulomanrique/streamer-copilot/actions/workflows/package.yml)
 
-- Electron app shell and renderer screens are implemented.
-- Runtime integrations for Twitch, YouTube, Kick, OBS, sounds, voice, scheduled messages, tray, startup, packaging, and auto-updates are in the repo.
+## Download
 
-## Features
+Baixe a versao mais recente em **[GitHub Releases](https://github.com/paulomanrique/streamer-copilot/releases/latest)**.
 
-- Unified chat feed for Twitch, YouTube, and Kick
-- Sound commands with permissions and cooldowns
-- Voice commands with language selection and TTS playback
-- Raffles with chat entry commands, staff triggers, and OBS wheel overlay
-- Scheduled messages with interval and random window
-- OBS WebSocket stats panel
-- Profile selector and profile-scoped JSON storage
-- Activity log
-- Tray support and start-on-login preferences
-- Electron Builder packaging for macOS, Windows, and Linux
-- Auto-updater via GitHub releases
+Instaladores publicados:
 
-## Requirements
+- **macOS**: `.dmg`
+- **Windows**: `.exe`
+- **Linux**: `.AppImage` e `.deb`
+
+Todas as versoes ficam no historico de **[releases](https://github.com/paulomanrique/streamer-copilot/releases)**. Builds novas sao geradas automaticamente quando uma tag `v*` e publicada.
+
+## Por Que Usar
+
+Streaming fica mais dificil quando cada plataforma exige uma aba, cada comando mora em uma ferramenta diferente e o OBS fica separado do chat. Streamer Copilot junta as operacoes mais repetitivas em um unico app desktop, com perfis por canal e automacoes pensadas para lives reais.
+
+## Recursos
+
+- **Chat unificado** para Twitch, YouTube, Kick e TikTok.
+- **Comandos de som** com permissao por nivel de usuario, cooldown global e cooldown por usuario.
+- **Comandos de voz/TTS** com selecao de idioma e voz.
+- **Comandos de texto** para respostas automaticas e mensagens programadas.
+- **Sorteios** com comando de entrada no chat, gatilho de staff e overlay de roleta para OBS.
+- **Sugestoes do chat** em listas persistentes ou por sessao.
+- **Painel OBS** com cena atual, status da stream, FPS, bitrate e frames perdidos.
+- **Perfis separados** para manter configuracoes por canal, evento ou cliente.
+- **Logs de chat e atividade** para revisar sessoes e diagnosticar automacoes.
+- **Tray, start-on-login e auto-update** para uso diario como app desktop.
+
+## Plataformas
+
+| Plataforma | Leitura de chat | Envio de mensagem | Observacoes |
+| --- | --- | --- | --- |
+| Twitch | Sim | Sim | OAuth com escopos de chat e informacoes do canal |
+| YouTube | Sim | Sim | Polling via YouTube Data API e suporte a multiplos canais monitorados |
+| Kick | Sim | Sim | Leitura publica e autorizacao opcional para enviar como usuario Kick |
+| TikTok | Sim | Em progresso | Integracao via live connector e chave EulerStream para chat |
+| OBS | Stats e overlay | N/A | Requer OBS WebSocket v5 habilitado |
+
+## Sorteios Com Overlay
+
+Crie um sorteio em `Settings -> Raffles`, abra as entradas e adicione a URL exibida como **Browser Source** no OBS. O overlay roda localmente em `127.0.0.1` e acompanha a roleta em tempo real.
+
+Modos disponiveis:
+
+- `single-winner`: escolhe um vencedor em um unico giro.
+- `survivor-final`: elimina participantes por rodada ate chegar ao top 2, depois finaliza com um gatilho separado.
+
+## Status Do Projeto
+
+Streamer Copilot esta em desenvolvimento ativo. O app ja tem shell Electron, renderer React, integracoes runtime, empacotamento com Electron Builder e publicacao por GitHub Releases.
+
+Roadmap publico:
+
+- [GitHub Project](https://github.com/users/paulomanrique/projects/4)
+- [Issues](https://github.com/paulomanrique/streamer-copilot/issues)
+- [Releases](https://github.com/paulomanrique/streamer-copilot/releases)
+
+## Requisitos Para Rodar Do Codigo
 
 - Node.js 20+
 - npm 10+
-- OBS Studio 28+ with WebSocket enabled
-- `better-sqlite3` rebuilt for Electron: `npm run rebuild:native`
+- OBS Studio 28+ com WebSocket habilitado
+- Native modules recompilados para Electron com `npm run rebuild:native`
 
-## Development
+## Desenvolvimento
 
 ```bash
 npm install
@@ -36,7 +79,7 @@ npm run rebuild:native
 npm run dev
 ```
 
-Other commands:
+Comandos uteis:
 
 ```bash
 npm run build
@@ -48,29 +91,13 @@ npm run package:win
 npm run package:linux
 ```
 
-## Raffle Overlay
+## Configuracao De Ambiente
 
-- Create a raffle from `Settings -> Raffles`
-- Use `Open entries` to start collecting chat signups
-- Add an OBS `Browser Source` and paste the overlay URL shown in the raffle page
-- The app serves the wheel overlay on `127.0.0.1` and updates it live while the raffle runs
-- `single-winner` picks one winner in a single spin
-- `survivor-final` eliminates one entrant per spin until the top 2, then requires a final trigger
-
-## Environment
-
-Copy `.env.example` to `.env` and fill only what you need.
-
-Platform adapters are intentionally tolerant of partial setup:
-
-- Twitch can read chat and send messages only when credentials and channel are present.
-- YouTube can poll/send only when `liveChatId` and auth are present.
-- Kick can read public chat with slug/chatroom metadata and can send only when developer-app bot credentials are present.
-- If a platform is not ready, scheduled dispatch skips it and logs the reason.
+Copie `.env.example` para `.env` e preencha somente o que for usar. Os adapters toleram configuracao parcial: se uma plataforma nao estiver pronta, o app pula aquele destino e registra o motivo no log.
 
 ### Twitch
 
-- `TWITCH_CHANNEL` or `TWITCH_CHANNELS`
+- `TWITCH_CHANNEL` ou `TWITCH_CHANNELS`
 - `TWITCH_USERNAME`
 - `TWITCH_OAUTH_TOKEN`
 
@@ -91,22 +118,27 @@ Platform adapters are intentionally tolerant of partial setup:
 - `KICK_CLIENT_ID`
 - `KICK_CLIENT_SECRET`
 
-## Packaging And Updates
+## Empacotamento E Updates
 
-- Packaging config lives in `electron-builder.yml`
-- CI packaging workflow lives in `.github/workflows/package.yml`
-- Auto-updater is enabled only in packaged builds
-- GitHub release publishing metadata is configured for `paulomanrique/streamer-copilot`
+- Configuracao de build: [`electron-builder.yml`](electron-builder.yml)
+- Workflow de pacote: [`.github/workflows/package.yml`](.github/workflows/package.yml)
+- Publicacao: [GitHub Releases](https://github.com/paulomanrique/streamer-copilot/releases)
+- Auto-updater: ativo apenas em builds empacotados
+- Artefatos: `Streamer Copilot-${version}-${os}-${arch}.${ext}`
 
-## Repository Structure
+## Arquitetura
 
 ```text
-src/main/               Electron main process
-src/preload/            IPC bridge
-src/shared/             Shared types, schemas, IPC contracts
-src/modules/            Domain services and repositories
-src/platforms/          Twitch, YouTube, Kick adapters
-src/renderer/           React renderer
-tests/unit/             Vitest
-tests/e2e/              Playwright
+src/main/               Processo principal do Electron
+src/preload/            Ponte IPC segura via contextBridge
+src/shared/             Tipos, schemas e contratos IPC compartilhados
+src/modules/            Servicos de dominio e repositorios
+src/platforms/          Adapters Twitch, YouTube, Kick e TikTok
+src/renderer/           Interface React
+tests/unit/             Testes Vitest
+tests/e2e/              Testes Playwright
 ```
+
+## Licenca
+
+Veja os termos no arquivo de licenca do repositorio quando disponivel.
