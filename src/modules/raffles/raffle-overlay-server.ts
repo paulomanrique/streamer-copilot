@@ -11,7 +11,7 @@ interface RaffleOverlayServerOptions {
 }
 
 const OVERLAY_PORT = 7842;
-const CHAT_OVERLAY_VERSION = 'chat-feed-v2';
+const CHAT_OVERLAY_VERSION = 'chat-feed-v3';
 
 export class RaffleOverlayServer {
   private server: http.Server | null = null;
@@ -259,7 +259,7 @@ html, body {
   width: 100%;
   min-height: 100%;
   margin: 0;
-  background: transparent;
+  background: #000000;
   color: var(--text-main);
   font-family: var(--font);
   overflow: hidden;
@@ -270,7 +270,9 @@ html, body {
   height: 100vh;
   display: flex;
   align-items: flex-end;
-  padding: 8px 0;
+  padding: 8px 0 8px 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .chat-list {
@@ -283,9 +285,9 @@ html, body {
 
 .chat-message {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
-  padding: 6px 12px;
+  padding: 6px 8px 6px 2px;
   border-left: 2px solid rgba(168, 85, 247, 0.2);
   cursor: default;
   user-select: text;
@@ -302,8 +304,8 @@ html, body {
 .chat-message.command { background: rgba(139, 92, 246, 0.05); }
 
 .time {
-  flex: 0 0 54px;
-  width: 54px;
+  flex: 0 0 40px;
+  width: 40px;
   margin-top: 2px;
   color: var(--text-muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
@@ -311,6 +313,7 @@ html, body {
   line-height: 1.25;
   text-align: right;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .body {
@@ -579,9 +582,22 @@ const chatOverlayJs = `
     if (lastIndex < content.length) container.appendChild(document.createTextNode(content.slice(lastIndex)));
   }
 
+  function toTwentyFourHourTime(label) {
+    var raw = String(label || '').trim();
+    var match = raw.match(/^(\\d{1,2}):(\\d{2})(?::\\d{2})?\\s*([AP]M)?$/i);
+    if (!match) return raw.replace(/\\s*[AP]M\\s*$/i, '');
+
+    var hour = Number(match[1]);
+    var minute = match[2];
+    var period = match[3] ? match[3].toUpperCase() : '';
+    if (period === 'PM' && hour < 12) hour += 12;
+    if (period === 'AM' && hour === 12) hour = 0;
+    return String(hour).padStart(2, '0') + ':' + minute;
+  }
+
   function render(messages) {
     if (!listEl) return;
-    var latest = messages.slice(-14);
+    var latest = messages.slice(-100);
 
     if (latest.length === 0) {
       if (!listEl.querySelector('.empty')) {
@@ -616,7 +632,7 @@ const chatOverlayJs = `
 
       var time = document.createElement('span');
       time.className = 'time';
-      time.textContent = message.timestampLabel || '';
+      time.textContent = toTwentyFourHourTime(message.timestampLabel);
       row.appendChild(time);
 
       var body = document.createElement('div');
