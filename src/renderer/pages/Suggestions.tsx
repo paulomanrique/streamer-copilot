@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { PERMISSION_LEVELS } from '../../shared/constants.js';
 import type { PermissionLevel, SuggestionEntry, SuggestionList, SuggestionListMode, SuggestionListUpsertInput } from '../../shared/types.js';
+import { useI18n } from '../i18n/I18nProvider.js';
 
 const EMPTY_FORM: SuggestionListUpsertInput = {
   title: '',
@@ -33,6 +34,7 @@ function mapEntryCounts(lists: SuggestionList[]): Record<string, number> {
 }
 
 export function SuggestionsPage() {
+  const { t } = useI18n();
   const triggerInputRef = useRef<HTMLInputElement | null>(null);
   const [rows, setRows] = useState<SuggestionList[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -259,7 +261,7 @@ export function SuggestionsPage() {
                     {entryCounts[list.id] ?? 0} entries
                     {list.allowDuplicates ? '' : ' · unique per user'}
                     {' · '}
-                    {list.permissions.map((p) => PERMISSION_LABELS[p] || p).join(', ')}
+                    {list.permissions.map((p) => t(PERMISSION_LABELS[p] || p)).join(', ')}
                   </div>
                 </div>
 
@@ -389,7 +391,7 @@ export function SuggestionsPage() {
                         onChange={() => setMode(m)}
                         className="accent-purple-500"
                       />
-                      <span className="text-sm text-gray-300">{MODE_LABELS[m]}</span>
+                      <span className="text-sm text-gray-300">{t(MODE_LABELS[m])}</span>
                     </label>
                   ))}
                 </div>
@@ -423,7 +425,7 @@ export function SuggestionsPage() {
                           : 'px-3 py-1 text-xs rounded-full bg-gray-700 text-gray-400 hover:text-white'
                       }
                     >
-                      {PERMISSION_LABELS[level]}
+                      {t(PERMISSION_LABELS[level])}
                     </button>
                   ))}
                 </div>
