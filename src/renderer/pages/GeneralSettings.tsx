@@ -95,7 +95,7 @@ export function GeneralSettingsPage({ settings, onSave, appLanguage, onSaveProfi
           <h3 className="text-sm font-medium mb-1">{messages.settings.recommendationTemplateTitle}</h3>
           <p className="text-xs text-gray-500 mb-3">{messages.settings.recommendationTemplateDescription}</p>
           <textarea
-            value={draft.recommendationTemplate}
+            value={draft.recommendationTemplate ?? ''}
             onChange={(event) => updateDraft({ recommendationTemplate: event.target.value })}
             rows={3}
             className="w-full resize-none bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"

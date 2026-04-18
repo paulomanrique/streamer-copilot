@@ -374,7 +374,7 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
   };
 
   const recommendUser = async (platform: string, author: string) => {
-    const template = recommendationTemplate.trim() || DEFAULT_RECOMMENDATION_TEMPLATE;
+    const template = recommendationTemplate?.trim() || DEFAULT_RECOMMENDATION_TEMPLATE;
     const username = platform === 'youtube' || platform === 'youtube-v'
       ? `@${author.replace(/^@+/, '')}`
       : author;
