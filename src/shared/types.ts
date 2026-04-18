@@ -408,6 +408,11 @@ export interface RaffleOverlayInfo {
   stateUrl: string;
 }
 
+export interface ChatOverlayInfo {
+  overlayUrl: string;
+  stateUrl: string;
+}
+
 export interface RaffleSnapshot {
   raffle: Raffle;
   entries: RaffleEntry[];

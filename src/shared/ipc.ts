@@ -1,5 +1,6 @@
 import type {
   AppInfo,
+  ChatOverlayInfo,
   ChatMessage,
   KickAuthStatus,
   KickLiveStats,
@@ -112,6 +113,7 @@ export const IPC_CHANNELS = {
   obsConnected: 'obs:connected',
   obsDisconnected: 'obs:disconnected',
   chatGetRecent: 'chat:get-recent',
+  chatOverlayInfo: 'chat:overlay-info',
   chatMessage: 'chat:message',
   chatEvent: 'chat:event',
   chatSendMessage: 'chat:send-message',
@@ -220,6 +222,7 @@ export interface CopilotApi {
   onObsConnected: (listener: () => void) => () => void;
   onObsDisconnected: (listener: () => void) => () => void;
   getRecentChat: () => Promise<RecentChatSnapshot>;
+  getChatOverlayInfo: () => Promise<ChatOverlayInfo>;
   sendChatMessage: (input: { platform: PlatformId; content: string }) => Promise<void>;
   onChatMessage: (listener: (payload: ChatMessage) => void) => () => void;
   onChatEvent: (listener: (payload: StreamEvent) => void) => () => void;

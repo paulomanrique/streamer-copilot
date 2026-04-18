@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { CopilotApi, RecentChatSnapshot, ChatSession, ChatLogMessage } from '../shared/ipc.js';
 import type {
   ChatMessage,
+  ChatOverlayInfo,
   KickAuthStatus,
   KickLiveStats,
   CloneProfileInput,
@@ -114,6 +115,7 @@ const IPC_CHANNELS = {
   obsDisconnected: 'obs:disconnected',
   obsStats: 'obs:stats',
   chatGetRecent: 'chat:get-recent',
+  chatOverlayInfo: 'chat:overlay-info',
   chatMessage: 'chat:message',
   chatEvent: 'chat:event',
   chatSendMessage: 'chat:send-message',
@@ -253,6 +255,7 @@ const copilotApi: CopilotApi = {
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.obsStats, wrappedListener); };
   },
   getRecentChat: () => ipcRenderer.invoke(IPC_CHANNELS.chatGetRecent) as Promise<RecentChatSnapshot>,
+  getChatOverlayInfo: () => ipcRenderer.invoke(IPC_CHANNELS.chatOverlayInfo) as Promise<ChatOverlayInfo>,
   onChatMessage: (listener: (message: ChatMessage) => void) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, message: ChatMessage) => listener(message);
     ipcRenderer.on(IPC_CHANNELS.chatMessage, wrappedListener);

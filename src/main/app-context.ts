@@ -1062,6 +1062,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         return null;
       }
     },
+    getChatSnapshot: () => chatService.getRecent(),
   });
 
   raffleService = new RaffleService({
@@ -1314,6 +1315,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.obsTestConnection, async (_, raw) => obsService.testConnection(obsConnectionSettingsSchema.parse(raw)));
 
   ipcMain.handle(IPC_CHANNELS.chatGetRecent, async () => chatService.getRecent());
+  ipcMain.handle(IPC_CHANNELS.chatOverlayInfo, async () => {
+    await raffleOverlayServer.start();
+    return raffleOverlayServer.getChatOverlayInfo();
+  });
   ipcMain.handle(IPC_CHANNELS.chatSendMessage, async (_, raw) => {
     const i = chatSendMessageSchema.parse(raw);
     await sendPlatformMessage(i.platform, i.content);

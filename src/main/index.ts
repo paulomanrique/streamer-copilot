@@ -57,6 +57,7 @@ async function createMainWindow(): Promise<void> {
   stateHub.attachWindow(mainWindow);
 
   mainWindow.once('ready-to-show', () => {
+    mainWindow?.maximize();
     mainWindow?.show();
   });
 

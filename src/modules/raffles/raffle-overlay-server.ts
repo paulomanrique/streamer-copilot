@@ -2,10 +2,12 @@ import http from 'node:http';
 
 import type { AddressInfo } from 'node:net';
 
-import type { RaffleOverlayInfo, RaffleOverlayState } from '../../shared/types.js';
+import type { RecentChatSnapshot } from '../../shared/ipc.js';
+import type { ChatOverlayInfo, RaffleOverlayInfo, RaffleOverlayState } from '../../shared/types.js';
 
 interface RaffleOverlayServerOptions {
   getOverlayState: (raffleId: string) => RaffleOverlayState | null;
+  getChatSnapshot: () => RecentChatSnapshot;
 }
 
 const OVERLAY_PORT = 7842;
@@ -13,15 +15,45 @@ const OVERLAY_PORT = 7842;
 export class RaffleOverlayServer {
   private server: http.Server | null = null;
   private port = 0;
+  private startPromise: Promise<void> | null = null;
 
   constructor(private readonly options: RaffleOverlayServerOptions) {}
 
   async start(): Promise<void> {
     if (this.server) return;
+    if (this.startPromise) return this.startPromise;
 
-    this.server = http.createServer((req, res) => {
+    const server = http.createServer((req, res) => {
       const url = new URL(req.url ?? '/', 'http://127.0.0.1');
       const path = url.pathname;
+
+      if (path === '/chat/overlay/state') {
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+          'Access-Control-Allow-Origin': '*',
+        });
+        res.end(JSON.stringify(this.options.getChatSnapshot()));
+        return;
+      }
+
+      if (path === '/chat/overlay/overlay.css') {
+        res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(chatOverlayCss);
+        return;
+      }
+
+      if (path === '/chat/overlay/overlay.js') {
+        res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(chatOverlayJs);
+        return;
+      }
+
+      if (path === '/chat/overlay' || path === '/chat/overlay/') {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(this.renderChatHtml());
+        return;
+      }
 
       if (path.startsWith('/raffles/overlay/') && path.endsWith('/state')) {
         const raffleId = decodeURIComponent(path.replace('/raffles/overlay/', '').replace('/state', '').replace(/\/$/, ''));
@@ -70,11 +102,18 @@ export class RaffleOverlayServer {
       res.end('Not found');
     });
 
-    await new Promise<void>((resolve, reject) => {
-      this.server?.once('error', reject);
-      this.server?.listen(OVERLAY_PORT, '127.0.0.1', () => resolve());
+    this.startPromise = new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(OVERLAY_PORT, '127.0.0.1', () => resolve());
     });
-    this.port = (this.server.address() as AddressInfo).port;
+
+    try {
+      await this.startPromise;
+      this.server = server;
+      this.port = (server.address() as AddressInfo).port;
+    } finally {
+      this.startPromise = null;
+    }
   }
 
   async stop(): Promise<void> {
@@ -98,6 +137,35 @@ export class RaffleOverlayServer {
       overlayUrl: `http://127.0.0.1:${this.port}/raffles/overlay/${encoded}`,
       stateUrl: `http://127.0.0.1:${this.port}/raffles/overlay/${encoded}/state`,
     };
+  }
+
+  getChatOverlayInfo(): ChatOverlayInfo {
+    if (!this.server || this.port === 0) {
+      throw new Error('Overlay server is not running');
+    }
+
+    return {
+      overlayUrl: `http://127.0.0.1:${this.port}/chat/overlay`,
+      stateUrl: `http://127.0.0.1:${this.port}/chat/overlay/state`,
+    };
+  }
+
+  private renderChatHtml(): string {
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chat — Overlay</title>
+    <link rel="stylesheet" href="/chat/overlay/overlay.css" />
+  </head>
+  <body>
+    <main class="chat-overlay" aria-live="polite">
+      <div id="chat-list" class="chat-list"></div>
+    </main>
+    <script src="/chat/overlay/overlay.js"></script>
+  </body>
+</html>`;
   }
 
   private renderHtml(raffleId: string): string {
@@ -165,6 +233,279 @@ function escapeHtml(value: string): string {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+
+const chatOverlayCss = `
+:root {
+  --font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --text: #f8fafc;
+  --muted: #b6b6b6;
+  --surface: rgba(18, 18, 18, 0.78);
+  --border: rgba(255, 255, 255, 0.2);
+  --shadow: rgba(0, 0, 0, 0.35);
+  --twitch: #a78bfa;
+  --youtube: #f87171;
+  --kick: #4ade80;
+  --tiktok: #22d3ee;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font);
+  overflow: hidden;
+}
+
+.chat-overlay {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: flex-end;
+  padding: 18px;
+}
+
+.chat-list {
+  width: min(620px, 100%);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.chat-message {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 10px 28px var(--shadow);
+  animation: enter 220ms ease-out both;
+}
+
+.avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  object-fit: cover;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.body {
+  min-width: 0;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  margin-bottom: 2px;
+}
+
+.platform {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--muted);
+  flex: 0 0 auto;
+}
+
+.platform.twitch { background: var(--twitch); }
+.platform.youtube, .platform.youtube-v { background: var(--youtube); }
+.platform.kick { background: var(--kick); }
+.platform.tiktok { background: var(--tiktok); }
+
+.author {
+  font-size: 14px;
+  line-height: 1.2;
+  font-weight: 800;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.time {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.content {
+  color: #eeeeee;
+  font-size: 16px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+}
+
+.emote {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  vertical-align: middle;
+  margin: 0 1px;
+}
+
+.empty {
+  padding: 10px 12px;
+  color: rgba(238, 238, 238, 0.72);
+  border-radius: 8px;
+  background: rgba(18, 18, 18, 0.52);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  font-size: 14px;
+}
+
+@keyframes enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+`;
+
+const chatOverlayJs = `
+(function () {
+  var listEl = document.getElementById('chat-list');
+  var renderedIds = new Set();
+
+  function platformClass(platform) {
+    return String(platform || 'unknown').replace(/[^a-z0-9-]/gi, '').toLowerCase();
+  }
+
+  function createAvatar(message) {
+    if (message.avatarUrl) {
+      var img = document.createElement('img');
+      img.className = 'avatar';
+      img.src = message.avatarUrl;
+      img.alt = '';
+      return img;
+    }
+
+    var fallback = document.createElement('div');
+    fallback.className = 'avatar';
+    fallback.textContent = String(message.author || '?').slice(0, 1);
+    return fallback;
+  }
+
+  function appendContent(container, message) {
+    if (Array.isArray(message.contentParts) && message.contentParts.length > 0) {
+      message.contentParts.forEach(function (part) {
+        if (part && part.type === 'emote' && part.imageUrl) {
+          var img = document.createElement('img');
+          img.className = 'emote';
+          img.src = part.imageUrl;
+          img.alt = part.name || '';
+          container.appendChild(img);
+          return;
+        }
+
+        container.appendChild(document.createTextNode(part && part.text ? part.text : ''));
+      });
+      return;
+    }
+
+    container.textContent = message.content || '';
+  }
+
+  function render(messages) {
+    if (!listEl) return;
+    var latest = messages.slice(-14);
+
+    if (latest.length === 0) {
+      if (!listEl.querySelector('.empty')) {
+        listEl.textContent = '';
+        var empty = document.createElement('div');
+        empty.className = 'empty';
+        empty.textContent = 'Aguardando mensagens do chat...';
+        listEl.appendChild(empty);
+      }
+      return;
+    }
+
+    var latestIds = new Set(latest.map(function (message) { return message.id; }));
+    Array.from(listEl.children).forEach(function (child) {
+      if (child.classList.contains('empty') || !latestIds.has(child.getAttribute('data-id'))) {
+        child.remove();
+      }
+    });
+
+    latest.forEach(function (message) {
+      var alreadyRendered = Array.from(listEl.children).some(function (child) {
+        return child.getAttribute('data-id') === message.id;
+      });
+      if (renderedIds.has(message.id) && alreadyRendered) return;
+
+      var row = document.createElement('article');
+      row.className = 'chat-message';
+      row.setAttribute('data-id', message.id);
+
+      row.appendChild(createAvatar(message));
+
+      var body = document.createElement('div');
+      body.className = 'body';
+
+      var meta = document.createElement('div');
+      meta.className = 'meta';
+
+      var platform = document.createElement('span');
+      platform.className = 'platform ' + platformClass(message.platform);
+      meta.appendChild(platform);
+
+      var author = document.createElement('span');
+      author.className = 'author';
+      author.textContent = message.author || 'chat';
+      if (message.color) author.style.color = message.color;
+      meta.appendChild(author);
+
+      var time = document.createElement('span');
+      time.className = 'time';
+      time.textContent = message.timestampLabel || '';
+      meta.appendChild(time);
+
+      var content = document.createElement('div');
+      content.className = 'content';
+      appendContent(content, message);
+
+      body.appendChild(meta);
+      body.appendChild(content);
+      row.appendChild(body);
+      listEl.appendChild(row);
+      renderedIds.add(message.id);
+    });
+
+    renderedIds.forEach(function (id) {
+      if (!latestIds.has(id)) renderedIds.delete(id);
+    });
+  }
+
+  async function refresh() {
+    try {
+      var response = await fetch('/chat/overlay/state', { cache: 'no-store' });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      var snapshot = await response.json();
+      render(Array.isArray(snapshot.messages) ? snapshot.messages : []);
+    } catch (error) {
+      console.error('Failed to refresh chat overlay', error);
+    }
+  }
+
+  refresh();
+  setInterval(refresh, 1000);
+})();
+`;
 
 const overlayCss = `
 :root {
