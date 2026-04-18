@@ -115,7 +115,9 @@ export const IPC_CHANNELS = {
   chatGetRecent: 'chat:get-recent',
   chatOverlayInfo: 'chat:overlay-info',
   chatMessage: 'chat:message',
+  chatMessagesBatch: 'chat:messages-batch',
   chatEvent: 'chat:event',
+  chatEventsBatch: 'chat:events-batch',
   chatSendMessage: 'chat:send-message',
   logsList: 'logs:list',
   twitchLiveStats: 'twitch:live-stats',
@@ -225,7 +227,9 @@ export interface CopilotApi {
   getChatOverlayInfo: () => Promise<ChatOverlayInfo>;
   sendChatMessage: (input: { platform: PlatformId; content: string }) => Promise<void>;
   onChatMessage: (listener: (payload: ChatMessage) => void) => () => void;
+  onChatMessagesBatch: (listener: (payload: ChatMessage[]) => void) => () => void;
   onChatEvent: (listener: (payload: StreamEvent) => void) => () => void;
+  onChatEventsBatch: (listener: (payload: StreamEvent[]) => void) => () => void;
   listEventLogs: (filters?: EventLogFilters) => Promise<EventLogEntry[]>;
   twitchGetCredentials: () => Promise<TwitchCredentials | null>;
   twitchConnect: (input: TwitchCredentials) => Promise<void>;

@@ -117,7 +117,9 @@ const IPC_CHANNELS = {
   chatGetRecent: 'chat:get-recent',
   chatOverlayInfo: 'chat:overlay-info',
   chatMessage: 'chat:message',
+  chatMessagesBatch: 'chat:messages-batch',
   chatEvent: 'chat:event',
+  chatEventsBatch: 'chat:events-batch',
   chatSendMessage: 'chat:send-message',
   logsList: 'logs:list',
   twitchLiveStats: 'twitch:live-stats',
@@ -261,10 +263,20 @@ const copilotApi: CopilotApi = {
     ipcRenderer.on(IPC_CHANNELS.chatMessage, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.chatMessage, wrappedListener); };
   },
+  onChatMessagesBatch: (listener: (messages: ChatMessage[]) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, messages: ChatMessage[]) => listener(messages);
+    ipcRenderer.on(IPC_CHANNELS.chatMessagesBatch, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.chatMessagesBatch, wrappedListener); };
+  },
   onChatEvent: (listener: (event: StreamEvent) => void) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, event: StreamEvent) => listener(event);
     ipcRenderer.on(IPC_CHANNELS.chatEvent, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.chatEvent, wrappedListener); };
+  },
+  onChatEventsBatch: (listener: (events: StreamEvent[]) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, events: StreamEvent[]) => listener(events);
+    ipcRenderer.on(IPC_CHANNELS.chatEventsBatch, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.chatEventsBatch, wrappedListener); };
   },
   sendChatMessage: (input: { platform: import('../shared/types.js').PlatformId; content: string }) =>
     ipcRenderer.invoke(IPC_CHANNELS.chatSendMessage, input),

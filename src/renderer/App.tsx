@@ -27,8 +27,6 @@ export default function App() {
   const {
     profiles,
     activeProfileId,
-    chatMessages,
-    chatEvents,
     obsStats,
     twitchStatus,
     twitchChannel,
@@ -40,8 +38,8 @@ export default function App() {
     setProfiles,
     setObsStats,
     setChatSnapshot,
-    appendChatMessage,
-    appendChatEvent,
+    appendChatMessages,
+    appendChatEvents,
     twitchLiveStats,
     youtubeStreams,
     setTwitchStatus,
@@ -261,18 +259,18 @@ export default function App() {
   }, [setTwitchStatus, setTwitchChannel, setTwitchLiveStats, setYoutubeStreams, setTiktokStatus, setTiktokUsername, setKickStatus, setKickSlug, setKickLiveStats]);
 
   useEffect(() => {
-    const disconnectMessage = window.copilot.onChatMessage((message) => {
-      appendChatMessage(message);
+    const disconnectMessage = window.copilot.onChatMessagesBatch((messages) => {
+      appendChatMessages(messages);
     });
-    const disconnectEvent = window.copilot.onChatEvent((event) => {
-      appendChatEvent(event);
+    const disconnectEvent = window.copilot.onChatEventsBatch((events) => {
+      appendChatEvents(events);
     });
 
     return () => {
       disconnectMessage();
       disconnectEvent();
     };
-  }, [appendChatEvent, appendChatMessage]);
+  }, [appendChatEvents, appendChatMessages]);
 
   const onSelectProfile = async (profileId: string) => {
     try {
@@ -473,10 +471,8 @@ export default function App() {
         <StatusMessages isLoading={isLoading} error={error} />
 
         {hasActiveProfile && currentSection === 'dashboard' ? (
-          <DashboardSummary
+          <ConnectedDashboardSummary
             activeProfileName={activeProfileName}
-            chatEvents={chatEvents}
-            chatMessages={chatMessages}
             obsStats={obsStats}
             twitchStatus={twitchStatus}
             twitchChannel={twitchChannel}
@@ -487,6 +483,7 @@ export default function App() {
             kickStatus={kickStatus}
             kickSlug={kickSlug}
             kickLiveStats={kickLiveStats}
+            recommendationTemplate={generalSettings.recommendationTemplate}
           />
         ) : null}
 
@@ -544,4 +541,11 @@ export default function App() {
     </main>
     </I18nProvider>
   );
+}
+
+function ConnectedDashboardSummary(props: Omit<Parameters<typeof DashboardSummary>[0], 'chatEvents' | 'chatMessages'>) {
+  const chatEvents = useAppStore((state) => state.chatEvents);
+  const chatMessages = useAppStore((state) => state.chatMessages);
+
+  return <DashboardSummary {...props} chatEvents={chatEvents} chatMessages={chatMessages} />;
 }

@@ -13,8 +13,8 @@ const DEFAULT_OBS_STATS: ObsStatsSnapshot = {
   droppedFrames: 0,
   droppedFramesRender: 0,
 };
-const MAX_CHAT_MESSAGES = 100;
-const MAX_CHAT_EVENTS = 100;
+export const MAX_CHAT_MESSAGES = 100;
+export const MAX_CHAT_EVENTS = 100;
 
 interface AppStore extends ProfilesSnapshot {
   chatMessages: ChatMessage[];
@@ -34,7 +34,9 @@ interface AppStore extends ProfilesSnapshot {
   setObsStats: (stats: ObsStatsSnapshot | ((current: ObsStatsSnapshot) => ObsStatsSnapshot)) => void;
   setChatSnapshot: (snapshot: { messages: ChatMessage[]; events: StreamEvent[] }) => void;
   appendChatMessage: (message: ChatMessage) => void;
+  appendChatMessages: (messages: ChatMessage[]) => void;
   appendChatEvent: (event: StreamEvent) => void;
+  appendChatEvents: (events: StreamEvent[]) => void;
   setTwitchStatus: (status: TwitchConnectionStatus) => void;
   setTwitchChannel: (channel: string | null) => void;
   setTwitchLiveStats: (stats: TwitchLiveStats) => void;
@@ -83,17 +85,13 @@ export const useAppStore = create<AppStore>((set) => ({
       };
     }),
   appendChatMessage: (message) =>
-    set((state) => {
-      const next = [...state.chatMessages, { ...message, receivedOrder: state.chatSequence }];
-      if (next.length > MAX_CHAT_MESSAGES) next.shift();
-      return { chatMessages: next, chatSequence: state.chatSequence + 1 };
-    }),
+    set((state) => appendChatMessagesToState(state, [message])),
+  appendChatMessages: (messages) =>
+    set((state) => appendChatMessagesToState(state, messages)),
   appendChatEvent: (event) =>
-    set((state) => {
-      const next = [...state.chatEvents, { ...event, receivedOrder: state.chatSequence }];
-      if (next.length > MAX_CHAT_EVENTS) next.shift();
-      return { chatEvents: next, chatSequence: state.chatSequence + 1 };
-    }),
+    set((state) => appendChatEventsToState(state, [event])),
+  appendChatEvents: (events) =>
+    set((state) => appendChatEventsToState(state, events)),
   setTwitchStatus: (status) => set({ twitchStatus: status }),
   setTwitchChannel: (channel) => set({ twitchChannel: channel }),
   setTwitchLiveStats: (stats) => set({ twitchLiveStats: stats }),
@@ -104,3 +102,25 @@ export const useAppStore = create<AppStore>((set) => ({
   setKickSlug: (slug) => set({ kickSlug: slug }),
   setKickLiveStats: (stats) => set({ kickLiveStats: stats }),
 }));
+
+type ChatStateSlice = Pick<AppStore, 'chatMessages' | 'chatEvents' | 'chatSequence'>;
+
+export function appendChatMessagesToState(state: ChatStateSlice, messages: ChatMessage[]): Partial<ChatStateSlice> {
+  if (messages.length === 0) return {};
+  let chatSequence = state.chatSequence;
+  const received = messages.map((message) => ({ ...message, receivedOrder: chatSequence++ }));
+  return {
+    chatMessages: [...state.chatMessages, ...received].slice(-MAX_CHAT_MESSAGES),
+    chatSequence,
+  };
+}
+
+export function appendChatEventsToState(state: ChatStateSlice, events: StreamEvent[]): Partial<ChatStateSlice> {
+  if (events.length === 0) return {};
+  let chatSequence = state.chatSequence;
+  const received = events.map((event) => ({ ...event, receivedOrder: chatSequence++ }));
+  return {
+    chatEvents: [...state.chatEvents, ...received].slice(-MAX_CHAT_EVENTS),
+    chatSequence,
+  };
+}

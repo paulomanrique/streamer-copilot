@@ -1,3 +1,5 @@
+import { memo } from 'react';
+
 import type { StreamEvent } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
 
@@ -45,7 +47,7 @@ const EVENT_ICONS: Record<StreamEvent['type'], string> = {
 
 const ACTIVITY_AUTHOR_CLASS: Record<StreamEvent['type'], string> = {
   subscription: 'text-emerald-400',
-  superchat: 'text-yellow-400',
+  superchat: 'text-violet-300',
   raid: 'text-red-400',
   follow: 'text-sky-400',
   cheer: 'text-purple-400',
@@ -57,7 +59,7 @@ interface EventBannerProps {
   variant?: 'chat' | 'activity';
 }
 
-export function EventBanner({ event, variant = 'chat' }: EventBannerProps) {
+export const EventBanner = memo(function EventBanner({ event, variant = 'chat' }: EventBannerProps) {
   const { t } = useI18n();
   const baseMeta = PLATFORM_META[event.platform] ?? PLATFORM_META.twitch;
   const platform = baseMeta;
@@ -86,12 +88,17 @@ export function EventBanner({ event, variant = 'chat' }: EventBannerProps) {
     );
   }
 
+  const isSuperchat = event.type === 'superchat';
+  const bannerClass = isSuperchat
+    ? 'bg-violet-500/10 border-violet-400/30'
+    : `${platform.bg} border-opacity-30`;
+
   return (
-    <div className={`mx-3 my-1 px-3 py-2 rounded-lg border ${platform.bg} border-opacity-30`}
-      style={{ borderColor: getBorderColor(event.platform) }}
+    <div className={`mx-3 my-1 px-3 py-2 rounded-lg border ${bannerClass}`}
+      style={isSuperchat ? undefined : { borderColor: getBorderColor(event.platform) }}
     >
       <div className="flex items-center gap-2">
-        <span className="text-lg">{EVENT_ICONS[event.type]}</span>
+        <span className={`text-lg ${isSuperchat ? 'text-violet-300' : ''}`}>{EVENT_ICONS[event.type]}</span>
         <div>
           <p className="text-sm text-gray-200">{buildEventTitle(event, t)}</p>
           {event.message ? <p className="text-xs text-gray-400 mt-0.5" data-no-i18n="true">"{event.message}"</p> : null}
@@ -100,7 +107,7 @@ export function EventBanner({ event, variant = 'chat' }: EventBannerProps) {
       </div>
     </div>
   );
-}
+});
 
 function getBorderColor(platform: string): string {
   const map: Record<string, string> = {

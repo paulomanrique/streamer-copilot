@@ -1,14 +1,18 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { LegendList, type LegendListRef } from '@legendapp/list/react';
 
 import type { ChatMessage, PlatformId, StreamEvent } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
 import { EventBanner } from './EventBanner.js';
-
-type FeedMode = 'all' | 'superchat';
-type OrderedFeedItem =
-  | { kind: 'message'; id: string; order: number; message: ChatMessage }
-  | { kind: 'event'; id: string; order: number; event: StreamEvent };
+import {
+  computeStableChatFeedRows,
+  DEFAULT_MAX_CHAT_FEED_ROWS,
+  deriveChatFeedRows,
+  type ChatFeedRow,
+  type FeedMode,
+  type StableChatFeedRowsState,
+} from './ChatFeed.logic.js';
 
 interface ContextMenuState {
   visible: boolean;
@@ -65,7 +69,6 @@ const PLATFORM_BUTTONS = [
   { id: 'kick' },
   { id: 'tiktok' },
 ] as const;
-const MAX_RENDERED_FEED_ITEMS = 120;
 const DEFAULT_RECOMMENDATION_TEMPLATE = 'Pessoal, visitem o {username}';
 
 type ContextMenuAction = { separator: true } | { id: string; label: string; danger?: boolean };
@@ -229,14 +232,6 @@ function getPlatformDisplayName(platformId: string, connectedPlatforms: string[]
   return platformId;
 }
 
-function getReceivedOrder(item: ChatMessage | StreamEvent): number {
-  const withOrder = item as (ChatMessage | StreamEvent) & { receivedOrder?: number };
-  if (typeof withOrder.receivedOrder === 'number') return withOrder.receivedOrder;
-
-  const timestampPrefix = Number(item.id.match(/^\D*?(\d{10,})/)?.[1]);
-  return Number.isFinite(timestampPrefix) ? timestampPrefix : 0;
-}
-
 function resolveProfileUrl(platform: string, author: string): string {
   const username = author.replace(/^@+/, '').trim();
   if (!username) return '';
@@ -258,7 +253,7 @@ function resolveProfileUrl(platform: string, author: string): string {
 
 export function ChatFeed({ messages, events, connectedPlatforms, recommendationTemplate }: ChatFeedProps) {
   const { t } = useI18n();
-  const feedRef  = useRef<HTMLDivElement | null>(null);
+  const listRef  = useRef<LegendListRef | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const menuRef  = useRef<HTMLDivElement | null>(null);
 
@@ -291,55 +286,47 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
   }, [sendError]);
 
   // ── scroll management ──────────────────────────────────────────────
-  const onScroll = () => {
-    if (!feedRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = feedRef.current;
-    // Consider "at bottom" if within 60px of the actual bottom
-    const atBottom = scrollHeight - scrollTop - clientHeight < 60;
-    setIsAtBottom(atBottom);
-  };
+  const onScroll = useCallback(() => {
+    const state = listRef.current?.getState();
+    if (!state) return;
+    setIsAtBottom((current) => current === state.isAtEnd ? current : state.isAtEnd);
+  }, []);
 
   const jumpToBottom = () => {
-    if (!feedRef.current) return;
-    feedRef.current.scrollTop = feedRef.current.scrollHeight;
+    void listRef.current?.scrollToEnd({ animated: true });
     setIsAtBottom(true);
   };
 
   // ── filtering ──────────────────────────────────────────────────────
-  const allowedEventTypes = feedMode === 'superchat' ? new Set(['superchat']) : new Set(['raid', 'superchat']);
-  const visibleMessages = feedMode === 'superchat'
-    ? []
-    : messages.filter((m) => platformFilter[platformKey(m.platform)] !== false);
-  const visibleEvents = events.filter(
-    (e) => allowedEventTypes.has(e.type) && platformFilter[platformKey(e.platform)] !== false,
+  const platformEnabled = useCallback(
+    (platform: string) => platformFilter[platformKey(platform)] !== false,
+    [platformFilter],
   );
 
-  const items: OrderedFeedItem[] = [
-    ...visibleMessages.map((message) => ({
-      kind: 'message' as const,
-      id: message.id,
-      order: getReceivedOrder(message),
-      message,
-    })),
-    ...visibleEvents.map((event) => ({
-      kind: 'event' as const,
-      id: event.id,
-      order: getReceivedOrder(event),
-      event,
-    })),
-  ].sort((a, b) => a.order - b.order).slice(-MAX_RENDERED_FEED_ITEMS);
+  const rawItems = useMemo(
+    () => deriveChatFeedRows({
+      messages,
+      events,
+      feedMode,
+      platformEnabled,
+      maxRows: DEFAULT_MAX_CHAT_FEED_ROWS,
+    }),
+    [events, feedMode, messages, platformEnabled],
+  );
+  const items = useStableRows(rawItems);
 
   // ── auto-scroll ────────────────────────────────────────────────────
   useEffect(() => {
-    if (!feedRef.current || !isAtBottom) return;
-    feedRef.current.scrollTop = feedRef.current.scrollHeight;
-  }, [items, isAtBottom]);
+    if (!isAtBottom) return;
+    void listRef.current?.scrollToEnd({ animated: false });
+  }, [items.length, isAtBottom]);
 
   // ── batch-fetch avatars for YouTube / non-Twitch platforms ──────────
   useEffect(() => {
-    const logins = messages
-      .filter((m) => m.platform !== 'twitch' && !m.avatarUrl)
-      .map((m) => m.author.toLowerCase())
+    const logins = items
+      .flatMap((item) => item.kind === 'message' ? [item.message] : [])
+      .filter((message) => message.platform !== 'twitch' && !message.avatarUrl)
+      .map((message) => message.author.toLowerCase())
       .filter((login, i, arr) => arr.indexOf(login) === i)
       .filter((login) => !avatarCache.has(login));
 
@@ -353,7 +340,10 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
         return next;
       });
     });
-  }, [messages]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [avatarCache, items]);
+
+  // ── close context menu on outside click / Escape ───────────────────
+  const hideMenu = useCallback(() => setCtxMenu((c) => ({ ...c, visible: false })), []);
 
   // ── close context menu on outside click / Escape ───────────────────
   useEffect(() => {
@@ -365,7 +355,7 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
-  }, [ctxMenu.visible]);
+  }, [ctxMenu.visible, hideMenu]);
 
   // ── adjust menu position after render ──────────────────────────────
   useEffect(() => {
@@ -377,9 +367,7 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
     if (x !== ctxMenu.x || y !== ctxMenu.y) setCtxMenu((c) => ({ ...c, x, y }));
   }, [ctxMenu]);
 
-  const hideMenu = () => setCtxMenu((c) => ({ ...c, visible: false }));
-
-  const replyTo = (platform: string, author: string) => {
+  const replyTo = useCallback((platform: string, author: string) => {
     setInputPlatform(platform);
     setInputValue(`@${author} `);
     hideMenu();
@@ -390,7 +378,7 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
         inputRef.current.setSelectionRange(len, len);
       }
     });
-  };
+  }, [hideMenu]);
 
   const recommendUser = async (platform: string, author: string) => {
     let template = recommendationTemplate?.trim() || DEFAULT_RECOMMENDATION_TEMPLATE;
@@ -418,10 +406,27 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
     }
   };
 
-  const handleContextMenu = (e: React.MouseEvent, platform: string, author: string) => {
+  const handleContextMenu = useCallback((e: React.MouseEvent, platform: string, author: string) => {
     e.preventDefault();
     setCtxMenu({ visible: true, x: e.clientX, y: e.clientY, platform, author });
-  };
+  }, []);
+
+  const renderItem = useCallback(
+    ({ item }: { item: ChatFeedRow }) =>
+      item.kind === 'event' ? (
+        <EventBanner event={item.event} />
+      ) : (
+        <ChatMessageRow
+          message={item.message}
+          avatarUrl={avatarCache.get(item.message.author.toLowerCase()) || undefined}
+          highlighted={highlighted === item.message.author}
+          hasMultipleYouTubeStreams={hasMultipleYouTubeStreams}
+          onReplyTo={replyTo}
+          onContextMenuRequest={handleContextMenu}
+        />
+      ),
+    [avatarCache, handleContextMenu, hasMultipleYouTubeStreams, highlighted, replyTo],
+  );
 
   const sendMessage = async () => {
     const content = inputValue.trim();
@@ -478,21 +483,25 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
       </div>
 
       {/* ── messages ───────────────────────────────────────────────── */}
-      <div ref={feedRef} onScroll={onScroll} className="flex-1 overflow-y-auto py-1 space-y-0.5 relative">
-        {items.map((item) =>
-          item.kind === 'event' ? (
-            <EventBanner key={item.id} event={item.event} />
-          ) : (
-            <ChatMessageRow
-              key={item.id}
-              message={item.message}
-              avatarUrl={avatarCache.get(item.message.author.toLowerCase()) || undefined}
-              highlighted={highlighted === item.message.author}
-              hasMultipleYouTubeStreams={hasMultipleYouTubeStreams}
-              onDoubleClick={() => replyTo(item.message.platform, item.message.author)}
-              onContextMenu={(e) => handleContextMenu(e, item.message.platform, item.message.author)}
-            />
-          ),
+      <div className="flex-1 min-h-0 relative">
+        {items.length === 0 ? (
+          <div className="flex h-full items-center justify-center text-sm text-gray-500">
+            No messages yet.
+          </div>
+        ) : (
+          <LegendList<ChatFeedRow>
+            ref={listRef}
+            data={items}
+            keyExtractor={(item) => item.id}
+            renderItem={renderItem}
+            estimatedItemSize={64}
+            initialScrollAtEnd
+            maintainScrollAtEnd
+            maintainScrollAtEndThreshold={0.08}
+            maintainVisibleContentPosition
+            onScroll={onScroll}
+            className="h-full overflow-y-auto overflow-x-hidden py-1"
+          />
         )}
 
         {/* Floating Scroll Button */}
@@ -619,11 +628,11 @@ interface ChatMessageRowProps {
   avatarUrl?: string;
   highlighted: boolean;
   hasMultipleYouTubeStreams: boolean;
-  onDoubleClick: () => void;
-  onContextMenu: (e: React.MouseEvent) => void;
+  onReplyTo: (platform: string, author: string) => void;
+  onContextMenuRequest: (event: React.MouseEvent, platform: string, author: string) => void;
 }
 
-function ChatMessageRow({ message, avatarUrl, highlighted, hasMultipleYouTubeStreams, onDoubleClick, onContextMenu }: ChatMessageRowProps) {
+const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highlighted, hasMultipleYouTubeStreams, onReplyTo, onContextMenuRequest }: ChatMessageRowProps) {
   const pKey = platformKey(message.platform);
   const meta = PLATFORM_META[pKey];
 
@@ -662,8 +671,8 @@ function ChatMessageRow({ message, avatarUrl, highlighted, hasMultipleYouTubeStr
         ${isCommand ? 'bg-violet-500/5' : ''}`}
       data-platform={platformKey(message.platform)}
       data-author={message.author}
-      onDoubleClick={onDoubleClick}
-      onContextMenu={onContextMenu}
+      onDoubleClick={() => onReplyTo(message.platform, message.author)}
+      onContextMenu={(event) => onContextMenuRequest(event, message.platform, message.author)}
     >
       <span className="text-gray-600 text-xs mt-0.5 shrink-0 font-mono w-[54px] text-right">{message.timestampLabel}</span>
       <div className="flex-1 min-w-0">
@@ -719,4 +728,14 @@ function ChatMessageRow({ message, avatarUrl, highlighted, hasMultipleYouTubeStr
       </div>
     </div>
   );
+});
+
+function useStableRows(rows: ChatFeedRow[]): ChatFeedRow[] {
+  const previous = useRef<StableChatFeedRowsState>({ byId: new Map(), result: [] });
+
+  return useMemo(() => {
+    const next = computeStableChatFeedRows(rows, previous.current);
+    previous.current = next;
+    return next.result;
+  }, [rows]);
 }
