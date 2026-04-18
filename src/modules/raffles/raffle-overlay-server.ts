@@ -11,6 +11,7 @@ interface RaffleOverlayServerOptions {
 }
 
 const OVERLAY_PORT = 7842;
+const CHAT_OVERLAY_VERSION = 'chat-feed-v2';
 
 export class RaffleOverlayServer {
   private server: http.Server | null = null;
@@ -145,8 +146,8 @@ export class RaffleOverlayServer {
     }
 
     return {
-      overlayUrl: `http://127.0.0.1:${this.port}/chat/overlay`,
-      stateUrl: `http://127.0.0.1:${this.port}/chat/overlay/state`,
+      overlayUrl: `http://127.0.0.1:${this.port}/chat/overlay?v=${CHAT_OVERLAY_VERSION}`,
+      stateUrl: `http://127.0.0.1:${this.port}/chat/overlay/state?v=${CHAT_OVERLAY_VERSION}`,
     };
   }
 
@@ -157,13 +158,13 @@ export class RaffleOverlayServer {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Chat — Overlay</title>
-    <link rel="stylesheet" href="/chat/overlay/overlay.css" />
+    <link rel="stylesheet" href="/chat/overlay/overlay.css?v=${CHAT_OVERLAY_VERSION}" />
   </head>
   <body>
     <main class="chat-overlay" aria-live="polite">
       <div id="chat-list" class="chat-list"></div>
     </main>
-    <script src="/chat/overlay/overlay.js"></script>
+    <script src="/chat/overlay/overlay.js?v=${CHAT_OVERLAY_VERSION}"></script>
   </body>
 </html>`;
   }
@@ -671,7 +672,7 @@ const chatOverlayJs = `
 
   async function refresh() {
     try {
-      var response = await fetch('/chat/overlay/state', { cache: 'no-store' });
+      var response = await fetch('/chat/overlay/state?v=${CHAT_OVERLAY_VERSION}', { cache: 'no-store' });
       if (!response.ok) throw new Error('HTTP ' + response.status);
       var snapshot = await response.json();
       render(Array.isArray(snapshot.messages) ? snapshot.messages : []);
