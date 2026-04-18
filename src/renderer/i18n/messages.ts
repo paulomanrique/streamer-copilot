@@ -249,6 +249,8 @@ const ptUi: Record<string, string> = {
   'encoder': 'encoder',
   'render': 'render',
   'Connection': 'Conexão',
+  'Stream preview': 'Prévia da live',
+  'Connect a live platform to show the stream preview.': 'Conecte uma plataforma ao vivo para mostrar a prévia da live.',
   'followers': 'seguidores',
   'subscribers': 'inscritos',
   'viewers': 'espectadores',

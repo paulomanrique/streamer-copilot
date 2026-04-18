@@ -86,6 +86,7 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
             stats={obsStats} 
             twitchLiveStats={twitchLiveStats} 
             twitchConnected={twitchStatus === 'connected'} 
+            twitchChannel={twitchChannel}
             youtubeStreams={youtubeStreams}
             kickStatus={kickStatus}
             kickSlug={kickSlug}
