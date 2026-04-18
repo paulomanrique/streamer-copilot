@@ -13,6 +13,8 @@ const DEFAULT_OBS_STATS: ObsStatsSnapshot = {
   droppedFrames: 0,
   droppedFramesRender: 0,
 };
+const MAX_CHAT_MESSAGES = 100;
+const MAX_CHAT_EVENTS = 100;
 
 interface AppStore extends ProfilesSnapshot {
   chatMessages: ChatMessage[];
@@ -72,22 +74,24 @@ export const useAppStore = create<AppStore>((set) => ({
   setChatSnapshot: (snapshot) =>
     set((state) => {
       let chatSequence = state.chatSequence;
+      const messages = snapshot.messages.slice(-MAX_CHAT_MESSAGES);
+      const events = snapshot.events.slice(-MAX_CHAT_EVENTS);
       return {
-        chatMessages: snapshot.messages.map((message) => ({ ...message, receivedOrder: chatSequence++ })),
-        chatEvents: snapshot.events.map((event) => ({ ...event, receivedOrder: chatSequence++ })),
+        chatMessages: messages.map((message) => ({ ...message, receivedOrder: chatSequence++ })),
+        chatEvents: events.map((event) => ({ ...event, receivedOrder: chatSequence++ })),
         chatSequence,
       };
     }),
   appendChatMessage: (message) =>
     set((state) => {
       const next = [...state.chatMessages, { ...message, receivedOrder: state.chatSequence }];
-      if (next.length > 100) next.shift();
+      if (next.length > MAX_CHAT_MESSAGES) next.shift();
       return { chatMessages: next, chatSequence: state.chatSequence + 1 };
     }),
   appendChatEvent: (event) =>
     set((state) => {
       const next = [...state.chatEvents, { ...event, receivedOrder: state.chatSequence }];
-      if (next.length > 100) next.shift();
+      if (next.length > MAX_CHAT_EVENTS) next.shift();
       return { chatEvents: next, chatSequence: state.chatSequence + 1 };
     }),
   setTwitchStatus: (status) => set({ twitchStatus: status }),

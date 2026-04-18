@@ -63,6 +63,7 @@ const PLATFORM_BUTTONS = [
   { id: 'kick' },
   { id: 'tiktok' },
 ] as const;
+const MAX_RENDERED_FEED_ITEMS = 120;
 
 type ContextMenuAction = { separator: true } | { id: string; label: string; danger?: boolean };
 
@@ -303,7 +304,7 @@ export function ChatFeed({ messages, events, connectedPlatforms }: ChatFeedProps
       order: getReceivedOrder(event),
       event,
     })),
-  ].sort((a, b) => a.order - b.order);
+  ].sort((a, b) => a.order - b.order).slice(-MAX_RENDERED_FEED_ITEMS);
 
   // ── auto-scroll ────────────────────────────────────────────────────
   useEffect(() => {
