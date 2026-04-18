@@ -236,16 +236,20 @@ function escapeHtml(value: string): string {
 
 const chatOverlayCss = `
 :root {
-  --font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --text: #f8fafc;
-  --muted: #b6b6b6;
-  --surface: rgba(18, 18, 18, 0.78);
-  --border: rgba(255, 255, 255, 0.2);
-  --shadow: rgba(0, 0, 0, 0.35);
-  --twitch: #a78bfa;
-  --youtube: #f87171;
-  --kick: #4ade80;
-  --tiktok: #22d3ee;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --text-main: #d1d5db;
+  --text-muted: #4b5563;
+  --command: #c4b5fd;
+  --twitch: rgba(168, 85, 247, 0.2);
+  --twitch-text: #d8b4fe;
+  --youtube: rgba(239, 68, 68, 0.2);
+  --youtube-text: #fca5a5;
+  --youtube-v: rgba(251, 113, 133, 0.2);
+  --youtube-v-text: #fda4af;
+  --kick: rgba(34, 197, 94, 0.2);
+  --kick-text: #86efac;
+  --tiktok: rgba(236, 72, 153, 0.2);
+  --tiktok-text: #f9a8d4;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -255,7 +259,7 @@ html, body {
   min-height: 100%;
   margin: 0;
   background: transparent;
-  color: var(--text);
+  color: var(--text-main);
   font-family: var(--font);
   overflow: hidden;
 }
@@ -265,109 +269,167 @@ html, body {
   height: 100vh;
   display: flex;
   align-items: flex-end;
-  padding: 18px;
+  padding: 8px 0;
 }
 
 .chat-list {
-  width: min(620px, 100%);
+  width: 100%;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 2px;
 }
 
 .chat-message {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 10px;
-  align-items: start;
+  display: flex;
+  gap: 8px;
   min-width: 0;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  box-shadow: 0 10px 28px var(--shadow);
-  animation: enter 220ms ease-out both;
+  padding: 6px 12px;
+  border-left: 2px solid rgba(168, 85, 247, 0.2);
+  cursor: default;
+  user-select: text;
+  transition: background 75ms ease;
+  animation: enter 160ms ease-out both;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.72);
 }
 
-.avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.12);
-  object-fit: cover;
-  display: grid;
-  place-items: center;
-  color: var(--muted);
-  font-weight: 800;
-  text-transform: uppercase;
+.chat-message.twitch { border-left-color: rgba(168, 85, 247, 0.2); }
+.chat-message.youtube { border-left-color: rgba(239, 68, 68, 0.2); }
+.chat-message.youtube-v { border-left-color: rgba(251, 113, 133, 0.2); }
+.chat-message.kick { border-left-color: rgba(34, 197, 94, 0.2); }
+.chat-message.tiktok { border-left-color: rgba(236, 72, 153, 0.2); }
+.chat-message.command { background: rgba(139, 92, 246, 0.05); }
+
+.time {
+  flex: 0 0 54px;
+  width: 54px;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.25;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .body {
+  flex: 1 1 auto;
   min-width: 0;
 }
 
 .meta {
   display: flex;
   align-items: center;
-  gap: 7px;
+  flex-wrap: wrap;
+  gap: 6px;
   min-width: 0;
-  margin-bottom: 2px;
 }
 
-.platform {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: var(--muted);
+.platform-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   flex: 0 0 auto;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 800;
 }
 
-.platform.twitch { background: var(--twitch); }
-.platform.youtube, .platform.youtube-v { background: var(--youtube); }
-.platform.kick { background: var(--kick); }
-.platform.tiktok { background: var(--tiktok); }
+.platform-badge svg {
+  width: 10px;
+  height: 10px;
+}
+
+.platform-badge.twitch { background: var(--twitch); color: var(--twitch-text); }
+.platform-badge.youtube { background: var(--youtube); color: var(--youtube-text); }
+.platform-badge.youtube-v { background: var(--youtube-v); color: var(--youtube-v-text); }
+.platform-badge.kick { background: var(--kick); color: var(--kick-text); }
+.platform-badge.tiktok { background: var(--tiktok); color: var(--tiktok-text); }
+
+.avatar,
+.avatar-fallback {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  object-fit: cover;
+}
+
+.avatar-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-fallback svg {
+  width: 12px;
+  height: 12px;
+}
+
+.twitch-badge {
+  width: 16px;
+  height: 16px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+
+.member-star {
+  color: #facc15;
+  font-size: 12px;
+  line-height: 1;
+}
 
 .author {
   font-size: 14px;
-  line-height: 1.2;
-  font-weight: 800;
-  color: var(--text);
+  line-height: 1.25;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.time {
-  margin-left: auto;
-  color: var(--muted);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
+.mod {
+  color: #34d399;
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 700;
 }
 
 .content {
-  color: #eeeeee;
-  font-size: 16px;
-  line-height: 1.35;
+  margin: 2px 0 0;
+  color: var(--text-main);
+  font-size: 14px;
+  line-height: 1.375;
   overflow-wrap: anywhere;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+}
+
+.content.command {
+  color: var(--command);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.content a {
+  color: #7dd3fc;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .emote {
-  width: 24px;
-  height: 24px;
+  height: 20px;
+  max-width: none;
   object-fit: contain;
-  vertical-align: middle;
+  vertical-align: text-bottom;
   margin: 0 1px;
 }
 
 .empty {
-  padding: 10px 12px;
-  color: rgba(238, 238, 238, 0.72);
-  border-radius: 8px;
-  background: rgba(18, 18, 18, 0.52);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  font-size: 14px;
+  padding: 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
 }
 
 @keyframes enter {
@@ -380,24 +442,101 @@ const chatOverlayJs = `
 (function () {
   var listEl = document.getElementById('chat-list');
   var renderedIds = new Set();
+  var icons = {
+    twitch: 'M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z',
+    youtube: 'M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z',
+    kick: 'M2 2h4v8l4-4h4l-6 6 6 6h-4l-4-4v4H2V2zm14 0h4v20h-4z',
+    tiktok: 'M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.67a8.17 8.17 0 0 0 4.79 1.53V6.75a4.85 4.85 0 0 1-1.02-.06z',
+  };
+  var defaultColors = [
+    '#FF0000', '#0000FF', '#008000', '#B22222', '#FF7F50',
+    '#9ACD32', '#FF4500', '#2E8B57', '#DAA520', '#D2691E',
+    '#5F9EA0', '#1E90FF', '#FF69B4', '#8A2BE2', '#00FF7F',
+  ];
 
   function platformClass(platform) {
-    return String(platform || 'unknown').replace(/[^a-z0-9-]/gi, '').toLowerCase();
+    var value = String(platform || 'twitch').replace(/[^a-z0-9-]/gi, '').toLowerCase();
+    return value === 'youtube-v' ? value : (icons[value] ? value : 'twitch');
   }
 
-  function createAvatar(message) {
+  function platformLabel(platform) {
+    if (platform === 'youtube-v') return 'YouTube Vertical';
+    if (platform === 'youtube') return 'YouTube';
+    if (platform === 'kick') return 'Kick';
+    if (platform === 'tiktok') return 'TikTok';
+    return 'Twitch';
+  }
+
+  function iconFor(platform) {
+    return platform === 'youtube-v' ? icons.youtube : (icons[platform] || icons.twitch);
+  }
+
+  function resolveAuthorColor(message) {
+    if (message.color) return message.color;
+    var author = String(message.author || '');
+    var hash = 0;
+    for (var i = 0; i < author.length; i += 1) {
+      hash = author.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return defaultColors[Math.abs(hash) % defaultColors.length];
+  }
+
+  function hasBadge(message, exact, prefix) {
+    return Array.isArray(message.badges) && message.badges.some(function (badge) {
+      return badge === exact || (prefix && String(badge).indexOf(prefix) === 0);
+    });
+  }
+
+  function isSubscriber(message) {
+    if (message.platform === 'youtube' || message.platform === 'youtube-v') return hasBadge(message, 'member');
+    return hasBadge(message, 'subscriber', 'subscriber/') || hasBadge(message, 'member');
+  }
+
+  function isModerator(message) {
+    return hasBadge(message, 'moderator', 'moderator/');
+  }
+
+  function appendSvgIcon(parent, pathData) {
+    var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'currentColor');
+    var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', pathData);
+    svg.appendChild(path);
+    parent.appendChild(svg);
+  }
+
+  function appendAvatar(meta, message, platform, authorColor) {
+    if (platform === 'twitch') return;
+
     if (message.avatarUrl) {
       var img = document.createElement('img');
       img.className = 'avatar';
       img.src = message.avatarUrl;
-      img.alt = '';
-      return img;
+      img.alt = message.author || '';
+      img.style.outline = '1.5px solid ' + authorColor + '60';
+      img.onerror = function () { img.style.display = 'none'; };
+      meta.appendChild(img);
+      return;
     }
 
-    var fallback = document.createElement('div');
-    fallback.className = 'avatar';
-    fallback.textContent = String(message.author || '?').slice(0, 1);
-    return fallback;
+    var fallback = document.createElement('span');
+    fallback.className = 'avatar-fallback';
+    fallback.style.backgroundColor = authorColor + '28';
+    fallback.style.color = authorColor;
+    appendSvgIcon(fallback, iconFor(platform));
+    meta.appendChild(fallback);
+  }
+
+  function appendTwitchBadges(meta, message) {
+    if (message.platform !== 'twitch' || !Array.isArray(message.badgeUrls)) return;
+    message.badgeUrls.forEach(function (url) {
+      var badge = document.createElement('img');
+      badge.className = 'twitch-badge';
+      badge.src = url;
+      badge.alt = '';
+      meta.appendChild(badge);
+    });
   }
 
   function appendContent(container, message) {
@@ -408,6 +547,7 @@ const chatOverlayJs = `
           img.className = 'emote';
           img.src = part.imageUrl;
           img.alt = part.name || '';
+          img.title = part.name || '';
           container.appendChild(img);
           return;
         }
@@ -417,7 +557,25 @@ const chatOverlayJs = `
       return;
     }
 
-    container.textContent = message.content || '';
+    var content = String(message.content || '');
+    var urlRegex = /https?:\\/\\/[^\\s]+/gi;
+    var lastIndex = 0;
+    var match;
+    while ((match = urlRegex.exec(content)) !== null) {
+      if (match.index > lastIndex) {
+        container.appendChild(document.createTextNode(content.slice(lastIndex, match.index)));
+      }
+      var raw = match[0];
+      var trimmed = raw.replace(/[),.!?:;]+$/, '');
+      var trailing = raw.slice(trimmed.length);
+      var link = document.createElement('a');
+      link.href = trimmed;
+      link.textContent = trimmed;
+      container.appendChild(link);
+      if (trailing) container.appendChild(document.createTextNode(trailing));
+      lastIndex = match.index + raw.length;
+    }
+    if (lastIndex < content.length) container.appendChild(document.createTextNode(content.slice(lastIndex)));
   }
 
   function render(messages) {
@@ -449,10 +607,16 @@ const chatOverlayJs = `
       if (renderedIds.has(message.id) && alreadyRendered) return;
 
       var row = document.createElement('article');
-      row.className = 'chat-message';
+      var platform = platformClass(message.platform);
+      var isCommand = String(message.content || '').indexOf('!') === 0;
+      var authorColor = resolveAuthorColor(message);
+      row.className = 'chat-message ' + platform + (isCommand ? ' command' : '');
       row.setAttribute('data-id', message.id);
 
-      row.appendChild(createAvatar(message));
+      var time = document.createElement('span');
+      time.className = 'time';
+      time.textContent = message.timestampLabel || '';
+      row.appendChild(time);
 
       var body = document.createElement('div');
       body.className = 'body';
@@ -460,23 +624,37 @@ const chatOverlayJs = `
       var meta = document.createElement('div');
       meta.className = 'meta';
 
-      var platform = document.createElement('span');
-      platform.className = 'platform ' + platformClass(message.platform);
-      meta.appendChild(platform);
+      var badge = document.createElement('span');
+      badge.className = 'platform-badge ' + platform;
+      appendSvgIcon(badge, iconFor(platform));
+      badge.appendChild(document.createTextNode(platformLabel(platform)));
+      meta.appendChild(badge);
+
+      appendAvatar(meta, message, platform, authorColor);
+      appendTwitchBadges(meta, message);
+
+      if (isSubscriber(message)) {
+        var star = document.createElement('span');
+        star.className = 'member-star';
+        star.textContent = '★';
+        meta.appendChild(star);
+      }
 
       var author = document.createElement('span');
       author.className = 'author';
-      author.textContent = message.author || 'chat';
-      if (message.color) author.style.color = message.color;
+      author.textContent = platform === 'youtube' || platform === 'youtube-v' ? '@' + (message.author || 'chat') : (message.author || 'chat');
+      author.style.color = authorColor;
       meta.appendChild(author);
 
-      var time = document.createElement('span');
-      time.className = 'time';
-      time.textContent = message.timestampLabel || '';
-      meta.appendChild(time);
+      if (platform !== 'twitch' && isModerator(message)) {
+        var mod = document.createElement('span');
+        mod.className = 'mod';
+        mod.textContent = 'MOD';
+        meta.appendChild(mod);
+      }
 
-      var content = document.createElement('div');
-      content.className = 'content';
+      var content = document.createElement('p');
+      content.className = 'content' + (isCommand ? ' command' : '');
       appendContent(content, message);
 
       body.appendChild(meta);
