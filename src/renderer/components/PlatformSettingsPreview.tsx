@@ -66,7 +66,7 @@ const PLATFORM_PREVIEW_DATA = [
         <span className="text-pink-400">Planned (M2+)</span>
       </>
     ),
-    note: 'Reserved mockup slot so the multi-live layout is stable before implementation.',
+    note: 'Reserved slot so the multi-live layout stays stable while additional outputs are configured.',
     action: <button disabled className="px-3 py-1.5 rounded bg-gray-700 text-gray-500 text-sm cursor-not-allowed">Soon</button>,
   },
 ];

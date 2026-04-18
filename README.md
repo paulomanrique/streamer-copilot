@@ -4,9 +4,8 @@ Desktop Electron app for stream automation: unified chat, sound and voice comman
 
 ## Status
 
-- Mockup and app shell are implemented.
+- Electron app shell and renderer screens are implemented.
 - Runtime integrations for Twitch, YouTube, Kick, OBS, sounds, voice, scheduled messages, tray, startup, packaging, and auto-updates are in the repo.
-- The only remaining open tracker item is visual approval of the mockup screens.
 
 ## Features
 
@@ -48,10 +47,6 @@ npm run package:mac
 npm run package:win
 npm run package:linux
 ```
-
-## Mockup
-
-Open `mockup/index.html` directly in a browser.
 
 ## Raffle Overlay
 
@@ -106,7 +101,6 @@ Platform adapters are intentionally tolerant of partial setup:
 ## Repository Structure
 
 ```text
-mockup/                 Interactive HTML mockup
 src/main/               Electron main process
 src/preload/            IPC bridge
 src/shared/             Shared types, schemas, IPC contracts

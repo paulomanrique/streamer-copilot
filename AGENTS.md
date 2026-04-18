@@ -7,7 +7,7 @@ Guia para agentes de IA que trabalham neste repositório.
 - **Nome**: Streamer Copilot
 - **Tipo**: Aplicativo desktop Electron para automação de streams
 - **Propósito**: Chat unificado (Twitch + YouTube + Kick), comandos de som/voz, mensagens agendadas, estatísticas do OBS
-- **Fase atual**: Phase 1 — Mockup HTML/Tailwind/JS (ver `mockup/`)
+- **Fase atual**: Electron + React renderer com integrações runtime
 
 ---
 
@@ -37,14 +37,7 @@ Guia para agentes de IA que trabalham neste repositório.
 
 ```
 streamer-copilot/
-├── mockup/                    ← Phase 1: HTML estático, sem build
-│   ├── index.html             ← Single-page app com todas as telas
-│   └── js/
-│       ├── mock-data.js       ← Dados fictícios de chat/eventos
-│       ├── chat-renderer.js   ← Renderização DOM do chat
-│       └── nav.js             ← Navegação show/hide entre seções
-│
-├── src/                       ← Phase 2: Electron + React (a implementar)
+├── src/                       ← Electron + React
 │   ├── main/                  ← Processo principal do Electron
 │   │   ├── index.ts           ← BrowserWindow, lifecycle
 │   │   ├── app-context.ts     ← Fiação dos serviços + handlers IPC
@@ -165,11 +158,6 @@ Cooldowns rastreados em memória no main process: `Map<commandId, lastUsed>` e `
 ## Comandos
 
 ```bash
-# Phase 1 — abrir mockup
-open mockup/index.html   # macOS
-# ou simplesmente abrir o arquivo no browser
-
-# Phase 2 (a implementar)
 npm install
 npm run dev          # Electron em modo desenvolvimento
 npm run build        # build de produção
@@ -188,7 +176,7 @@ Issues e milestones: https://github.com/users/paulomanrique/projects/4
 
 Milestones:
 - **M0**: Foundations (Electron + React + TS setup)
-- **M1**: Phase 1 HTML Mockup
+- **M1**: Initial UI Prototype
 - **M2**: Platform Chat Connections
 - **M3**: Sound Commands
 - **M4**: Voice Commands
