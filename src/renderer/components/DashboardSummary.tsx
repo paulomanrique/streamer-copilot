@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
-import type { ChatMessage, ChatOverlayInfo, KickConnectionStatus, KickLiveStats, ObsStatsSnapshot, StreamEvent, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
+import type { ChatMessage, KickConnectionStatus, KickLiveStats, ObsStatsSnapshot, StreamEvent, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
 import { ChatFeed } from './ChatFeed.js';
 import { EventBanner } from './EventBanner.js';
@@ -28,8 +28,6 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
   const visibleMessages = chatMessages;
   const visibleEvents = chatEvents;
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [chatOverlayInfo, setChatOverlayInfo] = useState<ChatOverlayInfo | null>(null);
-  const [chatOverlayCopyMessage, setChatOverlayCopyMessage] = useState<string | null>(null);
   const [enabledTypes, setEnabledTypes] = useState<Record<StreamEvent['type'], boolean>>({
     subscription: true,
     superchat: true,
@@ -63,22 +61,6 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
 
   const filteredActivity = visibleEvents.filter((event) => enabledTypes[event.type] !== false);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    void window.copilot.getChatOverlayInfo()
-      .then((info) => {
-        if (!cancelled) setChatOverlayInfo(info);
-      })
-      .catch(() => {
-        if (!cancelled) setChatOverlayInfo(null);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const setAllFilters = (enabled: boolean) => {
     setEnabledTypes({
       subscription: enabled,
@@ -88,13 +70,6 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
       follow: enabled,
       gift: enabled,
     });
-  };
-
-  const copyChatOverlayUrl = async () => {
-    if (!chatOverlayInfo?.overlayUrl) return;
-    await navigator.clipboard.writeText(chatOverlayInfo.overlayUrl);
-    setChatOverlayCopyMessage(t('Copied'));
-    window.setTimeout(() => setChatOverlayCopyMessage(null), 2000);
   };
 
   return (
@@ -118,29 +93,6 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
           />
 
           <div className="flex flex-col flex-1 overflow-hidden p-4">
-            <div className="mb-4 shrink-0 rounded-lg border border-gray-800 bg-gray-900/50 p-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">{t('OBS Chat Overlay')}</p>
-                {chatOverlayCopyMessage ? <span className="text-xs text-violet-300">{chatOverlayCopyMessage}</span> : null}
-              </div>
-              <div className="flex gap-2">
-                <input
-                  value={chatOverlayInfo?.overlayUrl ?? ''}
-                  readOnly
-                  className="min-w-0 flex-1 rounded border border-gray-700 bg-gray-950 px-3 py-2 text-xs text-gray-300"
-                />
-                <button
-                  type="button"
-                  onClick={() => void copyChatOverlayUrl()}
-                  disabled={!chatOverlayInfo?.overlayUrl}
-                  className="rounded bg-violet-600 px-3 py-2 text-xs text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {t('Copy')}
-                </button>
-              </div>
-              <p className="mt-2 text-xs text-gray-500">{t('Add this URL to an OBS Browser Source to show the live chat on stream.')}</p>
-            </div>
-
             <div className="flex items-center justify-between mb-2 shrink-0">
               <h2 className="text-sm font-semibold text-gray-200">{t('Activity Log')}</h2>
               <div className="relative">
