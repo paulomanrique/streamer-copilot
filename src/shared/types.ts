@@ -10,6 +10,7 @@ export interface GeneralSettings {
   startOnLogin: boolean;
   minimizeToTray: boolean;
   eventNotifications: boolean;
+  recommendationTemplate: string;
 }
 
 export type AppLanguage = 'pt-BR' | 'en-US';

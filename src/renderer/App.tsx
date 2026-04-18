@@ -18,6 +18,7 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   startOnLogin: false,
   minimizeToTray: true,
   eventNotifications: true,
+  recommendationTemplate: 'Pessoal, visitem o {username}',
 };
 
 type ProfileFormMode = 'create' | 'rename' | 'clone';
@@ -465,6 +466,7 @@ export default function App() {
             kickStatus={kickStatus}
             kickSlug={kickSlug}
             kickLiveStats={kickLiveStats}
+            recommendationTemplate={generalSettings.recommendationTemplate}
           />
         ) : null}
 

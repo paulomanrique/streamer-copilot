@@ -92,6 +92,17 @@ export function GeneralSettingsPage({ settings, onSave, appLanguage, onSaveProfi
         </div>
 
         <div className="bg-gray-800/40 rounded-xl border border-gray-700 p-5">
+          <h3 className="text-sm font-medium mb-1">{messages.settings.recommendationTemplateTitle}</h3>
+          <p className="text-xs text-gray-500 mb-3">{messages.settings.recommendationTemplateDescription}</p>
+          <textarea
+            value={draft.recommendationTemplate}
+            onChange={(event) => updateDraft({ recommendationTemplate: event.target.value })}
+            rows={3}
+            className="w-full resize-none bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
+          />
+        </div>
+
+        <div className="bg-gray-800/40 rounded-xl border border-gray-700 p-5">
           <h3 className="text-sm font-medium mb-3">{messages.settings.diagnosticLog}</h3>
           <div className="flex gap-2">
             <select defaultValue="Info" className="flex-1 bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">

@@ -21,9 +21,10 @@ interface DashboardSummaryProps {
   kickStatus: KickConnectionStatus;
   kickSlug: string | null;
   kickLiveStats: KickLiveStats | null;
+  recommendationTemplate: string;
 }
 
-export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, obsStats, twitchStatus, twitchChannel, twitchLiveStats, youtubeStreams, tiktokStatus, tiktokUsername, kickStatus, kickSlug, kickLiveStats }: DashboardSummaryProps) {
+export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, obsStats, twitchStatus, twitchChannel, twitchLiveStats, youtubeStreams, tiktokStatus, tiktokUsername, kickStatus, kickSlug, kickLiveStats, recommendationTemplate }: DashboardSummaryProps) {
   const { messages, t } = useI18n();
   const visibleMessages = chatMessages;
   const visibleEvents = chatEvents;
@@ -79,6 +80,7 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
             messages={visibleMessages}
             events={visibleEvents}
             connectedPlatforms={connectedPlatforms}
+            recommendationTemplate={recommendationTemplate}
           />
 
         <div className="flex flex-col w-[40%] overflow-hidden">

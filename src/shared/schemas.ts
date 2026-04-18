@@ -41,6 +41,7 @@ export const generalSettingsSchema = z.object({
   startOnLogin: z.boolean(),
   minimizeToTray: z.boolean(),
   eventNotifications: z.boolean(),
+  recommendationTemplate: z.string().max(500),
 });
 
 export const scheduledMessageUpsertInputSchema = z.object({

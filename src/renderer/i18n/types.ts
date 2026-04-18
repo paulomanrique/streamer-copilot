@@ -73,6 +73,8 @@ export interface TranslationMessages {
     minimizeToTrayDescription: string;
     eventNotifications: string;
     eventNotificationsDescription: string;
+    recommendationTemplateTitle: string;
+    recommendationTemplateDescription: string;
     diagnosticLog: string;
     openLogsFolder: string;
     saveSettings: string;

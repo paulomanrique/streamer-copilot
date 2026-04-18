@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import type { ChatMessage, StreamEvent } from '../../shared/types.js';
+import type { ChatMessage, PlatformId, StreamEvent } from '../../shared/types.js';
+import { useI18n } from '../i18n/I18nProvider.js';
 import { EventBanner } from './EventBanner.js';
 
 type FeedMode = 'all' | 'superchat';
@@ -21,6 +22,7 @@ interface ChatFeedProps {
   messages: ChatMessage[];
   events: StreamEvent[];
   connectedPlatforms: string[];
+  recommendationTemplate: string;
 }
 
 const PLATFORM_META = {
@@ -64,6 +66,7 @@ const PLATFORM_BUTTONS = [
   { id: 'tiktok' },
 ] as const;
 const MAX_RENDERED_FEED_ITEMS = 120;
+const DEFAULT_RECOMMENDATION_TEMPLATE = 'Pessoal, visitem o {username}';
 
 type ContextMenuAction = { separator: true } | { id: string; label: string; danger?: boolean };
 
@@ -234,7 +237,8 @@ function getReceivedOrder(item: ChatMessage | StreamEvent): number {
   return Number.isFinite(timestampPrefix) ? timestampPrefix : 0;
 }
 
-export function ChatFeed({ messages, events, connectedPlatforms }: ChatFeedProps) {
+export function ChatFeed({ messages, events, connectedPlatforms, recommendationTemplate }: ChatFeedProps) {
+  const { t } = useI18n();
   const feedRef  = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const menuRef  = useRef<HTMLDivElement | null>(null);
@@ -367,6 +371,22 @@ export function ChatFeed({ messages, events, connectedPlatforms }: ChatFeedProps
         inputRef.current.setSelectionRange(len, len);
       }
     });
+  };
+
+  const recommendUser = async (platform: string, author: string) => {
+    const template = recommendationTemplate.trim() || DEFAULT_RECOMMENDATION_TEMPLATE;
+    const username = platform === 'youtube' || platform === 'youtube-v'
+      ? `@${author.replace(/^@+/, '')}`
+      : author;
+    const content = template.replaceAll('{username}', username);
+
+    setSendError(null);
+    hideMenu();
+    try {
+      await window.copilot.sendChatMessage({ platform: platform as PlatformId, content });
+    } catch (cause) {
+      setSendError(cause instanceof Error ? cause.message : 'Failed to send recommendation');
+    }
   };
 
   const handleContextMenu = (e: React.MouseEvent, platform: string, author: string) => {
@@ -520,6 +540,18 @@ export function ChatFeed({ messages, events, connectedPlatforms }: ChatFeedProps
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.95a1 1 0 00.95.69h4.153c.969 0 1.371 1.24.588 1.81l-3.36 2.44a1 1 0 00-.364 1.118l1.285 3.95c.3.922-.755 1.688-1.54 1.118l-3.359-2.44a1 1 0 00-1.176 0l-3.36 2.44c-.783.57-1.838-.196-1.539-1.118l1.285-3.95a1 1 0 00-.364-1.118l-3.36-2.44c-.782-.57-.38-1.81.588-1.81h4.154a1 1 0 00.95-.69l1.286-3.95z"/>
             </svg>
             Highlight
+          </button>
+
+          <div className="border-t border-gray-700 my-1" />
+
+          {/* Recommend */}
+          <button type="button"
+            className="w-full text-left px-3 py-1.5 text-sm hover:bg-green-600/20 text-green-300 flex items-center gap-2"
+            onClick={() => void recommendUser(ctxMenu.platform, ctxMenu.author)}>
+            <svg className="w-3.5 h-3.5 text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+            </svg>
+            {t('Recommend')}
           </button>
 
           <div className="border-t border-gray-700 my-1" />

@@ -6,11 +6,13 @@ import type { GeneralSettings } from '../../shared/types.js';
 import { AppSettingsRepository } from './app-settings-repository.js';
 
 const GENERAL_SETTINGS_KEY = 'general:settings';
+const DEFAULT_RECOMMENDATION_TEMPLATE = 'Pessoal, visitem o {username}';
 
 const DEFAULT_SETTINGS: GeneralSettings = {
   startOnLogin: false,
   minimizeToTray: true,
   eventNotifications: true,
+  recommendationTemplate: DEFAULT_RECOMMENDATION_TEMPLATE,
 };
 
 export class GeneralSettingsStore {
@@ -26,6 +28,7 @@ export class GeneralSettingsStore {
         startOnLogin: parsed.startOnLogin ?? DEFAULT_SETTINGS.startOnLogin,
         minimizeToTray: parsed.minimizeToTray ?? DEFAULT_SETTINGS.minimizeToTray,
         eventNotifications: parsed.eventNotifications ?? DEFAULT_SETTINGS.eventNotifications,
+        recommendationTemplate: normalizeRecommendationTemplate(parsed.recommendationTemplate),
       };
     } catch {
       return { ...DEFAULT_SETTINGS };
@@ -37,6 +40,7 @@ export class GeneralSettingsStore {
       startOnLogin: Boolean(input.startOnLogin),
       minimizeToTray: Boolean(input.minimizeToTray),
       eventNotifications: Boolean(input.eventNotifications),
+      recommendationTemplate: normalizeRecommendationTemplate(input.recommendationTemplate),
     };
     this.repository.set(GENERAL_SETTINGS_KEY, JSON.stringify(nextSettings));
     return nextSettings;
@@ -66,4 +70,10 @@ export class GeneralSettingsStore {
     ].join('\n');
     await fs.writeFile(desktopEntryPath, `${desktopEntry}\n`, 'utf8');
   }
+}
+
+function normalizeRecommendationTemplate(input: unknown): string {
+  if (typeof input !== 'string') return DEFAULT_RECOMMENDATION_TEMPLATE;
+  const value = input.trim();
+  return value || DEFAULT_RECOMMENDATION_TEMPLATE;
 }
