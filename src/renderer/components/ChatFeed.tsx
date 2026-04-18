@@ -393,7 +393,14 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
   };
 
   const recommendUser = async (platform: string, author: string) => {
-    const template = recommendationTemplate?.trim() || DEFAULT_RECOMMENDATION_TEMPLATE;
+    let template = recommendationTemplate?.trim() || DEFAULT_RECOMMENDATION_TEMPLATE;
+    try {
+      const settings = await window.copilot.getGeneralSettings();
+      template = settings.recommendationTemplate?.trim() || DEFAULT_RECOMMENDATION_TEMPLATE;
+    } catch {
+      // Keep the renderer prop/default fallback when settings cannot be read.
+    }
+
     const username = platform === 'youtube' || platform === 'youtube-v'
       ? `@${author.replace(/^@+/, '')}`
       : author;
