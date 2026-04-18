@@ -237,6 +237,25 @@ function getReceivedOrder(item: ChatMessage | StreamEvent): number {
   return Number.isFinite(timestampPrefix) ? timestampPrefix : 0;
 }
 
+function resolveProfileUrl(platform: string, author: string): string {
+  const username = author.replace(/^@+/, '').trim();
+  if (!username) return '';
+
+  switch (platform) {
+    case 'twitch':
+      return `https://twitch.tv/${encodeURIComponent(username)}`;
+    case 'kick':
+      return `https://kick.com/${encodeURIComponent(username.toLowerCase())}`;
+    case 'tiktok':
+      return `https://www.tiktok.com/@${encodeURIComponent(username)}`;
+    case 'youtube':
+    case 'youtube-v':
+      return `https://www.youtube.com/results?search_query=${encodeURIComponent(username)}`;
+    default:
+      return '';
+  }
+}
+
 export function ChatFeed({ messages, events, connectedPlatforms, recommendationTemplate }: ChatFeedProps) {
   const { t } = useI18n();
   const feedRef  = useRef<HTMLDivElement | null>(null);
@@ -378,7 +397,10 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
     const username = platform === 'youtube' || platform === 'youtube-v'
       ? `@${author.replace(/^@+/, '')}`
       : author;
-    const content = template.replaceAll('{username}', username);
+    const profileUrl = resolveProfileUrl(platform, author);
+    const content = template
+      .replaceAll('{username}', username)
+      .replaceAll('{url}', profileUrl);
 
     setSendError(null);
     hideMenu();
