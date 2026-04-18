@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { KickConnectionStatus, KickLiveStats, ObsStatsSnapshot, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
 
@@ -6,19 +6,11 @@ interface ObsStatsPanelProps {
   stats: ObsStatsSnapshot;
   twitchLiveStats: TwitchLiveStats | null;
   twitchConnected: boolean;
-  twitchChannel: string | null;
   youtubeStreams: YouTubeStreamInfo[];
   kickStatus: KickConnectionStatus;
   kickSlug: string | null;
   kickLiveStats: KickLiveStats | null;
 }
-
-interface StreamEmbed {
-  label: string;
-  url: string;
-  toneClass: string;
-}
-
 
 const ICONS = {
   twitch: 'M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z',
@@ -33,41 +25,11 @@ function fmtNum(n: number): string {
   return String(n);
 }
 
-export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, twitchChannel, youtubeStreams, kickStatus, kickSlug, kickLiveStats }: ObsStatsPanelProps) {
+export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtubeStreams, kickStatus, kickSlug, kickLiveStats }: ObsStatsPanelProps) {
   const { t } = useI18n();
 
   const hype = twitchLiveStats?.hypeTrain;
   const [timeLeft, setTimeLeft] = useState('');
-
-  const streamEmbed = useMemo<StreamEmbed | null>(() => {
-    const primaryYoutubeStream = youtubeStreams[0];
-    if (primaryYoutubeStream) {
-      return {
-        label: primaryYoutubeStream.platform === 'youtube-v' ? 'YouTube Vertical' : 'YouTube',
-        url: `https://www.youtube.com/embed/${encodeURIComponent(primaryYoutubeStream.videoId)}?autoplay=1&mute=1&playsinline=1&rel=0`,
-        toneClass: primaryYoutubeStream.platform === 'youtube-v' ? 'text-rose-300' : 'text-red-300',
-      };
-    }
-
-    if (twitchConnected && twitchChannel) {
-      const parent = window.location.hostname || 'localhost';
-      return {
-        label: `Twitch #${twitchChannel}`,
-        url: `https://player.twitch.tv/?channel=${encodeURIComponent(twitchChannel)}&parent=${encodeURIComponent(parent)}&muted=true&autoplay=true`,
-        toneClass: 'text-purple-300',
-      };
-    }
-
-    if (kickStatus === 'connected' && kickSlug) {
-      return {
-        label: `Kick ${kickSlug}`,
-        url: `https://player.kick.com/${encodeURIComponent(kickSlug)}?autoplay=true&muted=true`,
-        toneClass: 'text-green-300',
-      };
-    }
-
-    return null;
-  }, [kickSlug, kickStatus, twitchChannel, twitchConnected, youtubeStreams]);
 
   useEffect(() => {
     if (!hype) {
@@ -126,28 +88,6 @@ export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, twitchC
         <div className="bg-gray-800/60 rounded-lg p-2.5 text-center">
           <div className="text-base font-mono font-bold text-yellow-400">{stats.droppedFramesRender}</div>
           <div className="text-xs text-gray-500 mt-0.5 leading-tight">{t('Dropped Frames')}<br />({t('render')})</div>
-        </div>
-
-        <div className="col-span-4 overflow-hidden rounded-lg border border-gray-800 bg-black">
-          <div className="flex items-center justify-between border-b border-gray-800 bg-gray-900/80 px-3 py-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">{t('Stream preview')}</span>
-            {streamEmbed ? <span className={`text-xs font-medium ${streamEmbed.toneClass}`}>{streamEmbed.label}</span> : null}
-          </div>
-          {streamEmbed ? (
-            <iframe
-              key={streamEmbed.url}
-              title={streamEmbed.label}
-              src={streamEmbed.url}
-              className="aspect-video w-full bg-black"
-              allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-              allowFullScreen
-              referrerPolicy="no-referrer-when-downgrade"
-            />
-          ) : (
-            <div className="flex aspect-video items-center justify-center px-4 text-center text-xs text-gray-500">
-              {t('Connect a live platform to show the stream preview.')}
-            </div>
-          )}
         </div>
 
         {(twitchConnected || youtubeStreams.length > 0 || kickStatus === 'connected') && (
