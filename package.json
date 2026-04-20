@@ -26,6 +26,7 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "lint": "eslint .",
+    "validate:ipc": "tsx scripts/validate-ipc-sync.ts",
     "rebuild:native": "electron-rebuild -f -w better-sqlite3"
   },
   "dependencies": {
@@ -63,6 +64,7 @@
     "nodemon": "^3.1.10",
     "postcss": "^8.5.9",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.58.2",
     "vite": "^7.1.5",
