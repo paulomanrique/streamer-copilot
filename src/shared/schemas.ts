@@ -141,12 +141,18 @@ export const rendererVoiceCapabilitiesSchema = z.object({
   speechSynthesisAvailable: z.boolean(),
 });
 
+export const soundSettingsSchema = z.object({
+  defaultCooldownSeconds: z.number().int().min(0).max(3600),
+  defaultUserCooldownSeconds: z.number().int().min(0).max(3600),
+});
+
 export const soundCommandUpsertInputSchema = z.object({
   id: z.string().min(1).optional(),
   trigger: z.string().max(80).nullable(),
   filePath: z.string().min(1),
   permissions: z.array(permissionLevelSchema).min(1),
-  cooldownSeconds: z.number().int().min(0).max(3600),
+  cooldownSeconds: z.number().int().min(0).max(3600).nullable(),
+  userCooldownSeconds: z.number().int().min(0).max(3600).nullable(),
   commandEnabled: z.boolean(),
   schedule: z.object({
     intervalSeconds: z.number().int().min(5),

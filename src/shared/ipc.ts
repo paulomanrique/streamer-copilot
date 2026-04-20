@@ -31,6 +31,7 @@ import type {
   SoundCommandDeleteInput,
   SoundCommandUpsertInput,
   SoundPlayPayload,
+  SoundSettings,
   SuggestionEntry,
   SuggestionList,
   SuggestionListDeleteInput,
@@ -106,6 +107,8 @@ export const IPC_CHANNELS = {
   soundsReadFile: 'sounds:read-file',
   soundsPreviewPlay: 'sounds:preview-play',
   soundsPlay: 'sounds:play',
+  soundsGetSettings: 'sounds:get-settings',
+  soundsSaveSettings: 'sounds:save-settings',
   obsGetSettings: 'obs:get-settings',
   obsSaveSettings: 'obs:save-settings',
   obsTestConnection: 'obs:test-connection',
@@ -217,6 +220,8 @@ export interface CopilotApi {
   readSoundFile: (filePath: string) => Promise<string>;
   previewPlay: (input: SoundPlayPayload) => Promise<void>;
   onSoundPlay: (listener: (payload: SoundPlayPayload) => void) => () => void;
+  getSoundSettings: () => Promise<SoundSettings>;
+  saveSoundSettings: (input: SoundSettings) => Promise<SoundSettings>;
   getObsSettings: () => Promise<ObsConnectionSettings>;
   saveObsSettings: (input: ObsConnectionSettings) => Promise<ObsConnectionSettings>;
   testObsConnection: (input: ObsConnectionSettings) => Promise<void>;

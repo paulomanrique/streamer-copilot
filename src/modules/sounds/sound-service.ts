@@ -1,9 +1,10 @@
-import type { ChatMessage, PermissionLevel, SoundCommand, SoundPlayPayload } from '../../shared/types.js';
+import type { ChatMessage, PermissionLevel, SoundCommand, SoundPlayPayload, SoundSettings } from '../../shared/types.js';
 import type { CommandModule } from '../commands/command-dispatcher.js';
 import { SoundCommandRepository } from './sound-repository.js';
 
 interface SoundServiceOptions {
   repository: SoundCommandRepository;
+  getSettings: () => SoundSettings;
   onPlay: (payload: SoundPlayPayload) => void;
   now?: () => number;
 }
@@ -77,12 +78,20 @@ export class SoundService implements CommandModule {
   }
 
   private canRun(command: SoundCommand, userId: string, now: number): boolean {
-    const lastCommandRunAt = this.commandCooldowns.get(command.id);
-    if (lastCommandRunAt && now - lastCommandRunAt < command.cooldownSeconds * 1000) return false;
+    const settings = this.options.getSettings();
+    const globalCd = command.cooldownSeconds ?? settings.defaultCooldownSeconds;
+    const userCd = command.userCooldownSeconds ?? settings.defaultUserCooldownSeconds;
 
-    const userKey = this.buildUserKey(command.id, userId);
-    const lastUserRunAt = this.userCooldowns.get(userKey);
-    if (lastUserRunAt && now - lastUserRunAt < command.cooldownSeconds * 1000) return false;
+    if (globalCd > 0) {
+      const lastCommandRunAt = this.commandCooldowns.get(command.id);
+      if (lastCommandRunAt && now - lastCommandRunAt < globalCd * 1000) return false;
+    }
+
+    if (userCd > 0) {
+      const userKey = this.buildUserKey(command.id, userId);
+      const lastUserRunAt = this.userCooldowns.get(userKey);
+      if (lastUserRunAt && now - lastUserRunAt < userCd * 1000) return false;
+    }
 
     return true;
   }

@@ -41,6 +41,7 @@ import type {
   SoundCommandDeleteInput,
   SoundCommandUpsertInput,
   SoundPlayPayload,
+  SoundSettings,
   StreamEvent,
   SuggestionEntry,
   SuggestionList,
@@ -108,6 +109,8 @@ const IPC_CHANNELS = {
   soundsReadFile: 'sounds:read-file',
   soundsPlay: 'sounds:play',
   soundsPreviewPlay: 'sounds:preview-play',
+  soundsGetSettings: 'sounds:get-settings',
+  soundsSaveSettings: 'sounds:save-settings',
   obsGetSettings: 'obs:get-settings',
   obsSaveSettings: 'obs:save-settings',
   obsTestConnection: 'obs:test-connection',
@@ -238,6 +241,8 @@ const copilotApi: CopilotApi = {
     ipcRenderer.on(IPC_CHANNELS.soundsPlay, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.soundsPlay, wrappedListener); };
   },
+  getSoundSettings: () => ipcRenderer.invoke(IPC_CHANNELS.soundsGetSettings) as Promise<SoundSettings>,
+  saveSoundSettings: (input: SoundSettings) => ipcRenderer.invoke(IPC_CHANNELS.soundsSaveSettings, input) as Promise<SoundSettings>,
   getObsSettings: () => ipcRenderer.invoke(IPC_CHANNELS.obsGetSettings),
   saveObsSettings: (settings: ObsConnectionSettings) => ipcRenderer.invoke(IPC_CHANNELS.obsSaveSettings, settings),
   testObsConnection: (settings: ObsConnectionSettings) => ipcRenderer.invoke(IPC_CHANNELS.obsTestConnection, settings),

@@ -28,6 +28,7 @@ import { GeneralSettingsStore } from '../modules/settings/general-settings-store
 import { ProfileStore } from '../modules/settings/profile-store.js';
 import { SoundCommandRepository } from '../modules/sounds/sound-repository.js';
 import { SoundService } from '../modules/sounds/sound-service.js';
+import { SoundSettingsStore } from '../modules/sounds/sound-settings-store.js';
 import { SuggestionRepository } from '../modules/suggestions/suggestion-repository.js';
 import { SuggestionService } from '../modules/suggestions/suggestion-service.js';
 import { TextCommandRepository } from '../modules/text/text-repository.js';
@@ -72,6 +73,7 @@ import {
   soundCommandDeleteInputSchema,
   soundCommandUpsertInputSchema,
   soundPlayPayloadSchema,
+  soundSettingsSchema,
   suggestionListDeleteInputSchema,
   suggestionListUpsertInputSchema,
   kickConnectSchema,
@@ -154,6 +156,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const chatLogService = new ChatLogService(chatLogRepository);
   const raffleRepository = new RaffleRepository(options.databaseHandle.db);
   const soundRepository = new SoundCommandRepository(options.databaseHandle.db);
+  const soundSettingsStore = new SoundSettingsStore(appSettingsRepository);
   const textRepository = new TextCommandRepository(options.databaseHandle.db);
   const voiceRepository = new VoiceCommandRepository(options.databaseHandle.db);
   const suggestionRepository = new SuggestionRepository(options.databaseHandle.db);
@@ -168,6 +171,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
   const soundService = new SoundService({
     repository: soundRepository,
+    getSettings: () => soundSettingsStore.load(),
     onPlay: (payload) => options.stateHub.pushSoundPlay(payload),
   });
   const textService = new TextService({
@@ -1188,6 +1192,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
   ipcMain.handle(IPC_CHANNELS.soundsReadFile, async (_, p) => (await fs.readFile(String(p))).toString('base64'));
   ipcMain.handle(IPC_CHANNELS.soundsPreviewPlay, async (_, raw) => soundService.previewPlay(soundPlayPayloadSchema.parse(raw)));
+  ipcMain.handle(IPC_CHANNELS.soundsGetSettings, async () => soundSettingsStore.load());
+  ipcMain.handle(IPC_CHANNELS.soundsSaveSettings, async (_, raw) => soundSettingsStore.save(soundSettingsSchema.parse(raw)));
 
   ipcMain.handle(IPC_CHANNELS.obsGetSettings, async () => obsService.getSettings());
   ipcMain.handle(IPC_CHANNELS.obsSaveSettings, async (_, raw) => obsService.saveSettings(obsConnectionSettingsSchema.parse(raw)));

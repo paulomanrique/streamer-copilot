@@ -257,12 +257,18 @@ export interface RendererVoiceCapabilities {
   speechSynthesisAvailable: boolean;
 }
 
+export interface SoundSettings {
+  defaultCooldownSeconds: number;
+  defaultUserCooldownSeconds: number;
+}
+
 export interface SoundCommand {
   id: string;
   trigger: string | null;
   filePath: string;
   permissions: PermissionLevel[];
-  cooldownSeconds: number;
+  cooldownSeconds: number | null;
+  userCooldownSeconds: number | null;
   commandEnabled: boolean;
   schedule: CommandSchedule | null;
   enabled: boolean;
@@ -273,7 +279,8 @@ export interface SoundCommandUpsertInput {
   trigger: string | null;
   filePath: string;
   permissions: PermissionLevel[];
-  cooldownSeconds: number;
+  cooldownSeconds: number | null;
+  userCooldownSeconds: number | null;
   commandEnabled: boolean;
   schedule: CommandScheduleUpsertInput | null;
   enabled: boolean;
