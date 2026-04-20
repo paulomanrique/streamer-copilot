@@ -352,7 +352,7 @@ export function RafflesPage() {
     }
   }
 
-  async function deleteRaffle(id: string): Promise<void> {
+  async function _deleteRaffle(id: string): Promise<void> {
     try {
       const nextRows = await window.copilot.deleteRaffle({ id });
       setRows(nextRows);

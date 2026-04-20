@@ -8,7 +8,6 @@ import { fileURLToPath } from 'node:url';
 
 import { BrowserWindow, Notification, dialog, ipcMain, net, shell } from 'electron';
 import { parseFile as parseAudioFile } from 'music-metadata';
-import type { OpenDialogOptions } from 'electron';
 
 import type { DatabaseHandle } from '../db/database.js';
 import { ChatService } from '../modules/chat/chat-service.js';
@@ -43,7 +42,6 @@ import { TikTokSettingsStore } from '../platforms/tiktok/settings-store.js';
 import { createTikTokChatAdapter } from '../platforms/tiktok/adapter.js';
 import { TwitchCredentialsStore } from '../platforms/twitch/credentials-store.js';
 import { createTwitchChatAdapter } from '../platforms/twitch/adapter.js';
-import { createYouTubeChatAdapter } from '../platforms/youtube/adapter.js';
 import { YouTubeSettingsStore } from '../platforms/youtube/settings-store.js';
 import { YouTubeScraper } from './youtube-scraper.js';
 import { APP_NAME } from '../shared/constants.js';
@@ -274,11 +272,12 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     channelHandle: string | null;
   }>();
   let youtubeMonitorTimer: ReturnType<typeof setInterval> | null = null;
-  let lastDetectedVideoIds: Set<string> = new Set();
+  let _lastDetectedVideoIds: Set<string> = new Set();
 
   // Ordered list of platform IDs for YouTube streams (first = horizontal, second = vertical)
   const YT_PLATFORMS: Array<'youtube' | 'youtube-v'> = ['youtube', 'youtube-v'];
   const SCHEDULED_SUPPORTED_TARGETS: PlatformId[] = ['twitch', 'youtube'];
+  // eslint-disable-next-line prefer-const -- forward-declared; assigned after dependent services are created
   let raffleService: RaffleService;
 
   const getYoutubeStreams = (): YouTubeStreamInfo[] => {
@@ -440,6 +439,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
     return new Promise((resolve, reject) => {
       let finished = false;
+      // eslint-disable-next-line prefer-const -- forward-declared; used in timeout before assignment
       let server: http.Server;
 
       const timeout = setTimeout(() => {
@@ -872,7 +872,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       await scraper.start();
     }
 
-    lastDetectedVideoIds = new Set(allLiveStreams.map((s) => s.videoId));
+    _lastDetectedVideoIds = new Set(allLiveStreams.map((s) => s.videoId));
     options.stateHub.pushYoutubeStatus(getYoutubeStreams());
   };
 
@@ -900,7 +900,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       const [streamData, followersData, hypeData] = await Promise.all([
         streamRes.json() as Promise<{ data?: Array<{ viewer_count: number }> }>,
         followersRes.json() as Promise<{ total?: number }>,
-        hypeRes.json() as Promise<{ data?: Array<{ event_data: any; event_type: string }> }>,
+        hypeRes.json() as Promise<{ data?: Array<{ event_data: { level: number; progress: number; goal: number; expires_at: string }; event_type: string }> }>,
       ]);
 
       const stream = streamData.data?.[0];
@@ -1245,7 +1245,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.soundsUpsert, async (_, raw) => {
     const input = soundCommandUpsertInputSchema.parse(raw);
     const ext = path.extname(input.filePath);
-    const safeTrigger = (input.trigger ?? '').replace(/^!+/, '').replace(/[^a-zA-Z0-9_\-]/g, '_');
+    const safeTrigger = (input.trigger ?? '').replace(/^!+/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
     const desiredPath = safeTrigger ? path.join(path.dirname(input.filePath), safeTrigger + ext) : input.filePath;
     let finalFilePath = input.filePath;
     if (input.filePath !== desiredPath) {
@@ -1363,7 +1363,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       if (c) {
         try {
           const res = await net.fetch(`https://api.twitch.tv/helix/users?${uncached.map(l => `login=${encodeURIComponent(l)}`).join('&')}`, { headers: { Authorization: `Bearer ${c.oauthToken.replace(/^oauth:/,'')}`, 'Client-Id': TWITCH_CLIENT_ID } });
-          const d = await res.json(); (d.data ?? []).forEach((u: any) => userAvatarCache.set(u.login.toLowerCase(), u.profile_image_url));
+          const d = await res.json() as { data?: Array<{ login: string; profile_image_url: string }> }; (d.data ?? []).forEach((u) => userAvatarCache.set(u.login.toLowerCase(), u.profile_image_url));
           uncached.forEach(l => { if (!userAvatarCache.has(l.toLowerCase())) userAvatarCache.set(l.toLowerCase(), ''); });
         } catch (err) {
           logService.warn('twitch', 'Failed to fetch user avatars', { error: err instanceof Error ? err.message : String(err) });
@@ -1382,12 +1382,12 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         try {
           const h = { Authorization: `Bearer ${c.oauthToken.replace(/^oauth:/,'')}`, 'Client-Id': TWITCH_CLIENT_ID };
           const g = await net.fetch('https://api.twitch.tv/helix/chat/badges/global', { headers: h });
-          const gd = await g.json(); (gd.data ?? []).forEach((set: any) => set.versions.forEach((v: any) => badgeCache.set(`${set.set_id}/${v.id}`, v.image_url_1x)));
+          const gd = await g.json() as { data?: Array<{ set_id: string; versions: Array<{ id: string; image_url_1x: string }> }> }; (gd.data ?? []).forEach((set) => set.versions.forEach((v) => badgeCache.set(`${set.set_id}/${v.id}`, v.image_url_1x)));
           const u = await net.fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(c.channel)}`, { headers: h });
           const ud = await u.json(); const uid = ud.data?.[0]?.id;
           if (uid) {
             const ch = await net.fetch(`https://api.twitch.tv/helix/chat/badges?broadcaster_id=${uid}`, { headers: h });
-            const cd = await ch.json(); (cd.data ?? []).forEach((set: any) => set.versions.forEach((v: any) => badgeCache.set(`${set.set_id}/${v.id}`, v.image_url_1x)));
+            const cd = await ch.json() as { data?: Array<{ set_id: string; versions: Array<{ id: string; image_url_1x: string }> }> }; (cd.data ?? []).forEach((set) => set.versions.forEach((v) => badgeCache.set(`${set.set_id}/${v.id}`, v.image_url_1x)));
           }
         } catch (err) {
           logService.warn('twitch', 'Failed to fetch badge URLs', { error: err instanceof Error ? err.message : String(err) });
@@ -1732,7 +1732,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
         if (/login|not available|not ready|not connected/i.test(message)) {
-          throw new Error('Log in to YouTube in Platforms before sending messages.');
+          throw new Error('Log in to YouTube in Platforms before sending messages.', { cause });
         }
         throw cause;
       }
@@ -1752,9 +1752,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       if (platform === 'kick') {
         const message = cause instanceof Error ? cause.message : String(cause);
         if (/authorization|chat:write|oauth|forbidden|401|403/i.test(message)) {
-          throw new Error('Log in to Kick in Platforms before sending messages.');
+          throw new Error('Log in to Kick in Platforms before sending messages.', { cause });
         }
-        throw new Error(message || 'Log in to Kick in Platforms before sending messages.');
+        throw new Error(message || 'Log in to Kick in Platforms before sending messages.', { cause });
       }
       throw cause;
     }
@@ -1960,6 +1960,4 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     return { runAt, result: 'skipped', detail: skipped.join('; ') || 'No connected targets' };
   }
 
-  function readCsvEnv(v: string | undefined): string[] | undefined { return v ? v.split(',').map(i => i.trim()).filter(Boolean) : undefined; }
-  function readSingleValueAsArray(v: string | undefined): string[] | undefined { return v?.trim() ? [v.trim()] : undefined; }
 }

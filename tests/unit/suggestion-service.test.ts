@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { ChatMessage, PermissionLevel, SuggestionEntry, SuggestionList, SuggestionSnapshot } from '../../src/shared/types.js';
+import type { ChatMessage, SuggestionEntry, SuggestionList, SuggestionSnapshot } from '../../src/shared/types.js';
 import { SuggestionService } from '../../src/modules/suggestions/suggestion-service.js';
 
 function makeList(overrides: Partial<SuggestionList> = {}): SuggestionList {

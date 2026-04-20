@@ -175,7 +175,7 @@ function renderContentWithLinks(content: string): ReactNode[] {
   }
 
   if (lastIndex < content.length) {
-    nodes.push(<span key={`text-${key++}`}>{content.slice(lastIndex)}</span>);
+    nodes.push(<span key={`text-${key}`}>{content.slice(lastIndex)}</span>);
   }
 
   if (nodes.length === 0) nodes.push(<span key="text-0">{content}</span>);
@@ -467,7 +467,7 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
         </div>
 
         <div className="flex items-center gap-1.5">
-          {PLATFORM_BUTTONS.filter((b) => connectedPlatforms.includes(b.id as any)).map(({ id }) => {
+          {PLATFORM_BUTTONS.filter((b) => (connectedPlatforms as readonly string[]).includes(b.id)).map(({ id }) => {
             const meta = PLATFORM_META[platformKey(id)];
             const on = platformFilter[id] !== false;
             const title = getPlatformDisplayName(id, connectedPlatforms);

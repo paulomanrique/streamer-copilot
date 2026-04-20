@@ -268,6 +268,7 @@ export class KickChatAdapter implements PlatformChatAdapter {
     }
   }
 
+  /* eslint-disable no-useless-escape -- regex escapes (\s) inside template literal are needed at runtime */
   private async injectScraper(): Promise<void> {
     if (!this.window || this.window.isDestroyed()) return;
 
@@ -453,6 +454,7 @@ export class KickChatAdapter implements PlatformChatAdapter {
 
     await this.window.webContents.executeJavaScript(script, true);
   }
+  /* eslint-enable no-useless-escape */
 
   private async createSendClient(): Promise<{ postMessage: (content: string) => Promise<void> } | null> {
     if (!this.options.clientId || !this.options.clientSecret || !this.options.oauthToken || !this.options.broadcasterUserId) return null;

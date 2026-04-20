@@ -28,7 +28,7 @@ describe('KickChatAdapter', () => {
       fetchFn,
     });
 
-    await expect((adapter as any).resolveChatroomId()).resolves.toBe(60319060);
+    await expect((adapter as unknown as { resolveChatroomId: () => Promise<number> }).resolveChatroomId()).resolves.toBe(60319060);
     expect(fetchFn).toHaveBeenNthCalledWith(1, 'https://id.kick.com/oauth/token', expect.objectContaining({
       method: 'POST',
     }));
@@ -46,7 +46,7 @@ describe('KickChatAdapter', () => {
       fetchFn,
     });
 
-    await expect((adapter as any).resolveChatroomId()).resolves.toBe(998877);
+    await expect((adapter as unknown as { resolveChatroomId: () => Promise<number> }).resolveChatroomId()).resolves.toBe(998877);
     expect(fetchFn).toHaveBeenCalledTimes(1);
     expect(fetchFn).toHaveBeenCalledWith('https://kick.com/api/v2/channels/legacy-channel/chatroom', expect.objectContaining({
       headers: { accept: 'application/json' },

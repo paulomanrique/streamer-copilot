@@ -165,7 +165,7 @@ export class RaffleService implements CommandModule {
     if (raffle.entryDeadlineAt && new Date(raffle.entryDeadlineAt).getTime() <= this.now()) {
       try {
         this.closeEntries(raffle);
-      } catch {}
+      } catch { /* deadline close can fail silently */ }
       return;
     }
 
@@ -328,7 +328,7 @@ export class RaffleService implements CommandModule {
     const pending = this.pendingAnimations.get(raffleId);
     if (!pending || pending.targetEntryId !== entryId) return;
 
-    const raffle = this.requireRaffle(raffleId);
+    this.requireRaffle(raffleId);
     const entries = this.options.repository.listEntries(raffleId);
     const selectedEntry = entries.find((entry) => entry.id === entryId);
     if (!selectedEntry) throw new Error('Selected raffle entry no longer exists');
@@ -451,7 +451,7 @@ export class RaffleService implements CommandModule {
     };
   }
 
-  private computeRotation(entries: RaffleEntry[], targetEntryId: string, roundNumber: number): number {
+  private computeRotation(entries: RaffleEntry[], targetEntryId: string, _roundNumber: number): number {
     const index = Math.max(
       0,
       entries.findIndex((entry) => entry.id === targetEntryId),
