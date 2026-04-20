@@ -10,6 +10,7 @@ import { DashboardSummary } from './components/DashboardSummary.js';
 import { ProfileFormModal } from './components/ProfileFormModal.js';
 import { ProfileSelectorModal } from './components/ProfileSelectorModal.js';
 import type { AppSection } from './components/SectionTabs.js';
+import { SectionErrorBoundary } from './components/AppErrorBoundary.js';
 import { StatusMessages } from './components/StatusMessages.js';
 import { ToastStack, type ToastItem } from './components/ToastStack.js';
 import { SettingsWorkspace } from './pages/SettingsWorkspace.js';
@@ -471,6 +472,7 @@ export default function App() {
         <StatusMessages isLoading={isLoading} error={error} />
 
         {hasActiveProfile && currentSection === 'dashboard' ? (
+          <SectionErrorBoundary sectionName="Dashboard">
           <ConnectedDashboardSummary
             activeProfileName={activeProfileName}
             obsStats={obsStats}
@@ -485,9 +487,11 @@ export default function App() {
             kickLiveStats={kickLiveStats}
             recommendationTemplate={generalSettings.recommendationTemplate}
           />
+          </SectionErrorBoundary>
         ) : null}
 
         {hasActiveProfile && currentSection === 'settings' ? (
+          <SectionErrorBoundary sectionName="Settings">
           <SettingsWorkspace
             activeProfileId={activeProfileId}
             activeProfileName={activeProfileName}
@@ -511,6 +515,7 @@ export default function App() {
             onChangeVoiceVolume={setVoiceVolume}
             obsStats={obsStats}
           />
+          </SectionErrorBoundary>
         ) : null}
       </section>
 
