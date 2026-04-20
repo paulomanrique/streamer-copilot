@@ -2,13 +2,20 @@ import { createRequire } from 'node:module';
 import type { ChatMessage, PlatformId, StreamEvent, TwitchConnectionStatus } from '../../shared/types.js';
 import type { PlatformChatAdapter } from '../base.js';
 
+/**
+ * Subset of tmi.js IRC tags. Covers fields used by this adapter.
+ * Values are string | boolean | number for simple tags, or
+ * Record<string, string> for composite tags like `badges`.
+ */
+type TmiTags = Record<string, string | boolean | number | Record<string, string> | undefined>;
+
 type TmiLikeClient = {
   connect: () => Promise<unknown>;
   disconnect: () => Promise<unknown>;
   say: (channel: string, message: string) => Promise<unknown> | unknown;
-  on: (event: string, handler: (...args: any[]) => void) => void;
-  removeListener?: (event: string, handler: (...args: any[]) => void) => void;
-  off?: (event: string, handler: (...args: any[]) => void) => void;
+  on: (event: string, handler: (...args: unknown[]) => void) => void;
+  removeListener?: (event: string, handler: (...args: unknown[]) => void) => void;
+  off?: (event: string, handler: (...args: unknown[]) => void) => void;
 };
 
 export interface TwitchAdapterOptions {
@@ -123,9 +130,11 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
       const module = await this.loadTmiModule();
       if (!module) return null;
 
-      const mod = module as any;
-      const Client = mod.Client ?? mod.default?.Client ?? mod.default ?? mod;
-      if (typeof Client !== 'function') return null;
+      const mod = module as Record<string, unknown>;
+      const defaultExport = mod.default as Record<string, unknown> | undefined;
+      const ClientCandidate = mod.Client ?? defaultExport?.Client ?? mod.default ?? mod;
+      if (typeof ClientCandidate !== 'function') return null;
+      const Client = ClientCandidate as new (options: Record<string, unknown>) => TmiLikeClient;
 
       return new Client({
         channels: this.options.channels ?? [this.channel],
@@ -137,7 +146,7 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
           secure: this.options.secure,
           reconnect: this.options.reconnect,
         },
-      }) as TmiLikeClient;
+      });
     } catch (err) {
       console.warn('[twitch] Failed to create tmi.js client:', err instanceof Error ? err.message : String(err));
       return null;
@@ -145,7 +154,8 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
   }
 
   private attachTmiListeners(client: TmiLikeClient): void {
-    client.on('message', (channel: string, tags: Record<string, any>, message: string, self: boolean) => {
+    client.on('message', (...args: unknown[]) => {
+      const [channel, tags, message, self] = args as [string, TmiTags, string, boolean];
       if (self) return;
       this.emitMessage({
         platform: 'twitch',
@@ -153,11 +163,12 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
         content: message,
         badges: this.resolveBadges(tags),
         color: typeof tags.color === 'string' && tags.color ? tags.color : undefined,
-        badgeUrls: this.options.resolveBadgeUrls ? this.options.resolveBadgeUrls(tags.badges ?? '') : undefined,
+        badgeUrls: this.options.resolveBadgeUrls ? this.options.resolveBadgeUrls((tags.badges as string | Record<string, string>) ?? '') : undefined,
       }, tags);
     });
 
-    client.on('cheer', (channel: string, tags: Record<string, any>, message: string) => {
+    client.on('cheer', (...args: unknown[]) => {
+      const [channel, tags, message] = args as [string, TmiTags, string];
       this.emitEvent({
         platform: 'twitch',
         type: 'cheer',
@@ -168,8 +179,8 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
     });
 
     // New subscription
-    client.on('subscription', (...args: any[]) => {
-      const [channel, username, , message, tags] = args as [string, string, unknown, string, Record<string, any>];
+    client.on('subscription', (...args: unknown[]) => {
+      const [channel, username, , message, tags] = args as [string, string, unknown, string, TmiTags];
       this.emitEvent({
         platform: 'twitch',
         type: 'subscription',
@@ -180,8 +191,8 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
     });
 
     // Resub — amount = months
-    client.on('resub', (...args: any[]) => {
-      const [channel, username, months, message, tags] = args as [string, string, number, string, Record<string, any>];
+    client.on('resub', (...args: unknown[]) => {
+      const [channel, username, months, message, tags] = args as [string, string, number, string, TmiTags];
       this.emitEvent({
         platform: 'twitch',
         type: 'subscription',
@@ -192,8 +203,8 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
     });
 
     // Single gift sub
-    client.on('subgift', (...args: any[]) => {
-      const [channel, gifter, , recipient, , tags] = args as [string, string, unknown, string, unknown, Record<string, any>];
+    client.on('subgift', (...args: unknown[]) => {
+      const [channel, gifter, , recipient, , tags] = args as [string, string, unknown, string, unknown, TmiTags];
       this.emitEvent({
         platform: 'twitch',
         type: 'gift',
@@ -204,7 +215,7 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
     });
 
     // Anonymous gift sub
-    client.on('anonsubgift', (...args: any[]) => {
+    client.on('anonsubgift', (...args: unknown[]) => {
       const [, , recipient] = args as [string, unknown, string];
       this.emitEvent({
         platform: 'twitch',
@@ -216,8 +227,8 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
     });
 
     // Mass gift subs (community gift)
-    client.on('submysterygift', (...args: any[]) => {
-      const [channel, gifter, count, , tags] = args as [string, string, number, unknown, Record<string, any>];
+    client.on('submysterygift', (...args: unknown[]) => {
+      const [channel, gifter, count, , tags] = args as [string, string, number, unknown, TmiTags];
       this.emitEvent({
         platform: 'twitch',
         type: 'gift',
@@ -228,7 +239,7 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
     });
 
     // Anonymous mass gift
-    client.on('anonsubmysterygift', (...args: any[]) => {
+    client.on('anonsubmysterygift', (...args: unknown[]) => {
       const [, count] = args as [string, number];
       this.emitEvent({
         platform: 'twitch',
@@ -240,8 +251,8 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
     });
 
     // Gift → paid upgrade (counts as subscription)
-    client.on('giftpaidupgrade', (...args: any[]) => {
-      const [channel, username, , tags] = args as [string, string, unknown, Record<string, any>];
+    client.on('giftpaidupgrade', (...args: unknown[]) => {
+      const [channel, username, , tags] = args as [string, string, unknown, TmiTags];
       this.emitEvent({
         platform: 'twitch',
         type: 'subscription',
@@ -251,8 +262,8 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
       });
     });
 
-    client.on('anongiftpaidupgrade', (...args: any[]) => {
-      const [channel, username, tags] = args as [string, string, Record<string, any>];
+    client.on('anongiftpaidupgrade', (...args: unknown[]) => {
+      const [channel, username, tags] = args as [string, string, TmiTags];
       this.emitEvent({
         platform: 'twitch',
         type: 'subscription',
@@ -262,8 +273,8 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
       });
     });
 
-    client.on('raided', (...args: any[]) => {
-      const [channel, user, viewers] = args;
+    client.on('raided', (...args: unknown[]) => {
+      const [channel, user, viewers] = args as [string, string, number];
       const tags = this.extractTags(args) ?? {};
       this.emitEvent({
         platform: 'twitch',
@@ -286,7 +297,7 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
     });
   }
 
-  private emitMessage(message: Omit<ChatMessage, 'id' | 'timestampLabel'> & { color?: string }, tags?: Record<string, any>): void {
+  private emitMessage(message: Omit<ChatMessage, 'id' | 'timestampLabel'> & { color?: string }, tags?: TmiTags): void {
     const payload: ChatMessage = {
       id: tags?.['id']?.toString?.() ?? this.buildId(),
       timestampLabel: this.formatTimestamp(tags?.['tmi-sent-ts']),
@@ -335,14 +346,15 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
     return normalized || null;
   }
 
-  private resolveAuthor(tags: Record<string, any>, channel: string | null | undefined): string {
+  private resolveAuthor(tags: TmiTags, channel: string | null | undefined): string {
     return String(tags['display-name'] ?? tags.username ?? this.normalizeChannelName(channel) ?? this.options.mockAuthor ?? DEFAULT_MOCK_AUTHOR);
   }
 
-  private resolveBadges(tags: Record<string, any>): ChatMessage['badges'] {
+  private resolveBadges(tags: TmiTags): ChatMessage['badges'] {
     const badges: ChatMessage['badges'] = [];
-    if (tags.badges) {
-      for (const [name, version] of Object.entries(tags.badges)) {
+    const rawBadges = tags.badges;
+    if (rawBadges && typeof rawBadges === 'object') {
+      for (const [name, version] of Object.entries(rawBadges as Record<string, string>)) {
         badges.push(`${name}/${version}`);
       }
     } else {
@@ -358,25 +370,25 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
     return rawBadges.split(',').some((entry) => entry.trim().startsWith(`${badge}/`));
   }
 
-  private extractTags(args: any[]): Record<string, any> | null {
+  private extractTags(args: unknown[]): TmiTags | null {
     for (const value of args) {
       if (value && typeof value === 'object' && !Array.isArray(value)) {
-        return value as Record<string, any>;
+        return value as TmiTags;
       }
     }
     return null;
   }
 
-  private resolveEventAuthor(first: unknown, tags: Record<string, any>, channel: string | null | undefined): string {
+  private resolveEventAuthor(first: unknown, tags: TmiTags, channel: string | null | undefined): string {
     if (typeof first === 'string' && first.trim()) return first;
     return this.resolveAuthor(tags, channel);
   }
 
-  private resolveEventAmount(first: unknown, second: unknown, third: unknown, tags: Record<string, any>): number | null {
+  private resolveEventAmount(first: unknown, second: unknown, third: unknown, tags: TmiTags): number | null {
     return this.firstNumber(first) ?? this.firstNumber(second) ?? this.firstNumber(third) ?? this.firstNumber(tags['msg-param-months']) ?? this.firstNumber(tags.bits);
   }
 
-  private resolveEventMessage(first: unknown, second: unknown, third: unknown, tags: Record<string, any>): string | undefined {
+  private resolveEventMessage(first: unknown, second: unknown, third: unknown, tags: TmiTags): string | undefined {
     const values = [second, third, tags.message, tags['system-msg']];
     for (const value of values) {
       if (typeof value === 'string' && value.trim()) return value;
