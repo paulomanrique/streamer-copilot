@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { DEFAULT_APP_LANGUAGE } from '../shared/constants.js';
-import type { AppInfo, AppLanguage, GeneralSettings, PermissionLevel, ProfileSettings, ProfilesSnapshot, VoiceSpeakPayload } from '../shared/types.js';
+import type { AppInfo, AppLanguage, GeneralSettings, PermissionLevel, ProfileSettings, ProfilesSnapshot } from '../shared/types.js';
 import { useAppStore } from './store.js';
 import { I18nProvider } from './i18n/I18nProvider.js';
 import { messages } from './i18n/messages.js';
@@ -12,8 +12,12 @@ import { ProfileSelectorModal } from './components/ProfileSelectorModal.js';
 import type { AppSection } from './components/SectionTabs.js';
 import { SectionErrorBoundary } from './components/AppErrorBoundary.js';
 import { StatusMessages } from './components/StatusMessages.js';
-import { ToastStack, type ToastItem } from './components/ToastStack.js';
+import { ToastStack } from './components/ToastStack.js';
 import { SettingsWorkspace } from './pages/SettingsWorkspace.js';
+import { useAudioPlayer } from './hooks/useAudioPlayer.js';
+import { useIpcListeners } from './hooks/useIpcListeners.js';
+import { useTTSEngine } from './hooks/useTTSEngine.js';
+import { useToasts } from './hooks/useToasts.js';
 
 const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   startOnLogin: false,
@@ -37,20 +41,14 @@ export default function App() {
     kickSlug,
     kickLiveStats,
     setProfiles,
-    setObsStats,
     setChatSnapshot,
-    appendChatMessages,
-    appendChatEvents,
     twitchLiveStats,
     youtubeStreams,
     setTwitchStatus,
     setTwitchChannel,
-    setTwitchLiveStats,
     setYoutubeStreams,
     setTiktokStatus,
-    setTiktokUsername,
     setKickStatus,
-    setKickSlug,
     setKickLiveStats,
   } = useAppStore();
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
@@ -68,22 +66,25 @@ export default function App() {
   const [appLanguage, setAppLanguage] = useState<AppLanguage>(DEFAULT_APP_LANGUAGE);
   const [languageCode, setLanguageCode] = useState('en-US');
   const [permissionLevels, setPermissionLevels] = useState<PermissionLevel[]>(['everyone', 'moderator']);
-  const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [voiceRate, setVoiceRate] = useState(1);
   const [voiceVolume, setVoiceVolume] = useState(0.8);
-  const activeSoundsRef = useRef<HTMLAudioElement[]>([]);
-  const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
+
+  const { toasts, pushToast } = useToasts();
+
+  const pushError = useCallback((message: string) => {
+    setError(message);
+    pushToast(messages[appLanguage].errors.rendererError, message);
+  }, [appLanguage, pushToast]);
+
+  // Extracted hooks for audio, TTS, and IPC listeners
+  useAudioPlayer(pushError);
+  useTTSEngine({ languageCode, voiceRate, voiceVolume, onError: pushError });
+  useIpcListeners();
 
   const activeProfile = useMemo(
     () => profiles.find((profile) => profile.id === activeProfileId) ?? null,
     [profiles, activeProfileId],
   );
-
-  const pushError = (message: string) => {
-    const toastId = Date.now() + Math.floor(Math.random() * 1000);
-    setError(message);
-    setToasts((current) => [...current, { id: toastId, title: messages[appLanguage].errors.rendererError, message }]);
-  };
 
   const getActiveProfileFromSnapshot = (snapshot: ProfilesSnapshot) =>
     snapshot.profiles.find((profile) => profile.id === snapshot.activeProfileId) ?? null;
@@ -133,145 +134,6 @@ export default function App() {
       setIsProfileSelectorOpen(true);
     }
   }, [activeProfileId, isLoading]);
-
-  useEffect(() => {
-    if (toasts.length === 0) return undefined;
-
-    const timerId = window.setTimeout(() => {
-      setToasts((current) => current.slice(1));
-    }, 4000);
-
-    return () => window.clearTimeout(timerId);
-  }, [toasts]);
-
-  useEffect(() => {
-    void window.copilot.setRendererVoiceCapabilities({
-      speechSynthesisAvailable:
-        'speechSynthesis' in window && typeof window.SpeechSynthesisUtterance === 'function',
-    });
-  }, []);
-
-  // Keep a ref to the loaded voices list so the speak handler always has it,
-  // even if it fires before voices are cached in state.
-  useEffect(() => {
-    const load = () => {
-      const list = window.speechSynthesis.getVoices();
-      if (list.length > 0) voicesRef.current = list;
-    };
-    load();
-    window.speechSynthesis.addEventListener('voiceschanged', load);
-    return () => window.speechSynthesis.removeEventListener('voiceschanged', load);
-  }, []);
-
-  useEffect(() => {
-    const speak = (payload: VoiceSpeakPayload) => {
-      if (!('speechSynthesis' in window) || typeof window.SpeechSynthesisUtterance !== 'function') {
-        pushError('Speech synthesis is not available in this renderer');
-        return;
-      }
-
-      const utterance = new window.SpeechSynthesisUtterance(payload.text);
-      const allVoices = voicesRef.current.length > 0 ? voicesRef.current : window.speechSynthesis.getVoices();
-      const matchedVoice = allVoices.find((v) => v.name === payload.lang);
-      if (matchedVoice) {
-        utterance.lang = matchedVoice.lang;  // must be set before .voice
-        utterance.voice = matchedVoice;
-      } else {
-        utterance.lang = languageCode;
-      }
-      utterance.rate = voiceRate;
-      utterance.volume = voiceVolume;
-      window.speechSynthesis.speak(utterance);
-    };
-
-    return window.copilot.onVoiceSpeak(speak);
-  }, [languageCode, voiceRate, voiceVolume]);
-
-  useEffect(() => {
-    const play = async (payload: { filePath: string }) => {
-      let objectUrl: string | null = null;
-      try {
-        const base64 = await window.copilot.readSoundFile(payload.filePath);
-        const binary = atob(base64);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        const ext = payload.filePath.split('.').pop()?.toLowerCase() ?? 'mp3';
-        const mime = ext === 'ogg' ? 'audio/ogg' : ext === 'wav' ? 'audio/wav' : 'audio/mpeg';
-        objectUrl = URL.createObjectURL(new Blob([bytes], { type: mime }));
-
-        const audio = new Audio(objectUrl);
-        audio.volume = 1;
-        activeSoundsRef.current = [...activeSoundsRef.current, audio];
-
-        const cleanup = () => {
-          activeSoundsRef.current = activeSoundsRef.current.filter((item) => item !== audio);
-          if (objectUrl) URL.revokeObjectURL(objectUrl);
-        };
-
-        audio.addEventListener('ended', cleanup, { once: true });
-        audio.addEventListener('error', () => { cleanup(); pushError(`Failed to play sound file: ${payload.filePath}`); }, { once: true });
-
-        await audio.play();
-      } catch {
-        if (objectUrl) URL.revokeObjectURL(objectUrl);
-        pushError(`Failed to play sound file: ${payload.filePath}`);
-      }
-    };
-
-    return window.copilot.onSoundPlay((payload) => { void play(payload); });
-  }, []);
-
-  useEffect(() => {
-    const disconnectStats = window.copilot.onObsStats((stats) => {
-      setObsStats(stats);
-    });
-    const disconnectConnected = window.copilot.onObsConnected(() => {
-      setObsStats((current) => ({ ...current, connected: true }));
-    });
-    const disconnectDisconnected = window.copilot.onObsDisconnected(() => {
-      setObsStats((current) => ({ ...current, connected: false }));
-    });
-
-    return () => {
-      disconnectStats();
-      disconnectConnected();
-      disconnectDisconnected();
-    };
-  }, [setObsStats]);
-
-  useEffect(() => {
-    const unsubStatus = window.copilot.onTwitchStatus((status, channel) => {
-      setTwitchStatus(status);
-      setTwitchChannel(channel);
-    });
-    const unsubStats = window.copilot.onTwitchLiveStats(setTwitchLiveStats);
-    const unsubYt = window.copilot.onYoutubeStatus(setYoutubeStreams);
-    const unsubTiktok = window.copilot.onTiktokStatus((status, username) => {
-      setTiktokStatus(status);
-      setTiktokUsername(username);
-    });
-    const unsubKick = window.copilot.onKickStatus((status, slug) => {
-      setKickStatus(status);
-      setKickSlug(slug);
-      if (status !== 'connected') setKickLiveStats(null);
-    });
-    const unsubKickStats = window.copilot.onKickLiveStats(setKickLiveStats);
-    return () => { unsubStatus(); unsubStats(); unsubYt(); unsubTiktok(); unsubKick(); unsubKickStats(); };
-  }, [setTwitchStatus, setTwitchChannel, setTwitchLiveStats, setYoutubeStreams, setTiktokStatus, setTiktokUsername, setKickStatus, setKickSlug, setKickLiveStats]);
-
-  useEffect(() => {
-    const disconnectMessage = window.copilot.onChatMessagesBatch((messages) => {
-      appendChatMessages(messages);
-    });
-    const disconnectEvent = window.copilot.onChatEventsBatch((events) => {
-      appendChatEvents(events);
-    });
-
-    return () => {
-      disconnectMessage();
-      disconnectEvent();
-    };
-  }, [appendChatEvents, appendChatMessages]);
 
   const onSelectProfile = async (profileId: string) => {
     try {
