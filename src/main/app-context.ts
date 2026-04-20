@@ -33,6 +33,7 @@ import { SuggestionRepository } from '../modules/suggestions/suggestion-reposito
 import { SuggestionService } from '../modules/suggestions/suggestion-service.js';
 import { TextCommandRepository } from '../modules/text/text-repository.js';
 import { TextService } from '../modules/text/text-service.js';
+import { TextSettingsStore } from '../modules/text/text-settings-store.js';
 import { VoiceCommandRepository } from '../modules/voice/voice-repository.js';
 import { VoiceService } from '../modules/voice/voice-service.js';
 import { createKickChatAdapter } from '../platforms/kick/adapter.js';
@@ -81,6 +82,7 @@ import {
   selectProfileInputSchema,
   textCommandDeleteInputSchema,
   textCommandUpsertInputSchema,
+  textSettingsSchema,
   tiktokConnectSchema,
   tiktokSettingsSchema,
   twitchCredentialsSchema,
@@ -90,7 +92,7 @@ import {
   youtubeConnectSchema,
   youtubeSettingsSchema,
 } from '../shared/schemas.js';
-import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, PlatformId, Raffle, SoundSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
+import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, PlatformId, Raffle, SoundSettings, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
 
 const TWITCH_CLIENT_ID = 'vtwg8tzuv1nlip4qh9n6sxx2p76g0s';
 const TWITCH_REDIRECT_PORT = 32999;
@@ -175,8 +177,24 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     if (store) soundSettingsCache = await store.load();
   };
 
-  // Load cache on startup (non-blocking, best-effort).
+  // Text settings: file-based, per-profile. Cached in memory for synchronous access in canRun().
+  let textSettingsCache: TextSettings = { defaultCooldownSeconds: 0, defaultUserCooldownSeconds: 0 };
+
+  const getTextSettingsStore = async (): Promise<TextSettingsStore | null> => {
+    const snapshot = await profileStore.list();
+    const active = snapshot.profiles.find((p) => p.id === snapshot.activeProfileId);
+    if (!active) return null;
+    return new TextSettingsStore(active.directory);
+  };
+
+  const reloadTextSettingsCache = async (): Promise<void> => {
+    const store = await getTextSettingsStore();
+    if (store) textSettingsCache = await store.load();
+  };
+
+  // Load caches on startup (non-blocking, best-effort).
   void reloadSoundSettingsCache();
+  void reloadTextSettingsCache();
 
   const schedulerService = new SchedulerService({
     source: {
@@ -194,6 +212,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
   const textService = new TextService({
     repository: textRepository,
+    getSettings: () => textSettingsCache,
     onRespond: async (payload) => {
       try {
         await sendPlatformMessage(payload.platform, payload.content);
@@ -1110,6 +1129,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     chatService.clearRecent();
     suggestionService.clearSessionEntries();
     await reloadSoundSettingsCache();
+    await reloadTextSettingsCache();
     return snapshot;
   });
   ipcMain.handle(IPC_CHANNELS.profilesCreate, async (_, raw) => { const i = createProfileInputSchema.parse(raw); return profileStore.create(i.name, i.directory, i.appLanguage); });
@@ -1167,6 +1187,17 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const result = textService.delete(textCommandDeleteInputSchema.parse(raw).id);
     schedulerService.refreshStatus();
     return result;
+  });
+  ipcMain.handle(IPC_CHANNELS.textGetSettings, async () => {
+    const store = await getTextSettingsStore();
+    return store ? store.load() : textSettingsCache;
+  });
+  ipcMain.handle(IPC_CHANNELS.textSaveSettings, async (_, raw) => {
+    const store = await getTextSettingsStore();
+    if (!store) throw new Error('No active profile');
+    const saved = await store.save(textSettingsSchema.parse(raw));
+    textSettingsCache = saved;
+    return saved;
   });
 
   ipcMain.handle(IPC_CHANNELS.voiceList, async () => voiceService.list());

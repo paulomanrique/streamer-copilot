@@ -4,6 +4,7 @@ import { PERMISSION_LEVELS } from '../../shared/constants.js';
 import type {
   PermissionLevel,
   TextCommand,
+  TextSettings,
   ScheduledAvailableTargets,
   ScheduledStatusItem,
   TextCommandUpsertInput,
@@ -13,10 +14,16 @@ const EMPTY_FORM: TextCommandUpsertInput = {
   trigger: '!',
   response: '',
   permissions: ['everyone'],
-  cooldownSeconds: 0,
+  cooldownSeconds: null,
+  userCooldownSeconds: null,
   commandEnabled: true,
   schedule: null,
   enabled: true,
+};
+
+const DEFAULT_TEXT_SETTINGS: TextSettings = {
+  defaultCooldownSeconds: 0,
+  defaultUserCooldownSeconds: 0,
 };
 
 const SCHEDULE_PLATFORMS: { id: 'twitch' | 'youtube'; label: string }[] = [
@@ -47,7 +54,9 @@ export function TextCommandsPage() {
   const [trigger, setTrigger] = useState(EMPTY_FORM.trigger);
   const [response, setResponse] = useState(EMPTY_FORM.response);
   const [levels, setLevels] = useState<PermissionLevel[]>(EMPTY_FORM.permissions);
-  const [cooldownSeconds, setCooldownSeconds] = useState(EMPTY_FORM.cooldownSeconds);
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const [userCooldownSeconds, setUserCooldownSeconds] = useState(0);
+  const [useGlobalCooldown, setUseGlobalCooldown] = useState(true);
   const [commandEnabled, setCommandEnabled] = useState(EMPTY_FORM.commandEnabled);
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [scheduleIntervalMinutes, setScheduleIntervalMinutes] = useState(15);
@@ -61,11 +70,23 @@ export function TextCommandsPage() {
   const [statusById, setStatusById] = useState<Record<string, ScheduledStatusItem>>({});
   const [availableTargets, setAvailableTargets] = useState<ScheduledAvailableTargets>({ supported: ['twitch', 'youtube'], connected: [] });
 
+  // Global text settings
+  const [textSettings, setTextSettings] = useState<TextSettings>(DEFAULT_TEXT_SETTINGS);
+  const [draftSettings, setDraftSettings] = useState<TextSettings>(DEFAULT_TEXT_SETTINGS);
+  const [settingsBusy, setSettingsBusy] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [settingsSaved, setSettingsSaved] = useState(false);
+
   useEffect(() => {
     const load = async () => {
       try {
-        const commands = await window.copilot.listTextCommands();
+        const [commands, settings] = await Promise.all([
+          window.copilot.listTextCommands(),
+          window.copilot.getTextSettings(),
+        ]);
         setRows(commands);
+        setTextSettings(settings);
+        setDraftSettings(settings);
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : 'Failed to load text commands');
       }
@@ -109,6 +130,27 @@ export function TextCommandsPage() {
     void loadOccupiedTriggers();
   }, [draftId, isModalOpen, rows]);
 
+  const saveSettings = async () => {
+    setSettingsBusy(true);
+    setSettingsError(null);
+    setSettingsSaved(false);
+    try {
+      const saved = await window.copilot.saveTextSettings(draftSettings);
+      setTextSettings(saved);
+      setDraftSettings(saved);
+      setSettingsSaved(true);
+      setTimeout(() => setSettingsSaved(false), 2000);
+    } catch (cause) {
+      setSettingsError(cause instanceof Error ? cause.message : 'Failed to save settings');
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
+
+  const settingsDirty =
+    draftSettings.defaultCooldownSeconds !== textSettings.defaultCooldownSeconds ||
+    draftSettings.defaultUserCooldownSeconds !== textSettings.defaultUserCooldownSeconds;
+
   const validateTrigger = (value: string): string | null => {
     if (!commandEnabled) return null;
     const normalized = value.trim();
@@ -123,7 +165,9 @@ export function TextCommandsPage() {
     setTrigger(EMPTY_FORM.trigger);
     setResponse(EMPTY_FORM.response);
     setLevels(EMPTY_FORM.permissions);
-    setCooldownSeconds(EMPTY_FORM.cooldownSeconds);
+    setCooldownSeconds(textSettings.defaultCooldownSeconds);
+    setUserCooldownSeconds(textSettings.defaultUserCooldownSeconds);
+    setUseGlobalCooldown(true);
     setCommandEnabled(EMPTY_FORM.commandEnabled);
     setScheduleEnabled(false);
     setScheduleIntervalMinutes(15);
@@ -141,11 +185,14 @@ export function TextCommandsPage() {
   };
 
   const openEdit = (command: TextCommand) => {
+    const isGlobal = command.cooldownSeconds === null && command.userCooldownSeconds === null;
     setDraftId(command.id);
     setTrigger(command.trigger ?? '!');
     setResponse(command.response);
     setLevels(command.permissions);
-    setCooldownSeconds(command.cooldownSeconds);
+    setUseGlobalCooldown(isGlobal);
+    setCooldownSeconds(command.cooldownSeconds ?? textSettings.defaultCooldownSeconds);
+    setUserCooldownSeconds(command.userCooldownSeconds ?? textSettings.defaultUserCooldownSeconds);
     setCommandEnabled(command.commandEnabled);
     setScheduleEnabled(Boolean(command.schedule?.enabled));
     setScheduleIntervalMinutes(Math.round((command.schedule?.intervalSeconds ?? 900) / 60));
@@ -190,7 +237,8 @@ export function TextCommandsPage() {
         trigger: commandEnabled ? trigger?.trim() ?? null : null,
         response: response.trim(),
         permissions: levels,
-        cooldownSeconds,
+        cooldownSeconds: useGlobalCooldown ? null : cooldownSeconds,
+        userCooldownSeconds: useGlobalCooldown ? null : userCooldownSeconds,
         commandEnabled,
         schedule: scheduleEnabled
           ? {
@@ -260,6 +308,48 @@ export function TextCommandsPage() {
 
         {error ? <p className="mb-4 text-sm text-red-400">{error}</p> : null}
 
+        {/* Global cooldown settings */}
+        <div className="bg-gray-800/40 rounded-xl border border-gray-700 p-4 mb-4">
+          <h3 className="text-sm font-semibold text-gray-300 mb-3">Default Cooldown Settings</h3>
+          <div className="grid grid-cols-2 gap-3 max-w-sm">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Global Cooldown (s)</label>
+              <input
+                type="number"
+                min="0"
+                value={draftSettings.defaultCooldownSeconds}
+                onChange={(e) => setDraftSettings({ ...draftSettings, defaultCooldownSeconds: Number(e.target.value) })}
+                className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-1.5 focus:outline-none focus:border-violet-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Per-user Cooldown (s)</label>
+              <input
+                type="number"
+                min="0"
+                value={draftSettings.defaultUserCooldownSeconds}
+                onChange={(e) => setDraftSettings({ ...draftSettings, defaultUserCooldownSeconds: Number(e.target.value) })}
+                className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-1.5 focus:outline-none focus:border-violet-500"
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-3 mt-3">
+            <button
+              type="button"
+              disabled={!settingsDirty || settingsBusy}
+              onClick={() => void saveSettings()}
+              className="px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-xs font-medium transition-colors disabled:opacity-50"
+            >
+              Save
+            </button>
+            {settingsSaved ? <span className="text-xs text-green-400">Saved</span> : null}
+            {settingsError ? <span className="text-xs text-red-300">{settingsError}</span> : null}
+          </div>
+          <p className="text-xs text-gray-500 mt-2">
+            These defaults apply to all text commands that use the global cooldown setting.
+          </p>
+        </div>
+
         <div className="bg-gray-800/40 rounded-xl border border-gray-700 overflow-hidden">
           <table className="w-full text-sm">
             <thead>
@@ -267,7 +357,7 @@ export function TextCommandsPage() {
                 <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Modes</th>
                 <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Response</th>
                 <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Permissions</th>
-                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Schedule</th>
+                <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Cooldown</th>
                 <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Active</th>
                 <th className="text-left px-4 py-3 text-xs text-gray-400 font-semibold uppercase tracking-wider">Actions</th>
               </tr>
@@ -295,8 +385,10 @@ export function TextCommandsPage() {
                   <td className="px-4 py-3 text-gray-400 text-sm">
                     {row.schedule?.enabled ? (
                       <span>{Math.round(row.schedule.intervalSeconds / 60)} min · next {formatTime(statusById[`text:${row.id}`]?.nextFireAt ?? null)}</span>
+                    ) : row.cooldownSeconds === null && row.userCooldownSeconds === null ? (
+                      <span className="text-gray-500">Global default</span>
                     ) : (
-                      <span>{row.cooldownSeconds}s cooldown</span>
+                      <span>{row.cooldownSeconds ?? 0}s / {row.userCooldownSeconds ?? 0}s per user</span>
                     )}
                   </td>
                   <td className="px-4 py-3">
@@ -409,16 +501,49 @@ export function TextCommandsPage() {
               </div>
 
               <div>
-                <label className="block text-sm text-gray-400 mb-1.5">Cooldown (seconds)</label>
-                <input
-                  type="number"
-                  min={0}
-                  max={3600}
-                  value={cooldownSeconds}
-                  disabled={!commandEnabled}
-                  onChange={(event) => setCooldownSeconds(Number(event.target.value))}
-                  className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 disabled:opacity-50"
-                />
+                <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer mb-2">
+                  <input
+                    type="checkbox"
+                    checked={useGlobalCooldown}
+                    disabled={!commandEnabled}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      setUseGlobalCooldown(checked);
+                      if (checked) {
+                        setCooldownSeconds(textSettings.defaultCooldownSeconds);
+                        setUserCooldownSeconds(textSettings.defaultUserCooldownSeconds);
+                      }
+                    }}
+                    className="accent-violet-500"
+                  />
+                  Use global cooldown defaults
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1.5">Global Cooldown (s)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="3600"
+                      value={useGlobalCooldown ? textSettings.defaultCooldownSeconds : cooldownSeconds}
+                      disabled={!commandEnabled || useGlobalCooldown}
+                      onChange={(event) => setCooldownSeconds(Number(event.target.value))}
+                      className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1.5">Per-user Cooldown (s)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="3600"
+                      value={useGlobalCooldown ? textSettings.defaultUserCooldownSeconds : userCooldownSeconds}
+                      disabled={!commandEnabled || useGlobalCooldown}
+                      onChange={(event) => setUserCooldownSeconds(Number(event.target.value))}
+                      className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="rounded-lg border border-gray-700 bg-gray-800/40 p-3 space-y-3">

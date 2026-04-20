@@ -313,4 +313,47 @@ export const MIGRATIONS: SqlMigration[] = [
       ALTER TABLE sound_commands_new RENAME TO sound_commands;
     `,
   },
+  {
+    version: 15,
+    name: 'text_commands_cooldown_overhaul',
+    sql: `
+      CREATE TABLE IF NOT EXISTS text_commands_new (
+        id TEXT PRIMARY KEY,
+        trigger TEXT NOT NULL DEFAULT '',
+        response TEXT NOT NULL,
+        permissions_json TEXT NOT NULL,
+        cooldown_seconds INTEGER,
+        user_cooldown_seconds INTEGER,
+        command_enabled INTEGER NOT NULL DEFAULT 1,
+        schedule_enabled INTEGER NOT NULL DEFAULT 0,
+        schedule_interval_seconds INTEGER,
+        schedule_random_window_seconds INTEGER NOT NULL DEFAULT 0,
+        schedule_target_platforms_json TEXT NOT NULL DEFAULT '["twitch","youtube"]',
+        schedule_last_sent_at TEXT,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      INSERT INTO text_commands_new (
+        id, trigger, response, permissions_json,
+        cooldown_seconds, user_cooldown_seconds,
+        command_enabled, schedule_enabled,
+        schedule_interval_seconds, schedule_random_window_seconds,
+        schedule_target_platforms_json, schedule_last_sent_at,
+        enabled, created_at, updated_at
+      )
+      SELECT
+        id, trigger, response, permissions_json,
+        cooldown_seconds, NULL,
+        command_enabled, schedule_enabled,
+        schedule_interval_seconds, schedule_random_window_seconds,
+        schedule_target_platforms_json, schedule_last_sent_at,
+        enabled, created_at, updated_at
+      FROM text_commands;
+
+      DROP TABLE text_commands;
+      ALTER TABLE text_commands_new RENAME TO text_commands;
+    `,
+  },
 ];

@@ -32,6 +32,7 @@ import type {
   SoundCommandUpsertInput,
   SoundPlayPayload,
   SoundSettings,
+  TextSettings,
   SuggestionEntry,
   SuggestionList,
   SuggestionListDeleteInput,
@@ -94,6 +95,8 @@ export const IPC_CHANNELS = {
   textList: 'text:list',
   textUpsert: 'text:upsert',
   textDelete: 'text:delete',
+  textGetSettings: 'text:get-settings',
+  textSaveSettings: 'text:save-settings',
   voiceList: 'voice:list',
   voiceUpsert: 'voice:upsert',
   voiceDelete: 'voice:delete',
@@ -207,6 +210,8 @@ export interface CopilotApi {
   listTextCommands: () => Promise<TextCommand[]>;
   upsertTextCommand: (input: TextCommandUpsertInput) => Promise<TextCommand[]>;
   deleteTextCommand: (input: TextCommandDeleteInput) => Promise<TextCommand[]>;
+  getTextSettings: () => Promise<TextSettings>;
+  saveTextSettings: (input: TextSettings) => Promise<TextSettings>;
   listVoiceCommands: () => Promise<VoiceCommand[]>;
   upsertVoiceCommand: (input: VoiceCommandUpsertInput) => Promise<VoiceCommand[]>;
   deleteVoiceCommand: (input: VoiceCommandDeleteInput) => Promise<VoiceCommand[]>;

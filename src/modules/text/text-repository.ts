@@ -9,7 +9,8 @@ interface TextCommandRow {
   trigger: string;
   response: string;
   permissions_json: string;
-  cooldown_seconds: number;
+  cooldown_seconds: number | null;
+  user_cooldown_seconds: number | null;
   command_enabled: number;
   schedule_enabled: number;
   schedule_interval_seconds: number | null;
@@ -26,7 +27,7 @@ export class TextCommandRepository {
     const rows = this.db
       .prepare(
         `
-          SELECT id, trigger, response, permissions_json, cooldown_seconds, enabled
+          SELECT id, trigger, response, permissions_json, cooldown_seconds, user_cooldown_seconds, enabled
                , command_enabled, schedule_enabled, schedule_interval_seconds
                , schedule_random_window_seconds, schedule_target_platforms_json, schedule_last_sent_at
           FROM text_commands
@@ -41,6 +42,7 @@ export class TextCommandRepository {
       response: row.response,
       permissions: JSON.parse(row.permissions_json) as PermissionLevel[],
       cooldownSeconds: row.cooldown_seconds,
+      userCooldownSeconds: row.user_cooldown_seconds,
       commandEnabled: row.command_enabled === 1,
       schedule: row.schedule_enabled === 1 && row.schedule_interval_seconds !== null
         ? {
@@ -66,6 +68,7 @@ export class TextCommandRepository {
             response,
             permissions_json,
             cooldown_seconds,
+            user_cooldown_seconds,
             command_enabled,
             schedule_enabled,
             schedule_interval_seconds,
@@ -73,12 +76,13 @@ export class TextCommandRepository {
             schedule_target_platforms_json,
             enabled,
             updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
           ON CONFLICT(id) DO UPDATE SET
             trigger = excluded.trigger,
             response = excluded.response,
             permissions_json = excluded.permissions_json,
             cooldown_seconds = excluded.cooldown_seconds,
+            user_cooldown_seconds = excluded.user_cooldown_seconds,
             command_enabled = excluded.command_enabled,
             schedule_enabled = excluded.schedule_enabled,
             schedule_interval_seconds = excluded.schedule_interval_seconds,
@@ -94,6 +98,7 @@ export class TextCommandRepository {
         input.response,
         JSON.stringify(input.permissions),
         input.cooldownSeconds,
+        input.userCooldownSeconds,
         input.commandEnabled ? 1 : 0,
         input.schedule?.enabled ? 1 : 0,
         input.schedule?.enabled ? input.schedule.intervalSeconds : null,

@@ -3,12 +3,14 @@ import type {
   PermissionLevel,
   TextCommand,
   TextCommandResponsePayload,
+  TextSettings,
 } from '../../shared/types.js';
 import type { CommandModule } from '../commands/command-dispatcher.js';
 import { TextCommandRepository } from './text-repository.js';
 
 interface TextServiceOptions {
   repository: TextCommandRepository;
+  getSettings: () => TextSettings;
   onRespond: (payload: TextCommandResponsePayload) => void | Promise<void>;
   now?: () => number;
 }
@@ -85,12 +87,20 @@ export class TextService implements CommandModule {
   }
 
   private canRun(command: TextCommand, userId: string, now: number): boolean {
-    const lastCommandRunAt = this.commandCooldowns.get(command.id);
-    if (lastCommandRunAt && now - lastCommandRunAt < command.cooldownSeconds * 1000) return false;
+    const settings = this.options.getSettings();
+    const globalCd = command.cooldownSeconds ?? settings.defaultCooldownSeconds;
+    const userCd = command.userCooldownSeconds ?? settings.defaultUserCooldownSeconds;
 
-    const userKey = this.buildUserKey(command.id, userId);
-    const lastUserRunAt = this.userCooldowns.get(userKey);
-    if (lastUserRunAt && now - lastUserRunAt < command.cooldownSeconds * 1000) return false;
+    if (globalCd > 0) {
+      const lastCommandRunAt = this.commandCooldowns.get(command.id);
+      if (lastCommandRunAt && now - lastCommandRunAt < globalCd * 1000) return false;
+    }
+
+    if (userCd > 0) {
+      const userKey = this.buildUserKey(command.id, userId);
+      const lastUserRunAt = this.userCooldowns.get(userKey);
+      if (lastUserRunAt && now - lastUserRunAt < userCd * 1000) return false;
+    }
 
     return true;
   }

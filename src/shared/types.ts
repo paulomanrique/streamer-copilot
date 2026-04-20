@@ -222,12 +222,18 @@ export interface VoiceSpeakPayload {
   lang: string;
 }
 
+export interface TextSettings {
+  defaultCooldownSeconds: number;
+  defaultUserCooldownSeconds: number;
+}
+
 export interface TextCommand {
   id: string;
   trigger: string | null;
   response: string;
   permissions: PermissionLevel[];
-  cooldownSeconds: number;
+  cooldownSeconds: number | null;
+  userCooldownSeconds: number | null;
   commandEnabled: boolean;
   schedule: CommandSchedule | null;
   enabled: boolean;
@@ -238,7 +244,8 @@ export interface TextCommandUpsertInput {
   trigger: string | null;
   response: string;
   permissions: PermissionLevel[];
-  cooldownSeconds: number;
+  cooldownSeconds: number | null;
+  userCooldownSeconds: number | null;
   commandEnabled: boolean;
   schedule: CommandScheduleUpsertInput | null;
   enabled: boolean;

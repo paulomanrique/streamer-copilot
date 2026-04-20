@@ -105,12 +105,18 @@ export const voiceSpeakPayloadSchema = z.object({
   lang: z.string().min(2).max(200),
 });
 
+export const textSettingsSchema = z.object({
+  defaultCooldownSeconds: z.number().int().min(0).max(3600),
+  defaultUserCooldownSeconds: z.number().int().min(0).max(3600),
+});
+
 export const textCommandUpsertInputSchema = z.object({
   id: z.string().min(1).optional(),
   trigger: z.string().max(80).nullable(),
   response: z.string().min(1).max(500),
   permissions: z.array(permissionLevelSchema).min(1),
-  cooldownSeconds: z.number().int().min(0).max(3600),
+  cooldownSeconds: z.number().int().min(0).max(3600).nullable(),
+  userCooldownSeconds: z.number().int().min(0).max(3600).nullable(),
   commandEnabled: z.boolean(),
   schedule: z.object({
     intervalSeconds: z.number().int().min(5),
