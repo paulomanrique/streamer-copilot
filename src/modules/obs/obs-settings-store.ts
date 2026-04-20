@@ -20,6 +20,11 @@ const DEFAULT_SETTINGS: ObsConnectionSettings = {
 export class ObsSettingsStore {
   constructor(private readonly repository: AppSettingsRepository) {}
 
+  /** Returns true when the user has explicitly saved OBS settings at least once. */
+  hasUserSettings(): boolean {
+    return this.repository.get(OBS_SETTINGS_KEY) !== null;
+  }
+
   get(): ObsConnectionSettings {
     const raw = this.repository.get(OBS_SETTINGS_KEY);
     if (!raw) return DEFAULT_SETTINGS;

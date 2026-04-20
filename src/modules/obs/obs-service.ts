@@ -23,6 +23,7 @@ export class ObsService {
   private started = false;
   private connected = false;
   private consecutivePollFailures = 0;
+  private consecutiveConnectFailures = 0;
   private lastStats: ObsStatsSnapshot | null = null;
 
   constructor(private readonly options: ObsServiceOptions) {
@@ -35,12 +36,19 @@ export class ObsService {
   start(): void {
     if (this.started) return;
     this.started = true;
+
+    if (!this.options.settingsStore.hasUserSettings()) {
+      console.log('[obs] No saved settings — skipping auto-connect (configure via Settings)');
+      return;
+    }
+
     this.currentSettings = this.options.settingsStore.get();
     void this.connectCurrentSettings();
   }
 
   async stop(): Promise<void> {
     this.started = false;
+    this.consecutiveConnectFailures = 0;
     this.clearReconnectTimer();
     this.stopPolling();
     if (!this.connected) return;
@@ -97,11 +105,19 @@ export class ObsService {
       this.connected = true;
       this.consecutivePollFailures = 0;
       this.reconnectDelayMs = 1_000;
+      if (this.consecutiveConnectFailures > 0) {
+        console.log(`[obs] Reconnected successfully after ${this.consecutiveConnectFailures} failed attempt(s)`);
+      }
+      this.consecutiveConnectFailures = 0;
       this.options.onConnected();
       await this.emitStats();
       this.startPolling();
     } catch (err) {
-      console.warn('[obs] Failed to connect:', err instanceof Error ? err.message : String(err));
+      this.consecutiveConnectFailures += 1;
+      if (this.consecutiveConnectFailures === 1) {
+        console.warn('[obs] Failed to connect:', err instanceof Error ? err.message : String(err));
+        console.warn('[obs] Will keep retrying silently in the background…');
+      }
       this.handleDisconnected();
       this.scheduleReconnect();
     }
