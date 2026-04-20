@@ -90,7 +90,7 @@ import {
   youtubeConnectSchema,
   youtubeSettingsSchema,
 } from '../shared/schemas.js';
-import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, PlatformId, Raffle, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
+import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, PlatformId, Raffle, SoundSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
 
 const TWITCH_CLIENT_ID = 'vtwg8tzuv1nlip4qh9n6sxx2p76g0s';
 const TWITCH_REDIRECT_PORT = 32999;
@@ -156,10 +156,28 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const chatLogService = new ChatLogService(chatLogRepository);
   const raffleRepository = new RaffleRepository(options.databaseHandle.db);
   const soundRepository = new SoundCommandRepository(options.databaseHandle.db);
-  const soundSettingsStore = new SoundSettingsStore(appSettingsRepository);
   const textRepository = new TextCommandRepository(options.databaseHandle.db);
   const voiceRepository = new VoiceCommandRepository(options.databaseHandle.db);
   const suggestionRepository = new SuggestionRepository(options.databaseHandle.db);
+
+  // Sound settings: file-based, per-profile. Cached in memory for synchronous access in canRun().
+  let soundSettingsCache: SoundSettings = { defaultCooldownSeconds: 0, defaultUserCooldownSeconds: 0 };
+
+  const getSoundSettingsStore = async (): Promise<SoundSettingsStore | null> => {
+    const snapshot = await profileStore.list();
+    const active = snapshot.profiles.find((p) => p.id === snapshot.activeProfileId);
+    if (!active) return null;
+    return new SoundSettingsStore(active.directory);
+  };
+
+  const reloadSoundSettingsCache = async (): Promise<void> => {
+    const store = await getSoundSettingsStore();
+    if (store) soundSettingsCache = await store.load();
+  };
+
+  // Load cache on startup (non-blocking, best-effort).
+  void reloadSoundSettingsCache();
+
   const schedulerService = new SchedulerService({
     source: {
       list: () => listCommandScheduleTasks(),
@@ -171,7 +189,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
   const soundService = new SoundService({
     repository: soundRepository,
-    getSettings: () => soundSettingsStore.load(),
+    getSettings: () => soundSettingsCache,
     onPlay: (payload) => options.stateHub.pushSoundPlay(payload),
   });
   const textService = new TextService({
@@ -1091,6 +1109,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const snapshot = await profileStore.select(selectProfileInputSchema.parse(raw).profileId);
     chatService.clearRecent();
     suggestionService.clearSessionEntries();
+    await reloadSoundSettingsCache();
     return snapshot;
   });
   ipcMain.handle(IPC_CHANNELS.profilesCreate, async (_, raw) => { const i = createProfileInputSchema.parse(raw); return profileStore.create(i.name, i.directory, i.appLanguage); });
@@ -1192,8 +1211,17 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
   ipcMain.handle(IPC_CHANNELS.soundsReadFile, async (_, p) => (await fs.readFile(String(p))).toString('base64'));
   ipcMain.handle(IPC_CHANNELS.soundsPreviewPlay, async (_, raw) => soundService.previewPlay(soundPlayPayloadSchema.parse(raw)));
-  ipcMain.handle(IPC_CHANNELS.soundsGetSettings, async () => soundSettingsStore.load());
-  ipcMain.handle(IPC_CHANNELS.soundsSaveSettings, async (_, raw) => soundSettingsStore.save(soundSettingsSchema.parse(raw)));
+  ipcMain.handle(IPC_CHANNELS.soundsGetSettings, async () => {
+    const store = await getSoundSettingsStore();
+    return store ? store.load() : soundSettingsCache;
+  });
+  ipcMain.handle(IPC_CHANNELS.soundsSaveSettings, async (_, raw) => {
+    const store = await getSoundSettingsStore();
+    if (!store) throw new Error('No active profile');
+    const saved = await store.save(soundSettingsSchema.parse(raw));
+    soundSettingsCache = saved;
+    return saved;
+  });
 
   ipcMain.handle(IPC_CHANNELS.obsGetSettings, async () => obsService.getSettings());
   ipcMain.handle(IPC_CHANNELS.obsSaveSettings, async (_, raw) => obsService.saveSettings(obsConnectionSettingsSchema.parse(raw)));

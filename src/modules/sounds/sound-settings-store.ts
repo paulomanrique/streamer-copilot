@@ -1,7 +1,9 @@
-import type { SoundSettings } from '../../shared/types.js';
-import { AppSettingsRepository } from '../settings/app-settings-repository.js';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 
-const SOUND_SETTINGS_KEY = 'sounds:settings';
+import type { SoundSettings } from '../../shared/types.js';
+
+const SETTINGS_FILE = 'sound-settings.json';
 
 const DEFAULT_SETTINGS: SoundSettings = {
   defaultCooldownSeconds: 0,
@@ -9,14 +11,16 @@ const DEFAULT_SETTINGS: SoundSettings = {
 };
 
 export class SoundSettingsStore {
-  constructor(private readonly repository: AppSettingsRepository) {}
+  private readonly filePath: string;
 
-  load(): SoundSettings {
-    const raw = this.repository.get(SOUND_SETTINGS_KEY);
-    if (!raw) return { ...DEFAULT_SETTINGS };
+  constructor(profileDirectory: string) {
+    this.filePath = path.join(profileDirectory, SETTINGS_FILE);
+  }
 
+  async load(): Promise<SoundSettings> {
     try {
-      const parsed = JSON.parse(raw) as Partial<SoundSettings>;
+      const data = await fs.readFile(this.filePath, 'utf-8');
+      const parsed = JSON.parse(data) as Partial<SoundSettings>;
       return {
         defaultCooldownSeconds:
           typeof parsed.defaultCooldownSeconds === 'number'
@@ -32,12 +36,13 @@ export class SoundSettingsStore {
     }
   }
 
-  save(input: SoundSettings): SoundSettings {
+  async save(input: SoundSettings): Promise<SoundSettings> {
     const next: SoundSettings = {
       defaultCooldownSeconds: input.defaultCooldownSeconds,
       defaultUserCooldownSeconds: input.defaultUserCooldownSeconds,
     };
-    this.repository.set(SOUND_SETTINGS_KEY, JSON.stringify(next));
+    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
+    await fs.writeFile(this.filePath, JSON.stringify(next, null, 2), 'utf-8');
     return next;
   }
 }
