@@ -6,7 +6,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
-import { BrowserWindow, dialog, ipcMain, net, shell } from 'electron';
+import { BrowserWindow, Notification, dialog, ipcMain, net, shell } from 'electron';
 import { parseFile as parseAudioFile } from 'music-metadata';
 import type { OpenDialogOptions } from 'electron';
 
@@ -92,7 +92,7 @@ import {
   youtubeConnectSchema,
   youtubeSettingsSchema,
 } from '../shared/schemas.js';
-import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, PlatformId, Raffle, SoundSettings, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
+import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, PlatformId, Raffle, SoundSettings, StreamEvent, StreamEventType, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
 
 const TWITCH_CLIENT_ID = 'vtwg8tzuv1nlip4qh9n6sxx2p76g0s';
 const TWITCH_REDIRECT_PORT = 32999;
@@ -154,6 +154,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const obsSettingsStore = new ObsSettingsStore(appSettingsRepository);
   const logRepository = new LogRepository(options.databaseHandle.db);
   const logService = new LogService(logRepository);
+  logService.setMinLevel(generalSettingsStore.load().diagnosticLogLevel);
   const chatLogRepository = new ChatLogRepository(options.databaseHandle.db);
   const chatLogService = new ChatLogService(chatLogRepository);
   const raffleRepository = new RaffleRepository(options.databaseHandle.db);
@@ -1090,13 +1091,46 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     onTick: () => raffleService.syncDeadlines(),
   });
 
+  const EVENT_TYPE_LABEL: Record<StreamEventType, string> = {
+    subscription: 'New Subscription',
+    superchat: 'Super Chat',
+    raid: 'Raid',
+    cheer: 'Cheer',
+    follow: 'New Follower',
+    gift: 'Gift Subscription',
+  };
+
+  function showEventNotification(event: StreamEvent): void {
+    if (!Notification.isSupported()) return;
+
+    const title = `${EVENT_TYPE_LABEL[event.type]} — ${event.platform}`;
+    const bodyParts: string[] = [event.author];
+    if (event.amount !== undefined) bodyParts.push(`Amount: ${event.amount}`);
+    if (event.message) bodyParts.push(event.message);
+
+    const notification = new Notification({ title, body: bodyParts.join(' · ') });
+    notification.on('click', () => {
+      const win = BrowserWindow.getAllWindows()[0];
+      if (win) {
+        if (!win.isVisible()) win.show();
+        win.focus();
+      }
+    });
+    notification.show();
+  }
+
   const chatService = new ChatService({
     raffleService, soundService, textService, voiceService, suggestionService,
     onMessage: (message) => {
       options.stateHub.pushChatMessage(message);
       chatLogService.recordMessage(message);
     },
-    onEvent: (event) => options.stateHub.pushChatEvent(event),
+    onEvent: (event) => {
+      options.stateHub.pushChatEvent(event);
+      if (options.generalSettingsStore.load().eventNotifications) {
+        showEventNotification(event);
+      }
+    },
   });
 
   const obsService = new ObsService({
@@ -1147,6 +1181,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.generalSaveSettings, async (_, raw) => {
     const s = generalSettingsSchema.parse(raw);
     const saved = generalSettingsStore.save(s);
+    logService.setMinLevel(saved.diagnosticLogLevel);
     await options.onGeneralSettingsChanged(saved);
     return saved;
   });

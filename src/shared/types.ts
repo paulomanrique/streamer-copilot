@@ -11,6 +11,7 @@ export interface GeneralSettings {
   minimizeToTray: boolean;
   eventNotifications: boolean;
   recommendationTemplate: string;
+  diagnosticLogLevel: EventLogLevel;
 }
 
 export type AppLanguage = 'pt-BR' | 'en-US';

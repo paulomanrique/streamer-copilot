@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { APP_LANGUAGE_OPTIONS } from '../../shared/constants.js';
-import type { AppLanguage, GeneralSettings, ProfileSettings } from '../../shared/types.js';
+import type { AppLanguage, EventLogLevel, GeneralSettings, ProfileSettings } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
 
 interface GeneralSettingsPageProps {
@@ -9,9 +9,10 @@ interface GeneralSettingsPageProps {
   onSave: (settings: GeneralSettings) => Promise<void>;
   appLanguage: AppLanguage;
   onSaveProfileSettings: (settings: ProfileSettings) => Promise<ProfileSettings>;
+  onNavigateToEventLog: () => void;
 }
 
-export function GeneralSettingsPage({ settings, onSave, appLanguage, onSaveProfileSettings }: GeneralSettingsPageProps) {
+export function GeneralSettingsPage({ settings, onSave, appLanguage, onSaveProfileSettings, onNavigateToEventLog }: GeneralSettingsPageProps) {
   const { messages } = useI18n();
   const [draft, setDraft] = useState<GeneralSettings>(settings);
   const [draftLanguage, setDraftLanguage] = useState<AppLanguage>(appLanguage);
@@ -70,13 +71,6 @@ export function GeneralSettingsPage({ settings, onSave, appLanguage, onSaveProfi
 
         <div className="bg-gray-800/40 rounded-xl border border-gray-700 p-5 space-y-4">
           <ToggleRow
-            title={messages.settings.startOnLogin}
-            description={messages.settings.startOnLoginDescription}
-            checked={draft.startOnLogin}
-            onChange={(checked) => updateDraft({ startOnLogin: checked })}
-          />
-          <ToggleRow
-            bordered
             title={messages.settings.minimizeToTray}
             description={messages.settings.minimizeToTrayDescription}
             checked={draft.minimizeToTray}
@@ -103,14 +97,23 @@ export function GeneralSettingsPage({ settings, onSave, appLanguage, onSaveProfi
         </div>
 
         <div className="bg-gray-800/40 rounded-xl border border-gray-700 p-5">
-          <h3 className="text-sm font-medium mb-3">{messages.settings.diagnosticLog}</h3>
+          <h3 className="text-sm font-medium mb-1">{messages.settings.diagnosticLog}</h3>
+          <p className="text-xs text-gray-500 mb-3">{messages.settings.diagnosticLogLevelDescription}</p>
           <div className="flex gap-2">
-            <select defaultValue="Info" className="flex-1 bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500">
-              <option>Info</option>
-              <option>Debug</option>
-              <option>Warn</option>
+            <select
+              value={draft.diagnosticLogLevel}
+              onChange={(event) => updateDraft({ diagnosticLogLevel: event.target.value as EventLogLevel })}
+              className="flex-1 bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
+            >
+              <option value="info">Info</option>
+              <option value="warn">Warn</option>
+              <option value="error">Error</option>
             </select>
-            <button type="button" className="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">
+            <button
+              type="button"
+              onClick={onNavigateToEventLog}
+              className="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors"
+            >
               {messages.settings.openLogsFolder}
             </button>
           </div>

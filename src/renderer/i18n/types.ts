@@ -76,7 +76,9 @@ export interface TranslationMessages {
     recommendationTemplateTitle: string;
     recommendationTemplateDescription: string;
     diagnosticLog: string;
+    diagnosticLogLevelDescription: string;
     openLogsFolder: string;
+    eventLog: string;
     saveSettings: string;
     settingsSaved: string;
   };

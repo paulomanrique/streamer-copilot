@@ -2,17 +2,20 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import type { GeneralSettings } from '../../shared/types.js';
+import type { EventLogLevel, GeneralSettings } from '../../shared/types.js';
 import { AppSettingsRepository } from './app-settings-repository.js';
 
 const GENERAL_SETTINGS_KEY = 'general:settings';
 const DEFAULT_RECOMMENDATION_TEMPLATE = 'Pessoal, visitem o {username}';
+
+const VALID_LOG_LEVELS: EventLogLevel[] = ['info', 'warn', 'error'];
 
 const DEFAULT_SETTINGS: GeneralSettings = {
   startOnLogin: false,
   minimizeToTray: true,
   eventNotifications: true,
   recommendationTemplate: DEFAULT_RECOMMENDATION_TEMPLATE,
+  diagnosticLogLevel: 'info',
 };
 
 export class GeneralSettingsStore {
@@ -29,6 +32,9 @@ export class GeneralSettingsStore {
         minimizeToTray: parsed.minimizeToTray ?? DEFAULT_SETTINGS.minimizeToTray,
         eventNotifications: parsed.eventNotifications ?? DEFAULT_SETTINGS.eventNotifications,
         recommendationTemplate: normalizeRecommendationTemplate(parsed.recommendationTemplate),
+        diagnosticLogLevel: VALID_LOG_LEVELS.includes(parsed.diagnosticLogLevel as EventLogLevel)
+          ? (parsed.diagnosticLogLevel as EventLogLevel)
+          : DEFAULT_SETTINGS.diagnosticLogLevel,
       };
     } catch {
       return { ...DEFAULT_SETTINGS };
@@ -41,6 +47,7 @@ export class GeneralSettingsStore {
       minimizeToTray: Boolean(input.minimizeToTray),
       eventNotifications: Boolean(input.eventNotifications),
       recommendationTemplate: normalizeRecommendationTemplate(input.recommendationTemplate),
+      diagnosticLogLevel: VALID_LOG_LEVELS.includes(input.diagnosticLogLevel) ? input.diagnosticLogLevel : 'info',
     };
     this.repository.set(GENERAL_SETTINGS_KEY, JSON.stringify(nextSettings));
     return nextSettings;

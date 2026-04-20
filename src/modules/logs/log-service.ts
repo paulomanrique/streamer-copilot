@@ -1,8 +1,20 @@
 import type { EventLogEntry, EventLogFilters, EventLogLevel } from '../../shared/types.js';
 import { LogRepository } from './log-repository.js';
 
+const LOG_LEVEL_PRIORITY: Record<EventLogLevel, number> = {
+  info: 0,
+  warn: 1,
+  error: 2,
+};
+
 export class LogService {
+  private minLevel: EventLogLevel = 'info';
+
   constructor(private readonly repository: LogRepository) {}
+
+  setMinLevel(level: EventLogLevel): void {
+    this.minLevel = level;
+  }
 
   list(filters?: EventLogFilters): EventLogEntry[] {
     return this.repository.list(filters);
@@ -21,6 +33,8 @@ export class LogService {
   }
 
   log(level: EventLogLevel, category: string, message: string, metadata?: unknown): void {
+    if (LOG_LEVEL_PRIORITY[level] < LOG_LEVEL_PRIORITY[this.minLevel]) return;
+
     try {
       this.repository.insert(level, category, message, metadata);
     } catch (cause) {

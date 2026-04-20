@@ -42,6 +42,7 @@ export const generalSettingsSchema = z.object({
   minimizeToTray: z.boolean(),
   eventNotifications: z.boolean(),
   recommendationTemplate: z.string().max(500),
+  diagnosticLogLevel: eventLogLevelSchema.default('info'),
 });
 
 export const scheduledMessageUpsertInputSchema = z.object({
