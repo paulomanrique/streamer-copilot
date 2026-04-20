@@ -80,7 +80,8 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
       this.connected = true;
       this.mockMode = false;
       this.options.onStatusChange?.('connected');
-    } catch {
+    } catch (err) {
+      console.warn('[twitch] Connection failed, entering mock mode:', err instanceof Error ? err.message : String(err));
       this.mockMode = true;
       this.connected = true;
       this.client = null;
@@ -94,8 +95,8 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
     if (this.client) {
       try {
         await this.client.disconnect();
-      } catch {
-        // Ignore disconnect errors in fallback mode.
+      } catch (err) {
+        console.warn('[twitch] Disconnect error:', err instanceof Error ? err.message : String(err));
       }
     }
 
@@ -137,7 +138,8 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
           reconnect: this.options.reconnect,
         },
       }) as TmiLikeClient;
-    } catch {
+    } catch (err) {
+      console.warn('[twitch] Failed to create tmi.js client:', err instanceof Error ? err.message : String(err));
       return null;
     }
   }

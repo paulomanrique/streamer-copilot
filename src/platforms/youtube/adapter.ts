@@ -123,7 +123,8 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
       this.nextPageToken = null;
       this.currentPollingIntervalMillis = this.options.pollingIntervalMillis ?? DEFAULT_POLLING_INTERVAL_MILLIS;
       void this.pollOnce(config.liveChatId);
-    } catch {
+    } catch (err) {
+      console.warn('[youtube] Connection failed, entering mock mode:', err instanceof Error ? err.message : String(err));
       this.client = null;
       this.mockMode = true;
       this.connected = true;

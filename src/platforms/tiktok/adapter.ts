@@ -63,8 +63,8 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
     if (this.connection) {
       try {
         await this.connection.disconnect();
-      } catch {
-        // Best effort cleanup.
+      } catch (err) {
+        console.warn('[tiktok] Disconnect error:', err instanceof Error ? err.message : String(err));
       }
     }
 
@@ -91,7 +91,8 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
     if (!conn) return false;
     try {
       return await conn.fetchIsLive();
-    } catch {
+    } catch (err) {
+      console.warn('[tiktok] fetchIsLive failed:', err instanceof Error ? err.message : String(err));
       return false;
     }
   }

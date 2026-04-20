@@ -47,7 +47,8 @@ export class ObsService {
 
     try {
       await this.client.disconnect();
-    } catch {
+    } catch (err) {
+      console.warn('[obs] Disconnect error during stop:', err instanceof Error ? err.message : String(err));
       this.handleDisconnected();
     }
   }
@@ -76,7 +77,8 @@ export class ObsService {
     if (this.connected) {
       try {
         await this.client.disconnect();
-      } catch {
+      } catch (err) {
+        console.warn('[obs] Disconnect error during restart:', err instanceof Error ? err.message : String(err));
         this.handleDisconnected();
       }
     }
@@ -98,7 +100,8 @@ export class ObsService {
       this.options.onConnected();
       await this.emitStats();
       this.startPolling();
-    } catch {
+    } catch (err) {
+      console.warn('[obs] Failed to connect:', err instanceof Error ? err.message : String(err));
       this.handleDisconnected();
       this.scheduleReconnect();
     }
@@ -175,7 +178,8 @@ export class ObsService {
       this.options.onStats(snapshot);
       this.lastStats = snapshot;
       this.consecutivePollFailures = 0;
-    } catch {
+    } catch (err) {
+      console.warn('[obs] Stats poll failed:', err instanceof Error ? err.message : String(err));
       this.consecutivePollFailures += 1;
       if (this.consecutivePollFailures < MAX_TRANSIENT_POLL_FAILURES) return;
       this.handleDisconnected();

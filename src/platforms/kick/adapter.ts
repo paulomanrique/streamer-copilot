@@ -173,7 +173,8 @@ export class KickChatAdapter implements PlatformChatAdapter {
       );
 
       return sent === true;
-    } catch {
+    } catch (err) {
+      console.warn('[kick] sendMessage failed:', err instanceof Error ? err.message : String(err));
       return false;
     }
   }
@@ -212,7 +213,8 @@ export class KickChatAdapter implements PlatformChatAdapter {
           sandbox: false,
         },
       });
-    } catch {
+    } catch (err) {
+      console.warn('[kick] Failed to create BrowserWindow:', err instanceof Error ? err.message : String(err));
       return null;
     }
   }

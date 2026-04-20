@@ -769,7 +769,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       const streams = extractYtLiveVideoIds(html);
       const subscriberCount = extractYtSubscriberCount(html);
       return streams.map((stream) => ({ ...stream, subscriberCount, channelHandle: normalizedHandle }));
-    } catch { return []; }
+    } catch (err) {
+      logService.warn('youtube', 'Failed to check YouTube live', { error: err instanceof Error ? err.message : String(err) });
+      return [];
+    }
   };
 
   function extractYtInitialData(html: string): unknown {
@@ -997,7 +1000,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       }
 
       options.stateHub.pushTwitchLiveStats({ viewerCount: stream?.viewer_count ?? 0, followerCount: followersData.total ?? 0, isLive: !!stream, hypeTrain });
-    } catch {}
+    } catch (err) {
+      logService.warn('twitch', 'Failed to poll Twitch stats', { error: err instanceof Error ? err.message : String(err) });
+    }
   };
 
   const startTwitchStatsPoll = (channel: string, accessToken: string) => {
@@ -1024,7 +1029,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
           for (const version of set.versions) badgeCache.set(`${set.set_id}/${version.id}`, version.image_url_2x);
         }
       }
-    } catch {}
+    } catch (err) {
+      logService.warn('twitch', 'Failed to load Twitch badges', { error: err instanceof Error ? err.message : String(err) });
+    }
   };
 
   const resolveBadgeUrls = (rawBadges: string | Record<string, string>): string[] => {
@@ -1386,10 +1393,12 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
           const res = await net.fetch(`https://api.twitch.tv/helix/users?${uncached.map(l => `login=${encodeURIComponent(l)}`).join('&')}`, { headers: { Authorization: `Bearer ${c.oauthToken.replace(/^oauth:/,'')}`, 'Client-Id': TWITCH_CLIENT_ID } });
           const d = await res.json(); (d.data ?? []).forEach((u: any) => userAvatarCache.set(u.login.toLowerCase(), u.profile_image_url));
           uncached.forEach(l => { if (!userAvatarCache.has(l.toLowerCase())) userAvatarCache.set(l.toLowerCase(), ''); });
-        } catch {}
+        } catch (err) {
+          logService.warn('twitch', 'Failed to fetch user avatars', { error: err instanceof Error ? err.message : String(err) });
+        }
       }
     }
-    const res: any = {}; list.forEach(l => { const u = userAvatarCache.get(l.toLowerCase()); if (u) res[l] = u; });
+    const res: Record<string, string> = {}; list.forEach(l => { const u = userAvatarCache.get(l.toLowerCase()); if (u) res[l] = u; });
     return res;
   });
   ipcMain.handle(IPC_CHANNELS.twitchGetBadgeUrls, async (_, ids) => {
@@ -1408,10 +1417,12 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
             const ch = await net.fetch(`https://api.twitch.tv/helix/chat/badges?broadcaster_id=${uid}`, { headers: h });
             const cd = await ch.json(); (cd.data ?? []).forEach((set: any) => set.versions.forEach((v: any) => badgeCache.set(`${set.set_id}/${v.id}`, v.image_url_1x)));
           }
-        } catch {}
+        } catch (err) {
+          logService.warn('twitch', 'Failed to fetch badge URLs', { error: err instanceof Error ? err.message : String(err) });
+        }
       }
     }
-    const res: any = {}; list.forEach(i => { const u = badgeCache.get(i); if (u) res[i] = u; });
+    const res: Record<string, string> = {}; list.forEach(i => { const u = badgeCache.get(i); if (u) res[i] = u; });
     return res;
   });
   ipcMain.handle(IPC_CHANNELS.twitchStartOAuth, async () => {
