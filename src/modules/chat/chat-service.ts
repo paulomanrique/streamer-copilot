@@ -7,6 +7,7 @@ import { SoundService } from '../sounds/sound-service.js';
 import { SuggestionService } from '../suggestions/suggestion-service.js';
 import { TextService } from '../text/text-service.js';
 import { VoiceService } from '../voice/voice-service.js';
+import { MusicRequestService } from '../music/music-request-service.js';
 
 interface ChatServiceOptions {
   raffleService: RaffleService;
@@ -14,6 +15,7 @@ interface ChatServiceOptions {
   suggestionService: SuggestionService;
   textService: TextService;
   voiceService: VoiceService;
+  musicService: MusicRequestService;
   onMessage: (message: ChatMessage) => void;
   onEvent: (event: StreamEvent) => void;
   maxHistory?: number;
@@ -33,6 +35,7 @@ export class ChatService {
     this.dispatcher.register(options.voiceService);
     this.dispatcher.register(options.raffleService);
     this.dispatcher.register(options.suggestionService);
+    this.dispatcher.register(options.musicService);
   }
 
   registerAdapter(adapter: PlatformChatAdapter): void {

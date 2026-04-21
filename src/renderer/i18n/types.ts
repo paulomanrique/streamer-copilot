@@ -80,6 +80,7 @@ export interface TranslationMessages {
     openLogsFolder: string;
     eventLog: string;
     welcomeMessage: string;
+    musicRequest: string;
     saveSettings: string;
     settingsSaved: string;
   };

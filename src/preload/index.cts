@@ -52,6 +52,10 @@ import type {
   TikTokSettings,
   TwitchConnectionStatus,
   TwitchCredentials,
+  MusicRequestSettings,
+  MusicPlayCommand,
+  MusicPlayerEvent,
+  MusicPlayerState,
   VoiceCommandDeleteInput,
   VoiceCommandUpsertInput,
   VoiceSpeakPayload,
@@ -171,6 +175,16 @@ const IPC_CHANNELS = {
   welcomeGetSettings: 'welcome:get-settings',
   welcomeSaveSettings: 'welcome:save-settings',
   welcomePickSoundFile: 'welcome:pick-sound-file',
+  musicGetSettings: 'music:get-settings',
+  musicSaveSettings: 'music:save-settings',
+  musicGetState: 'music:get-state',
+  musicSkip: 'music:skip',
+  musicClearQueue: 'music:clear-queue',
+  musicPlayerEvent: 'music:player-event',
+  musicStateUpdate: 'music:state-update',
+  musicPlay: 'music:play',
+  musicStop: 'music:stop',
+  musicVolume: 'music:volume',
 } as const;
 
 const copilotApi: CopilotApi = {
@@ -351,6 +365,32 @@ const copilotApi: CopilotApi = {
   getWelcomeSettings: () => ipcRenderer.invoke(IPC_CHANNELS.welcomeGetSettings) as Promise<WelcomeSettings>,
   saveWelcomeSettings: (input: WelcomeSettings) => ipcRenderer.invoke(IPC_CHANNELS.welcomeSaveSettings, input) as Promise<WelcomeSettings>,
   pickWelcomeSoundFile: () => ipcRenderer.invoke(IPC_CHANNELS.welcomePickSoundFile) as Promise<string | null>,
+  getMusicSettings: () => ipcRenderer.invoke(IPC_CHANNELS.musicGetSettings) as Promise<MusicRequestSettings>,
+  saveMusicSettings: (input: MusicRequestSettings) => ipcRenderer.invoke(IPC_CHANNELS.musicSaveSettings, input) as Promise<MusicRequestSettings>,
+  getMusicState: () => ipcRenderer.invoke(IPC_CHANNELS.musicGetState) as Promise<MusicPlayerState>,
+  musicSkip: () => ipcRenderer.invoke(IPC_CHANNELS.musicSkip) as Promise<void>,
+  musicClearQueue: () => ipcRenderer.invoke(IPC_CHANNELS.musicClearQueue) as Promise<void>,
+  musicPlayerEvent: (event: MusicPlayerEvent) => ipcRenderer.invoke(IPC_CHANNELS.musicPlayerEvent, event) as Promise<void>,
+  onMusicStateUpdate: (listener: (state: MusicPlayerState) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, state: MusicPlayerState) => listener(state);
+    ipcRenderer.on(IPC_CHANNELS.musicStateUpdate, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.musicStateUpdate, wrappedListener); };
+  },
+  onMusicPlay: (listener: (cmd: MusicPlayCommand) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, cmd: MusicPlayCommand) => listener(cmd);
+    ipcRenderer.on(IPC_CHANNELS.musicPlay, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.musicPlay, wrappedListener); };
+  },
+  onMusicStop: (listener: () => void) => {
+    const wrappedListener = () => listener();
+    ipcRenderer.on(IPC_CHANNELS.musicStop, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.musicStop, wrappedListener); };
+  },
+  onMusicVolume: (listener: (volume: number) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, volume: number) => listener(volume);
+    ipcRenderer.on(IPC_CHANNELS.musicVolume, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.musicVolume, wrappedListener); };
+  },
   onTwitchStatus: (listener: (status: TwitchConnectionStatus, channel: string | null) => void) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, status: TwitchConnectionStatus, channel: string | null) => listener(status, channel);
     ipcRenderer.on(IPC_CHANNELS.twitchStatus, wrappedListener);

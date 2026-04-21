@@ -56,6 +56,10 @@ import type {
   VoiceCommandDeleteInput,
   VoiceCommandUpsertInput,
   VoiceSpeakPayload,
+  MusicRequestSettings,
+  MusicPlayerState,
+  MusicPlayCommand,
+  MusicPlayerEvent,
   WelcomeSettings,
 } from './types.js';
 import type { ChatSession, ChatLogMessage } from '../modules/chat-log/chat-log-service.js';
@@ -173,6 +177,16 @@ export const IPC_CHANNELS = {
   welcomeGetSettings: 'welcome:get-settings',
   welcomeSaveSettings: 'welcome:save-settings',
   welcomePickSoundFile: 'welcome:pick-sound-file',
+  musicGetSettings: 'music:get-settings',
+  musicSaveSettings: 'music:save-settings',
+  musicGetState: 'music:get-state',
+  musicSkip: 'music:skip',
+  musicClearQueue: 'music:clear-queue',
+  musicPlayerEvent: 'music:player-event',
+  musicStateUpdate: 'music:state-update',
+  musicPlay: 'music:play',
+  musicStop: 'music:stop',
+  musicVolume: 'music:volume',
 } as const;
 
 export interface RecentChatSnapshot {
@@ -293,4 +307,14 @@ export interface CopilotApi {
   getWelcomeSettings: () => Promise<WelcomeSettings>;
   saveWelcomeSettings: (input: WelcomeSettings) => Promise<WelcomeSettings>;
   pickWelcomeSoundFile: () => Promise<string | null>;
+  getMusicSettings: () => Promise<MusicRequestSettings>;
+  saveMusicSettings: (input: MusicRequestSettings) => Promise<MusicRequestSettings>;
+  getMusicState: () => Promise<MusicPlayerState>;
+  musicSkip: () => Promise<void>;
+  musicClearQueue: () => Promise<void>;
+  musicPlayerEvent: (event: MusicPlayerEvent) => Promise<void>;
+  onMusicStateUpdate: (listener: (state: MusicPlayerState) => void) => () => void;
+  onMusicPlay: (listener: (cmd: MusicPlayCommand) => void) => () => void;
+  onMusicStop: (listener: () => void) => () => void;
+  onMusicVolume: (listener: (volume: number) => void) => () => void;
 }

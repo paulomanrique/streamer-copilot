@@ -161,6 +161,26 @@ export const rendererVoiceCapabilitiesSchema = z.object({
   speechSynthesisAvailable: z.boolean(),
 });
 
+export const musicRequestSettingsSchema = z.object({
+  enabled: z.boolean(),
+  volume: z.number().min(0).max(1),
+  maxQueueSize: z.number().int().min(1).max(100),
+  maxDurationSeconds: z.number().int().min(30).max(3600),
+  requestTrigger: z.string().min(1).max(80),
+  skipTrigger: z.string().min(1).max(80),
+  queueTrigger: z.string().min(1).max(80),
+  cancelTrigger: z.string().min(1).max(80),
+  requestPermissions: z.array(permissionLevelSchema).min(1),
+  skipPermissions: z.array(permissionLevelSchema).min(1),
+  cooldownSeconds: z.number().int().min(0).max(3600),
+  userCooldownSeconds: z.number().int().min(0).max(3600),
+});
+
+export const musicPlayerEventSchema = z.object({
+  type: z.enum(['ended', 'error']),
+  itemId: z.string().min(1),
+});
+
 export const soundSettingsSchema = z.object({
   defaultCooldownSeconds: z.number().int().min(0).max(3600),
   defaultUserCooldownSeconds: z.number().int().min(0).max(3600),

@@ -3,6 +3,8 @@ import type { BrowserWindow } from 'electron';
 import { IPC_CHANNELS } from '../shared/ipc.js';
 import type {
   ChatMessage,
+  MusicPlayCommand,
+  MusicPlayerState,
   ObsStatsSnapshot,
   RaffleEntry,
   RaffleRoundResult,
@@ -119,6 +121,22 @@ export class StateHub {
 
   pushKickLiveStats(stats: KickLiveStats | null): void {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.kickLiveStats, stats);
+  }
+
+  pushMusicStateUpdate(state: MusicPlayerState): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.musicStateUpdate, state);
+  }
+
+  pushMusicPlay(cmd: MusicPlayCommand): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.musicPlay, cmd);
+  }
+
+  pushMusicStop(): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.musicStop);
+  }
+
+  pushMusicVolume(volume: number): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.musicVolume, volume);
   }
 
   private flushChatMessages(): void {

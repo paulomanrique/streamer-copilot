@@ -35,6 +35,8 @@ import { TextService } from '../modules/text/text-service.js';
 import { TextSettingsStore } from '../modules/text/text-settings-store.js';
 import { WelcomeSettingsStore } from '../modules/welcome/welcome-settings-store.js';
 import { WelcomeService } from '../modules/welcome/welcome-service.js';
+import { MusicSettingsStore } from '../modules/music/music-settings-store.js';
+import { MusicRequestService } from '../modules/music/music-request-service.js';
 import { VoiceCommandRepository } from '../modules/voice/voice-repository.js';
 import { VoiceService } from '../modules/voice/voice-service.js';
 import { createKickChatAdapter } from '../platforms/kick/adapter.js';
@@ -90,11 +92,13 @@ import {
   voiceCommandDeleteInputSchema,
   voiceCommandUpsertInputSchema,
   voiceSpeakPayloadSchema,
+  musicRequestSettingsSchema,
+  musicPlayerEventSchema,
   welcomeSettingsSchema,
   youtubeConnectSchema,
   youtubeSettingsSchema,
 } from '../shared/schemas.js';
-import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, PlatformId, Raffle, SoundSettings, StreamEvent, StreamEventType, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
+import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, MusicRequestSettings, PlatformId, Raffle, SoundSettings, StreamEvent, StreamEventType, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
 
 const TWITCH_CLIENT_ID = 'vtwg8tzuv1nlip4qh9n6sxx2p76g0s';
 const TWITCH_REDIRECT_PORT = 32999;
@@ -210,10 +214,31 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     if (store) welcomeSettingsCache = await store.load();
   };
 
+  // Music request settings: file-based, per-profile. Cached in memory for sync access.
+  let musicSettingsCache: MusicRequestSettings = {
+    enabled: false, volume: 0.5, maxQueueSize: 20, maxDurationSeconds: 600,
+    requestTrigger: '!sr', skipTrigger: '!skip', queueTrigger: '!queue', cancelTrigger: '!cancel',
+    requestPermissions: ['everyone'], skipPermissions: ['moderator', 'broadcaster'],
+    cooldownSeconds: 5, userCooldownSeconds: 30,
+  };
+
+  const getMusicSettingsStore = async (): Promise<MusicSettingsStore | null> => {
+    const snapshot = await profileStore.list();
+    const active = snapshot.profiles.find((p) => p.id === snapshot.activeProfileId);
+    if (!active) return null;
+    return new MusicSettingsStore(active.directory);
+  };
+
+  const reloadMusicSettingsCache = async (): Promise<void> => {
+    const store = await getMusicSettingsStore();
+    if (store) musicSettingsCache = await store.load();
+  };
+
   // Load caches on startup (non-blocking, best-effort).
   void reloadSoundSettingsCache();
   void reloadTextSettingsCache();
   void reloadWelcomeSettingsCache();
+  void reloadMusicSettingsCache();
 
   const schedulerService = new SchedulerService({
     source: {
@@ -253,6 +278,42 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     logInfo: (message, metadata) => logService.info('welcome', message, metadata),
     logError: (message, metadata) => logService.error('welcome', message, metadata),
   });
+  // YouTube search + audio extraction for music requests
+  async function searchYouTube(query: string): Promise<{ videoId: string; title: string; durationSeconds: number; thumbnailUrl: string | null } | null> {
+    const YouTube = await import('youtube-sr');
+    const results = await YouTube.YouTube.search(query, { limit: 1, type: 'video' });
+    const video = results[0];
+    if (!video || !video.id) return null;
+    return {
+      videoId: video.id,
+      title: video.title ?? query,
+      durationSeconds: Math.floor((video.duration ?? 0) / 1000),
+      thumbnailUrl: video.thumbnail?.url ?? null,
+    };
+  }
+
+  async function getAudioUrl(videoId: string): Promise<string> {
+    const ytdl = await import('@distube/ytdl-core');
+    const info = await ytdl.default.getInfo(`https://www.youtube.com/watch?v=${videoId}`);
+    const audioFormats = ytdl.default.filterFormats(info.formats, 'audioonly');
+    if (audioFormats.length === 0) throw new Error('No audio formats available');
+    const best = ytdl.default.chooseFormat(audioFormats, { quality: 'highestaudio' });
+    return best.url;
+  }
+
+  const musicService = new MusicRequestService({
+    getSettings: () => musicSettingsCache,
+    searchYouTube,
+    getAudioUrl,
+    onPlay: (cmd) => options.stateHub.pushMusicPlay(cmd),
+    onStop: () => options.stateHub.pushMusicStop(),
+    onStateUpdate: (state) => options.stateHub.pushMusicStateUpdate(state),
+    onVolumeChange: (volume) => options.stateHub.pushMusicVolume(volume),
+    sendMessage: (platform, content) => sendPlatformMessage(platform, content),
+    logInfo: (message, metadata) => logService.info('music', message, metadata),
+    logError: (message, metadata) => logService.error('music', message, metadata),
+  });
+
   let rendererSpeechSynthesisAvailable = process.platform !== 'linux';
   let isShuttingDown = false;
   const voiceService = new VoiceService({
@@ -1154,7 +1215,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   }
 
   const chatService = new ChatService({
-    raffleService, soundService, textService, voiceService, suggestionService,
+    raffleService, soundService, textService, voiceService, suggestionService, musicService,
     onMessage: (message) => {
       options.stateHub.pushChatMessage(message);
       chatLogService.recordMessage(message);
@@ -1198,9 +1259,11 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     chatService.clearRecent();
     suggestionService.clearSessionEntries();
     welcomeService.reset();
+    musicService.reset();
     await reloadSoundSettingsCache();
     await reloadTextSettingsCache();
     await reloadWelcomeSettingsCache();
+    await reloadMusicSettingsCache();
     return snapshot;
   });
   ipcMain.handle(IPC_CHANNELS.profilesCreate, async (_, raw) => { const i = createProfileInputSchema.parse(raw); return profileStore.create(i.name, i.directory, i.appLanguage); });
@@ -1343,6 +1406,28 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       filters: [{ name: 'Audio', extensions: ['mp3', 'wav', 'ogg'] }],
     });
     return r.canceled ? null : r.filePaths[0];
+  });
+
+  // ── Music Request IPC ─────────────────────────────────────────────────
+  ipcMain.handle(IPC_CHANNELS.musicGetSettings, async () => {
+    const store = await getMusicSettingsStore();
+    return store ? store.load() : musicSettingsCache;
+  });
+  ipcMain.handle(IPC_CHANNELS.musicSaveSettings, async (_, raw) => {
+    const store = await getMusicSettingsStore();
+    if (!store) throw new Error('No active profile');
+    const saved = await store.save(musicRequestSettingsSchema.parse(raw));
+    musicSettingsCache = saved;
+    // Push volume change to renderer in real-time
+    options.stateHub.pushMusicVolume(saved.volume);
+    return saved;
+  });
+  ipcMain.handle(IPC_CHANNELS.musicGetState, async () => musicService.getState());
+  ipcMain.handle(IPC_CHANNELS.musicSkip, async () => musicService.skip());
+  ipcMain.handle(IPC_CHANNELS.musicClearQueue, async () => musicService.clearQueue());
+  ipcMain.handle(IPC_CHANNELS.musicPlayerEvent, async (_, raw) => {
+    const event = musicPlayerEventSchema.parse(raw);
+    musicService.onPlayerEvent(event);
   });
 
   ipcMain.handle(IPC_CHANNELS.obsGetSettings, async () => obsService.getSettings());

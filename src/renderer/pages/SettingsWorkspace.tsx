@@ -15,8 +15,9 @@ import { TextCommandsPage } from './TextCommands.js';
 import { EventLogPage } from './EventLog.js';
 import { VoiceCommandsPage } from './VoiceCommands.js';
 import { WelcomeMessagePage } from './WelcomeMessage.js';
+import { MusicRequestPage } from './MusicRequest.js';
 
-type SettingsView = 'general' | 'profiles' | 'platforms' | 'obs' | 'sound' | 'text' | 'voice' | 'welcome' | 'raffles' | 'suggestions' | 'chat-logs' | 'event-log';
+type SettingsView = 'general' | 'profiles' | 'platforms' | 'obs' | 'sound' | 'text' | 'voice' | 'welcome' | 'music' | 'raffles' | 'suggestions' | 'chat-logs' | 'event-log';
 
 interface SettingsWorkspaceProps {
   activeProfileId: string;
@@ -140,6 +141,15 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
     label: 'Automations',
     items: [
       {
+        id: 'music',
+        label: 'Music Request',
+        icon: (
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
+          </svg>
+        ),
+      },
+      {
         id: 'welcome',
         label: 'Welcome Message',
         icon: (
@@ -208,6 +218,7 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
     voice: messages.settings.voiceTts,
     text: messages.settings.textCommands,
     welcome: messages.settings.welcomeMessage,
+    music: messages.settings.musicRequest,
     raffles: messages.settings.raffles,
     suggestions: messages.settings.suggestions,
     obs: 'OBS Studio',
@@ -279,6 +290,7 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
           />
         ) : null}
         {currentView === 'welcome' ? <WelcomeMessagePage /> : null}
+        {currentView === 'music' ? <MusicRequestPage /> : null}
         {currentView === 'raffles' ? <RafflesPage /> : null}
         {currentView === 'suggestions' ? <SuggestionsPage /> : null}
         {currentView === 'chat-logs' ? <ChatLogsPage /> : null}

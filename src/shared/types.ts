@@ -278,6 +278,50 @@ export interface WelcomeSettings {
   userOverrides: WelcomeUserOverride[];
 }
 
+export interface MusicRequestSettings {
+  enabled: boolean;
+  volume: number;
+  maxQueueSize: number;
+  maxDurationSeconds: number;
+  requestTrigger: string;
+  skipTrigger: string;
+  queueTrigger: string;
+  cancelTrigger: string;
+  requestPermissions: PermissionLevel[];
+  skipPermissions: PermissionLevel[];
+  cooldownSeconds: number;
+  userCooldownSeconds: number;
+}
+
+export interface MusicQueueItem {
+  id: string;
+  videoId: string;
+  title: string;
+  durationSeconds: number;
+  thumbnailUrl: string | null;
+  requestedBy: string;
+  platform: PlatformId;
+  requestedAt: string;
+}
+
+export interface MusicPlayerState {
+  currentItem: MusicQueueItem | null;
+  queue: MusicQueueItem[];
+  isPlaying: boolean;
+}
+
+export interface MusicPlayCommand {
+  itemId: string;
+  audioUrl: string;
+  title: string;
+  volume: number;
+}
+
+export interface MusicPlayerEvent {
+  type: 'ended' | 'error';
+  itemId: string;
+}
+
 export interface SoundSettings {
   defaultCooldownSeconds: number;
   defaultUserCooldownSeconds: number;
