@@ -89,8 +89,7 @@ export function useMusicPlayer(): void {
               }
             },
             onError: (e) => {
-              console.error('[MusicPlayer] YT IFrame error code:', e.data);
-              void window.copilot.musicPlayerEvent({ type: 'error', itemId });
+              void window.copilot.musicPlayerEvent({ type: 'error', itemId, errorCode: e.data });
             },
           },
         });

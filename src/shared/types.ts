@@ -320,6 +320,7 @@ export interface MusicPlayCommand {
 export interface MusicPlayerEvent {
   type: 'ended' | 'error';
   itemId: string;
+  errorCode?: number;
 }
 
 export interface SoundSettings {

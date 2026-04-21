@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { app, BrowserWindow, Menu, Tray, nativeImage, net, protocol } from 'electron';
+import { app, BrowserWindow, Menu, Tray, nativeImage, net, protocol, session } from 'electron';
 
 // Must be called before app.whenReady()
 protocol.registerSchemesAsPrivileged([
@@ -90,6 +90,11 @@ app.whenReady().then(async () => {
     const filePath = request.url.slice('copilot-local://'.length);
     return net.fetch(`file://${filePath}`);
   });
+
+  // Strip "Electron/x.x.x" from the UA so YouTube iframes load normally
+  session.defaultSession.setUserAgent(
+    session.defaultSession.getUserAgent().replace(/ Electron\/[^\s]+/, ''),
+  );
 
   databaseHandle = openDatabase(app.getPath('userData'));
   generalSettingsStore = new GeneralSettingsStore(new AppSettingsRepository(databaseHandle.db));

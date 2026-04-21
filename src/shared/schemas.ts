@@ -179,6 +179,7 @@ export const musicRequestSettingsSchema = z.object({
 export const musicPlayerEventSchema = z.object({
   type: z.enum(['ended', 'error']),
   itemId: z.string().min(1),
+  errorCode: z.number().optional(),
 });
 
 export const soundSettingsSchema = z.object({
