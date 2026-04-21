@@ -278,122 +278,6 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     logInfo: (message, metadata) => logService.info('welcome', message, metadata),
     logError: (message, metadata) => logService.error('welcome', message, metadata),
   });
-  // Hidden BrowserWindow that plays YouTube embeds — no ytdl-core dependency
-  class MusicEmbedPlayer {
-    private window: BrowserWindow | null = null;
-    private currentItemId: string | null = null;
-    private pollTimer: ReturnType<typeof setInterval> | null = null;
-    private loadTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
-    private readonly onEvent: (event: import('../shared/types.js').MusicPlayerEvent) => void;
-
-    constructor(onEvent: (event: import('../shared/types.js').MusicPlayerEvent) => void) {
-      this.onEvent = onEvent;
-    }
-
-    play(itemId: string, videoId: string, volume: number): void {
-      this.stop();
-      this.currentItemId = itemId;
-
-      const win = new BrowserWindow({
-        width: 480,
-        height: 270,
-        show: false,
-        skipTaskbar: true,
-        webPreferences: {
-          nodeIntegration: false,
-          contextIsolation: true,
-          backgroundThrottling: false,
-        },
-      });
-      // Strip "Electron/..." from UA so YouTube doesn't block the embed
-      win.webContents.setUserAgent(
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      );
-      this.window = win;
-
-      void win.loadURL(`https://www.youtube.com/embed/${videoId}?autoplay=1&controls=0`);
-
-      win.webContents.on('did-finish-load', () => {
-        this.applyVolume(volume);
-      });
-
-      // Timeout if stuck loading for more than 30s
-      this.loadTimeoutTimer = setTimeout(() => {
-        if (this.currentItemId === itemId) {
-          logService.error('music', 'YouTube embed load timeout', { videoId });
-          this.onEvent({ type: 'error', itemId });
-          this.stop();
-        }
-      }, 30_000);
-
-      // Poll video state every 3s
-      this.pollTimer = setInterval(() => {
-        if (!this.window || this.window.isDestroyed()) return;
-        void this.window.webContents.executeJavaScript(`
-          (function() {
-            const v = document.querySelector('video');
-            if (!v) return JSON.stringify({ s: 'loading', title: document.title, url: location.href });
-            if (v.ended || (v.duration > 0 && v.currentTime >= v.duration - 0.5)) return JSON.stringify({ s: 'ended' });
-            if (v.error !== null) return JSON.stringify({ s: 'error', code: v.error.code });
-            if (v.paused && v.currentTime === 0) v.play().catch(() => {});
-            return JSON.stringify({ s: 'ok', paused: v.paused, t: v.currentTime });
-          })();
-        `).then((raw: unknown) => {
-          let result: Record<string, unknown> = { s: 'unknown' };
-          try { result = JSON.parse(raw as string) as Record<string, unknown>; } catch { return; }
-          const state = result['s'];
-          if (state === 'loading') {
-            logService.info('music', 'Embed poll: loading', { title: result['title'], url: result['url'], videoId });
-          } else if (state === 'ended') {
-            this.clearTimers();
-            this.onEvent({ type: 'ended', itemId: this.currentItemId! });
-            this.cleanup();
-          } else if (state === 'error') {
-            logService.error('music', 'Embed poll: video error', { code: result['code'], videoId });
-            this.clearTimers();
-            this.onEvent({ type: 'error', itemId: this.currentItemId! });
-            this.cleanup();
-          }
-        }).catch(() => {});
-      }, 3_000);
-    }
-
-    stop(): void {
-      this.clearTimers();
-      this.cleanup();
-    }
-
-    setVolume(volume: number): void {
-      this.applyVolume(volume);
-    }
-
-    destroy(): void {
-      this.stop();
-    }
-
-    private applyVolume(volume: number): void {
-      if (!this.window || this.window.isDestroyed()) return;
-      void this.window.webContents.executeJavaScript(`
-        (function() {
-          const v = document.querySelector('video');
-          if (v) { v.volume = ${volume}; if (v.paused) v.play().catch(() => {}); }
-          else setTimeout(() => { const v2 = document.querySelector('video'); if (v2) v2.volume = ${volume}; }, 1000);
-        })();
-      `);
-    }
-
-    private clearTimers(): void {
-      if (this.pollTimer) { clearInterval(this.pollTimer); this.pollTimer = null; }
-      if (this.loadTimeoutTimer) { clearTimeout(this.loadTimeoutTimer); this.loadTimeoutTimer = null; }
-    }
-
-    private cleanup(): void {
-      if (this.window && !this.window.isDestroyed()) this.window.destroy();
-      this.window = null;
-      this.currentItemId = null;
-    }
-  }
-
   // YouTube search for music requests
   async function searchYouTube(query: string): Promise<{ videoId: string; title: string; durationSeconds: number; thumbnailUrl: string | null } | null> {
     const YouTube = await import('youtube-sr');
@@ -408,21 +292,13 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     };
   }
 
-  // Forward-declared so musicEmbedPlayer callback can reference it
-  // eslint-disable-next-line prefer-const
-  let musicService!: MusicRequestService;
-  const musicEmbedPlayer = new MusicEmbedPlayer((event) => { musicService.onPlayerEvent(event); });
-
-  musicService = new MusicRequestService({
+  const musicService = new MusicRequestService({
     getSettings: () => musicSettingsCache,
     searchYouTube,
-    onPlay: (cmd) => {
-      musicEmbedPlayer.play(cmd.itemId, cmd.videoId, cmd.volume);
-      options.stateHub.pushMusicStateUpdate(musicService.getState());
-    },
-    onStop: () => musicEmbedPlayer.stop(),
+    onPlay: (cmd) => options.stateHub.pushMusicPlay(cmd),
+    onStop: () => options.stateHub.pushMusicStop(),
     onStateUpdate: (state) => options.stateHub.pushMusicStateUpdate(state),
-    onVolumeChange: (volume) => musicEmbedPlayer.setVolume(volume),
+    onVolumeChange: (volume) => options.stateHub.pushMusicVolume(volume),
     sendMessage: (platform, content) => sendPlatformMessage(platform, content),
     logInfo: (message, metadata) => logService.info('music', message, metadata),
     logError: (message, metadata) => logService.error('music', message, metadata),
@@ -1944,7 +1820,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     stopTwitchStatsPoll();
     stopKickStatsPoll();
     if (youtubeMonitorTimer) clearInterval(youtubeMonitorTimer);
-    musicEmbedPlayer.destroy();
+    musicService.reset();
     await Promise.allSettled([chatService.disconnectAll(), obsService.stop(), raffleOverlayServer.stop()]);
     Object.values(IPC_CHANNELS).forEach(c => ipcMain.removeHandler(c));
   };

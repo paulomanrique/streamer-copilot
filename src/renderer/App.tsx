@@ -15,6 +15,7 @@ import { StatusMessages } from './components/StatusMessages.js';
 import { ToastStack } from './components/ToastStack.js';
 import { SettingsWorkspace } from './pages/SettingsWorkspace.js';
 import { useAudioQueue } from './hooks/useAudioQueue.js';
+import { useMusicPlayer } from './hooks/useMusicPlayer.js';
 import { useIpcListeners } from './hooks/useIpcListeners.js';
 import { useToasts } from './hooks/useToasts.js';
 
@@ -77,6 +78,7 @@ export default function App() {
 
   // Extracted hooks for audio, TTS, and IPC listeners
   useAudioQueue({ voiceRate, voiceVolume, languageCode, onError: pushError });
+  useMusicPlayer();
   useIpcListeners();
 
   const activeProfile = useMemo(
