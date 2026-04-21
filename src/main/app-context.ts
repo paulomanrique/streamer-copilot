@@ -278,8 +278,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     logInfo: (message, metadata) => logService.info('welcome', message, metadata),
     logError: (message, metadata) => logService.error('welcome', message, metadata),
   });
-  // Local proxy server for YouTube audio — avoids CORS/header restrictions in the renderer
-  const audioProxyCdnUrls = new Map<string, string>();
+  // Local proxy server — streams YouTube audio directly from ytdl-core to avoid CORS issues
+  const audioProxyAllowed = new Set<string>();
   let audioProxyServer: http.Server | null = null;
   let audioProxyPort: number | null = null;
 
@@ -289,49 +289,36 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     return new Promise((resolve, reject) => {
       const server = http.createServer((req, res) => {
         const videoId = req.url?.slice(1) ?? '';
-        const cdnUrl = audioProxyCdnUrls.get(videoId);
 
-        if (!cdnUrl) {
+        if (!videoId || !audioProxyAllowed.has(videoId)) {
           res.writeHead(404);
           res.end();
           return;
         }
 
-        const proxyHeaders: Record<string, string> = {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Origin': 'https://www.youtube.com',
-          'Referer': 'https://www.youtube.com/',
-        };
-        if (req.headers['range']) {
-          proxyHeaders['Range'] = req.headers['range'] as string;
-        }
+        res.writeHead(200, {
+          'Content-Type': 'audio/webm',
+          'Access-Control-Allow-Origin': '*',
+          'Transfer-Encoding': 'chunked',
+        });
 
-        net.fetch(cdnUrl, { headers: proxyHeaders }).then((upstream) => {
-          const headers: Record<string, string> = {
-            'Access-Control-Allow-Origin': '*',
-            'Content-Type': upstream.headers.get('content-type') ?? 'audio/webm',
-          };
-          const contentLength = upstream.headers.get('content-length');
-          const contentRange = upstream.headers.get('content-range');
-          const acceptRanges = upstream.headers.get('accept-ranges');
-          if (contentLength) headers['Content-Length'] = contentLength;
-          if (contentRange) headers['Content-Range'] = contentRange;
-          if (acceptRanges) headers['Accept-Ranges'] = acceptRanges;
+        import('@distube/ytdl-core').then((ytdl) => {
+          const stream = ytdl.default(
+            `https://www.youtube.com/watch?v=${videoId}`,
+            { filter: 'audioonly', quality: 'highestaudio' },
+          );
 
-          res.writeHead(upstream.status, headers);
+          stream.pipe(res);
 
-          if (!upstream.body) { res.end(); return; }
-          const reader = upstream.body.getReader();
-          const pump = (): void => {
-            reader.read().then(({ done, value }) => {
-              if (done) { res.end(); return; }
-              res.write(value, pump);
-            }).catch(() => res.end());
-          };
-          pump();
-        }).catch(() => {
-          res.writeHead(502);
-          res.end();
+          stream.on('error', (err: Error) => {
+            logService.error('music', 'Audio proxy stream error', { videoId, error: err.message });
+            if (!res.writableEnded) res.end();
+          });
+
+          req.on('close', () => stream.destroy());
+        }).catch((err: Error) => {
+          logService.error('music', 'Audio proxy: failed to load ytdl-core', { error: err.message });
+          if (!res.writableEnded) res.end();
         });
       });
 
@@ -339,6 +326,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         const addr = server.address() as { port: number };
         audioProxyServer = server;
         audioProxyPort = addr.port;
+        logService.info('music', `Audio proxy server listening on port ${addr.port}`);
         resolve(addr.port);
       });
 
@@ -361,13 +349,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   }
 
   async function getAudioUrl(videoId: string): Promise<string> {
-    const ytdl = await import('@distube/ytdl-core');
-    const info = await ytdl.default.getInfo(`https://www.youtube.com/watch?v=${videoId}`);
-    const audioFormats = ytdl.default.filterFormats(info.formats, 'audioonly');
-    if (audioFormats.length === 0) throw new Error('No audio formats available');
-    const best = ytdl.default.chooseFormat(audioFormats, { quality: 'highestaudio' });
     const port = await ensureAudioProxyServer();
-    audioProxyCdnUrls.set(videoId, best.url);
+    audioProxyAllowed.add(videoId);
+    logService.info('music', 'Audio proxy URL created', { videoId, port });
     return `http://127.0.0.1:${port}/${videoId}`;
   }
 
