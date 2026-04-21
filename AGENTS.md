@@ -97,7 +97,7 @@ streamer-copilot/
 
 - Limpe `ELECTRON_RUN_AS_NODE` nos scripts de dev e start.
 - `better-sqlite3` deve ser recompilado para o ABI do Electron: `npm run rebuild:native`.
-- Vite dev server: `127.0.0.1:5173` com `strictPort: true`.
+- Vite dev server: `127.0.0.1:5174` com `strictPort: true`.
 - OBS WebSocket deve estar habilitado: Ferramentas → Configurações do Servidor WebSocket.
 
 ---

@@ -10,10 +10,10 @@
   "type": "module",
   "main": "dist/main/index.js",
   "scripts": {
-    "dev": "cross-env ELECTRON_RUN_AS_NODE= VITE_DEV_SERVER_URL=http://127.0.0.1:5173 concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\" \"npm:dev:app\"",
+    "dev": "cross-env ELECTRON_RUN_AS_NODE= VITE_DEV_SERVER_URL=http://127.0.0.1:5174 concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\" \"npm:dev:app\"",
     "dev:renderer": "vite",
     "dev:electron": "tsc -p tsconfig.electron.json --watch",
-    "dev:app": "wait-on tcp:127.0.0.1:5173 dist/main/index.js dist/preload/index.cjs && nodemon --watch dist/main --watch dist/preload --exec \"electron dist/main/index.js\"",
+    "dev:app": "wait-on tcp:127.0.0.1:5174 dist/main/index.js dist/preload/index.cjs && nodemon --watch dist/main --watch dist/preload --exec \"electron dist/main/index.js\"",
     "build": "npm run build:renderer && npm run build:electron",
     "build:renderer": "vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
