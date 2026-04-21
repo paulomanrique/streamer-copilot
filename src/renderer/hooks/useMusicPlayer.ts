@@ -21,7 +21,7 @@ declare global {
           events?: {
             onReady?: (event: { target: YTPlayer }) => void;
             onStateChange?: (event: YTEvent) => void;
-            onError?: () => void;
+            onError?: (event: YTEvent) => void;
           };
         },
       ) => YTPlayer;
@@ -31,6 +31,14 @@ declare global {
 }
 
 const YT_ENDED = 0;
+
+function createOffScreenContainer(): HTMLDivElement {
+  const div = document.createElement('div');
+  // Must be large enough for the YT IFrame API to initialize (320x180 minimum)
+  div.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:320px;height:180px;pointer-events:none;visibility:hidden;';
+  document.body.appendChild(div);
+  return div;
+}
 
 export function useMusicPlayer(): void {
   const playerRef = useRef<YTPlayer | null>(null);
@@ -48,19 +56,19 @@ export function useMusicPlayer(): void {
 
   useEffect(() => {
     return window.copilot.onMusicPlay((cmd) => {
-      // Destroy the previous player
+      // Destroy the previous player and remove its container
       if (playerRef.current) {
         try { playerRef.current.destroy(); } catch { /* ignore */ }
         playerRef.current = null;
       }
-
-      // Create a persistent off-screen container
-      if (!containerRef.current) {
-        const div = document.createElement('div');
-        div.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;pointer-events:none;';
-        document.body.appendChild(div);
-        containerRef.current = div;
+      if (containerRef.current) {
+        containerRef.current.remove();
+        containerRef.current = null;
       }
+
+      // Create a fresh off-screen container for each new song.
+      // YT.Player replaces the div with an iframe, so we need a new div each time.
+      containerRef.current = createOffScreenContainer();
 
       const itemId = cmd.itemId;
       const volume = Math.round(cmd.volume * 100);
@@ -80,7 +88,8 @@ export function useMusicPlayer(): void {
                 void window.copilot.musicPlayerEvent({ type: 'ended', itemId });
               }
             },
-            onError: () => {
+            onError: (e) => {
+              console.error('[MusicPlayer] YT IFrame error code:', e.data);
               void window.copilot.musicPlayerEvent({ type: 'error', itemId });
             },
           },
@@ -96,6 +105,10 @@ export function useMusicPlayer(): void {
       if (playerRef.current) {
         try { playerRef.current.destroy(); } catch { /* ignore */ }
         playerRef.current = null;
+      }
+      if (containerRef.current) {
+        containerRef.current.remove();
+        containerRef.current = null;
       }
     });
   }, []);
