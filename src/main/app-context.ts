@@ -278,6 +278,74 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     logInfo: (message, metadata) => logService.info('welcome', message, metadata),
     logError: (message, metadata) => logService.error('welcome', message, metadata),
   });
+  // Local proxy server for YouTube audio — avoids CORS/header restrictions in the renderer
+  const audioProxyCdnUrls = new Map<string, string>();
+  let audioProxyServer: http.Server | null = null;
+  let audioProxyPort: number | null = null;
+
+  function ensureAudioProxyServer(): Promise<number> {
+    if (audioProxyPort !== null) return Promise.resolve(audioProxyPort);
+
+    return new Promise((resolve, reject) => {
+      const server = http.createServer((req, res) => {
+        const videoId = req.url?.slice(1) ?? '';
+        const cdnUrl = audioProxyCdnUrls.get(videoId);
+
+        if (!cdnUrl) {
+          res.writeHead(404);
+          res.end();
+          return;
+        }
+
+        const proxyHeaders: Record<string, string> = {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Origin': 'https://www.youtube.com',
+          'Referer': 'https://www.youtube.com/',
+        };
+        if (req.headers['range']) {
+          proxyHeaders['Range'] = req.headers['range'] as string;
+        }
+
+        net.fetch(cdnUrl, { headers: proxyHeaders }).then((upstream) => {
+          const headers: Record<string, string> = {
+            'Access-Control-Allow-Origin': '*',
+            'Content-Type': upstream.headers.get('content-type') ?? 'audio/webm',
+          };
+          const contentLength = upstream.headers.get('content-length');
+          const contentRange = upstream.headers.get('content-range');
+          const acceptRanges = upstream.headers.get('accept-ranges');
+          if (contentLength) headers['Content-Length'] = contentLength;
+          if (contentRange) headers['Content-Range'] = contentRange;
+          if (acceptRanges) headers['Accept-Ranges'] = acceptRanges;
+
+          res.writeHead(upstream.status, headers);
+
+          if (!upstream.body) { res.end(); return; }
+          const reader = upstream.body.getReader();
+          const pump = (): void => {
+            reader.read().then(({ done, value }) => {
+              if (done) { res.end(); return; }
+              res.write(value, pump);
+            }).catch(() => res.end());
+          };
+          pump();
+        }).catch(() => {
+          res.writeHead(502);
+          res.end();
+        });
+      });
+
+      server.listen(0, '127.0.0.1', () => {
+        const addr = server.address() as { port: number };
+        audioProxyServer = server;
+        audioProxyPort = addr.port;
+        resolve(addr.port);
+      });
+
+      server.once('error', reject);
+    });
+  }
+
   // YouTube search + audio extraction for music requests
   async function searchYouTube(query: string): Promise<{ videoId: string; title: string; durationSeconds: number; thumbnailUrl: string | null } | null> {
     const YouTube = await import('youtube-sr');
@@ -298,7 +366,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const audioFormats = ytdl.default.filterFormats(info.formats, 'audioonly');
     if (audioFormats.length === 0) throw new Error('No audio formats available');
     const best = ytdl.default.chooseFormat(audioFormats, { quality: 'highestaudio' });
-    return best.url;
+    const port = await ensureAudioProxyServer();
+    audioProxyCdnUrls.set(videoId, best.url);
+    return `http://127.0.0.1:${port}/${videoId}`;
   }
 
   const musicService = new MusicRequestService({
@@ -1830,6 +1900,11 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     stopTwitchStatsPoll();
     stopKickStatsPoll();
     if (youtubeMonitorTimer) clearInterval(youtubeMonitorTimer);
+    if (audioProxyServer) {
+      audioProxyServer.close();
+      audioProxyServer = null;
+      audioProxyPort = null;
+    }
     await Promise.allSettled([chatService.disconnectAll(), obsService.stop(), raffleOverlayServer.stop()]);
     Object.values(IPC_CHANNELS).forEach(c => ipcMain.removeHandler(c));
   };
