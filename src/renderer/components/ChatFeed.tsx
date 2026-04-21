@@ -202,7 +202,7 @@ function resolveProfileUrl(platform: string, author: string): string {
       return `https://www.tiktok.com/@${encodeURIComponent(username)}`;
     case 'youtube':
     case 'youtube-v':
-      return `https://www.youtube.com/results?search_query=${encodeURIComponent(username)}`;
+      return `https://www.youtube.com/@${encodeURIComponent(username)}`;
     default:
       return '';
   }
