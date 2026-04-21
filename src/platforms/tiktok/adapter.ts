@@ -1,6 +1,391 @@
+import { gunzipSync } from 'node:zlib';
 import { createRequire } from 'node:module';
-import type { ChatMessage, StreamEvent, StreamEventType, TikTokConnectionStatus } from '../../shared/types.js';
+import type { ChatMessage, StreamEvent, TikTokConnectionStatus } from '../../shared/types.js';
 import type { PlatformChatAdapter } from '../base.js';
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const EULER_BASE = 'https://tiktok.eulerstream.com';
+const UA =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36';
+
+const DEFAULT_WS_PARAMS: Record<string, string> = {
+  version_code: '180800',
+  aid: '1988',
+  app_language: 'en',
+  app_name: 'tiktok_web',
+  browser_platform: 'Win32',
+  browser_language: 'en-US',
+  browser_name: 'Mozilla',
+  browser_version: '5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
+  browser_online: 'true',
+  cookie_enabled: 'true',
+  tz_name: 'Europe/Berlin',
+  device_platform: 'web',
+  identity: 'audience',
+  live_id: '12',
+  webcast_language: 'en',
+  ws_direct: '0',
+  sup_ws_ds_opt: '1',
+  update_version_code: '2.0.0',
+  did_rule: '3',
+  screen_height: '1080',
+  screen_width: '1920',
+  heartbeat_duration: '0',
+  resp_content_type: 'protobuf',
+  history_comment_count: '6',
+  client_enter: '1',
+  last_rtt: '150',
+};
+
+const HEARTBEAT_MS = 10_000;
+const CONNECT_TIMEOUT_MS = 15_000;
+
+// ─── Minimal Protobuf reader ───────────────────────────────────────────────────
+
+interface Cur { buf: Buffer; pos: number; }
+
+function cur(buf: Buffer): Cur { return { buf, pos: 0 }; }
+function done(c: Cur): boolean { return c.pos >= c.buf.length; }
+
+function readVarint(c: Cur): bigint {
+  let result = 0n, shift = 0n;
+  while (c.pos < c.buf.length) {
+    const b = c.buf[c.pos++];
+    result |= BigInt(b & 0x7f) << shift;
+    if (!(b & 0x80)) break;
+    shift += 7n;
+  }
+  return result;
+}
+
+function readTag(c: Cur): [number, number] {
+  const v = readVarint(c);
+  return [Number(v >> 3n), Number(v & 7n)];
+}
+
+function readBytes(c: Cur): Buffer<ArrayBuffer> {
+  const len = Number(readVarint(c));
+  const slice = c.buf.subarray(c.pos, c.pos + len);
+  c.pos += len;
+  return Buffer.from(slice) as Buffer<ArrayBuffer>;
+}
+
+function skipField(c: Cur, wireType: number): void {
+  switch (wireType) {
+    case 0: readVarint(c); break;
+    case 1: c.pos += 8; break;
+    case 2: readBytes(c); break;
+    case 5: c.pos += 4; break;
+  }
+}
+
+// ─── Minimal Protobuf writer ───────────────────────────────────────────────────
+
+class PW {
+  private chunks: Buffer[] = [];
+
+  varint(v: bigint | number): this {
+    let n = typeof v === 'bigint' ? v : BigInt(v);
+    if (n < 0n) n = BigInt.asUintN(64, n);
+    const bytes: number[] = [];
+    while (true) {
+      const b = Number(n & 0x7fn);
+      n >>= 7n;
+      bytes.push(n === 0n ? b : b | 0x80);
+      if (n === 0n) break;
+    }
+    this.chunks.push(Buffer.from(bytes));
+    return this;
+  }
+
+  tag(field: number, wire: number): this { return this.varint((field << 3) | wire); }
+
+  str(field: number, value: string): this {
+    if (!value) return this;
+    const b = Buffer.from(value, 'utf-8');
+    this.tag(field, 2).varint(b.length);
+    this.chunks.push(b);
+    return this;
+  }
+
+  buf(field: number, data: Buffer | Uint8Array): this {
+    if (!data.length) return this;
+    const b = Buffer.isBuffer(data) ? data : Buffer.from(data);
+    this.tag(field, 2).varint(b.length);
+    this.chunks.push(b);
+    return this;
+  }
+
+  i64(field: number, value: bigint | string | number): this {
+    const v = typeof value === 'bigint' ? value : BigInt(value);
+    if (v === 0n) return this;
+    return this.tag(field, 0).varint(v);
+  }
+
+  finish(): Buffer { return Buffer.concat(this.chunks); }
+}
+
+// ─── Message decoders ─────────────────────────────────────────────────────────
+
+interface UserInfo { nickname: string; uniqueId: string; }
+
+function decodeUser(buf: Buffer): UserInfo {
+  const c = cur(buf);
+  let nickname = '', uniqueId = '';
+  while (!done(c)) {
+    const [f, w] = readTag(c);
+    if (w === 2) {
+      const b = readBytes(c);
+      if (f === 3) nickname = b.toString('utf-8');       // User.nickname
+      else if (f === 38) uniqueId = b.toString('utf-8'); // User.uniqueId
+    } else skipField(c, w);
+  }
+  return { nickname, uniqueId };
+}
+
+function decodeText(buf: Buffer): string {
+  const c = cur(buf);
+  while (!done(c)) {
+    const [f, w] = readTag(c);
+    if (w === 2) {
+      const b = readBytes(c);
+      if (f === 1) return b.toString('utf-8'); // Text.displayType
+    } else skipField(c, w);
+  }
+  return '';
+}
+
+function decodeCommonDisplayType(buf: Buffer): string {
+  const c = cur(buf);
+  while (!done(c)) {
+    const [f, w] = readTag(c);
+    if (w === 2) {
+      const b = readBytes(c);
+      if (f === 8) return decodeText(b); // CommonMessageData.displayText (field 8)
+    } else skipField(c, w);
+  }
+  return '';
+}
+
+function decodeGiftDetails(buf: Buffer): { giftType: number; diamondCount: number; giftName: string } {
+  const c = cur(buf);
+  let giftType = 0, diamondCount = 0, giftName = '';
+  while (!done(c)) {
+    const [f, w] = readTag(c);
+    if (w === 0) {
+      const v = Number(readVarint(c));
+      if (f === 11) giftType = v;       // Gift.giftType (tag 88)
+      else if (f === 12) diamondCount = v; // Gift.diamondCount (tag 96)
+    } else if (w === 2) {
+      const b = readBytes(c);
+      if (f === 16) giftName = b.toString('utf-8'); // Gift.giftName (tag 130)
+    } else skipField(c, w);
+  }
+  return { giftType, diamondCount, giftName };
+}
+
+interface ChatData { user: UserInfo; comment: string; }
+interface SocialData { user: UserInfo; displayType: string; }
+interface GiftData { user: UserInfo; giftType: number; repeatEnd: number; repeatCount: number; diamondCount: number; giftName: string; }
+interface BaseMsg { type: string; payload: Buffer<ArrayBuffer>; msgId: string; }
+interface FetchResult { messages: BaseMsg[]; cursor: string; internalExt: string; wsParams: Record<string, string>; needsAck: boolean; wsUrl: string; }
+interface PushFrame { payloadEncoding: string; payloadType: string; payload: Buffer<ArrayBuffer>; logId: string; }
+type WsHandle = { send(d: Buffer): void; close(): void; readyState: number; addEventListener(e: string, h: (...a: unknown[]) => void, opts?: unknown): void; binaryType: string; };
+
+function decodeChatMsg(buf: Buffer): ChatData {
+  const c = cur(buf);
+  let user: UserInfo = { nickname: '', uniqueId: '' };
+  let comment = '';
+  while (!done(c)) {
+    const [f, w] = readTag(c);
+    if (w === 2) {
+      const b = readBytes(c);
+      if (f === 2) user = decodeUser(b);
+      else if (f === 3) comment = b.toString('utf-8'); // WebcastChatMessage.comment
+    } else skipField(c, w);
+  }
+  return { user, comment };
+}
+
+function decodeSocialMsg(buf: Buffer): SocialData {
+  const c = cur(buf);
+  let user: UserInfo = { nickname: '', uniqueId: '' };
+  let displayType = '';
+  while (!done(c)) {
+    const [f, w] = readTag(c);
+    if (w === 2) {
+      const b = readBytes(c);
+      if (f === 1) displayType = decodeCommonDisplayType(b); // WebcastSocialMessage.common
+      else if (f === 2) user = decodeUser(b);
+    } else skipField(c, w);
+  }
+  return { user, displayType };
+}
+
+function decodeGiftMsg(buf: Buffer): GiftData {
+  const c = cur(buf);
+  let user: UserInfo = { nickname: '', uniqueId: '' };
+  let giftType = 0, repeatEnd = 0, repeatCount = 0, diamondCount = 0, giftName = '';
+  while (!done(c)) {
+    const [f, w] = readTag(c);
+    if (w === 0) {
+      const v = Number(readVarint(c));
+      if (f === 5) repeatCount = v; // WebcastGiftMessage.repeatCount (tag 40)
+      else if (f === 9) repeatEnd = v; // WebcastGiftMessage.repeatEnd (tag 72)
+    } else if (w === 2) {
+      const b = readBytes(c);
+      if (f === 7) user = decodeUser(b); // WebcastGiftMessage.user (tag 58)
+      else if (f === 15) {               // WebcastGiftMessage.giftDetails (tag 122)
+        const d = decodeGiftDetails(b);
+        giftType = d.giftType;
+        diamondCount = d.diamondCount;
+        giftName = d.giftName;
+      }
+    } else skipField(c, w);
+  }
+  return { user, giftType, repeatEnd, repeatCount, diamondCount, giftName };
+}
+
+function decodeControlMsg(buf: Buffer): number {
+  const c = cur(buf);
+  while (!done(c)) {
+    const [f, w] = readTag(c);
+    if (w === 0) {
+      const v = Number(readVarint(c));
+      if (f === 2) return v; // WebcastControlMessage.action (tag 16)
+    } else skipField(c, w);
+  }
+  return 0;
+}
+
+function decodeBaseMsg(buf: Buffer): BaseMsg {
+  const c = cur(buf);
+  let type = '', msgId = '0';
+  let payload: Buffer<ArrayBuffer> = Buffer.alloc(0);
+  while (!done(c)) {
+    const [f, w] = readTag(c);
+    if (w === 2) {
+      const b = readBytes(c);
+      if (f === 1) type = b.toString('utf-8');
+      else if (f === 2) payload = b;
+    } else if (w === 0) {
+      const v = readVarint(c);
+      if (f === 3) msgId = v.toString();
+    } else skipField(c, w);
+  }
+  return { type, payload, msgId };
+}
+
+function decodeMapEntry(buf: Buffer): { key: string; value: string } {
+  const c = cur(buf);
+  let key = '', value = '';
+  while (!done(c)) {
+    const [f, w] = readTag(c);
+    if (w === 2) {
+      const b = readBytes(c);
+      if (f === 1) key = b.toString('utf-8');
+      else if (f === 2) value = b.toString('utf-8');
+    } else skipField(c, w);
+  }
+  return { key, value };
+}
+
+function decodeFetchResult(buf: Buffer): FetchResult {
+  const c = cur(buf);
+  const messages: BaseMsg[] = [];
+  let msgCursor = '', internalExt = '', wsUrl = '';
+  const wsParams: Record<string, string> = {};
+  let needsAck = false;
+  while (!done(c)) {
+    const [f, w] = readTag(c);
+    if (w === 2) {
+      const b = readBytes(c);
+      if (f === 1) messages.push(decodeBaseMsg(b));       // ProtoMessageFetchResult.messages
+      else if (f === 2) msgCursor = b.toString('utf-8');  // .cursor
+      else if (f === 5) internalExt = b.toString('utf-8'); // .internalExt
+      else if (f === 7) {                                  // .wsParams (map entry)
+        const e = decodeMapEntry(b);
+        if (e.key) wsParams[e.key] = e.value;
+      }
+      else if (f === 10) wsUrl = b.toString('utf-8');     // .wsUrl
+    } else if (w === 0) {
+      const v = readVarint(c);
+      if (f === 9) needsAck = v !== 0n; // .needsAck
+    } else skipField(c, w);
+  }
+  return { messages, cursor: msgCursor, internalExt, wsParams, needsAck, wsUrl };
+}
+
+function decodePushFrame(buf: Buffer): PushFrame {
+  const c = cur(buf);
+  let payloadEncoding = '', payloadType = '', logId = '0';
+  let payload: Buffer<ArrayBuffer> = Buffer.alloc(0);
+  while (!done(c)) {
+    const [f, w] = readTag(c);
+    if (w === 2) {
+      const b = readBytes(c);
+      if (f === 6) payloadEncoding = b.toString('utf-8');
+      else if (f === 7) payloadType = b.toString('utf-8');
+      else if (f === 8) payload = b;
+    } else if (w === 0) {
+      const v = readVarint(c);
+      if (f === 2) logId = v.toString(); // WebcastPushFrame.logId
+    } else skipField(c, w);
+  }
+  return { payloadEncoding, payloadType, payload, logId };
+}
+
+// ─── Message encoders ─────────────────────────────────────────────────────────
+
+function encodePushFrame(payloadType: string, payload: Buffer, logId?: string): Buffer {
+  const w = new PW();
+  if (logId && logId !== '0') w.i64(2, BigInt(logId));
+  w.str(6, 'pb');
+  w.str(7, payloadType);
+  w.buf(8, payload);
+  return w.finish();
+}
+
+function encodeHeartbeat(roomId: string): Buffer {
+  const hb = new PW().i64(1, BigInt(roomId)).i64(2, 1n);
+  return encodePushFrame('hb', hb.finish());
+}
+
+function encodeEnterRoom(roomId: string): Buffer {
+  const msg = new PW()
+    .i64(1, BigInt(roomId)) // roomId
+    .i64(4, 12n)            // liveId = '12'
+    .str(5, 'audience')     // identity
+    .str(9, '0');           // filterWelcomeMsg
+  return encodePushFrame('im_enter_room', msg.finish());
+}
+
+function encodeAck(logId: string, internalExt: string): Buffer {
+  return encodePushFrame('ack', Buffer.from(internalExt, 'utf-8'), logId);
+}
+
+// ─── Cookie helpers ───────────────────────────────────────────────────────────
+
+function parseCookieHeader(header: string, into: Record<string, string>): void {
+  for (const line of header.split(/\r?\n/)) {
+    const nameVal = line.split(';')[0].trim();
+    const eq = nameVal.indexOf('=');
+    if (eq < 0) continue;
+    const name = nameVal.slice(0, eq).trim();
+    const val = nameVal.slice(eq + 1).trim();
+    if (name) into[name] = val;
+  }
+}
+
+function buildCookieString(cookies: Record<string, string>): string {
+  return Object.entries(cookies)
+    .filter(([, v]) => v)
+    .map(([k, v]) => `${k}=${v}`)
+    .join('; ');
+}
+
+// ─── Adapter ──────────────────────────────────────────────────────────────────
 
 export interface TikTokAdapterOptions {
   username: string;
@@ -9,13 +394,6 @@ export interface TikTokAdapterOptions {
   onError?: (error: unknown) => void;
 }
 
-type TikTokConnection = {
-  connect: () => Promise<{ roomId: string }>;
-  disconnect: () => Promise<void> | void;
-  on: (event: string, handler: (...args: any[]) => void) => void;
-  fetchIsLive: () => Promise<boolean>;
-};
-
 export function createTikTokChatAdapter(options: TikTokAdapterOptions): TikTokChatAdapter {
   return new TikTokChatAdapter(options);
 }
@@ -23,214 +401,284 @@ export function createTikTokChatAdapter(options: TikTokAdapterOptions): TikTokCh
 export class TikTokChatAdapter implements PlatformChatAdapter {
   readonly platform = 'tiktok' as const;
 
-  private connection: TikTokConnection | null = null;
-  private readonly messageHandlers = new Set<(message: ChatMessage) => void>();
-  private readonly eventHandlers = new Set<(event: StreamEvent) => void>();
+  private ws: WsHandle | null = null;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private roomId = '';
+  private internalExt = '';
   private connected = false;
+  private readonly messageHandlers = new Set<(msg: ChatMessage) => void>();
+  private readonly eventHandlers = new Set<(ev: StreamEvent) => void>();
 
   constructor(private readonly options: TikTokAdapterOptions) {}
 
   async connect(): Promise<void> {
     if (this.connected) return;
 
-    this.options.onStatusChange?.('connecting');
-
-    const conn = await this.createConnection();
-    if (!conn) {
-      this.options.onError?.(new Error('Failed to create TikTokLiveConnection'));
+    if (!this.options.signApiKey) {
       this.options.onStatusChange?.('error');
+      this.options.onError?.(new Error('TikTok connection requires an EulerStream sign API key'));
       return;
     }
 
-    this.connection = conn;
-    this.attachListeners(conn);
+    this.options.onStatusChange?.('connecting');
 
     try {
-      await conn.connect();
-      this.connected = true;
-      this.options.onStatusChange?.('connected');
+      await this.doConnect();
     } catch (cause) {
       this.connected = false;
-      this.connection = null;
       this.options.onError?.(cause);
       this.options.onStatusChange?.('error');
     }
   }
 
-  async disconnect(): Promise<void> {
-    this.connected = false;
+  private async doConnect(): Promise<void> {
+    const { signApiKey, username } = this.options;
 
-    if (this.connection) {
-      try {
-        await this.connection.disconnect();
-      } catch (err) {
-        console.warn('[tiktok] Disconnect error:', err instanceof Error ? err.message : String(err));
-      }
+    // 1. Get signed WebSocket from EulerStream
+    const params = new URLSearchParams({
+      apiKey: signApiKey!,
+      client: 'ttlive-node',
+      unique_id: username,
+      client_enter: 'true',
+    });
+
+    const res = await fetch(`${EULER_BASE}/webcast/fetch?${params}`, {
+      headers: { 'User-Agent': UA },
+      signal: AbortSignal.timeout(20_000),
+    });
+
+    if (res.status === 429) throw new Error('TikTok sign server rate limit exceeded');
+    if (res.status === 402) throw new Error('TikTok sign server: premium feature required');
+    if (!res.ok) {
+      let detail = '';
+      try { detail = await res.text(); } catch { /* ignore */ }
+      throw new Error(`TikTok sign server returned ${res.status}${detail ? ': ' + detail.slice(0, 120) : ''}`);
     }
 
-    this.connection = null;
+    this.roomId = res.headers.get('x-room-id') ?? '';
+    if (!this.roomId) throw new Error('TikTok: sign server did not return a room ID (user may be offline)');
+
+    const cookies: Record<string, string> = { 'tt-target-idc': 'useast1a' };
+    const setCookie = res.headers.get('x-set-tt-cookie') ?? '';
+    if (setCookie) parseCookieHeader(setCookie, cookies);
+
+    const body = Buffer.from(await res.arrayBuffer());
+    const result = decodeFetchResult(body);
+
+    if (!result.wsUrl) throw new Error('TikTok: sign server did not return a WebSocket URL');
+
+    this.internalExt = result.internalExt;
+
+    // 2. Build WebSocket URL
+    const wsParams: Record<string, string> = {
+      ...DEFAULT_WS_PARAMS,
+      compress: 'gzip',
+      room_id: this.roomId,
+      internal_ext: result.internalExt,
+      cursor: result.cursor,
+    };
+    for (const [k, v] of Object.entries(result.wsParams)) {
+      if (v) wsParams[k] = v;
+    }
+    const wsUrl = `${result.wsUrl}?${new URLSearchParams(wsParams)}&version_code=270000`;
+
+    // 3. Open WebSocket using undici (supports custom headers without extra npm packages)
+    const _req = createRequire(import.meta.url);
+    const UndiciWS = (_req('undici') as { WebSocket: new (url: string, opts?: unknown) => WsHandle }).WebSocket;
+    const ws = new UndiciWS(wsUrl, {
+      headers: { 'User-Agent': UA, 'Cookie': buildCookieString(cookies) },
+    } as unknown);
+
+    this.ws = ws as unknown as NonNullable<typeof this.ws>;
+
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => { ws.close(); reject(new Error('TikTok WebSocket connection timeout')); }, CONNECT_TIMEOUT_MS);
+
+      ws.addEventListener('open', () => { clearTimeout(timer); resolve(); }, { once: true } as unknown);
+      ws.addEventListener('error', (ev: unknown) => {
+        clearTimeout(timer);
+        const msg = (ev as { message?: string })?.message ?? 'WebSocket error';
+        reject(new Error(`TikTok WebSocket: ${msg}`));
+      }, { once: true } as unknown);
+    });
+
+    // 4. Wire up ongoing handlers
+    ws.binaryType = 'arraybuffer';
+    ws.addEventListener('message', (ev: unknown) => {
+      const data = (ev as { data: unknown }).data;
+      this.onWsMessage(Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer));
+    });
+    ws.addEventListener('close', () => this.onDisconnect());
+    ws.addEventListener('error', (ev: unknown) => {
+      this.options.onError?.((ev as { message?: string })?.message ?? 'WebSocket error');
+    });
+
+    // 5. Enter room + start heartbeat
+    ws.send(encodeEnterRoom(this.roomId));
+    this.heartbeatTimer = setInterval(() => {
+      if (this.ws?.readyState === 1) this.ws.send(encodeHeartbeat(this.roomId));
+    }, HEARTBEAT_MS);
+
+    this.connected = true;
+    this.options.onStatusChange?.('connected');
+
+    // Process messages bundled with the initial sign-server response
+    this.processMessages(result.messages, result.needsAck, '0');
+  }
+
+  async disconnect(): Promise<void> {
+    this.connected = false;
+    this.clearHb();
+    if (this.ws) {
+      try { this.ws.close(); } catch { /* ignore */ }
+      this.ws = null;
+    }
     this.options.onStatusChange?.('disconnected');
   }
 
   async sendMessage(_content: string): Promise<void> {
-    throw new Error('TikTok adapter does not support sending messages (requires browser session authentication)');
+    throw new Error('TikTok does not support sending messages (requires browser session authentication)');
   }
 
-  onMessage(handler: (message: ChatMessage) => void): () => void {
+  onMessage(handler: (msg: ChatMessage) => void): () => void {
     this.messageHandlers.add(handler);
     return () => this.messageHandlers.delete(handler);
   }
 
-  onEvent(handler: (event: StreamEvent) => void): () => void {
+  onEvent(handler: (ev: StreamEvent) => void): () => void {
     this.eventHandlers.add(handler);
     return () => this.eventHandlers.delete(handler);
   }
 
   async fetchIsLive(): Promise<boolean> {
-    const conn = await this.createConnection();
-    if (!conn) return false;
     try {
-      return await conn.fetchIsLive();
-    } catch (err) {
-      console.warn('[tiktok] fetchIsLive failed:', err instanceof Error ? err.message : String(err));
+      const params = new URLSearchParams({
+        uniqueId: this.options.username,
+        sourceType: '54',
+        aid: '1988',
+        app_name: 'tiktok_web',
+        device_platform: 'web_pc',
+      });
+      const res = await fetch(`https://www.tiktok.com/api-live/user/room/?${params}`, {
+        headers: { 'User-Agent': UA, 'Accept': 'application/json', 'Referer': 'https://www.tiktok.com/' },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) return false;
+      const data = await res.json() as Record<string, unknown>;
+      // status 2 = live, status 4 = offline
+      return ((data?.data as Record<string, unknown>)?.data as Record<string, unknown>)?.status === 2;
+    } catch {
       return false;
     }
   }
 
-  private async createConnection(): Promise<TikTokConnection | null> {
+  private onWsMessage(raw: Buffer): void {
     try {
-      const require = createRequire(import.meta.url);
-      const module = require('tiktok-live-connector') as {
-        TikTokLiveConnection?: new (username: string, options?: Record<string, unknown>) => TikTokConnection;
-        default?: { TikTokLiveConnection?: new (username: string, options?: Record<string, unknown>) => TikTokConnection };
-      };
-      const ConnectionCtor = module.TikTokLiveConnection ?? module.default?.TikTokLiveConnection;
-      if (typeof ConnectionCtor !== 'function') {
-        this.options.onError?.(new Error('tiktok-live-connector did not export TikTokLiveConnection'));
-        return null;
+      const frame = decodePushFrame(raw);
+      if (frame.payloadEncoding !== 'pb') return;
+
+      let payload = frame.payload;
+      if (payload.length > 2 && payload[0] === 0x1f && payload[1] === 0x8b && payload[2] === 0x08) {
+        payload = gunzipSync(payload);
       }
 
-      const connectionOptions: Record<string, unknown> = {
-        enableExtendedGiftInfo: true,
-        processInitialData: false,
-        disableEulerFallbacks: !this.options.signApiKey,
-      };
+      const result = decodeFetchResult(payload);
 
-      if (this.options.signApiKey) {
-        connectionOptions.signApiKey = this.options.signApiKey;
+      if (result.needsAck && frame.logId !== '0') {
+        this.ws?.send(encodeAck(frame.logId, result.internalExt || this.internalExt));
       }
+      if (result.internalExt) this.internalExt = result.internalExt;
 
-      return new ConnectionCtor(this.options.username, connectionOptions);
-    } catch (cause) {
-      this.options.onError?.(cause);
-      return null;
+      this.processMessages(result.messages, result.needsAck, frame.logId);
+    } catch {
+      // Silently ignore malformed frames
     }
   }
 
-  private attachListeners(conn: TikTokConnection): void {
-    // Chat messages
-    conn.on('chat', (data: any) => {
-      const message = this.buildChatMessage(data);
-      if (message) this.emitMessage(message);
-    });
-
-    // Gift events
-    conn.on('gift', (data: any) => {
-      // Streak gifts: only process when streak ends (repeatEnd === true)
-      // or for non-streakable gifts (giftType !== 1)
-      if (data.giftType === 1 && !data.repeatEnd) return;
-
-      const event = this.buildStreamEvent('gift', data, {
-        amount: data.repeatCount ?? data.diamondCount ?? 1,
-        message: data.giftName ? `${data.giftName} x${data.repeatCount ?? 1}` : undefined,
-      });
-      if (event) this.emitEvent(event);
-    });
-
-    // Follow events
-    conn.on('follow', (data: any) => {
-      const event = this.buildStreamEvent('follow', data);
-      if (event) this.emitEvent(event);
-    });
-
-    // Subscribe events
-    conn.on('subscribe', (data: any) => {
-      const event = this.buildStreamEvent('subscription', data);
-      if (event) this.emitEvent(event);
-    });
-
-    // Disconnection
-    conn.on('disconnected', () => {
-      if (this.connected) {
-        this.connected = false;
-        this.connection = null;
-        this.options.onStatusChange?.('disconnected');
-      }
-    });
-
-    // Stream end
-    conn.on('streamEnd', () => {
-      if (this.connected) {
-        this.connected = false;
-        this.connection = null;
-        this.options.onStatusChange?.('disconnected');
-      }
-    });
-
-    // Error
-    conn.on('error', (cause: unknown) => {
-      this.options.onError?.(cause);
-      // Don't disconnect on transient errors — only update status if fatal
-    });
-  }
-
-  private buildChatMessage(data: any): ChatMessage | null {
-    const author = data.uniqueId ?? data.user?.uniqueId ?? data.nickname ?? '';
-    const content = data.comment ?? data.message ?? '';
-    if (!author || !content) return null;
-
-    const badges: string[] = [];
-    if (data.isModerator) badges.push('moderator');
-    if (data.isSubscriber) badges.push('subscriber');
-
-    return {
-      id: `tiktok-${data.msgId ?? Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      platform: 'tiktok',
-      author,
-      content,
-      badges,
-      timestampLabel: this.formatTimestamp(),
-      avatarUrl: data.profilePictureUrl ?? data.user?.profilePictureUrl ?? undefined,
-    };
-  }
-
-  private buildStreamEvent(type: StreamEventType, data: any, extra?: { amount?: number; message?: string }): StreamEvent | null {
-    const author = data.uniqueId ?? data.user?.uniqueId ?? data.nickname ?? 'TikTok user';
-
-    return {
-      id: `tiktok-event-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      platform: 'tiktok',
-      type,
-      author,
-      amount: extra?.amount,
-      message: extra?.message,
-      timestampLabel: this.formatTimestamp(),
-    };
-  }
-
-  private formatTimestamp(): string {
-    return new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date());
-  }
-
-  private emitMessage(message: ChatMessage): void {
-    for (const handler of this.messageHandlers) {
-      try { handler(message); } catch { /* ignore */ }
+  private processMessages(messages: BaseMsg[], _needsAck: boolean, _logId: string): void {
+    for (const msg of messages) {
+      try { this.dispatchMsg(msg); } catch { /* ignore */ }
     }
   }
 
-  private emitEvent(event: StreamEvent): void {
-    for (const handler of this.eventHandlers) {
-      try { handler(event); } catch { /* ignore */ }
+  private dispatchMsg(msg: BaseMsg): void {
+    switch (msg.type) {
+      case 'WebcastChatMessage': {
+        const d = decodeChatMsg(msg.payload);
+        const author = d.user.uniqueId || d.user.nickname;
+        if (!author || !d.comment) return;
+        this.emitMsg({
+          id: `tiktok-${msg.msgId}-${Math.random().toString(36).slice(2, 7)}`,
+          platform: 'tiktok',
+          author,
+          content: d.comment,
+          badges: [],
+          timestampLabel: ts(),
+        });
+        break;
+      }
+
+      case 'WebcastSocialMessage': {
+        const d = decodeSocialMsg(msg.payload);
+        if (!d.displayType.includes('follow')) return;
+        const author = d.user.uniqueId || d.user.nickname || 'TikTok user';
+        this.emitEv({
+          id: `tiktok-ev-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          platform: 'tiktok',
+          type: 'follow',
+          author,
+          timestampLabel: ts(),
+        });
+        break;
+      }
+
+      case 'WebcastGiftMessage': {
+        const d = decodeGiftMsg(msg.payload);
+        // Only emit when streak ends (giftType === 1 && repeatEnd) or non-streak gifts
+        if (d.giftType === 1 && !d.repeatEnd) return;
+        const author = d.user.uniqueId || d.user.nickname || 'TikTok user';
+        this.emitEv({
+          id: `tiktok-ev-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          platform: 'tiktok',
+          type: 'gift',
+          author,
+          amount: d.repeatCount || d.diamondCount || 1,
+          message: d.giftName ? `${d.giftName} x${d.repeatCount || 1}` : undefined,
+          timestampLabel: ts(),
+        });
+        break;
+      }
+
+      case 'WebcastControlMessage': {
+        const action = decodeControlMsg(msg.payload);
+        // 3 = STREAM_ENDED, 4 = STREAM_SUSPENDED
+        if (action === 3 || action === 4) this.onDisconnect();
+        break;
+      }
     }
   }
+
+  private onDisconnect(): void {
+    if (!this.connected) return;
+    this.connected = false;
+    this.clearHb();
+    this.ws = null;
+    this.options.onStatusChange?.('disconnected');
+  }
+
+  private clearHb(): void {
+    if (this.heartbeatTimer) { clearInterval(this.heartbeatTimer); this.heartbeatTimer = null; }
+  }
+
+  private emitMsg(msg: ChatMessage): void {
+    for (const h of this.messageHandlers) { try { h(msg); } catch { /* ignore */ } }
+  }
+
+  private emitEv(ev: StreamEvent): void {
+    for (const h of this.eventHandlers) { try { h(ev); } catch { /* ignore */ } }
+  }
+}
+
+function ts(): string {
+  return new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date());
 }
