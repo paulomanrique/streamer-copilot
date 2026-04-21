@@ -14,9 +14,8 @@ import { SectionErrorBoundary } from './components/AppErrorBoundary.js';
 import { StatusMessages } from './components/StatusMessages.js';
 import { ToastStack } from './components/ToastStack.js';
 import { SettingsWorkspace } from './pages/SettingsWorkspace.js';
-import { useAudioPlayer } from './hooks/useAudioPlayer.js';
+import { useAudioQueue } from './hooks/useAudioQueue.js';
 import { useIpcListeners } from './hooks/useIpcListeners.js';
-import { useTTSEngine } from './hooks/useTTSEngine.js';
 import { useToasts } from './hooks/useToasts.js';
 
 const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
@@ -77,8 +76,7 @@ export default function App() {
   }, [appLanguage, pushToast]);
 
   // Extracted hooks for audio, TTS, and IPC listeners
-  useAudioPlayer(pushError);
-  useTTSEngine({ languageCode, voiceRate, voiceVolume, onError: pushError });
+  useAudioQueue({ voiceRate, voiceVolume, languageCode, onError: pushError });
   useIpcListeners();
 
   const activeProfile = useMemo(

@@ -32,6 +32,7 @@
   "dependencies": {
     "@legendapp/list": "^3.0.0-beta.44",
     "@nekiro/kick-api": "^2.1.2",
+    "@sefinek/google-tts-api": "^2.1.13",
     "better-sqlite3": "^12.4.1",
     "electron-updater": "^6.8.3",
     "googleapis": "^171.4.0",

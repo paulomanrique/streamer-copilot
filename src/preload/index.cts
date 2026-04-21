@@ -167,6 +167,7 @@ const IPC_CHANNELS = {
   suggestionsEntries: 'suggestions:entries',
   suggestionsClearEntries: 'suggestions:clear-entries',
   suggestionsState: 'suggestions:state',
+  voiceGoogleTtsAudio: 'voice:google-tts-audio',
   welcomeGetSettings: 'welcome:get-settings',
   welcomeSaveSettings: 'welcome:save-settings',
   welcomePickSoundFile: 'welcome:pick-sound-file',
@@ -234,6 +235,11 @@ const copilotApi: CopilotApi = {
     const wrappedListener = (_event: Electron.IpcRendererEvent, payload: VoiceSpeakPayload) => listener(payload);
     ipcRenderer.on(IPC_CHANNELS.voiceSpeak, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.voiceSpeak, wrappedListener); };
+  },
+  onGoogleTtsAudio: (listener: (payload: { base64: string }) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: { base64: string }) => listener(payload);
+    ipcRenderer.on(IPC_CHANNELS.voiceGoogleTtsAudio, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.voiceGoogleTtsAudio, wrappedListener); };
   },
   listSoundCommands: () => ipcRenderer.invoke(IPC_CHANNELS.soundsList),
   upsertSoundCommand: (input: SoundCommandUpsertInput) => ipcRenderer.invoke(IPC_CHANNELS.soundsUpsert, input),

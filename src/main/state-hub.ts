@@ -65,6 +65,10 @@ export class StateHub {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.soundsPlay, payload);
   }
 
+  pushGoogleTtsAudio(payload: { base64: string }): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.voiceGoogleTtsAudio, payload);
+  }
+
   pushSuggestionState(payload: SuggestionSnapshot): void {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.suggestionsState, payload);
   }

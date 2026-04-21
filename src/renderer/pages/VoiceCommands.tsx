@@ -2,6 +2,41 @@ import { useEffect, useRef, useState } from 'react';
 
 import type { VoiceCommand } from '../../shared/types.js';
 
+const GOOGLE_TTS_LANGUAGES = [
+  { code: 'pt-BR', label: 'Português (Brasil)' },
+  { code: 'en', label: 'English' },
+  { code: 'es', label: 'Español' },
+  { code: 'fr', label: 'Français' },
+  { code: 'de', label: 'Deutsch' },
+  { code: 'it', label: 'Italiano' },
+  { code: 'ja', label: '日本語' },
+  { code: 'ko', label: '한국어' },
+  { code: 'zh-CN', label: '中文 (简体)' },
+  { code: 'zh-TW', label: '中文 (繁體)' },
+  { code: 'ru', label: 'Русский' },
+  { code: 'ar', label: 'العربية' },
+  { code: 'hi', label: 'हिन्दी' },
+  { code: 'nl', label: 'Nederlands' },
+  { code: 'pl', label: 'Polski' },
+  { code: 'pt', label: 'Português (Portugal)' },
+  { code: 'sv', label: 'Svenska' },
+  { code: 'tr', label: 'Türkçe' },
+  { code: 'uk', label: 'Українська' },
+  { code: 'vi', label: 'Tiếng Việt' },
+  { code: 'th', label: 'ไทย' },
+  { code: 'cs', label: 'Čeština' },
+  { code: 'da', label: 'Dansk' },
+  { code: 'fi', label: 'Suomi' },
+  { code: 'el', label: 'Ελληνικά' },
+  { code: 'he', label: 'עברית' },
+  { code: 'hu', label: 'Magyar' },
+  { code: 'id', label: 'Bahasa Indonesia' },
+  { code: 'ms', label: 'Bahasa Melayu' },
+  { code: 'no', label: 'Norsk' },
+  { code: 'ro', label: 'Română' },
+  { code: 'fil', label: 'Filipino' },
+];
+
 interface VoiceCommandsPageProps {
   voiceRate: number;
   voiceVolume: number;
@@ -157,6 +192,19 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
     }
   };
 
+  // ── Engine detection ──────────────────────────────────────────────────
+  const isGoogleEngine = selectedVoiceName.startsWith('google:');
+  const googleLangCode = isGoogleEngine ? selectedVoiceName.slice('google:'.length) : '';
+
+  const setEngine = (engine: 'system' | 'google') => {
+    if (engine === 'google') {
+      setSelectedVoiceName('google:pt-BR');
+    } else {
+      const defaultVoice = voices.find((v) => v.default) ?? voices[0];
+      setSelectedVoiceName(defaultVoice?.name ?? '');
+    }
+  };
+
   // ── Voices grouped by language ────────────────────────────────────────
   const voicesByLang = voices.reduce<Record<string, SpeechSynthesisVoice[]>>((acc, voice) => {
     const lang = voice.lang || 'Other';
@@ -209,55 +257,110 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
           )}
         </div>
 
-        {/* Voice select */}
+        {/* TTS Engine */}
         <div className="px-5 py-4">
-          <label className="block text-sm text-gray-400 mb-1.5">Voice</label>
-          {voices.length === 0 ? (
-            <p className="text-xs text-gray-500 italic">Loading voices…</p>
-          ) : (
-            <select
-              value={selectedVoiceName}
-              onChange={(e) => setSelectedVoiceName(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-200 px-3 py-2 focus:outline-none focus:border-violet-500"
+          <label className="block text-sm text-gray-400 mb-1.5">Engine</label>
+          <div className="flex gap-2 mb-3">
+            <button
+              type="button"
+              onClick={() => setEngine('system')}
+              className={`px-3 py-1.5 rounded text-sm transition-colors border ${
+                !isGoogleEngine
+                  ? 'bg-violet-600 border-violet-500 text-white'
+                  : 'bg-gray-700 border-gray-600 text-gray-400 hover:text-white'
+              }`}
             >
-              {sortedLangs.map((lang) => (
-                <optgroup key={lang} label={lang}>
-                  {voicesByLang[lang].map((voice) => (
-                    <option key={voice.name} value={voice.name}>
-                      {voice.name}{voice.default ? ' ★' : ''}
-                    </option>
+              System
+            </button>
+            <button
+              type="button"
+              onClick={() => setEngine('google')}
+              className={`px-3 py-1.5 rounded text-sm transition-colors border ${
+                isGoogleEngine
+                  ? 'bg-violet-600 border-violet-500 text-white'
+                  : 'bg-gray-700 border-gray-600 text-gray-400 hover:text-white'
+              }`}
+            >
+              Google Translate
+            </button>
+          </div>
+          <p className="text-xs text-gray-600 mb-3">
+            {isGoogleEngine
+              ? 'Uses Google Translate TTS. Requires internet.'
+              : 'Uses voices installed on this computer.'}
+          </p>
+        </div>
+
+        {/* Voice / Language select */}
+        <div className="px-5 py-4">
+          {isGoogleEngine ? (
+            <>
+              <label className="block text-sm text-gray-400 mb-1.5">Language</label>
+              <select
+                value={googleLangCode}
+                onChange={(e) => setSelectedVoiceName(`google:${e.target.value}`)}
+                className="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-200 px-3 py-2 focus:outline-none focus:border-violet-500"
+              >
+                {GOOGLE_TTS_LANGUAGES.map((lang) => (
+                  <option key={lang.code} value={lang.code}>
+                    {lang.label}
+                  </option>
+                ))}
+              </select>
+            </>
+          ) : (
+            <>
+              <label className="block text-sm text-gray-400 mb-1.5">Voice</label>
+              {voices.length === 0 ? (
+                <p className="text-xs text-gray-500 italic">Loading voices…</p>
+              ) : (
+                <select
+                  value={selectedVoiceName}
+                  onChange={(e) => setSelectedVoiceName(e.target.value)}
+                  className="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-200 px-3 py-2 focus:outline-none focus:border-violet-500"
+                >
+                  {sortedLangs.map((lang) => (
+                    <optgroup key={lang} label={lang}>
+                      {voicesByLang[lang].map((voice) => (
+                        <option key={voice.name} value={voice.name}>
+                          {voice.name}{voice.default ? ' ★' : ''}
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
-                </optgroup>
-              ))}
-            </select>
+                </select>
+              )}
+            </>
           )}
         </div>
 
-        {/* Rate & Volume */}
-        <div className="px-5 py-4 grid grid-cols-2 gap-x-6 gap-y-1">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-sm text-gray-400">Rate</span>
-            <span className="text-xs text-gray-500 tabular-nums">
-              {props.voiceRate === 1 ? 'Normal (1×)' : `${props.voiceRate.toFixed(2)}×`}
-            </span>
+        {/* Rate & Volume (system voices only) */}
+        {!isGoogleEngine ? (
+          <div className="px-5 py-4 grid grid-cols-2 gap-x-6 gap-y-1">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm text-gray-400">Rate</span>
+              <span className="text-xs text-gray-500 tabular-nums">
+                {props.voiceRate === 1 ? 'Normal (1×)' : `${props.voiceRate.toFixed(2)}×`}
+              </span>
+            </div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm text-gray-400">Volume</span>
+              <span className="text-xs text-gray-500 tabular-nums">{Math.round(props.voiceVolume * 100)}%</span>
+            </div>
+            <input
+              type="range" min="50" max="200"
+              value={Math.round(props.voiceRate * 100)}
+              onChange={(e) => props.onChangeVoiceRate(Number(e.target.value) / 100)}
+              className="w-full accent-violet-500"
+            />
+            <input
+              type="range" min="0" max="100"
+              value={Math.round(props.voiceVolume * 100)}
+              onChange={(e) => props.onChangeVoiceVolume(Number(e.target.value) / 100)}
+              className="w-full accent-violet-500"
+            />
           </div>
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-sm text-gray-400">Volume</span>
-            <span className="text-xs text-gray-500 tabular-nums">{Math.round(props.voiceVolume * 100)}%</span>
-          </div>
-          <input
-            type="range" min="50" max="200"
-            value={Math.round(props.voiceRate * 100)}
-            onChange={(e) => props.onChangeVoiceRate(Number(e.target.value) / 100)}
-            className="w-full accent-violet-500"
-          />
-          <input
-            type="range" min="0" max="100"
-            value={Math.round(props.voiceVolume * 100)}
-            onChange={(e) => props.onChangeVoiceVolume(Number(e.target.value) / 100)}
-            className="w-full accent-violet-500"
-          />
-        </div>
+        ) : null}
 
         {/* Extra options */}
         <div className="px-5 py-4 flex items-center gap-6">

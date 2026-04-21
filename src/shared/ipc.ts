@@ -169,6 +169,7 @@ export const IPC_CHANNELS = {
   suggestionsEntries: 'suggestions:entries',
   suggestionsClearEntries: 'suggestions:clear-entries',
   suggestionsState: 'suggestions:state',
+  voiceGoogleTtsAudio: 'voice:google-tts-audio',
   welcomeGetSettings: 'welcome:get-settings',
   welcomeSaveSettings: 'welcome:save-settings',
   welcomePickSoundFile: 'welcome:pick-sound-file',
@@ -222,6 +223,7 @@ export interface CopilotApi {
   previewSpeak: (input: VoiceSpeakPayload) => Promise<void>;
   setRendererVoiceCapabilities: (input: RendererVoiceCapabilities) => Promise<void>;
   onVoiceSpeak: (listener: (payload: VoiceSpeakPayload) => void) => () => void;
+  onGoogleTtsAudio: (listener: (payload: { base64: string }) => void) => () => void;
   listSoundCommands: () => Promise<SoundCommand[]>;
   upsertSoundCommand: (input: SoundCommandUpsertInput) => Promise<SoundCommand[]>;
   deleteSoundCommand: (input: SoundCommandDeleteInput) => Promise<SoundCommand[]>;

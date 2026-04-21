@@ -46,6 +46,7 @@ import { TwitchCredentialsStore } from '../platforms/twitch/credentials-store.js
 import { createTwitchChatAdapter } from '../platforms/twitch/adapter.js';
 import { YouTubeSettingsStore } from '../platforms/youtube/settings-store.js';
 import { YouTubeScraper } from './youtube-scraper.js';
+import { getAllAudioBase64 } from '@sefinek/google-tts-api';
 import { APP_NAME } from '../shared/constants.js';
 import { IPC_CHANNELS } from '../shared/ipc.js';
 import {
@@ -257,6 +258,13 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const voiceService = new VoiceService({
     repository: voiceRepository,
     onSpeak: (payload) => {
+      // Google TTS: lang field starts with "google:"
+      if (payload.lang.startsWith('google:')) {
+        const langCode = payload.lang.slice('google:'.length) || 'en';
+        void speakWithGoogleTts(payload.text, langCode);
+        return;
+      }
+
       if (rendererSpeechSynthesisAvailable) {
         options.stateHub.pushVoiceSpeak(payload);
         return;
@@ -1740,6 +1748,21 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     await Promise.allSettled([chatService.disconnectAll(), obsService.stop(), raffleOverlayServer.stop()]);
     Object.values(IPC_CHANNELS).forEach(c => ipcMain.removeHandler(c));
   };
+
+  async function speakWithGoogleTts(text: string, lang: string): Promise<void> {
+    try {
+      const parts = await getAllAudioBase64(text, { lang });
+      // Concatenate all parts into one base64 string (each part is a separate MP3 chunk)
+      for (const part of parts) {
+        options.stateHub.pushGoogleTtsAudio({ base64: part.base64 });
+      }
+    } catch (cause) {
+      logService.error('voice', 'Google TTS failed, falling back to OS TTS', {
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
+      void speakWithOsFallback(text);
+    }
+  }
 
   async function speakWithOsFallback(text: string): Promise<void> {
     if (process.platform === 'darwin') await execFile('say', [text]);
