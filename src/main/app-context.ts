@@ -37,6 +37,7 @@ import { WelcomeSettingsStore } from '../modules/welcome/welcome-settings-store.
 import { WelcomeService } from '../modules/welcome/welcome-service.js';
 import { MusicSettingsStore } from '../modules/music/music-settings-store.js';
 import { MusicRequestService } from '../modules/music/music-request-service.js';
+import { searchYouTube as scrapeYouTube } from '../modules/music/youtube-search.js';
 import { MusicPlayer } from './music-player.js';
 import { VoiceCommandRepository } from '../modules/voice/voice-repository.js';
 import { VoiceService } from '../modules/voice/voice-service.js';
@@ -282,16 +283,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
   // YouTube search for music requests
   async function searchYouTube(query: string): Promise<{ videoId: string; title: string; durationSeconds: number; thumbnailUrl: string | null } | null> {
-    const YouTube = await import('youtube-sr');
-    const results = await YouTube.YouTube.search(query, { limit: 1, type: 'video' });
-    const video = results[0];
-    if (!video || !video.id) return null;
-    return {
-      videoId: video.id,
-      title: video.title ?? query,
-      durationSeconds: Math.floor((video.duration ?? 0) / 1000),
-      thumbnailUrl: video.thumbnail?.url ?? null,
-    };
+    return scrapeYouTube(query);
   }
 
   // musicPlayer and musicService are mutually dependent; use a shared ref to avoid forward-reference issues.

@@ -68,14 +68,25 @@ export class MusicPlayer {
     view.webContents.on('dom-ready', () => {
       if (view.webContents.isDestroyed()) return;
       void view.webContents.executeJavaScript(FOCUS_SPOOF);
-      // Retry until the <video> element exists (YouTube player loads asynchronously)
+      // YouTube's player API (movie_player.setVolume) is more reliable than
+      // setting video.volume directly, as YouTube may reset video.volume after init.
+      // Retry until the player is fully initialised (can take 2-5 seconds).
       void view.webContents.executeJavaScript(`
         (() => {
-          const setVol = () => {
+          const vol = ${Math.round(volume * 100)};
+          let attempts = 0;
+          const apply = () => {
+            const p = document.getElementById('movie_player');
+            if (p && typeof p.setVolume === 'function') {
+              p.setVolume(vol);
+              if (typeof p.unMute === 'function') p.unMute();
+              return;
+            }
             const v = document.querySelector('video');
-            if (v) { v.volume = ${volume}; v.muted = false; } else { setTimeout(setVol, 500); }
+            if (v) { v.volume = ${volume}; v.muted = false; }
+            if (++attempts < 30) setTimeout(apply, 500);
           };
-          setVol();
+          apply();
         })();
       `);
     });
@@ -97,8 +108,13 @@ export class MusicPlayer {
   setVolume(volume: number): void {
     if (!this.view?.webContents || this.view.webContents.isDestroyed()) return;
     void this.view.webContents.executeJavaScript(`
-      const v = document.querySelector('video');
-      if (v) v.volume = ${volume};
+      (() => {
+        const vol = ${Math.round(volume * 100)};
+        const p = document.getElementById('movie_player');
+        if (p && typeof p.setVolume === 'function') { p.setVolume(vol); return; }
+        const v = document.querySelector('video');
+        if (v) v.volume = ${volume};
+      })();
     `);
   }
 
