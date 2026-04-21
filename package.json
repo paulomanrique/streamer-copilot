@@ -1,6 +1,6 @@
 {
   "name": "streamer-copilot",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "private": true,
   "description": "Desktop app for streamers with unified chat and automations",
   "author": {
