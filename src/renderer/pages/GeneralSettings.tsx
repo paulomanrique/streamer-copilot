@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { APP_LANGUAGE_OPTIONS } from '../../shared/constants.js';
 import type { AppLanguage, EventLogLevel, GeneralSettings, ProfileSettings } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
+import { ToggleSwitch } from '../components/ToggleSwitch.js';
 
 interface GeneralSettingsPageProps {
   settings: GeneralSettings;
@@ -157,10 +158,7 @@ function ToggleRow({
         <p className="text-sm font-medium">{title}</p>
         <p className="text-xs text-gray-500 mt-0.5">{description}</p>
       </div>
-      <label className="toggle-switch">
-        <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
-        <span className="toggle-slider" />
-      </label>
+      <ToggleSwitch checked={checked} onChange={onChange} />
     </div>
   );
 }

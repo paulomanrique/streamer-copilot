@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { PERMISSION_LEVELS } from '../../shared/constants.js';
 import type { PermissionLevel, ScheduledStatusItem, SoundCommand, SoundCommandUpsertInput, SoundSettings } from '../../shared/types.js';
+import { ToggleSwitch } from '../components/ToggleSwitch.js';
 
 const EMPTY_FORM: SoundCommandUpsertInput = {
   trigger: '!',
@@ -349,10 +350,7 @@ export function SoundCommandsPage() {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <label className="toggle-switch">
-                      <input type="checkbox" checked={row.enabled} readOnly />
-                      <span className="toggle-slider" />
-                    </label>
+                    <ToggleSwitch checked={row.enabled} onChange={() => {}} />
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2">

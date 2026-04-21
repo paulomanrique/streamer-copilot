@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import type { VoiceCommand } from '../../shared/types.js';
+import { ToggleSwitch } from '../components/ToggleSwitch.js';
 
 const GOOGLE_TTS_LANGUAGES = [
   { code: 'pt-BR', label: 'Português (Brasil)' },
@@ -229,10 +230,7 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
             <p className="text-sm font-medium">Enable TTS</p>
             <p className="text-xs text-gray-500 mt-0.5">Respond to the trigger command in chat</p>
           </div>
-          <label className="toggle-switch">
-            <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
-            <span className="toggle-slider" />
-          </label>
+          <ToggleSwitch checked={enabled} onChange={setEnabled} />
         </div>
 
         {/* Command trigger */}

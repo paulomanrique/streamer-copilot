@@ -62,24 +62,35 @@ export class MusicPlayer {
 
     const { itemId, videoId, volume } = cmd;
 
+    // Ensure the WebContents is never muted at the Electron level
+    view.webContents.setAudioMuted(false);
+
     view.webContents.on('dom-ready', () => {
       if (view.webContents.isDestroyed()) return;
       void view.webContents.executeJavaScript(FOCUS_SPOOF);
+      // Retry until the <video> element exists (YouTube player loads asynchronously)
       void view.webContents.executeJavaScript(`
         (() => {
           const setVol = () => {
             const v = document.querySelector('video');
-            if (v) { v.volume = ${volume}; } else { setTimeout(setVol, 500); }
+            if (v) { v.volume = ${volume}; v.muted = false; } else { setTimeout(setVol, 500); }
           };
           setVol();
         })();
       `);
     });
 
+    view.webContents.on('did-fail-load', (_e, code, desc) => {
+      if (code === 0) return; // 0 = ERR_ABORTED, not a real error
+      this.clearPoll();
+      this.onEvent({ type: 'error', itemId, errorCode: code });
+    });
+
     this.pollTimer = setInterval(() => void this.checkPlayback(view, itemId), 2000);
 
+    // Load the full watch page (same as lurk-buddy) for reliable audio playback
     void view.webContents.loadURL(
-      `https://www.youtube.com/embed/${videoId}?autoplay=1&controls=0`,
+      `https://www.youtube.com/watch?v=${videoId}&autoplay=1`,
     );
   }
 

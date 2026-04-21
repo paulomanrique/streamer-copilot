@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import type { WelcomeSettings, WelcomeUserOverride } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
+import { ToggleSwitch } from '../components/ToggleSwitch.js';
 
 const copilot = (window as unknown as { copilot: import('../../shared/ipc.js').CopilotApi }).copilot;
 
@@ -133,14 +134,7 @@ export function WelcomeMessagePage() {
                   {t('Welcome message sent to first-time chatters in each session.')}
                 </p>
               </div>
-              <label className="toggle-switch">
-                <input
-                  type="checkbox"
-                  checked={draft.enabled}
-                  onChange={(e) => updateDraft({ enabled: e.target.checked })}
-                />
-                <span className="toggle-slider" />
-              </label>
+              <ToggleSwitch checked={draft.enabled} onChange={(enabled) => updateDraft({ enabled })} />
             </div>
           </div>
 

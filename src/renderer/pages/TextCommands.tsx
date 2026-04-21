@@ -9,6 +9,7 @@ import type {
   ScheduledStatusItem,
   TextCommandUpsertInput,
 } from '../../shared/types.js';
+import { ToggleSwitch } from '../components/ToggleSwitch.js';
 
 const EMPTY_FORM: TextCommandUpsertInput = {
   trigger: '!',
@@ -392,10 +393,7 @@ export function TextCommandsPage() {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <label className="toggle-switch">
-                      <input type="checkbox" checked={row.enabled} readOnly />
-                      <span className="toggle-slider" />
-                    </label>
+                    <ToggleSwitch checked={row.enabled} onChange={() => {}} />
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2">

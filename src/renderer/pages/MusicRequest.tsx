@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import type { MusicPlayerState, MusicRequestSettings, PermissionLevel } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
 import { PermissionPicker } from '../components/PermissionPicker.js';
+import { ToggleSwitch } from '../components/ToggleSwitch.js';
 
 const copilot = (window as unknown as { copilot: import('../../shared/ipc.js').CopilotApi }).copilot;
 
@@ -101,14 +102,7 @@ export function MusicRequestPage() {
                   {t('Viewers request songs via chat commands. The system searches YouTube and plays audio in sequence.')}
                 </p>
               </div>
-              <label className="toggle-switch">
-                <input
-                  type="checkbox"
-                  checked={draft.enabled}
-                  onChange={(e) => updateDraft({ enabled: e.target.checked })}
-                />
-                <span className="toggle-slider" />
-              </label>
+              <ToggleSwitch checked={draft.enabled} onChange={(enabled) => updateDraft({ enabled })} />
             </div>
           </div>
 
