@@ -312,7 +312,7 @@ export interface MusicPlayerState {
 
 export interface MusicPlayCommand {
   itemId: string;
-  audioUrl: string;
+  videoId: string;
   title: string;
   volume: number;
 }

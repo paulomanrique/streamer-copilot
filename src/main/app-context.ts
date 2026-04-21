@@ -278,63 +278,108 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     logInfo: (message, metadata) => logService.info('welcome', message, metadata),
     logError: (message, metadata) => logService.error('welcome', message, metadata),
   });
-  // Local proxy server — streams YouTube audio directly from ytdl-core to avoid CORS issues
-  const audioProxyAllowed = new Set<string>();
-  let audioProxyServer: http.Server | null = null;
-  let audioProxyPort: number | null = null;
+  // Hidden BrowserWindow that plays YouTube embeds — no ytdl-core dependency
+  class MusicEmbedPlayer {
+    private window: BrowserWindow | null = null;
+    private currentItemId: string | null = null;
+    private pollTimer: ReturnType<typeof setInterval> | null = null;
+    private loadTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+    private readonly onEvent: (event: import('../shared/types.js').MusicPlayerEvent) => void;
 
-  function ensureAudioProxyServer(): Promise<number> {
-    if (audioProxyPort !== null) return Promise.resolve(audioProxyPort);
+    constructor(onEvent: (event: import('../shared/types.js').MusicPlayerEvent) => void) {
+      this.onEvent = onEvent;
+    }
 
-    return new Promise((resolve, reject) => {
-      const server = http.createServer((req, res) => {
-        const videoId = req.url?.slice(1) ?? '';
+    play(itemId: string, videoId: string, volume: number): void {
+      this.stop();
+      this.currentItemId = itemId;
 
-        if (!videoId || !audioProxyAllowed.has(videoId)) {
-          res.writeHead(404);
-          res.end();
-          return;
+      const win = new BrowserWindow({
+        width: 480,
+        height: 270,
+        show: false,
+        skipTaskbar: true,
+        webPreferences: { nodeIntegration: false, contextIsolation: true },
+      });
+      this.window = win;
+
+      void win.loadURL(`https://www.youtube.com/embed/${videoId}?autoplay=1&controls=0`);
+
+      win.webContents.on('did-finish-load', () => {
+        this.applyVolume(volume);
+      });
+
+      // Timeout if stuck loading for more than 30s
+      this.loadTimeoutTimer = setTimeout(() => {
+        if (this.currentItemId === itemId) {
+          logService.error('music', 'YouTube embed load timeout', { videoId });
+          this.onEvent({ type: 'error', itemId });
+          this.stop();
         }
+      }, 30_000);
 
-        res.writeHead(200, {
-          'Content-Type': 'audio/webm',
-          'Access-Control-Allow-Origin': '*',
-          'Transfer-Encoding': 'chunked',
-        });
+      // Poll video state every 3s
+      this.pollTimer = setInterval(() => {
+        if (!this.window || this.window.isDestroyed()) return;
+        void this.window.webContents.executeJavaScript(`
+          (function() {
+            const v = document.querySelector('video');
+            if (!v) return 'loading';
+            if (v.ended || (v.duration > 0 && v.currentTime >= v.duration - 0.5)) return 'ended';
+            if (v.error !== null) return 'error';
+            return 'ok';
+          })();
+        `).then((state: unknown) => {
+          if (state === 'ended') {
+            this.clearTimers();
+            this.onEvent({ type: 'ended', itemId: this.currentItemId! });
+            this.cleanup();
+          } else if (state === 'error') {
+            this.clearTimers();
+            this.onEvent({ type: 'error', itemId: this.currentItemId! });
+            this.cleanup();
+          }
+        }).catch(() => {});
+      }, 3_000);
+    }
 
-        import('@distube/ytdl-core').then((ytdl) => {
-          const stream = ytdl.default(
-            `https://www.youtube.com/watch?v=${videoId}`,
-            { filter: 'audioonly', quality: 'highestaudio' },
-          );
+    stop(): void {
+      this.clearTimers();
+      this.cleanup();
+    }
 
-          stream.pipe(res);
+    setVolume(volume: number): void {
+      this.applyVolume(volume);
+    }
 
-          stream.on('error', (err: Error) => {
-            logService.error('music', 'Audio proxy stream error', { videoId, error: err.message });
-            if (!res.writableEnded) res.end();
-          });
+    destroy(): void {
+      this.stop();
+    }
 
-          req.on('close', () => stream.destroy());
-        }).catch((err: Error) => {
-          logService.error('music', 'Audio proxy: failed to load ytdl-core', { error: err.message });
-          if (!res.writableEnded) res.end();
-        });
-      });
+    private applyVolume(volume: number): void {
+      if (!this.window || this.window.isDestroyed()) return;
+      void this.window.webContents.executeJavaScript(`
+        (function() {
+          const v = document.querySelector('video');
+          if (v) { v.volume = ${volume}; if (v.paused) v.play().catch(() => {}); }
+          else setTimeout(() => { const v2 = document.querySelector('video'); if (v2) v2.volume = ${volume}; }, 1000);
+        })();
+      `);
+    }
 
-      server.listen(0, '127.0.0.1', () => {
-        const addr = server.address() as { port: number };
-        audioProxyServer = server;
-        audioProxyPort = addr.port;
-        logService.info('music', `Audio proxy server listening on port ${addr.port}`);
-        resolve(addr.port);
-      });
+    private clearTimers(): void {
+      if (this.pollTimer) { clearInterval(this.pollTimer); this.pollTimer = null; }
+      if (this.loadTimeoutTimer) { clearTimeout(this.loadTimeoutTimer); this.loadTimeoutTimer = null; }
+    }
 
-      server.once('error', reject);
-    });
+    private cleanup(): void {
+      if (this.window && !this.window.isDestroyed()) this.window.destroy();
+      this.window = null;
+      this.currentItemId = null;
+    }
   }
 
-  // YouTube search + audio extraction for music requests
+  // YouTube search for music requests
   async function searchYouTube(query: string): Promise<{ videoId: string; title: string; durationSeconds: number; thumbnailUrl: string | null } | null> {
     const YouTube = await import('youtube-sr');
     const results = await YouTube.YouTube.search(query, { limit: 1, type: 'video' });
@@ -348,21 +393,21 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     };
   }
 
-  async function getAudioUrl(videoId: string): Promise<string> {
-    const port = await ensureAudioProxyServer();
-    audioProxyAllowed.add(videoId);
-    logService.info('music', 'Audio proxy URL created', { videoId, port });
-    return `http://127.0.0.1:${port}/${videoId}`;
-  }
+  // Forward-declared so musicEmbedPlayer callback can reference it
+  // eslint-disable-next-line prefer-const
+  let musicService!: MusicRequestService;
+  const musicEmbedPlayer = new MusicEmbedPlayer((event) => { musicService.onPlayerEvent(event); });
 
-  const musicService = new MusicRequestService({
+  musicService = new MusicRequestService({
     getSettings: () => musicSettingsCache,
     searchYouTube,
-    getAudioUrl,
-    onPlay: (cmd) => options.stateHub.pushMusicPlay(cmd),
-    onStop: () => options.stateHub.pushMusicStop(),
+    onPlay: (cmd) => {
+      musicEmbedPlayer.play(cmd.itemId, cmd.videoId, cmd.volume);
+      options.stateHub.pushMusicStateUpdate(musicService.getState());
+    },
+    onStop: () => musicEmbedPlayer.stop(),
     onStateUpdate: (state) => options.stateHub.pushMusicStateUpdate(state),
-    onVolumeChange: (volume) => options.stateHub.pushMusicVolume(volume),
+    onVolumeChange: (volume) => musicEmbedPlayer.setVolume(volume),
     sendMessage: (platform, content) => sendPlatformMessage(platform, content),
     logInfo: (message, metadata) => logService.info('music', message, metadata),
     logError: (message, metadata) => logService.error('music', message, metadata),
@@ -1884,11 +1929,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     stopTwitchStatsPoll();
     stopKickStatsPoll();
     if (youtubeMonitorTimer) clearInterval(youtubeMonitorTimer);
-    if (audioProxyServer) {
-      audioProxyServer.close();
-      audioProxyServer = null;
-      audioProxyPort = null;
-    }
+    musicEmbedPlayer.destroy();
     await Promise.allSettled([chatService.disconnectAll(), obsService.stop(), raffleOverlayServer.stop()]);
     Object.values(IPC_CHANNELS).forEach(c => ipcMain.removeHandler(c));
   };

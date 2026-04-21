@@ -15,7 +15,6 @@ import type { CommandModule } from '../commands/command-dispatcher.js';
 interface MusicRequestServiceOptions {
   getSettings: () => MusicRequestSettings;
   searchYouTube: (query: string) => Promise<{ videoId: string; title: string; durationSeconds: number; thumbnailUrl: string | null } | null>;
-  getAudioUrl: (videoId: string) => Promise<string>;
   onPlay: (cmd: MusicPlayCommand) => void;
   onStop: () => void;
   onStateUpdate: (state: MusicPlayerState) => void;
@@ -136,7 +135,7 @@ export class MusicRequestService implements CommandModule {
       this.pushState();
 
       if (!this.isPlaying) {
-        void this.playNext();
+        this.playNext();
       }
     } catch (cause) {
       this.options.logError('Failed to search YouTube', {
@@ -159,7 +158,7 @@ export class MusicRequestService implements CommandModule {
     void this.options.sendMessage(message.platform, `⏭ Skipped: ${this.currentItem?.title ?? 'current song'}`).catch(() => {});
 
     this.options.onStop();
-    void this.playNext();
+    this.playNext();
   }
 
   private async handleQueue(message: ChatMessage, _settings: MusicRequestSettings): Promise<void> {
@@ -204,7 +203,7 @@ export class MusicRequestService implements CommandModule {
     this.pushState();
   }
 
-  async playNext(): Promise<void> {
+  playNext(): void {
     this.currentItem = null;
     this.isPlaying = false;
 
@@ -218,27 +217,15 @@ export class MusicRequestService implements CommandModule {
     this.isPlaying = true;
     this.pushState();
 
-    try {
-      const audioUrl = await this.options.getAudioUrl(item.videoId);
-      const settings = this.options.getSettings();
+    const settings = this.options.getSettings();
+    this.options.onPlay({
+      itemId: item.id,
+      videoId: item.videoId,
+      title: item.title,
+      volume: settings.volume,
+    });
 
-      this.options.onPlay({
-        itemId: item.id,
-        audioUrl,
-        title: item.title,
-        volume: settings.volume,
-      });
-
-      this.options.logInfo('Music playing', { title: item.title, requestedBy: item.requestedBy });
-    } catch (cause) {
-      this.options.logError('Failed to get audio URL', {
-        videoId: item.videoId,
-        title: item.title,
-        error: cause instanceof Error ? cause.message : String(cause),
-      });
-      // Skip to next on error
-      void this.playNext();
-    }
+    this.options.logInfo('Music playing', { title: item.title, requestedBy: item.requestedBy });
   }
 
   onPlayerEvent(event: MusicPlayerEvent): void {
@@ -247,12 +234,12 @@ export class MusicRequestService implements CommandModule {
     } else {
       this.options.logError('Music playback error', { itemId: event.itemId });
     }
-    void this.playNext();
+    this.playNext();
   }
 
   skip(): void {
     this.options.onStop();
-    void this.playNext();
+    this.playNext();
   }
 
   clearQueue(): void {
