@@ -1,45 +1,17 @@
 import { gunzipSync } from 'node:zlib';
 import { createRequire } from 'node:module';
+import { BrowserWindow, session } from 'electron';
 import type { ChatMessage, StreamEvent, TikTokConnectionStatus } from '../../shared/types.js';
 import type { PlatformChatAdapter } from '../base.js';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const EULER_BASE = 'https://tiktok.eulerstream.com';
 const UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36';
 
-const DEFAULT_WS_PARAMS: Record<string, string> = {
-  version_code: '180800',
-  aid: '1988',
-  app_language: 'en',
-  app_name: 'tiktok_web',
-  browser_platform: 'Win32',
-  browser_language: 'en-US',
-  browser_name: 'Mozilla',
-  browser_version: '5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
-  browser_online: 'true',
-  cookie_enabled: 'true',
-  tz_name: 'Europe/Berlin',
-  device_platform: 'web',
-  identity: 'audience',
-  live_id: '12',
-  webcast_language: 'en',
-  ws_direct: '0',
-  sup_ws_ds_opt: '1',
-  update_version_code: '2.0.0',
-  did_rule: '3',
-  screen_height: '1080',
-  screen_width: '1920',
-  heartbeat_duration: '0',
-  resp_content_type: 'protobuf',
-  history_comment_count: '6',
-  client_enter: '1',
-  last_rtt: '150',
-};
-
 const HEARTBEAT_MS = 10_000;
 const CONNECT_TIMEOUT_MS = 15_000;
+const CAPTURE_TIMEOUT_MS = 35_000;
 
 // ─── Minimal Protobuf reader ───────────────────────────────────────────────────
 
@@ -365,31 +337,86 @@ function encodeAck(logId: string, internalExt: string): Buffer {
   return encodePushFrame('ack', Buffer.from(internalExt, 'utf-8'), logId);
 }
 
-// ─── Cookie helpers ───────────────────────────────────────────────────────────
+// ─── WebSocket URL capture via hidden BrowserWindow ───────────────────────────
 
-function parseCookieHeader(header: string, into: Record<string, string>): void {
-  for (const line of header.split(/\r?\n/)) {
-    const nameVal = line.split(';')[0].trim();
-    const eq = nameVal.indexOf('=');
-    if (eq < 0) continue;
-    const name = nameVal.slice(0, eq).trim();
-    const val = nameVal.slice(eq + 1).trim();
-    if (name) into[name] = val;
-  }
+interface WsCaptureResult {
+  wsUrl: string;
+  cookieHeader: string;
+  roomId: string;
 }
 
-function buildCookieString(cookies: Record<string, string>): string {
-  return Object.entries(cookies)
-    .filter(([, v]) => v)
-    .map(([k, v]) => `${k}=${v}`)
-    .join('; ');
+async function captureWsCredentials(username: string): Promise<WsCaptureResult> {
+  return new Promise<WsCaptureResult>((resolve, reject) => {
+    let captured = false;
+    let win: BrowserWindow | null = null;
+
+    const cleanup = () => {
+      try { win?.destroy(); } catch { /* ignore */ }
+      win = null;
+    };
+
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error(`TikTok: timed out waiting for live stream — is @${username} currently live?`));
+    }, CAPTURE_TIMEOUT_MS);
+
+    const partition = `tiktok-ws-capture-${Date.now()}`;
+    const ses = session.fromPartition(partition);
+
+    ses.webRequest.onBeforeSendHeaders(
+      { urls: ['wss://webcast.tiktok.com/*'] },
+      (details, callback) => {
+        if (captured) { callback({}); return; }
+
+        const wsUrl = details.url;
+        const roomId = new URL(wsUrl).searchParams.get('room_id') ?? '';
+        if (!roomId) { callback({}); return; }
+
+        captured = true;
+        const cookieHeader = (
+          Object.entries(details.requestHeaders)
+            .find(([k]) => k.toLowerCase() === 'cookie')?.[1] ?? ''
+        ) as string;
+
+        callback({ cancel: true });
+        clearTimeout(timer);
+        setImmediate(cleanup);
+        resolve({ wsUrl, cookieHeader, roomId });
+      }
+    );
+
+    win = new BrowserWindow({
+      show: false,
+      width: 1280,
+      height: 720,
+      autoHideMenuBar: true,
+      skipTaskbar: true,
+      webPreferences: {
+        session: ses,
+        backgroundThrottling: false,
+        nodeIntegration: false,
+        contextIsolation: true,
+      },
+    });
+
+    win.loadURL(`https://www.tiktok.com/@${encodeURIComponent(username)}/live`, {
+      userAgent: UA,
+    });
+
+    win.webContents.on('did-fail-load', (_event, errorCode, errorDesc) => {
+      if (captured) return;
+      clearTimeout(timer);
+      cleanup();
+      reject(new Error(`TikTok: page failed to load (${errorCode}: ${errorDesc})`));
+    });
+  });
 }
 
 // ─── Adapter ──────────────────────────────────────────────────────────────────
 
 export interface TikTokAdapterOptions {
   username: string;
-  signApiKey?: string;
+  signApiKey?: string; // retained for backwards compat with settings, not used
   onStatusChange?: (status: TikTokConnectionStatus) => void;
   onError?: (error: unknown) => void;
 }
@@ -413,15 +440,7 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
 
   async connect(): Promise<void> {
     if (this.connected) return;
-
-    if (!this.options.signApiKey) {
-      this.options.onStatusChange?.('error');
-      this.options.onError?.(new Error('TikTok connection requires an EulerStream sign API key'));
-      return;
-    }
-
     this.options.onStatusChange?.('connecting');
-
     try {
       await this.doConnect();
     } catch (cause) {
@@ -432,67 +451,27 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
   }
 
   private async doConnect(): Promise<void> {
-    const { signApiKey, username } = this.options;
+    const { username } = this.options;
 
-    // 1. Get signed WebSocket from EulerStream
-    const params = new URLSearchParams({
-      apiKey: signApiKey!,
-      client: 'ttlive-node',
-      unique_id: username,
-      client_enter: 'true',
-    });
+    // 1. Open a hidden browser window, let TikTok's JS build the signed WebSocket
+    //    URL, intercept the upgrade request before it goes out, capture URL + cookies
+    const { wsUrl, cookieHeader, roomId } = await captureWsCredentials(username);
+    this.roomId = roomId;
 
-    const res = await fetch(`${EULER_BASE}/webcast/fetch?${params}`, {
-      headers: { 'User-Agent': UA },
-      signal: AbortSignal.timeout(20_000),
-    });
-
-    if (res.status === 429) throw new Error('TikTok sign server rate limit exceeded');
-    if (res.status === 402) throw new Error('TikTok sign server: premium feature required');
-    if (!res.ok) {
-      let detail = '';
-      try { detail = await res.text(); } catch { /* ignore */ }
-      throw new Error(`TikTok sign server returned ${res.status}${detail ? ': ' + detail.slice(0, 120) : ''}`);
-    }
-
-    this.roomId = res.headers.get('x-room-id') ?? '';
-    if (!this.roomId) throw new Error('TikTok: sign server did not return a room ID (user may be offline)');
-
-    const cookies: Record<string, string> = { 'tt-target-idc': 'useast1a' };
-    const setCookie = res.headers.get('x-set-tt-cookie') ?? '';
-    if (setCookie) parseCookieHeader(setCookie, cookies);
-
-    const body = Buffer.from(await res.arrayBuffer());
-    const result = decodeFetchResult(body);
-
-    if (!result.wsUrl) throw new Error('TikTok: sign server did not return a WebSocket URL');
-
-    this.internalExt = result.internalExt;
-
-    // 2. Build WebSocket URL
-    const wsParams: Record<string, string> = {
-      ...DEFAULT_WS_PARAMS,
-      compress: 'gzip',
-      room_id: this.roomId,
-      internal_ext: result.internalExt,
-      cursor: result.cursor,
-    };
-    for (const [k, v] of Object.entries(result.wsParams)) {
-      if (v) wsParams[k] = v;
-    }
-    const wsUrl = `${result.wsUrl}?${new URLSearchParams(wsParams)}&version_code=270000`;
-
-    // 3. Open WebSocket using undici (supports custom headers without extra npm packages)
+    // 2. Connect undici WebSocket (supports custom headers, no extra npm packages)
     const _req = createRequire(import.meta.url);
     const UndiciWS = (_req('undici') as { WebSocket: new (url: string, opts?: unknown) => WsHandle }).WebSocket;
     const ws = new UndiciWS(wsUrl, {
-      headers: { 'User-Agent': UA, 'Cookie': buildCookieString(cookies) },
+      headers: { 'User-Agent': UA, 'Cookie': cookieHeader },
     } as unknown);
 
     this.ws = ws as unknown as NonNullable<typeof this.ws>;
 
     await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => { ws.close(); reject(new Error('TikTok WebSocket connection timeout')); }, CONNECT_TIMEOUT_MS);
+      const timer = setTimeout(() => {
+        ws.close();
+        reject(new Error('TikTok WebSocket connection timeout'));
+      }, CONNECT_TIMEOUT_MS);
 
       ws.addEventListener('open', () => { clearTimeout(timer); resolve(); }, { once: true } as unknown);
       ws.addEventListener('error', (ev: unknown) => {
@@ -502,7 +481,7 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
       }, { once: true } as unknown);
     });
 
-    // 4. Wire up ongoing handlers
+    // 3. Wire up ongoing handlers
     ws.binaryType = 'arraybuffer';
     ws.addEventListener('message', (ev: unknown) => {
       const data = (ev as { data: unknown }).data;
@@ -513,7 +492,7 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
       this.options.onError?.((ev as { message?: string })?.message ?? 'WebSocket error');
     });
 
-    // 5. Enter room + start heartbeat
+    // 4. Enter room + start heartbeat
     ws.send(encodeEnterRoom(this.roomId));
     this.heartbeatTimer = setInterval(() => {
       if (this.ws?.readyState === 1) this.ws.send(encodeHeartbeat(this.roomId));
@@ -521,9 +500,6 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
 
     this.connected = true;
     this.options.onStatusChange?.('connected');
-
-    // Process messages bundled with the initial sign-server response
-    this.processMessages(result.messages, result.needsAck, '0');
   }
 
   async disconnect(): Promise<void> {
