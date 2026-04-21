@@ -299,8 +299,16 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         height: 270,
         show: false,
         skipTaskbar: true,
-        webPreferences: { nodeIntegration: false, contextIsolation: true },
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+          backgroundThrottling: false,
+        },
       });
+      // Strip "Electron/..." from UA so YouTube doesn't block the embed
+      win.webContents.setUserAgent(
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      );
       this.window = win;
 
       void win.loadURL(`https://www.youtube.com/embed/${videoId}?autoplay=1&controls=0`);
@@ -324,17 +332,24 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         void this.window.webContents.executeJavaScript(`
           (function() {
             const v = document.querySelector('video');
-            if (!v) return 'loading';
-            if (v.ended || (v.duration > 0 && v.currentTime >= v.duration - 0.5)) return 'ended';
-            if (v.error !== null) return 'error';
-            return 'ok';
+            if (!v) return JSON.stringify({ s: 'loading', title: document.title, url: location.href });
+            if (v.ended || (v.duration > 0 && v.currentTime >= v.duration - 0.5)) return JSON.stringify({ s: 'ended' });
+            if (v.error !== null) return JSON.stringify({ s: 'error', code: v.error.code });
+            if (v.paused && v.currentTime === 0) v.play().catch(() => {});
+            return JSON.stringify({ s: 'ok', paused: v.paused, t: v.currentTime });
           })();
-        `).then((state: unknown) => {
-          if (state === 'ended') {
+        `).then((raw: unknown) => {
+          let result: Record<string, unknown> = { s: 'unknown' };
+          try { result = JSON.parse(raw as string) as Record<string, unknown>; } catch { return; }
+          const state = result['s'];
+          if (state === 'loading') {
+            logService.info('music', 'Embed poll: loading', { title: result['title'], url: result['url'], videoId });
+          } else if (state === 'ended') {
             this.clearTimers();
             this.onEvent({ type: 'ended', itemId: this.currentItemId! });
             this.cleanup();
           } else if (state === 'error') {
+            logService.error('music', 'Embed poll: video error', { code: result['code'], videoId });
             this.clearTimers();
             this.onEvent({ type: 'error', itemId: this.currentItemId! });
             this.cleanup();

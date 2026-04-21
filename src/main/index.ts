@@ -8,6 +8,7 @@ import { app, BrowserWindow, Menu, Tray, nativeImage, net, protocol } from 'elec
 protocol.registerSchemesAsPrivileged([
   { scheme: 'copilot-local', privileges: { secure: true, standard: true, supportFetchAPI: true } },
 ]);
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
 import { openDatabase, type DatabaseHandle } from '../db/database.js';
 import { createAppContext } from './app-context.js';
