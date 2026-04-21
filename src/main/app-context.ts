@@ -1410,8 +1410,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     if (!store) throw new Error('No active profile');
     const saved = await store.save(musicRequestSettingsSchema.parse(raw));
     musicSettingsCache = saved;
-    // Push volume change to renderer in real-time
-    options.stateHub.pushMusicVolume(saved.volume);
+    musicPlayerRef?.setVolume(saved.volume);
     return saved;
   });
   ipcMain.handle(IPC_CHANNELS.musicGetState, async () => musicService.getState());
