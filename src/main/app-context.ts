@@ -196,7 +196,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   };
 
   // Welcome settings: file-based, per-profile. Cached in memory for sync access.
-  let welcomeSettingsCache: WelcomeSettings = { enabled: false, messageTemplate: 'Welcome, {username}!', soundFilePath: null };
+  let welcomeSettingsCache: WelcomeSettings = { enabled: false, messageTemplate: 'Welcome, {username}!', soundFilePath: null, userOverrides: [] };
 
   const getWelcomeSettingsStore = async (): Promise<WelcomeSettingsStore | null> => {
     const snapshot = await profileStore.list();

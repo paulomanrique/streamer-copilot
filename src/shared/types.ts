@@ -265,10 +265,17 @@ export interface RendererVoiceCapabilities {
   speechSynthesisAvailable: boolean;
 }
 
+export interface WelcomeUserOverride {
+  username: string;
+  messageTemplate: string | null;
+  soundFilePath: string | null;
+}
+
 export interface WelcomeSettings {
   enabled: boolean;
   messageTemplate: string;
   soundFilePath: string | null;
+  userOverrides: WelcomeUserOverride[];
 }
 
 export interface SoundSettings {

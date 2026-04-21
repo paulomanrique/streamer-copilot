@@ -37,10 +37,17 @@ export const deleteProfileInputSchema = z.object({
   profileId: z.string().min(1),
 });
 
+export const welcomeUserOverrideSchema = z.object({
+  username: z.string().min(1).max(80),
+  messageTemplate: z.string().max(500).nullable(),
+  soundFilePath: z.string().max(500).nullable(),
+});
+
 export const welcomeSettingsSchema = z.object({
   enabled: z.boolean(),
   messageTemplate: z.string().max(500),
   soundFilePath: z.string().max(500).nullable(),
+  userOverrides: z.array(welcomeUserOverrideSchema).default([]),
 });
 
 export const generalSettingsSchema = z.object({

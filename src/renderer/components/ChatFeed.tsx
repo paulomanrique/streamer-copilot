@@ -71,49 +71,6 @@ const PLATFORM_BUTTONS = [
 ] as const;
 const DEFAULT_RECOMMENDATION_TEMPLATE = 'Pessoal, visitem o {username}';
 
-type ContextMenuAction = { separator: true } | { id: string; label: string; danger?: boolean };
-
-const CONTEXT_MENU_ACTIONS: Record<string, ContextMenuAction[]> = {
-  twitch: [
-    { id: 'vip',    label: 'Add VIP' },
-    { id: 'unvip',  label: 'Remove VIP' },
-    { separator: true },
-    { id: 'mod',    label: 'Add Moderator' },
-    { id: 'unmod',  label: 'Remove Moderator' },
-    { separator: true },
-    { id: 'to1',    label: 'Timeout — 1 minute' },
-    { id: 'to10',   label: 'Timeout — 10 minutes' },
-    { id: 'to60',   label: 'Timeout — 1 hour' },
-    { id: 'to1440', label: 'Timeout — 24 hours' },
-    { separator: true },
-    { id: 'ban',    label: 'Ban user', danger: true },
-  ],
-  youtube: [
-    { id: 'hide',   label: 'Hide user on channel' },
-    { id: 'block',  label: 'Block user', danger: true },
-    { separator: true },
-    { id: 'report', label: 'Report message', danger: true },
-  ],
-  'youtube-v': [
-    { id: 'hide',   label: 'Hide user on channel' },
-    { id: 'block',  label: 'Block user', danger: true },
-    { separator: true },
-    { id: 'report', label: 'Report message', danger: true },
-  ],
-  kick: [
-    { id: 'mute',  label: 'Mute user' },
-    { separator: true },
-    { id: 'to5',   label: 'Timeout — 5 minutes' },
-    { id: 'to30',  label: 'Timeout — 30 minutes' },
-    { separator: true },
-    { id: 'ban',   label: 'Ban user', danger: true },
-  ],
-  tiktok: [
-    { id: 'mute',   label: 'Mute user' },
-    { id: 'report', label: 'Report comment', danger: true },
-  ],
-};
-
 // Twitch's default color palette assigned when a user has no color set
 const TWITCH_DEFAULT_COLORS = [
   '#FF0000', '#0000FF', '#008000', '#B22222', '#FF7F50',
@@ -604,19 +561,15 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
             Reply
           </button>
 
-          <div className="border-t border-gray-700 my-1" />
-
-          {/* Platform actions */}
-          {(CONTEXT_MENU_ACTIONS[ctxMenu.platform] ?? []).map((action, i) => {
-            if ('separator' in action) return <div key={i} className="border-t border-gray-700/60 my-1" />;
-            return (
-              <button key={action.id} type="button"
-                className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 ${action.danger ? 'text-red-400 hover:bg-red-600/20' : 'text-gray-300'}`}
-                onClick={hideMenu}>
-                {action.label}
-              </button>
-            );
-          })}
+          {/* Copy username */}
+          <button type="button"
+            className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 text-gray-300 flex items-center gap-2"
+            onClick={() => { void navigator.clipboard.writeText(ctxMenu.author); hideMenu(); }}>
+            <svg className="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/>
+            </svg>
+            {t('Copy username')}
+          </button>
         </div>
       ) : null}
     </div>
