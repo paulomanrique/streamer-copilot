@@ -37,6 +37,12 @@ export const deleteProfileInputSchema = z.object({
   profileId: z.string().min(1),
 });
 
+export const welcomeSettingsSchema = z.object({
+  enabled: z.boolean(),
+  messageTemplate: z.string().max(500),
+  soundFilePath: z.string().max(500).nullable(),
+});
+
 export const generalSettingsSchema = z.object({
   startOnLogin: z.boolean(),
   minimizeToTray: z.boolean(),

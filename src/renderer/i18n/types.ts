@@ -79,6 +79,7 @@ export interface TranslationMessages {
     diagnosticLogLevelDescription: string;
     openLogsFolder: string;
     eventLog: string;
+    welcomeMessage: string;
     saveSettings: string;
     settingsSaved: string;
   };

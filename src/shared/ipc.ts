@@ -56,6 +56,7 @@ import type {
   VoiceCommandDeleteInput,
   VoiceCommandUpsertInput,
   VoiceSpeakPayload,
+  WelcomeSettings,
 } from './types.js';
 import type { ChatSession, ChatLogMessage } from '../modules/chat-log/chat-log-service.js';
 export type { ChatSession, ChatLogMessage };
@@ -168,6 +169,9 @@ export const IPC_CHANNELS = {
   suggestionsEntries: 'suggestions:entries',
   suggestionsClearEntries: 'suggestions:clear-entries',
   suggestionsState: 'suggestions:state',
+  welcomeGetSettings: 'welcome:get-settings',
+  welcomeSaveSettings: 'welcome:save-settings',
+  welcomePickSoundFile: 'welcome:pick-sound-file',
 } as const;
 
 export interface RecentChatSnapshot {
@@ -284,4 +288,7 @@ export interface CopilotApi {
   getSuggestionEntries: (listId: string) => Promise<SuggestionEntry[]>;
   clearSuggestionEntries: (listId: string) => Promise<SuggestionEntry[]>;
   onSuggestionState: (listener: (payload: SuggestionSnapshot) => void) => () => void;
+  getWelcomeSettings: () => Promise<WelcomeSettings>;
+  saveWelcomeSettings: (input: WelcomeSettings) => Promise<WelcomeSettings>;
+  pickWelcomeSoundFile: () => Promise<string | null>;
 }

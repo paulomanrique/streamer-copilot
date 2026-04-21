@@ -14,8 +14,9 @@ import { SuggestionsPage } from './Suggestions.js';
 import { TextCommandsPage } from './TextCommands.js';
 import { EventLogPage } from './EventLog.js';
 import { VoiceCommandsPage } from './VoiceCommands.js';
+import { WelcomeMessagePage } from './WelcomeMessage.js';
 
-type SettingsView = 'general' | 'profiles' | 'platforms' | 'obs' | 'sound' | 'text' | 'voice' | 'raffles' | 'suggestions' | 'chat-logs' | 'event-log';
+type SettingsView = 'general' | 'profiles' | 'platforms' | 'obs' | 'sound' | 'text' | 'voice' | 'welcome' | 'raffles' | 'suggestions' | 'chat-logs' | 'event-log';
 
 interface SettingsWorkspaceProps {
   activeProfileId: string;
@@ -139,6 +140,15 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
     label: 'Automations',
     items: [
       {
+        id: 'welcome',
+        label: 'Welcome Message',
+        icon: (
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+          </svg>
+        ),
+      },
+      {
         id: 'raffles',
         label: 'Raffles',
         icon: (
@@ -197,6 +207,7 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
     sound: messages.settings.soundCommands,
     voice: messages.settings.voiceTts,
     text: messages.settings.textCommands,
+    welcome: messages.settings.welcomeMessage,
     raffles: messages.settings.raffles,
     suggestions: messages.settings.suggestions,
     obs: 'OBS Studio',
@@ -267,6 +278,7 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
             onChangeVoiceVolume={props.onChangeVoiceVolume}
           />
         ) : null}
+        {currentView === 'welcome' ? <WelcomeMessagePage /> : null}
         {currentView === 'raffles' ? <RafflesPage /> : null}
         {currentView === 'suggestions' ? <SuggestionsPage /> : null}
         {currentView === 'chat-logs' ? <ChatLogsPage /> : null}

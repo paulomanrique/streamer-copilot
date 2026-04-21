@@ -55,6 +55,7 @@ import type {
   VoiceCommandDeleteInput,
   VoiceCommandUpsertInput,
   VoiceSpeakPayload,
+  WelcomeSettings,
   YouTubeStreamInfo,
 } from '../shared/types.js';
 
@@ -166,6 +167,9 @@ const IPC_CHANNELS = {
   suggestionsEntries: 'suggestions:entries',
   suggestionsClearEntries: 'suggestions:clear-entries',
   suggestionsState: 'suggestions:state',
+  welcomeGetSettings: 'welcome:get-settings',
+  welcomeSaveSettings: 'welcome:save-settings',
+  welcomePickSoundFile: 'welcome:pick-sound-file',
 } as const;
 
 const copilotApi: CopilotApi = {
@@ -338,6 +342,9 @@ const copilotApi: CopilotApi = {
     ipcRenderer.on(IPC_CHANNELS.suggestionsState, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.suggestionsState, wrappedListener); };
   },
+  getWelcomeSettings: () => ipcRenderer.invoke(IPC_CHANNELS.welcomeGetSettings) as Promise<WelcomeSettings>,
+  saveWelcomeSettings: (input: WelcomeSettings) => ipcRenderer.invoke(IPC_CHANNELS.welcomeSaveSettings, input) as Promise<WelcomeSettings>,
+  pickWelcomeSoundFile: () => ipcRenderer.invoke(IPC_CHANNELS.welcomePickSoundFile) as Promise<string | null>,
   onTwitchStatus: (listener: (status: TwitchConnectionStatus, channel: string | null) => void) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, status: TwitchConnectionStatus, channel: string | null) => listener(status, channel);
     ipcRenderer.on(IPC_CHANNELS.twitchStatus, wrappedListener);

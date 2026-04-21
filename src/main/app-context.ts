@@ -33,6 +33,8 @@ import { SuggestionService } from '../modules/suggestions/suggestion-service.js'
 import { TextCommandRepository } from '../modules/text/text-repository.js';
 import { TextService } from '../modules/text/text-service.js';
 import { TextSettingsStore } from '../modules/text/text-settings-store.js';
+import { WelcomeSettingsStore } from '../modules/welcome/welcome-settings-store.js';
+import { WelcomeService } from '../modules/welcome/welcome-service.js';
 import { VoiceCommandRepository } from '../modules/voice/voice-repository.js';
 import { VoiceService } from '../modules/voice/voice-service.js';
 import { createKickChatAdapter } from '../platforms/kick/adapter.js';
@@ -87,10 +89,11 @@ import {
   voiceCommandDeleteInputSchema,
   voiceCommandUpsertInputSchema,
   voiceSpeakPayloadSchema,
+  welcomeSettingsSchema,
   youtubeConnectSchema,
   youtubeSettingsSchema,
 } from '../shared/schemas.js';
-import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, PlatformId, Raffle, SoundSettings, StreamEvent, StreamEventType, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
+import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, PlatformId, Raffle, SoundSettings, StreamEvent, StreamEventType, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
 
 const TWITCH_CLIENT_ID = 'vtwg8tzuv1nlip4qh9n6sxx2p76g0s';
 const TWITCH_REDIRECT_PORT = 32999;
@@ -191,9 +194,25 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     if (store) textSettingsCache = await store.load();
   };
 
+  // Welcome settings: file-based, per-profile. Cached in memory for sync access.
+  let welcomeSettingsCache: WelcomeSettings = { enabled: false, messageTemplate: 'Welcome, {username}!', soundFilePath: null };
+
+  const getWelcomeSettingsStore = async (): Promise<WelcomeSettingsStore | null> => {
+    const snapshot = await profileStore.list();
+    const active = snapshot.profiles.find((p) => p.id === snapshot.activeProfileId);
+    if (!active) return null;
+    return new WelcomeSettingsStore(active.directory);
+  };
+
+  const reloadWelcomeSettingsCache = async (): Promise<void> => {
+    const store = await getWelcomeSettingsStore();
+    if (store) welcomeSettingsCache = await store.load();
+  };
+
   // Load caches on startup (non-blocking, best-effort).
   void reloadSoundSettingsCache();
   void reloadTextSettingsCache();
+  void reloadWelcomeSettingsCache();
 
   const schedulerService = new SchedulerService({
     source: {
@@ -225,6 +244,13 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         });
       }
     },
+  });
+  const welcomeService = new WelcomeService({
+    getSettings: () => welcomeSettingsCache,
+    sendMessage: (platform, content) => sendPlatformMessage(platform, content),
+    playSound: (payload) => options.stateHub.pushSoundPlay(payload),
+    logInfo: (message, metadata) => logService.info('welcome', message, metadata),
+    logError: (message, metadata) => logService.error('welcome', message, metadata),
   });
   let rendererSpeechSynthesisAvailable = process.platform !== 'linux';
   let isShuttingDown = false;
@@ -1124,6 +1150,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     onMessage: (message) => {
       options.stateHub.pushChatMessage(message);
       chatLogService.recordMessage(message);
+      welcomeService.handleMessage(message);
     },
     onEvent: (event) => {
       options.stateHub.pushChatEvent(event);
@@ -1162,8 +1189,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const snapshot = await profileStore.select(selectProfileInputSchema.parse(raw).profileId);
     chatService.clearRecent();
     suggestionService.clearSessionEntries();
+    welcomeService.reset();
     await reloadSoundSettingsCache();
     await reloadTextSettingsCache();
+    await reloadWelcomeSettingsCache();
     return snapshot;
   });
   ipcMain.handle(IPC_CHANNELS.profilesCreate, async (_, raw) => { const i = createProfileInputSchema.parse(raw); return profileStore.create(i.name, i.directory, i.appLanguage); });
@@ -1287,6 +1316,25 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const saved = await store.save(soundSettingsSchema.parse(raw));
     soundSettingsCache = saved;
     return saved;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.welcomeGetSettings, async () => {
+    const store = await getWelcomeSettingsStore();
+    return store ? store.load() : welcomeSettingsCache;
+  });
+  ipcMain.handle(IPC_CHANNELS.welcomeSaveSettings, async (_, raw) => {
+    const store = await getWelcomeSettingsStore();
+    if (!store) throw new Error('No active profile');
+    const saved = await store.save(welcomeSettingsSchema.parse(raw));
+    welcomeSettingsCache = saved;
+    return saved;
+  });
+  ipcMain.handle(IPC_CHANNELS.welcomePickSoundFile, async (e) => {
+    const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender)!, {
+      properties: ['openFile'],
+      filters: [{ name: 'Audio', extensions: ['mp3', 'wav', 'ogg'] }],
+    });
+    return r.canceled ? null : r.filePaths[0];
   });
 
   ipcMain.handle(IPC_CHANNELS.obsGetSettings, async () => obsService.getSettings());

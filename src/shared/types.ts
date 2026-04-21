@@ -265,6 +265,12 @@ export interface RendererVoiceCapabilities {
   speechSynthesisAvailable: boolean;
 }
 
+export interface WelcomeSettings {
+  enabled: boolean;
+  messageTemplate: string;
+  soundFilePath: string | null;
+}
+
 export interface SoundSettings {
   defaultCooldownSeconds: number;
   defaultUserCooldownSeconds: number;
