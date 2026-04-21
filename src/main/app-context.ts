@@ -1413,6 +1413,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     musicPlayerRef?.setVolume(saved.volume);
     return saved;
   });
+  ipcMain.handle(IPC_CHANNELS.musicSetVolume, async (_, raw) => { musicPlayerRef?.setVolume(Number(raw)); });
   ipcMain.handle(IPC_CHANNELS.musicGetState, async () => musicService.getState());
   ipcMain.handle(IPC_CHANNELS.musicSkip, async () => musicService.skip());
   ipcMain.handle(IPC_CHANNELS.musicClearQueue, async () => musicService.clearQueue());

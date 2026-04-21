@@ -180,6 +180,7 @@ export const IPC_CHANNELS = {
   musicGetSettings: 'music:get-settings',
   musicSaveSettings: 'music:save-settings',
   musicGetState: 'music:get-state',
+  musicSetVolume: 'music:set-volume',
   musicSkip: 'music:skip',
   musicClearQueue: 'music:clear-queue',
   musicPlayerEvent: 'music:player-event',
@@ -310,6 +311,7 @@ export interface CopilotApi {
   getMusicSettings: () => Promise<MusicRequestSettings>;
   saveMusicSettings: (input: MusicRequestSettings) => Promise<MusicRequestSettings>;
   getMusicState: () => Promise<MusicPlayerState>;
+  musicSetVolume: (volume: number) => Promise<void>;
   musicSkip: () => Promise<void>;
   musicClearQueue: () => Promise<void>;
   musicPlayerEvent: (event: MusicPlayerEvent) => Promise<void>;

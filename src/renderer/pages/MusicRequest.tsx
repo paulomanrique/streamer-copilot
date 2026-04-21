@@ -115,7 +115,11 @@ export function MusicRequestPage() {
                 min={0}
                 max={100}
                 value={Math.round(draft.volume * 100)}
-                onChange={(e) => updateDraft({ volume: Number(e.target.value) / 100 })}
+                onChange={(e) => {
+                  const volume = Number(e.target.value) / 100;
+                  updateDraft({ volume });
+                  void window.copilot.musicSetVolume(volume);
+                }}
                 className="flex-1 accent-violet-500"
               />
               <span className="text-sm text-gray-400 w-10 text-right">{Math.round(draft.volume * 100)}%</span>
