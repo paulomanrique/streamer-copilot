@@ -68,23 +68,29 @@ export class MusicPlayer {
     view.webContents.on('dom-ready', () => {
       if (view.webContents.isDestroyed()) return;
       void view.webContents.executeJavaScript(FOCUS_SPOOF);
-      // YouTube's player API (movie_player.setVolume) is more reliable than
-      // setting video.volume directly, as YouTube may reset video.volume after init.
-      // Retry until the player is fully initialised (can take 2-5 seconds).
+      // Set yt-player-volume in localStorage BEFORE YouTube's player reads it,
+      // so the initial volume is correct. Then keep retrying setVolume() via the
+      // player API until it becomes available (2-5 s after dom-ready).
       void view.webContents.executeJavaScript(`
         (() => {
-          const vol = ${Math.round(volume * 100)};
+          const volPct = ${Math.round(volume * 100)};
+          try {
+            const stored = JSON.parse(localStorage.getItem('yt-player-volume') || '{}');
+            stored.data = String(volPct);
+            localStorage.setItem('yt-player-volume', JSON.stringify(stored));
+          } catch {}
+
           let attempts = 0;
           const apply = () => {
             const p = document.getElementById('movie_player');
             if (p && typeof p.setVolume === 'function') {
-              p.setVolume(vol);
+              p.setVolume(volPct);
               if (typeof p.unMute === 'function') p.unMute();
-              return;
+            } else {
+              const v = document.querySelector('video');
+              if (v) { v.volume = ${volume}; v.muted = false; }
             }
-            const v = document.querySelector('video');
-            if (v) { v.volume = ${volume}; v.muted = false; }
-            if (++attempts < 30) setTimeout(apply, 500);
+            if (++attempts < 20) setTimeout(apply, 500);
           };
           apply();
         })();

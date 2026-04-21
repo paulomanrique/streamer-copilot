@@ -32,7 +32,6 @@ export function PermissionPicker({
           <h3 style={styles.sectionTitle}>{label}</h3>
           <p style={styles.helper}>{t('Reusable checkbox-chip group for sound and voice command forms.')}</p>
         </div>
-        <span style={styles.selectionPill}>{selectedLevels.length} {t('selected')}</span>
       </div>
 
       <div style={styles.pickerSurface}>
@@ -48,7 +47,6 @@ export function PermissionPicker({
             </button>
           ))}
         </div>
-        <p style={styles.helper}>{t('Selected values')}: {selectedLevels.map((level) => messages.common.permissionLevel[level]).join(', ')}</p>
       </div>
     </section>
   );
