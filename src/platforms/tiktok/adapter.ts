@@ -351,7 +351,9 @@ async function captureWsCredentials(username: string): Promise<WsCaptureResult> 
     let win: BrowserWindow | null = null;
 
     const cleanup = () => {
-      try { win?.destroy(); } catch { /* ignore */ }
+      if (!win) return;
+      try { win.webContents.debugger.detach(); } catch { /* ignore */ }
+      try { win.destroy(); } catch { /* ignore */ }
       win = null;
     };
 
@@ -362,28 +364,6 @@ async function captureWsCredentials(username: string): Promise<WsCaptureResult> 
 
     const partition = `tiktok-ws-capture-${Date.now()}`;
     const ses = session.fromPartition(partition);
-
-    ses.webRequest.onBeforeSendHeaders(
-      { urls: ['wss://webcast.tiktok.com/*'] },
-      (details, callback) => {
-        if (captured) { callback({}); return; }
-
-        const wsUrl = details.url;
-        const roomId = new URL(wsUrl).searchParams.get('room_id') ?? '';
-        if (!roomId) { callback({}); return; }
-
-        captured = true;
-        const cookieHeader = (
-          Object.entries(details.requestHeaders)
-            .find(([k]) => k.toLowerCase() === 'cookie')?.[1] ?? ''
-        ) as string;
-
-        callback({ cancel: true });
-        clearTimeout(timer);
-        setImmediate(cleanup);
-        resolve({ wsUrl, cookieHeader, roomId });
-      }
-    );
 
     win = new BrowserWindow({
       show: false,
@@ -399,11 +379,51 @@ async function captureWsCredentials(username: string): Promise<WsCaptureResult> 
       },
     });
 
+    const wc = win.webContents;
+
+    // CDP intercepts WebSocket creation at the JS engine level, which is reliable
+    // even in Electron 35 where session.webRequest doesn't fire for WebSocket upgrades
+    try {
+      wc.debugger.attach('1.1');
+    } catch {
+      clearTimeout(timer);
+      cleanup();
+      reject(new Error('TikTok: failed to attach CDP debugger'));
+      return;
+    }
+
+    void wc.debugger.sendCommand('Network.enable').catch(() => {});
+
+    wc.debugger.on('message', async (_, method, params: Record<string, unknown>) => {
+      if (captured) return;
+      if (method !== 'Network.webSocketCreated') return;
+
+      const wsUrl = (params.url as string) ?? '';
+      if (!wsUrl.includes('tiktok.com')) return;
+
+      const roomId = (() => {
+        try { return new URL(wsUrl).searchParams.get('room_id') ?? ''; }
+        catch { return ''; }
+      })();
+      if (!roomId) return;
+
+      captured = true;
+      clearTimeout(timer);
+
+      // Fetch the session cookies for webcast.tiktok.com — these are exactly what
+      // Chromium would include in the WebSocket handshake headers automatically
+      const cookies = await ses.cookies.get({ url: 'https://webcast.tiktok.com' });
+      const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
+
+      setImmediate(cleanup);
+      resolve({ wsUrl, cookieHeader, roomId });
+    });
+
     win.loadURL(`https://www.tiktok.com/@${encodeURIComponent(username)}/live`, {
       userAgent: UA,
     });
 
-    win.webContents.on('did-fail-load', (_event, errorCode, errorDesc) => {
+    wc.on('did-fail-load', (_event, errorCode, errorDesc) => {
       if (captured) return;
       clearTimeout(timer);
       cleanup();
@@ -416,7 +436,6 @@ async function captureWsCredentials(username: string): Promise<WsCaptureResult> 
 
 export interface TikTokAdapterOptions {
   username: string;
-  signApiKey?: string; // retained for backwards compat with settings, not used
   onStatusChange?: (status: TikTokConnectionStatus) => void;
   onError?: (error: unknown) => void;
 }

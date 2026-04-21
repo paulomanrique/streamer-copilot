@@ -519,7 +519,6 @@ export type TikTokConnectionStatus = 'disconnected' | 'connecting' | 'connected'
 
 export interface TikTokSettings {
   username: string;
-  signApiKey: string;
   autoConnect: boolean;
 }
 

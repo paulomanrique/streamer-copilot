@@ -6,7 +6,6 @@ const SETTINGS_FILE = 'tiktok-settings.json';
 
 const DEFAULT_SETTINGS: TikTokSettings = {
   username: '',
-  signApiKey: '',
   autoConnect: false,
 };
 
@@ -23,7 +22,6 @@ export class TikTokSettingsStore {
       const parsed = JSON.parse(data) as Partial<TikTokSettings>;
       return {
         username: typeof parsed.username === 'string' ? parsed.username : DEFAULT_SETTINGS.username,
-        signApiKey: typeof parsed.signApiKey === 'string' ? parsed.signApiKey : DEFAULT_SETTINGS.signApiKey,
         autoConnect: typeof parsed.autoConnect === 'boolean' ? parsed.autoConnect : DEFAULT_SETTINGS.autoConnect,
       };
     } catch {

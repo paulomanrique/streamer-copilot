@@ -1638,7 +1638,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
 
   // TikTok Handlers
-  ipcMain.handle(IPC_CHANNELS.tiktokGetSettings, async () => { const s = await getTiktokSettingsStore(); return s ? s.load() : { username: '', signApiKey: '', autoConnect: false }; });
+  ipcMain.handle(IPC_CHANNELS.tiktokGetSettings, async () => { const s = await getTiktokSettingsStore(); return s ? s.load() : { username: '', autoConnect: false }; });
   ipcMain.handle(IPC_CHANNELS.tiktokSaveSettings, async (_, raw) => { const s = await getTiktokSettingsStore(); if (s) await s.save(tiktokSettingsSchema.parse(raw)); });
   ipcMain.handle(IPC_CHANNELS.tiktokConnect, async (_, raw) => {
     const c = tiktokConnectSchema.parse(raw);
@@ -1647,11 +1647,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     suggestionService.clearSessionEntries();
     const settingsStore = await getTiktokSettingsStore();
     const settings = settingsStore ? await settingsStore.load() : null;
-    logService.info('tiktok', 'Connecting', { username: c.username, hasSignApiKey: Boolean(settings?.signApiKey) });
+    logService.info('tiktok', 'Connecting', { username: c.username });
     await chatService.replaceAdapter(createTikTokChatAdapter({
       username: c.username,
-      signApiKey: settings?.signApiKey || undefined,
-      onError: (cause) => logTikTokConnectionError('Connection error', c.username, Boolean(settings?.signApiKey), cause),
+      onError: (cause) => logTikTokConnectionError('Connection error', c.username, cause),
       onStatusChange: (status) => setTiktokStatus(status),
     }));
   });
@@ -1768,8 +1767,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       suggestionService.clearSessionEntries();
       await chatService.replaceAdapter(createTikTokChatAdapter({
         username: settings.username,
-        signApiKey: settings.signApiKey || undefined,
-        onError: (cause) => logTikTokConnectionError('Auto-reconnect connection error', settings.username, Boolean(settings.signApiKey), cause),
+        onError: (cause) => logTikTokConnectionError('Auto-reconnect connection error', settings.username, cause),
         onStatusChange: (status) => setTiktokStatus(status),
       }));
       logService.info('tiktok', 'Auto-reconnected from saved settings', { username: settings.username });
@@ -1910,10 +1908,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }
   }
 
-  function logTikTokConnectionError(message: string, username: string, hasSignApiKey: boolean, cause: unknown): void {
+  function logTikTokConnectionError(message: string, username: string, cause: unknown): void {
     const metadata = {
       username,
-      hasSignApiKey,
       errorName: cause instanceof Error ? cause.name : undefined,
       error: cause instanceof Error ? cause.message : String(cause),
       stack: cause instanceof Error ? cause.stack : undefined,

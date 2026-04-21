@@ -287,7 +287,6 @@ export const tiktokConnectSchema = z.object({
 
 export const tiktokSettingsSchema = z.object({
   username: z.string().max(80),
-  signApiKey: z.string().max(200),
   autoConnect: z.boolean(),
 });
 

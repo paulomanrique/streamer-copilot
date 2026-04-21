@@ -96,9 +96,8 @@ export function PlatformsSettingsPage() {
 
   // TikTok state
   const [tiktokStatus, setTiktokStatus] = useState<TikTokConnectionStatus>('disconnected');
-  const [tiktokSettings, setTiktokSettings] = useState<TikTokSettings>({ username: '', signApiKey: '', autoConnect: false });
+  const [tiktokSettings, setTiktokSettings] = useState<TikTokSettings>({ username: '', autoConnect: false });
   const [tiktokUsernameInput, setTiktokUsernameInput] = useState('');
-  const [tiktokApiKeyInput, setTiktokApiKeyInput] = useState('');
   const [tiktokCheckingLive, setTiktokCheckingLive] = useState(false);
   const [tiktokLiveResult, setTiktokLiveResult] = useState<boolean | null>(null);
 
@@ -133,7 +132,6 @@ export function PlatformsSettingsPage() {
       setTiktokStatus(tiktokCurrentStatus);
       setTiktokSettings(tiktokSavedSettings);
       setTiktokUsernameInput(tiktokSavedSettings.username);
-      setTiktokApiKeyInput(tiktokSavedSettings.signApiKey);
       setKickStatus(kickCurrentStatus);
       setKickSettings(kickSavedSettings);
       setKickAuth(kickAuthStatus);
@@ -296,7 +294,7 @@ export function PlatformsSettingsPage() {
     setIsBusy(true);
     setError(null);
     try {
-      await saveTiktokSettings({ username, signApiKey: tiktokApiKeyInput.trim(), autoConnect: tiktokSettings.autoConnect });
+      await saveTiktokSettings({ username, autoConnect: tiktokSettings.autoConnect });
       await window.copilot.tiktokConnect({ username });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Failed to connect to TikTok');
@@ -635,24 +633,12 @@ export function PlatformsSettingsPage() {
                 )}
               </div>
 
-              <div>
-                <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider font-semibold">EulerStream API Key <span className="text-gray-600">(optional)</span></label>
-                <input
-                  type="password"
-                  value={tiktokApiKeyInput}
-                  onChange={(e) => setTiktokApiKeyInput(e.target.value)}
-                  placeholder="Required to connect TikTok chat"
-                  className="w-full bg-gray-900 border border-gray-700 rounded text-sm text-gray-200 px-3 py-1.5 focus:outline-none focus:border-pink-500 font-mono"
-                />
-                <p className="text-[10px] text-gray-600 mt-0.5">Live check works without a key. Chat connection uses EulerStream WebSocket signing.</p>
-              </div>
-
               <div className="flex items-center gap-2 pt-1">
                 <input
                   type="checkbox"
                   id="tiktok-auto-connect"
                   checked={tiktokSettings.autoConnect}
-                  onChange={(e) => void saveTiktokSettings({ ...tiktokSettings, username: tiktokUsernameInput.trim().replace(/^@/, ''), signApiKey: tiktokApiKeyInput.trim(), autoConnect: e.target.checked })}
+                  onChange={(e) => void saveTiktokSettings({ ...tiktokSettings, username: tiktokUsernameInput.trim().replace(/^@/, ''), autoConnect: e.target.checked })}
                   className="accent-pink-500"
                 />
                 <label htmlFor="tiktok-auto-connect" className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold cursor-pointer">Auto-connect on startup</label>
