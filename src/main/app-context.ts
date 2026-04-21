@@ -37,6 +37,7 @@ import { WelcomeSettingsStore } from '../modules/welcome/welcome-settings-store.
 import { WelcomeService } from '../modules/welcome/welcome-service.js';
 import { MusicSettingsStore } from '../modules/music/music-settings-store.js';
 import { MusicRequestService } from '../modules/music/music-request-service.js';
+import { MusicPlayer } from './music-player.js';
 import { VoiceCommandRepository } from '../modules/voice/voice-repository.js';
 import { VoiceService } from '../modules/voice/voice-service.js';
 import { createKickChatAdapter } from '../platforms/kick/adapter.js';
@@ -115,6 +116,7 @@ interface AppContextOptions {
   onGeneralSettingsChanged: (settings: import('../shared/types.js').GeneralSettings) => Promise<void> | void;
   stateHub: StateHub;
   userDataPath: string;
+  getWindow: () => BrowserWindow | null;
 }
 
 const CONTEXT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -292,17 +294,25 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     };
   }
 
+  // musicPlayer and musicService are mutually dependent; use a shared ref to avoid forward-reference issues.
+  let musicPlayerRef: MusicPlayer | null = null;
+
   const musicService = new MusicRequestService({
     getSettings: () => musicSettingsCache,
     searchYouTube,
-    onPlay: (cmd) => options.stateHub.pushMusicPlay(cmd),
-    onStop: () => options.stateHub.pushMusicStop(),
+    onPlay: (cmd) => musicPlayerRef?.play(cmd),
+    onStop: () => musicPlayerRef?.stop(),
     onStateUpdate: (state) => options.stateHub.pushMusicStateUpdate(state),
-    onVolumeChange: (volume) => options.stateHub.pushMusicVolume(volume),
+    onVolumeChange: (volume) => musicPlayerRef?.setVolume(volume),
     sendMessage: (platform, content) => sendPlatformMessage(platform, content),
     logInfo: (message, metadata) => logService.info('music', message, metadata),
     logError: (message, metadata) => logService.error('music', message, metadata),
   });
+
+  musicPlayerRef = new MusicPlayer(
+    options.getWindow,
+    (event) => musicService.onPlayerEvent(event),
+  );
 
   let rendererSpeechSynthesisAvailable = process.platform !== 'linux';
   let isShuttingDown = false;
@@ -1821,6 +1831,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     stopKickStatsPoll();
     if (youtubeMonitorTimer) clearInterval(youtubeMonitorTimer);
     musicService.reset();
+    musicPlayerRef?.stop();
     await Promise.allSettled([chatService.disconnectAll(), obsService.stop(), raffleOverlayServer.stop()]);
     Object.values(IPC_CHANNELS).forEach(c => ipcMain.removeHandler(c));
   };

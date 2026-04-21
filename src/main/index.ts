@@ -108,6 +108,7 @@ app.whenReady().then(async () => {
     onGeneralSettingsChanged: (settings) => applyGeneralSettings(settings),
     stateHub,
     userDataPath: app.getPath('userData'),
+    getWindow: () => mainWindow,
   });
 
   await createMainWindow();
