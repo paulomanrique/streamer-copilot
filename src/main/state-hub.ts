@@ -90,13 +90,13 @@ export class StateHub {
   pushChatMessage(payload: ChatMessage): void {
     this.pendingChatMessages.push(payload);
     if (this.chatMessagesFlushTimer) return;
-    this.chatMessagesFlushTimer = setTimeout(() => this.flushChatMessages(), 16);
+    this.chatMessagesFlushTimer = setTimeout(() => this.flushChatMessages(), 50);
   }
 
   pushChatEvent(payload: StreamEvent): void {
     this.pendingChatEvents.push(payload);
     if (this.chatEventsFlushTimer) return;
-    this.chatEventsFlushTimer = setTimeout(() => this.flushChatEvents(), 16);
+    this.chatEventsFlushTimer = setTimeout(() => this.flushChatEvents(), 50);
   }
 
   pushTwitchStatus(status: TwitchConnectionStatus, channel?: string | null): void {

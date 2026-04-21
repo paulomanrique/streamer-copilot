@@ -71,6 +71,19 @@ const PLATFORM_BUTTONS = [
 ] as const;
 const DEFAULT_RECOMMENDATION_TEMPLATE = 'Pessoal, visitem o {username}';
 
+const PLATFORM_BADGE_META: Record<string, { bg: string; text: string; label: string }> = {
+  twitch:      { bg: 'bg-purple-500/20', text: 'text-purple-300', label: 'Twitch' },
+  youtube:     { bg: 'bg-red-500/20',    text: 'text-red-300',    label: 'YouTube' },
+  'youtube-v': { bg: 'bg-rose-400/20',   text: 'text-rose-300',   label: 'YouTube Vertical' },
+  kick:        { bg: 'bg-green-500/20',  text: 'text-green-300',  label: 'Kick' },
+  tiktok:      { bg: 'bg-pink-500/20',   text: 'text-pink-300',   label: 'TikTok' },
+};
+
+function getYtBadgeLabel(platform: string, hasMultipleYouTubeStreams: boolean): string {
+  if (!hasMultipleYouTubeStreams) return 'YouTube';
+  return platform === 'youtube-v' ? 'YouTube Vertical' : 'YouTube Horizontal';
+}
+
 // Twitch's default color palette assigned when a user has no color set
 const TWITCH_DEFAULT_COLORS = [
   '#FF0000', '#0000FF', '#008000', '#B22222', '#FF7F50',
@@ -222,6 +235,7 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
   const [inputPlatform, setInputPlatform] = useState(() => connectedPlatforms[0] ?? 'twitch');
   const [sendError, setSendError] = useState<string | null>(null);
   const [avatarCache,   setAvatarCache]   = useState<Map<string, string>>(new Map());
+  const requestedAvatarsRef = useRef<Set<string>>(new Set());
   const [highlighted,   setHighlighted]   = useState<string | null>(null);
   const [isAtBottom,    setIsAtBottom]    = useState(true);
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState>({
@@ -278,26 +292,32 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
     void listRef.current?.scrollToEnd({ animated: false });
   }, [items.length, isAtBottom]);
 
-  // ── batch-fetch avatars for YouTube / non-Twitch platforms ──────────
+  // ── batch-fetch avatars for non-Twitch platforms ──────────────────
   useEffect(() => {
-    const logins = items
-      .flatMap((item) => item.kind === 'message' ? [item.message] : [])
-      .filter((message) => message.platform !== 'twitch' && !message.avatarUrl)
-      .map((message) => message.author.toLowerCase())
-      .filter((login, i, arr) => arr.indexOf(login) === i)
-      .filter((login) => !avatarCache.has(login));
-
-    if (logins.length === 0) return;
-
-    void window.copilot.twitchGetUserAvatars(logins).then((result) => {
+    const seen = new Set<string>();
+    const toFetch: string[] = [];
+    for (const item of items) {
+      if (item.kind !== 'message') continue;
+      const { message } = item;
+      if (message.platform === 'twitch' || message.avatarUrl) continue;
+      const login = message.author.toLowerCase();
+      if (!seen.has(login) && !requestedAvatarsRef.current.has(login)) {
+        seen.add(login);
+        toFetch.push(login);
+      }
+    }
+    if (toFetch.length === 0) return;
+    toFetch.forEach((l) => requestedAvatarsRef.current.add(l));
+    void window.copilot.twitchGetUserAvatars(toFetch).then((result) => {
       setAvatarCache((prev) => {
         const next = new Map(prev);
         for (const [login, url] of Object.entries(result)) next.set(login.toLowerCase(), url);
-        for (const login of logins) { if (!next.has(login)) next.set(login, ''); }
         return next;
       });
     });
-  }, [avatarCache, items]);
+  // avatarCache intentionally omitted — requestedAvatarsRef is the guard against double-fetching
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items]);
 
   // ── close context menu on outside click / Escape ───────────────────
   const hideMenu = useCallback(() => setCtxMenu((c) => ({ ...c, visible: false })), []);
@@ -588,20 +608,10 @@ interface ChatMessageRowProps {
 const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highlighted, hasMultipleYouTubeStreams, onReplyTo, onContextMenuRequest }: ChatMessageRowProps) {
   const pKey = platformKey(message.platform);
   const meta = PLATFORM_META[pKey];
-
-  // Platform badge metadata (matching Activity Log style)
-  const ytLabel = hasMultipleYouTubeStreams
-    ? (message.platform === 'youtube-v' ? 'YouTube Vertical' : 'YouTube Horizontal')
-    : 'YouTube';
-  const PLATFORM_BADGE_META: Record<string, { bg: string; text: string; label: string }> = {
-    twitch: { bg: 'bg-purple-500/20', text: 'text-purple-300', label: 'Twitch' },
-    youtube: { bg: 'bg-red-500/20', text: 'text-red-300', label: ytLabel },
-    'youtube-v': { bg: 'bg-rose-400/20', text: 'text-rose-300', label: ytLabel },
-    kick: { bg: 'bg-green-500/20', text: 'text-green-300', label: 'Kick' },
-    tiktok: { bg: 'bg-pink-500/20', text: 'text-pink-300', label: 'TikTok' },
-  };
-
-  const badgeMeta = PLATFORM_BADGE_META[pKey] || PLATFORM_BADGE_META.twitch;
+  const badgeMeta = PLATFORM_BADGE_META[pKey] ?? PLATFORM_BADGE_META.twitch;
+  const badgeLabel = (pKey === 'youtube' || pKey === 'youtube-v')
+    ? getYtBadgeLabel(message.platform, hasMultipleYouTubeStreams)
+    : badgeMeta.label;
   const isCommand = message.content.startsWith('!');
 
   // STAR LOGIC: 
@@ -615,6 +625,8 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highli
   const authorColor = resolveAuthorColor(message);
 
   const effectiveAvatarUrl = message.avatarUrl || avatarUrl;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const messageContent = useMemo(() => renderMessageContent(message), [message]);
 
   return (
     <div
@@ -636,7 +648,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highli
             <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor">
               <path d={meta.icon} />
             </svg>
-            {badgeMeta.label}
+            {badgeLabel}
           </span>
 
           {/* Avatar (Shown for everyone except Twitch by default, or if available) */}
@@ -676,7 +688,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highli
           {message.platform !== 'twitch' && isMod ? <span className="text-xs text-emerald-400 font-semibold">MOD</span> : null}
         </div>
         <p className={`text-sm mt-0.5 break-words leading-snug ${isCommand ? 'text-violet-300 font-mono' : 'text-gray-300'}`} data-no-i18n="true">
-          {renderMessageContent(message)}
+          {messageContent}
         </p>
       </div>
     </div>
