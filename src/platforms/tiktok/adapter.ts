@@ -100,20 +100,34 @@ class PW {
 
 // ─── Message decoders ─────────────────────────────────────────────────────────
 
-interface UserInfo { nickname: string; uniqueId: string; }
+interface UserInfo { nickname: string; uniqueId: string; avatarUrl: string; }
 
-function decodeUser(buf: Buffer): UserInfo {
+function decodeImageUrl(buf: Buffer): string {
+  // Image message: field 1 = urlList (repeated string) — take first entry
   const c = cur(buf);
-  let nickname = '', uniqueId = '';
   while (!done(c)) {
     const [f, w] = readTag(c);
     if (w === 2) {
       const b = readBytes(c);
-      if (f === 3) nickname = b.toString('utf-8');       // User.nickname
-      else if (f === 38) uniqueId = b.toString('utf-8'); // User.uniqueId
+      if (f === 1) return b.toString('utf-8');
     } else skipField(c, w);
   }
-  return { nickname, uniqueId };
+  return '';
+}
+
+function decodeUser(buf: Buffer): UserInfo {
+  const c = cur(buf);
+  let nickname = '', uniqueId = '', avatarUrl = '';
+  while (!done(c)) {
+    const [f, w] = readTag(c);
+    if (w === 2) {
+      const b = readBytes(c);
+      if (f === 3) nickname = b.toString('utf-8');             // User.nickname
+      else if (f === 9 && !avatarUrl) avatarUrl = decodeImageUrl(b); // User.avatarThumb
+      else if (f === 38) uniqueId = b.toString('utf-8');       // User.uniqueId
+    } else skipField(c, w);
+  }
+  return { nickname, uniqueId, avatarUrl };
 }
 
 function decodeText(buf: Buffer): string {
@@ -167,7 +181,7 @@ type WsHandle = { send(d: Buffer): void; close(): void; readyState: number; addE
 
 function decodeChatMsg(buf: Buffer): ChatData {
   const c = cur(buf);
-  let user: UserInfo = { nickname: '', uniqueId: '' };
+  let user: UserInfo = { nickname: '', uniqueId: '', avatarUrl: '' };
   let comment = '';
   while (!done(c)) {
     const [f, w] = readTag(c);
@@ -182,7 +196,7 @@ function decodeChatMsg(buf: Buffer): ChatData {
 
 function decodeSocialMsg(buf: Buffer): SocialData {
   const c = cur(buf);
-  let user: UserInfo = { nickname: '', uniqueId: '' };
+  let user: UserInfo = { nickname: '', uniqueId: '', avatarUrl: '' };
   let displayType = '';
   while (!done(c)) {
     const [f, w] = readTag(c);
@@ -197,7 +211,7 @@ function decodeSocialMsg(buf: Buffer): SocialData {
 
 function decodeGiftMsg(buf: Buffer): GiftData {
   const c = cur(buf);
-  let user: UserInfo = { nickname: '', uniqueId: '' };
+  let user: UserInfo = { nickname: '', uniqueId: '', avatarUrl: '' };
   let giftType = 0, repeatEnd = 0, repeatCount = 0, diamondCount = 0, giftName = '';
   while (!done(c)) {
     const [f, w] = readTag(c);
@@ -609,6 +623,7 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
           content: d.comment,
           badges: [],
           timestampLabel: ts(),
+          avatarUrl: d.user.avatarUrl || undefined,
         });
         break;
       }
