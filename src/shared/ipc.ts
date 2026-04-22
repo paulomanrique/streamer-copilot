@@ -155,6 +155,7 @@ export const IPC_CHANNELS = {
   tiktokGetSettings: 'tiktok:get-settings',
   tiktokSaveSettings: 'tiktok:save-settings',
   tiktokStatus: 'tiktok:status',
+  tiktokLiveStats: 'tiktok:live-stats',
   tiktokCheckLive: 'tiktok:check-live',
   kickConnect: 'kick:connect',
   kickDisconnect: 'kick:disconnect',
@@ -287,6 +288,7 @@ export interface CopilotApi {
   tiktokGetSettings: () => Promise<import('./types.js').TikTokSettings>;
   tiktokSaveSettings: (settings: import('./types.js').TikTokSettings) => Promise<void>;
   onTiktokStatus: (listener: (status: import('./types.js').TikTokConnectionStatus, username: string | null) => void) => () => void;
+  onTiktokLiveStats: (listener: (stats: import('./types.js').TikTokLiveStats | null) => void) => () => void;
   tiktokCheckLive: (username: string) => Promise<{ isLive: boolean }>;
   kickConnect: (input: { channelInput: string; clientId: string; clientSecret: string }) => Promise<void>;
   kickDisconnect: () => Promise<void>;

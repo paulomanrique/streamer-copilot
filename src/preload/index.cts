@@ -153,6 +153,7 @@ const IPC_CHANNELS = {
   tiktokGetSettings: 'tiktok:get-settings',
   tiktokSaveSettings: 'tiktok:save-settings',
   tiktokStatus: 'tiktok:status',
+  tiktokLiveStats: 'tiktok:live-stats',
   tiktokCheckLive: 'tiktok:check-live',
   kickConnect: 'kick:connect',
   kickDisconnect: 'kick:disconnect',
@@ -336,6 +337,11 @@ const copilotApi: CopilotApi = {
     const wrappedListener = (_event: Electron.IpcRendererEvent, status: TikTokConnectionStatus, username: string | null) => listener(status, username);
     ipcRenderer.on(IPC_CHANNELS.tiktokStatus, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.tiktokStatus, wrappedListener); };
+  },
+  onTiktokLiveStats: (listener: (stats: { viewerCount: number } | null) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, stats: { viewerCount: number } | null) => listener(stats);
+    ipcRenderer.on(IPC_CHANNELS.tiktokLiveStats, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.tiktokLiveStats, wrappedListener); };
   },
   tiktokCheckLive: (username: string) => ipcRenderer.invoke(IPC_CHANNELS.tiktokCheckLive, username) as Promise<{ isLive: boolean }>,
   kickConnect: (input: { channelInput: string; clientId: string; clientSecret: string }) => ipcRenderer.invoke(IPC_CHANNELS.kickConnect, input),

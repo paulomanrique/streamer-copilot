@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 
-import type { ChatMessage, KickConnectionStatus, KickLiveStats, ObsStatsSnapshot, StreamEvent, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
+import type { ChatMessage, KickConnectionStatus, KickLiveStats, ObsStatsSnapshot, StreamEvent, TikTokConnectionStatus, TikTokLiveStats, TwitchConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
 import { ChatFeed } from './ChatFeed.js';
 import { EventBanner } from './EventBanner.js';
@@ -18,13 +18,14 @@ interface DashboardSummaryProps {
   youtubeStreams: YouTubeStreamInfo[];
   tiktokStatus: TikTokConnectionStatus;
   tiktokUsername: string | null;
+  tiktokLiveStats: TikTokLiveStats | null;
   kickStatus: KickConnectionStatus;
   kickSlug: string | null;
   kickLiveStats: KickLiveStats | null;
   recommendationTemplate: string;
 }
 
-export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, obsStats, twitchStatus, twitchChannel, twitchLiveStats, youtubeStreams, tiktokStatus, tiktokUsername, kickStatus, kickSlug, kickLiveStats, recommendationTemplate }: DashboardSummaryProps) {
+export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, obsStats, twitchStatus, twitchChannel, twitchLiveStats, youtubeStreams, tiktokStatus, tiktokUsername, tiktokLiveStats, kickStatus, kickSlug, kickLiveStats, recommendationTemplate }: DashboardSummaryProps) {
   const { messages, t } = useI18n();
   const visibleMessages = chatMessages;
   const visibleEvents = chatEvents;
@@ -91,6 +92,7 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
             youtubeStreams={youtubeStreams}
             tiktokStatus={tiktokStatus}
             tiktokUsername={tiktokUsername}
+            tiktokLiveStats={tiktokLiveStats}
             kickStatus={kickStatus}
             kickSlug={kickSlug}
             kickLiveStats={kickLiveStats}

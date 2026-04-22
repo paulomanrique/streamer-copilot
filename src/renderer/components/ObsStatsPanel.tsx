@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { KickConnectionStatus, KickLiveStats, ObsStatsSnapshot, TikTokConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
+import type { KickConnectionStatus, KickLiveStats, ObsStatsSnapshot, TikTokConnectionStatus, TikTokLiveStats, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
 
 interface ObsStatsPanelProps {
@@ -9,6 +9,7 @@ interface ObsStatsPanelProps {
   youtubeStreams: YouTubeStreamInfo[];
   tiktokStatus: TikTokConnectionStatus;
   tiktokUsername: string | null;
+  tiktokLiveStats: TikTokLiveStats | null;
   kickStatus: KickConnectionStatus;
   kickSlug: string | null;
   kickLiveStats: KickLiveStats | null;
@@ -27,7 +28,7 @@ function fmtNum(n: number): string {
   return String(n);
 }
 
-export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtubeStreams, tiktokStatus, tiktokUsername, kickStatus, kickSlug, kickLiveStats }: ObsStatsPanelProps) {
+export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtubeStreams, tiktokStatus, tiktokUsername, tiktokLiveStats, kickStatus, kickSlug, kickLiveStats }: ObsStatsPanelProps) {
   const { t } = useI18n();
 
   const hype = twitchLiveStats?.hypeTrain;
@@ -127,7 +128,7 @@ export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtube
                 icon={ICONS.tiktok}
                 classes="bg-pink-500/10 border-pink-500/20 text-pink-300"
                 metaClass="text-pink-400"
-                value="—"
+                value={tiktokLiveStats ? fmtNum(tiktokLiveStats.viewerCount) : '—'}
                 isLive
               />
             )}

@@ -17,6 +17,7 @@ export function useIpcListeners(): void {
   const setYoutubeStreams = useAppStore((s) => s.setYoutubeStreams);
   const setTiktokStatus = useAppStore((s) => s.setTiktokStatus);
   const setTiktokUsername = useAppStore((s) => s.setTiktokUsername);
+  const setTiktokLiveStats = useAppStore((s) => s.setTiktokLiveStats);
   const setKickStatus = useAppStore((s) => s.setKickStatus);
   const setKickSlug = useAppStore((s) => s.setKickSlug);
   const setKickLiveStats = useAppStore((s) => s.setKickLiveStats);
@@ -46,15 +47,17 @@ export function useIpcListeners(): void {
     const unsubTiktok = window.copilot.onTiktokStatus((status, username) => {
       setTiktokStatus(status);
       setTiktokUsername(username);
+      if (status !== 'connected') setTiktokLiveStats(null);
     });
+    const unsubTiktokStats = window.copilot.onTiktokLiveStats(setTiktokLiveStats);
     const unsubKick = window.copilot.onKickStatus((status, slug) => {
       setKickStatus(status);
       setKickSlug(slug);
       if (status !== 'connected') setKickLiveStats(null);
     });
     const unsubKickStats = window.copilot.onKickLiveStats(setKickLiveStats);
-    return () => { unsubTwitchStatus(); unsubTwitchStats(); unsubYt(); unsubTiktok(); unsubKick(); unsubKickStats(); };
-  }, [setTwitchStatus, setTwitchChannel, setTwitchLiveStats, setYoutubeStreams, setTiktokStatus, setTiktokUsername, setKickStatus, setKickSlug, setKickLiveStats]);
+    return () => { unsubTwitchStatus(); unsubTwitchStats(); unsubYt(); unsubTiktok(); unsubTiktokStats(); unsubKick(); unsubKickStats(); };
+  }, [setTwitchStatus, setTwitchChannel, setTwitchLiveStats, setYoutubeStreams, setTiktokStatus, setTiktokUsername, setTiktokLiveStats, setKickStatus, setKickSlug, setKickLiveStats]);
 
   // Chat message/event listeners
   useEffect(() => {

@@ -1652,11 +1652,13 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       username: c.username,
       onError: (cause) => logTikTokConnectionError('Connection error', c.username, cause),
       onStatusChange: (status) => setTiktokStatus(status),
+      onLiveStats: (stats) => options.stateHub.pushTiktokLiveStats(stats),
     }));
   });
   ipcMain.handle(IPC_CHANNELS.tiktokDisconnect, async () => {
     chatLogService.closeSession('tiktok');
     await chatService.removeAdapter('tiktok');
+    options.stateHub.pushTiktokLiveStats(null);
     setTiktokStatus('disconnected', null);
   });
   ipcMain.handle(IPC_CHANNELS.tiktokGetStatus, async () => tiktokStatus);
@@ -1769,6 +1771,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         username: settings.username,
         onError: (cause) => logTikTokConnectionError('Auto-reconnect connection error', settings.username, cause),
         onStatusChange: (status) => setTiktokStatus(status),
+        onLiveStats: (stats) => options.stateHub.pushTiktokLiveStats(stats),
       }));
       logService.info('tiktok', 'Auto-reconnected from saved settings', { username: settings.username });
     } catch (cause) {

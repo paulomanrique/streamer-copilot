@@ -37,6 +37,7 @@ export default function App() {
     twitchChannel,
     tiktokStatus,
     tiktokUsername,
+    tiktokLiveStats,
     kickStatus,
     kickSlug,
     kickLiveStats,
@@ -344,6 +345,7 @@ export default function App() {
             youtubeStreams={youtubeStreams}
             tiktokStatus={tiktokStatus}
             tiktokUsername={tiktokUsername}
+            tiktokLiveStats={tiktokLiveStats}
             kickStatus={kickStatus}
             kickSlug={kickSlug}
             kickLiveStats={kickLiveStats}

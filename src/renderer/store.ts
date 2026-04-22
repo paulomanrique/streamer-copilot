@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import type { ChatMessage, KickConnectionStatus, KickLiveStats, ObsStatsSnapshot, ProfilesSnapshot, StreamEvent, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../shared/types.js';
+import type { ChatMessage, KickConnectionStatus, KickLiveStats, ObsStatsSnapshot, ProfilesSnapshot, StreamEvent, TikTokConnectionStatus, TikTokLiveStats, TwitchConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../shared/types.js';
 
 const DEFAULT_OBS_STATS: ObsStatsSnapshot = {
   connected: false,
@@ -27,6 +27,7 @@ interface AppStore extends ProfilesSnapshot {
   youtubeStreams: YouTubeStreamInfo[];
   tiktokStatus: TikTokConnectionStatus;
   tiktokUsername: string | null;
+  tiktokLiveStats: TikTokLiveStats | null;
   kickStatus: KickConnectionStatus;
   kickSlug: string | null;
   kickLiveStats: KickLiveStats | null;
@@ -43,6 +44,7 @@ interface AppStore extends ProfilesSnapshot {
   setYoutubeStreams: (streams: YouTubeStreamInfo[]) => void;
   setTiktokStatus: (status: TikTokConnectionStatus) => void;
   setTiktokUsername: (username: string | null) => void;
+  setTiktokLiveStats: (stats: TikTokLiveStats | null) => void;
   setKickStatus: (status: KickConnectionStatus) => void;
   setKickSlug: (slug: string | null) => void;
   setKickLiveStats: (stats: KickLiveStats | null) => void;
@@ -61,6 +63,7 @@ export const useAppStore = create<AppStore>((set) => ({
   youtubeStreams: [],
   tiktokStatus: 'disconnected',
   tiktokUsername: null,
+  tiktokLiveStats: null,
   kickStatus: 'disconnected',
   kickSlug: null,
   kickLiveStats: null,
@@ -98,6 +101,7 @@ export const useAppStore = create<AppStore>((set) => ({
   setYoutubeStreams: (streams) => set({ youtubeStreams: streams }),
   setTiktokStatus: (status) => set({ tiktokStatus: status }),
   setTiktokUsername: (username) => set({ tiktokUsername: username }),
+  setTiktokLiveStats: (stats) => set({ tiktokLiveStats: stats }),
   setKickStatus: (status) => set({ kickStatus: status }),
   setKickSlug: (slug) => set({ kickSlug: slug }),
   setKickLiveStats: (stats) => set({ kickLiveStats: stats }),

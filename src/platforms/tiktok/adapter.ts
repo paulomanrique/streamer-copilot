@@ -245,6 +245,18 @@ function decodeControlMsg(buf: Buffer): number {
   return 0;
 }
 
+function decodeRoomUserSeqMsg(buf: Buffer): { viewerCount: number } {
+  // WebcastRoomUserSeqMessage: field 2 = onlineUser (concurrent viewers)
+  const c = cur(buf);
+  let viewerCount = 0;
+  while (!done(c)) {
+    const [f, w] = readTag(c);
+    if (f === 2 && w === 0) viewerCount = Number(readVarint(c));
+    else skipField(c, w);
+  }
+  return { viewerCount };
+}
+
 function decodeBaseMsg(buf: Buffer): BaseMsg {
   const c = cur(buf);
   let type = '', msgId = '0';
@@ -394,6 +406,7 @@ async function captureWsCredentials(username: string): Promise<WsCaptureResult> 
     });
 
     const wc = win.webContents;
+    wc.setAudioMuted(true);
 
     // CDP intercepts WebSocket creation at the JS engine level, which is reliable
     // even in Electron 35 where session.webRequest doesn't fire for WebSocket upgrades
@@ -452,6 +465,7 @@ export interface TikTokAdapterOptions {
   username: string;
   onStatusChange?: (status: TikTokConnectionStatus) => void;
   onError?: (error: unknown) => void;
+  onLiveStats?: (stats: { viewerCount: number }) => void;
 }
 
 export function createTikTokChatAdapter(options: TikTokAdapterOptions): TikTokChatAdapter {
@@ -560,25 +574,42 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
   }
 
   async fetchIsLive(): Promise<boolean> {
-    try {
-      const params = new URLSearchParams({
-        uniqueId: this.options.username,
-        sourceType: '54',
-        aid: '1988',
-        app_name: 'tiktok_web',
-        device_platform: 'web_pc',
+    return new Promise<boolean>((resolve) => {
+      let resolved = false;
+      let win: BrowserWindow | null = null;
+
+      const done = (val: boolean) => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timer);
+        try { win?.destroy(); } catch { /* */ }
+        win = null;
+        resolve(val);
+      };
+
+      const partition = `tiktok-live-check-${Date.now()}`;
+      const ses = session.fromPartition(partition);
+      win = new BrowserWindow({
+        show: false,
+        width: 1280,
+        height: 720,
+        webPreferences: { session: ses, nodeIntegration: false, contextIsolation: true, backgroundThrottling: false },
       });
-      const res = await fetch(`https://www.tiktok.com/api-live/user/room/?${params}`, {
-        headers: { 'User-Agent': UA, 'Accept': 'application/json', 'Referer': 'https://www.tiktok.com/' },
-        signal: AbortSignal.timeout(10_000),
+      win.webContents.setAudioMuted(true);
+
+      const timer = setTimeout(() => done(false), 15_000);
+
+      // If TikTok redirects away from /live the user is offline (server-side 302)
+      win.webContents.on('did-finish-load', () => {
+        if (resolved) return;
+        const url = win?.webContents.getURL() ?? '';
+        done(url.toLowerCase().includes('/live'));
       });
-      if (!res.ok) return false;
-      const data = await res.json() as Record<string, unknown>;
-      // status 2 = live, status 4 = offline
-      return ((data?.data as Record<string, unknown>)?.data as Record<string, unknown>)?.status === 2;
-    } catch {
-      return false;
-    }
+
+      win.webContents.on('did-fail-load', () => done(false));
+
+      void win.loadURL(`https://www.tiktok.com/@${encodeURIComponent(this.options.username)}/live`, { userAgent: UA });
+    });
   }
 
   private onWsMessage(raw: Buffer): void {
@@ -656,6 +687,12 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
           message: d.giftName ? `${d.giftName} x${d.repeatCount || 1}` : undefined,
           timestampLabel: ts(),
         });
+        break;
+      }
+
+      case 'WebcastRoomUserSeqMessage': {
+        const d = decodeRoomUserSeqMsg(msg.payload);
+        if (d.viewerCount > 0) this.options.onLiveStats?.(d);
         break;
       }
 

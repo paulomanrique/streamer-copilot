@@ -67,6 +67,10 @@ export interface TwitchLiveStats {
   } | null;
 }
 
+export interface TikTokLiveStats {
+  viewerCount: number;
+}
+
 export interface KickLiveStats {
   viewerCount: number;
   followerCount: number | null;

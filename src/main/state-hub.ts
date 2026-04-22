@@ -16,6 +16,7 @@ import type {
   KickConnectionStatus,
   KickLiveStats,
   TikTokConnectionStatus,
+  TikTokLiveStats,
   TwitchConnectionStatus,
   TwitchLiveStats,
   VoiceSpeakPayload,
@@ -113,6 +114,10 @@ export class StateHub {
 
   pushTiktokStatus(status: TikTokConnectionStatus, username?: string | null): void {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.tiktokStatus, status, username ?? null);
+  }
+
+  pushTiktokLiveStats(stats: TikTokLiveStats | null): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.tiktokLiveStats, stats);
   }
 
   pushKickStatus(status: KickConnectionStatus, slug?: string | null): void {
