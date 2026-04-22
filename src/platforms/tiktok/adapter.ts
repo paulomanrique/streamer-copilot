@@ -11,7 +11,9 @@ const UA =
 
 const HEARTBEAT_MS = 10_000;
 const CONNECT_TIMEOUT_MS = 15_000;
-const CAPTURE_TIMEOUT_MS = 35_000;
+const CAPTURE_TIMEOUT_MS = 60_000;
+// Persistent session key — reused across connections so TikTok recognises the browser profile
+const TIKTOK_CAPTURE_PARTITION = 'persist:tiktok-capture';
 
 // ─── Minimal Protobuf reader ───────────────────────────────────────────────────
 
@@ -393,12 +395,13 @@ async function captureWsCredentials(config: WsCaptureConfig): Promise<WsCaptureR
     };
 
     let timer: NodeJS.Timeout = setTimeout(() => {
+      const lastUrl = win?.webContents?.getURL() ?? 'unknown';
       cleanup();
-      reject(new Error(`TikTok: timed out waiting for live stream — is @${username} currently live?`));
+      reject(new Error(`TikTok: timed out waiting for WebSocket (last page: ${lastUrl})`));
     }, CAPTURE_TIMEOUT_MS);
 
-    const partition = `tiktok-ws-capture-${Date.now()}`;
-    const ses = session.fromPartition(partition);
+    // Reuse a persistent session so TikTok recognises the browser across reconnects
+    const ses = session.fromPartition(TIKTOK_CAPTURE_PARTITION);
 
     win = new BrowserWindow({
       show: false,
@@ -417,6 +420,21 @@ async function captureWsCredentials(config: WsCaptureConfig): Promise<WsCaptureR
     const wc = win.webContents;
     wc.setAudioMuted(true);
 
+    const showCaptchaWindow = () => {
+      if (captchaShown) return;
+      captchaShown = true;
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        cleanup();
+        reject(new Error('TikTok: timed out waiting for CAPTCHA to be solved'));
+      }, CAPTCHA_TIMEOUT_MS);
+      win?.show();
+      win?.focus();
+      win?.setSkipTaskbar(false);
+      win?.setTitle('TikTok — Solve the verification to continue');
+      onCaptchaDetected?.();
+    };
+
     // CDP intercepts WebSocket creation at the JS engine level, which is reliable
     // even in Electron 35 where session.webRequest doesn't fire for WebSocket upgrades
     try {
@@ -430,22 +448,20 @@ async function captureWsCredentials(config: WsCaptureConfig): Promise<WsCaptureR
 
     void wc.debugger.sendCommand('Network.enable').catch(() => {});
 
-    // Detect CAPTCHA / challenge pages and surface them to the user
+    // URL-based CAPTCHA detection (covers server-side redirects)
     wc.on('did-navigate', (_, url) => {
       if (captured || captchaShown) return;
-      if (/captcha|\/verify|challenge/i.test(url)) {
-        captchaShown = true;
-        clearTimeout(timer);
-        timer = setTimeout(() => {
-          cleanup();
-          reject(new Error('TikTok: timed out waiting for CAPTCHA to be solved'));
-        }, CAPTCHA_TIMEOUT_MS);
-        win?.show();
-        win?.focus();
-        win?.setSkipTaskbar(false);
-        win?.setTitle('TikTok — Solve the verification to continue');
-        onCaptchaDetected?.();
-      }
+      if (/captcha|\/verify|challenge/i.test(url)) showCaptchaWindow();
+    });
+
+    // DOM-based CAPTCHA detection (covers inline CAPTCHAs that don't change URL)
+    wc.on('did-finish-load', () => {
+      if (captured || captchaShown) return;
+      void wc.executeJavaScript(
+        '!!(document.querySelector("#captcha-verify-image,#captcha_container,[class*=\\"captcha\\"],[data-e2e*=\\"captcha\\"]") || document.title.toLowerCase().includes("captcha") || document.title.toLowerCase().includes("verify"))',
+      ).then((hasCaptcha) => {
+        if (hasCaptcha && !captured) showCaptchaWindow();
+      }).catch(() => {});
     });
 
     wc.debugger.on('message', async (_, method, params: Record<string, unknown>) => {
