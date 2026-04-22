@@ -84,11 +84,13 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
           />
 
         <div className="flex flex-col w-[40%] overflow-hidden">
-          <ObsStatsPanel 
-            stats={obsStats} 
-            twitchLiveStats={twitchLiveStats} 
-            twitchConnected={twitchStatus === 'connected'} 
+          <ObsStatsPanel
+            stats={obsStats}
+            twitchLiveStats={twitchLiveStats}
+            twitchConnected={twitchStatus === 'connected'}
             youtubeStreams={youtubeStreams}
+            tiktokStatus={tiktokStatus}
+            tiktokUsername={tiktokUsername}
             kickStatus={kickStatus}
             kickSlug={kickSlug}
             kickLiveStats={kickLiveStats}
