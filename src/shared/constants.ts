@@ -21,6 +21,7 @@ export const PERMISSION_LEVELS: PermissionLevel[] = [
   'everyone',
   'follower',
   'subscriber',
+  'vip',
   'moderator',
   'broadcaster',
 ];

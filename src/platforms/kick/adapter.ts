@@ -230,6 +230,7 @@ export class KickChatAdapter implements PlatformChatAdapter {
           content?: string;
           contentParts?: ChatMessageContentPart[];
           timestampLabel?: string;
+          badges?: string[];
         };
         const author = typeof raw.author === 'string' && raw.author.trim() ? raw.author.trim() : 'Kick user';
         const content = typeof raw.content === 'string' ? raw.content.trim() : '';
@@ -249,7 +250,7 @@ export class KickChatAdapter implements PlatformChatAdapter {
           author,
           content,
           contentParts: Array.isArray(raw.contentParts) ? raw.contentParts : undefined,
-          badges: [],
+          badges: Array.isArray(raw.badges) ? raw.badges.filter((b): b is string => typeof b === 'string') : [],
           timestampLabel,
         });
       } catch {
@@ -380,6 +381,27 @@ export class KickChatAdapter implements PlatformChatAdapter {
           return containers.find((candidate) => candidate.querySelector('button.inline.font-bold[data-prevent-expand="true"]')) || null;
         };
 
+        const extractBadges = (wrapper) => {
+          const badges = [];
+          const body = findMessageBody(wrapper) || wrapper;
+          const imgs = body.querySelectorAll('img');
+          for (const img of imgs) {
+            const hint = (img.alt + ' ' + (img.getAttribute('title') || '') + ' ' + img.src).toLowerCase();
+            if (/\\bmod(erator)?\\b/.test(hint)) { badges.push('moderator'); continue; }
+            if (/\\bowner\\b|\\bbroadcaster\\b/.test(hint)) { badges.push('broadcaster'); continue; }
+            if (/\\bvip\\b/.test(hint)) { badges.push('vip'); continue; }
+            if (/\\bsub(scriber)?\\b/.test(hint)) { badges.push('subscriber'); continue; }
+          }
+          const svgBadges = body.querySelectorAll('[class*="badge"], [data-e2e*="badge"]');
+          for (const el of svgBadges) {
+            const hint = ((el.getAttribute('data-e2e') || '') + ' ' + el.className).toLowerCase();
+            if (/mod/.test(hint) && !badges.includes('moderator')) badges.push('moderator');
+            else if (/vip/.test(hint) && !badges.includes('vip')) badges.push('vip');
+            else if (/sub/.test(hint) && !badges.includes('subscriber')) badges.push('subscriber');
+          }
+          return badges;
+        };
+
         const processMessageNode = (node) => {
           if (!(node instanceof HTMLElement)) return;
           const wrapper = node.matches('[data-index]') ? node : node.closest('[data-index]');
@@ -408,7 +430,7 @@ export class KickChatAdapter implements PlatformChatAdapter {
           if (!id || state.seen.has(id)) return;
           state.seen.add(id);
 
-          emitChat({ id, author, content, contentParts, timestampLabel });
+          emitChat({ id, author, content, contentParts, timestampLabel, badges: extractBadges(wrapper) });
         };
 
         const scan = () => {

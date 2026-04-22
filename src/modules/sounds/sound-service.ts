@@ -1,5 +1,6 @@
 import type { ChatMessage, PermissionLevel, SoundCommand, SoundPlayPayload, SoundSettings } from '../../shared/types.js';
 import type { CommandModule } from '../commands/command-dispatcher.js';
+import { isPermissionAllowed } from '../commands/permission-utils.js';
 import { SoundCommandRepository } from './sound-repository.js';
 
 interface SoundServiceOptions {
@@ -13,14 +14,6 @@ interface ChatPermissionContext {
   permissionLevel: PermissionLevel;
   userId: string;
 }
-
-const PERMISSION_RANK: Record<PermissionLevel, number> = {
-  everyone: 0,
-  follower: 1,
-  subscriber: 2,
-  moderator: 3,
-  broadcaster: 4,
-};
 
 export class SoundService implements CommandModule {
   readonly name = 'sound';
@@ -58,7 +51,7 @@ export class SoundService implements CommandModule {
       if (!command.enabled) continue;
       if (command.commandEnabled === false || !command.trigger) continue;
       if (!content.startsWith(command.trigger)) continue;
-      if (!this.isAllowed(command.permissions, context.permissionLevel)) continue;
+      if (!isPermissionAllowed(command.permissions, context.permissionLevel)) continue;
       if (!this.canRun(command, context.userId, timestamp)) continue;
 
       const payload = { filePath: command.filePath };
@@ -69,12 +62,6 @@ export class SoundService implements CommandModule {
     }
 
     return null;
-  }
-
-  private isAllowed(allowedLevels: PermissionLevel[], actualLevel: PermissionLevel): boolean {
-    if (actualLevel === 'broadcaster') return true;
-
-    return allowedLevels.some((level) => PERMISSION_RANK[actualLevel] >= PERMISSION_RANK[level]);
   }
 
   private canRun(command: SoundCommand, userId: string, now: number): boolean {

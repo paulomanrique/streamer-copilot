@@ -20,7 +20,7 @@ export interface ProfileSettings {
   appLanguage: AppLanguage;
 }
 
-export type PermissionLevel = 'everyone' | 'follower' | 'subscriber' | 'moderator' | 'broadcaster';
+export type PermissionLevel = 'everyone' | 'follower' | 'subscriber' | 'vip' | 'moderator' | 'broadcaster';
 
 export interface CommandPermission {
   allowedLevels: PermissionLevel[];

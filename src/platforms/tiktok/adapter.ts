@@ -1,7 +1,7 @@
 import { gunzipSync } from 'node:zlib';
 import { createRequire } from 'node:module';
 import { BrowserWindow, session } from 'electron';
-import type { ChatMessage, StreamEvent, TikTokConnectionStatus } from '../../shared/types.js';
+import type { ChatBadge, ChatMessage, StreamEvent, TikTokConnectionStatus } from '../../shared/types.js';
 import type { PlatformChatAdapter } from '../base.js';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -102,7 +102,7 @@ class PW {
 
 // ─── Message decoders ─────────────────────────────────────────────────────────
 
-interface UserInfo { nickname: string; uniqueId: string; avatarUrl: string; }
+interface UserInfo { nickname: string; uniqueId: string; avatarUrl: string; badges: string[]; }
 
 function decodeImageUrl(buf: Buffer): string {
   // Image message: field 1 = urlList (repeated string) — take first entry
@@ -117,9 +117,24 @@ function decodeImageUrl(buf: Buffer): string {
   return '';
 }
 
+function decodeBadgeType(buf: Buffer): string {
+  const c = cur(buf);
+  while (!done(c)) {
+    const [f, w] = readTag(c);
+    if (w === 2) {
+      const b = readBytes(c);
+      const s = b.toString('utf-8');
+      // Return the first short identifier-like string — the badge type name
+      if (s.length > 1 && s.length < 64 && /^[\w\s_-]+$/.test(s)) return s.toLowerCase();
+    } else skipField(c, w);
+  }
+  return '';
+}
+
 function decodeUser(buf: Buffer): UserInfo {
   const c = cur(buf);
   let nickname = '', uniqueId = '', avatarUrl = '';
+  const badges: string[] = [];
   while (!done(c)) {
     const [f, w] = readTag(c);
     if (w === 2) {
@@ -127,9 +142,10 @@ function decodeUser(buf: Buffer): UserInfo {
       if (f === 3) nickname = b.toString('utf-8');             // User.nickname
       else if (f === 9 && !avatarUrl) avatarUrl = decodeImageUrl(b); // User.avatarThumb
       else if (f === 38) uniqueId = b.toString('utf-8');       // User.uniqueId
+      else if (f === 64) { const t = decodeBadgeType(b); if (t) badges.push(t); } // User.badge_list
     } else skipField(c, w);
   }
-  return { nickname, uniqueId, avatarUrl };
+  return { nickname, uniqueId, avatarUrl, badges };
 }
 
 function decodeText(buf: Buffer): string {
@@ -173,7 +189,7 @@ function decodeGiftDetails(buf: Buffer): { giftType: number; diamondCount: numbe
   return { giftType, diamondCount, giftName };
 }
 
-interface ChatData { user: UserInfo; comment: string; }
+interface ChatData { user: UserInfo; comment: string; badges: string[]; }
 interface SocialData { user: UserInfo; displayType: string; }
 interface GiftData { user: UserInfo; giftType: number; repeatEnd: number; repeatCount: number; diamondCount: number; giftName: string; }
 interface BaseMsg { type: string; payload: Buffer<ArrayBuffer>; msgId: string; }
@@ -183,7 +199,7 @@ type WsHandle = { send(d: Buffer): void; close(): void; readyState: number; addE
 
 function decodeChatMsg(buf: Buffer): ChatData {
   const c = cur(buf);
-  let user: UserInfo = { nickname: '', uniqueId: '', avatarUrl: '' };
+  let user: UserInfo = { nickname: '', uniqueId: '', avatarUrl: '', badges: [] };
   let comment = '';
   while (!done(c)) {
     const [f, w] = readTag(c);
@@ -193,12 +209,12 @@ function decodeChatMsg(buf: Buffer): ChatData {
       else if (f === 3) comment = b.toString('utf-8'); // WebcastChatMessage.comment
     } else skipField(c, w);
   }
-  return { user, comment };
+  return { user, comment, badges: user.badges };
 }
 
 function decodeSocialMsg(buf: Buffer): SocialData {
   const c = cur(buf);
-  let user: UserInfo = { nickname: '', uniqueId: '', avatarUrl: '' };
+  let user: UserInfo = { nickname: '', uniqueId: '', avatarUrl: '', badges: [] };
   let displayType = '';
   while (!done(c)) {
     const [f, w] = readTag(c);
@@ -213,7 +229,7 @@ function decodeSocialMsg(buf: Buffer): SocialData {
 
 function decodeGiftMsg(buf: Buffer): GiftData {
   const c = cur(buf);
-  let user: UserInfo = { nickname: '', uniqueId: '', avatarUrl: '' };
+  let user: UserInfo = { nickname: '', uniqueId: '', avatarUrl: '', badges: [] };
   let giftType = 0, repeatEnd = 0, repeatCount = 0, diamondCount = 0, giftName = '';
   while (!done(c)) {
     const [f, w] = readTag(c);
@@ -697,12 +713,17 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
         const d = decodeChatMsg(msg.payload);
         const author = d.user.uniqueId || d.user.nickname;
         if (!author || !d.comment) return;
+        const chatBadges: ChatBadge[] = [];
+        for (const b of d.badges) {
+          if (b.includes('mod')) chatBadges.push('moderator');
+          else if (b.includes('sub') || b.includes('member')) chatBadges.push('subscriber');
+        }
         this.emitMsg({
           id: `tiktok-${msg.msgId}-${Math.random().toString(36).slice(2, 7)}`,
           platform: 'tiktok',
           author,
           content: d.comment,
-          badges: [],
+          badges: chatBadges,
           timestampLabel: ts(),
           avatarUrl: d.user.avatarUrl || undefined,
         });

@@ -11,6 +11,7 @@ import type {
   PlatformId,
 } from '../../shared/types.js';
 import type { CommandModule } from '../commands/command-dispatcher.js';
+import { isPermissionAllowed } from '../commands/permission-utils.js';
 
 interface MusicRequestServiceOptions {
   getSettings: () => MusicRequestSettings;
@@ -24,14 +25,6 @@ interface MusicRequestServiceOptions {
   logError: (message: string, metadata?: unknown) => void;
   now?: () => number;
 }
-
-const PERMISSION_RANK: Record<PermissionLevel, number> = {
-  everyone: 0,
-  follower: 1,
-  subscriber: 2,
-  moderator: 3,
-  broadcaster: 4,
-};
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -89,7 +82,7 @@ export class MusicRequestService implements CommandModule {
     query: string,
     settings: MusicRequestSettings,
   ): Promise<void> {
-    if (!this.isAllowed(settings.requestPermissions, permissionLevel)) return;
+    if (!isPermissionAllowed(settings.requestPermissions, permissionLevel)) return;
     if (!this.canRun('request', message.author, settings)) return;
 
     if (this.queue.length >= settings.maxQueueSize) {
@@ -147,7 +140,7 @@ export class MusicRequestService implements CommandModule {
   }
 
   private handleSkip(message: ChatMessage, permissionLevel: PermissionLevel, settings: MusicRequestSettings): void {
-    if (!this.isAllowed(settings.skipPermissions, permissionLevel)) return;
+    if (!isPermissionAllowed(settings.skipPermissions, permissionLevel)) return;
 
     if (!this.isPlaying && !this.currentItem) {
       void this.options.sendMessage(message.platform, '❌ Nothing is playing').catch(() => {});
@@ -277,11 +270,6 @@ export class MusicRequestService implements CommandModule {
 
   private pushState(): void {
     this.options.onStateUpdate(this.getState());
-  }
-
-  private isAllowed(allowedLevels: PermissionLevel[], actualLevel: PermissionLevel): boolean {
-    if (actualLevel === 'broadcaster') return true;
-    return allowedLevels.some((level) => PERMISSION_RANK[actualLevel] >= PERMISSION_RANK[level]);
   }
 
   private canRun(action: string, userId: string, settings: MusicRequestSettings): boolean {

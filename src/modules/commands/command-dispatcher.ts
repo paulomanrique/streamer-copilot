@@ -1,4 +1,5 @@
 import type { ChatMessage, PermissionLevel } from '../../shared/types.js';
+import { resolvePermissionLevel } from './permission-utils.js';
 
 /**
  * A command handler module. Each module (sound, voice, future ones) registers here.
@@ -9,14 +10,6 @@ export interface CommandModule {
   readonly name: string;
   handle(message: ChatMessage, permissionLevel: PermissionLevel): void;
 }
-
-const PERMISSION_RANK: Record<PermissionLevel, number> = {
-  everyone: 0,
-  follower: 1,
-  subscriber: 2,
-  moderator: 3,
-  broadcaster: 4,
-};
 
 /** How long (ms) to suppress duplicate command executions from the same author+content. */
 const DEDUP_WINDOW_MS = 2_000;
@@ -68,29 +61,7 @@ export class CommandDispatcher {
     }
   }
 
-  /**
-   * Derives the sender's effective PermissionLevel from their badge list.
-   * Handles both Twitch badge strings (e.g. "moderator/1", "subscriber/3")
-   * and YouTube badge strings ("member", "moderator").
-   */
   private resolvePermission(message: ChatMessage): PermissionLevel {
-    const badges = message.badges ?? [];
-
-    const rank = (level: PermissionLevel) => PERMISSION_RANK[level];
-    let best: PermissionLevel = 'everyone';
-
-    for (const badge of badges) {
-      const b = badge.toLowerCase();
-      let level: PermissionLevel | null = null;
-
-      if (b === 'broadcaster') level = 'broadcaster';
-      else if (b.startsWith('moderator')) level = 'moderator';
-      else if (b.startsWith('subscriber') || b === 'member') level = 'subscriber';
-      else if (b === 'vip') level = 'subscriber'; // treat VIPs as subscribers
-
-      if (level && rank(level) > rank(best)) best = level;
-    }
-
-    return best;
+    return resolvePermissionLevel(message);
   }
 }

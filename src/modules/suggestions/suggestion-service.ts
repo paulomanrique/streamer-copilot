@@ -8,6 +8,7 @@ import type {
   TextCommandResponsePayload,
 } from '../../shared/types.js';
 import type { CommandModule } from '../commands/command-dispatcher.js';
+import { isPermissionAllowed } from '../commands/permission-utils.js';
 import type { SuggestionRepository } from './suggestion-repository.js';
 
 interface SuggestionServiceOptions {
@@ -16,14 +17,6 @@ interface SuggestionServiceOptions {
   onFeedback: (payload: TextCommandResponsePayload) => void | Promise<void>;
   now?: () => number;
 }
-
-const PERMISSION_RANK: Record<PermissionLevel, number> = {
-  everyone: 0,
-  follower: 1,
-  subscriber: 2,
-  moderator: 3,
-  broadcaster: 4,
-};
 
 export class SuggestionService implements CommandModule {
   readonly name = 'suggestion';
@@ -73,7 +66,7 @@ export class SuggestionService implements CommandModule {
       const content = afterTrigger.trim();
       if (!content) continue;
 
-      if (!this.isAllowed(list.permissions, permissionLevel)) continue;
+      if (!isPermissionAllowed(list.permissions, permissionLevel)) continue;
       if (!this.canRun(list, message.author, timestamp)) continue;
 
       const userKey = `${message.platform}:${message.author.toLowerCase()}`;
@@ -104,11 +97,6 @@ export class SuggestionService implements CommandModule {
 
       return;
     }
-  }
-
-  private isAllowed(allowedLevels: PermissionLevel[], actualLevel: PermissionLevel): boolean {
-    if (actualLevel === 'broadcaster') return true;
-    return allowedLevels.some((level) => PERMISSION_RANK[actualLevel] >= PERMISSION_RANK[level]);
   }
 
   private canRun(list: SuggestionList, userId: string, now: number): boolean {

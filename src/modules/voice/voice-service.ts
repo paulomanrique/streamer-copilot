@@ -1,5 +1,6 @@
 import type { ChatMessage, PermissionLevel, VoiceCommand, VoiceSpeakPayload } from '../../shared/types.js';
 import type { CommandModule } from '../commands/command-dispatcher.js';
+import { isPermissionAllowed } from '../commands/permission-utils.js';
 import { VoiceCommandRepository } from './voice-repository.js';
 
 interface VoiceServiceOptions {
@@ -11,14 +12,6 @@ interface VoiceServiceOptions {
 interface ChatPermissionContext {
   permissionLevel: PermissionLevel;
 }
-
-const PERMISSION_RANK: Record<PermissionLevel, number> = {
-  everyone: 0,
-  follower: 1,
-  subscriber: 2,
-  moderator: 3,
-  broadcaster: 4,
-};
 
 export class VoiceService implements CommandModule {
   readonly name = 'voice';
@@ -53,7 +46,7 @@ export class VoiceService implements CommandModule {
     for (const command of commands) {
       if (!command.enabled) continue;
       if (!content.startsWith(command.trigger)) continue;
-      if (!this.isAllowed(command.permissions, context.permissionLevel)) continue;
+      if (!isPermissionAllowed(command.permissions, context.permissionLevel)) continue;
       if (!this.canRun(command)) continue;
 
       const extractedText = command.template ?? content.slice(command.trigger.length).trim();
@@ -70,11 +63,6 @@ export class VoiceService implements CommandModule {
     }
 
     return null;
-  }
-
-  private isAllowed(allowedLevels: PermissionLevel[], actualLevel: PermissionLevel): boolean {
-    if (actualLevel === 'broadcaster') return true;
-    return allowedLevels.some((level) => PERMISSION_RANK[actualLevel] >= PERMISSION_RANK[level]);
   }
 
   private canRun(command: VoiceCommand): boolean {

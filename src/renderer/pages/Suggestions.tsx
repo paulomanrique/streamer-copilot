@@ -20,6 +20,7 @@ const PERMISSION_LABELS: Record<PermissionLevel, string> = {
   everyone: 'Everyone',
   follower: 'Followers',
   subscriber: 'Subscribers',
+  vip: 'VIP',
   moderator: 'Moderators',
   broadcaster: 'Broadcaster',
 };

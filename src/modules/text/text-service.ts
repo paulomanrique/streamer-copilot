@@ -6,6 +6,7 @@ import type {
   TextSettings,
 } from '../../shared/types.js';
 import type { CommandModule } from '../commands/command-dispatcher.js';
+import { isPermissionAllowed } from '../commands/permission-utils.js';
 import { TextCommandRepository } from './text-repository.js';
 
 interface TextServiceOptions {
@@ -20,14 +21,6 @@ interface ChatPermissionContext {
   userId: string;
   platform: ChatMessage['platform'];
 }
-
-const PERMISSION_RANK: Record<PermissionLevel, number> = {
-  everyone: 0,
-  follower: 1,
-  subscriber: 2,
-  moderator: 3,
-  broadcaster: 4,
-};
 
 export class TextService implements CommandModule {
   readonly name = 'text';
@@ -64,7 +57,7 @@ export class TextService implements CommandModule {
       if (!command.enabled) continue;
       if (command.commandEnabled === false || !command.trigger) continue;
       if (!content.startsWith(command.trigger)) continue;
-      if (!this.isAllowed(command.permissions, context.permissionLevel)) continue;
+      if (!isPermissionAllowed(command.permissions, context.permissionLevel)) continue;
       if (!this.canRun(command, context.userId, timestamp)) continue;
 
       const payload: TextCommandResponsePayload = {
@@ -79,11 +72,6 @@ export class TextService implements CommandModule {
     }
 
     return null;
-  }
-
-  private isAllowed(allowedLevels: PermissionLevel[], actualLevel: PermissionLevel): boolean {
-    if (actualLevel === 'broadcaster') return true;
-    return allowedLevels.some((level) => PERMISSION_RANK[actualLevel] >= PERMISSION_RANK[level]);
   }
 
   private canRun(command: TextCommand, userId: string, now: number): boolean {
