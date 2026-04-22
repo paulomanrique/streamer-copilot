@@ -206,6 +206,30 @@ export function SoundCommandsPage() {
     }
   };
 
+  const toggleEnabled = async (row: SoundCommand) => {
+    try {
+      const commands = await window.copilot.upsertSoundCommand({
+        id: row.id,
+        trigger: row.trigger,
+        filePath: row.filePath,
+        permissions: row.permissions,
+        cooldownSeconds: row.cooldownSeconds,
+        userCooldownSeconds: row.userCooldownSeconds,
+        commandEnabled: row.commandEnabled,
+        schedule: row.schedule ? {
+          intervalSeconds: row.schedule.intervalSeconds,
+          randomWindowSeconds: row.schedule.randomWindowSeconds,
+          targetPlatforms: row.schedule.targetPlatforms,
+          enabled: row.schedule.enabled,
+        } : null,
+        enabled: !row.enabled,
+      });
+      setRows(commands);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Failed to update command');
+    }
+  };
+
   const deleteCommand = async (id: string) => {
     try {
       const commands = await window.copilot.deleteSoundCommand({ id });
@@ -350,7 +374,7 @@ export function SoundCommandsPage() {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <ToggleSwitch checked={row.enabled} onChange={() => {}} />
+                    <ToggleSwitch checked={row.enabled} onChange={() => void toggleEnabled(row)} />
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2">
