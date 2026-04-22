@@ -30,6 +30,7 @@ const STATUS_DOT: Record<TwitchConnectionStatus, string> = {
 const TIKTOK_STATUS_LABEL: Record<TikTokConnectionStatus, string> = {
   disconnected: 'Disconnected',
   connecting: 'Connecting…',
+  captcha: 'Verification required',
   connected: 'Connected',
   error: 'Connection error',
 };
@@ -37,6 +38,7 @@ const TIKTOK_STATUS_LABEL: Record<TikTokConnectionStatus, string> = {
 const TIKTOK_STATUS_COLOR: Record<TikTokConnectionStatus, string> = {
   disconnected: 'text-gray-400',
   connecting: 'text-yellow-400',
+  captcha: 'text-orange-400',
   connected: 'text-green-400',
   error: 'text-red-400',
 };
@@ -44,6 +46,7 @@ const TIKTOK_STATUS_COLOR: Record<TikTokConnectionStatus, string> = {
 const TIKTOK_STATUS_DOT: Record<TikTokConnectionStatus, string> = {
   disconnected: 'bg-gray-500',
   connecting: 'bg-yellow-400 animate-pulse',
+  captcha: 'bg-orange-400 animate-pulse',
   connected: 'bg-green-400',
   error: 'bg-red-500',
 };
@@ -589,12 +592,25 @@ export function PlatformsSettingsPage() {
 
             {tiktokStatus === 'connected' ? (
               <button type="button" onClick={() => void disconnectTiktok()} className="text-xs px-3 py-1.5 rounded bg-gray-700 text-gray-300">Disconnect</button>
+            ) : tiktokStatus === 'captcha' ? (
+              <button type="button" onClick={() => void disconnectTiktok()} className="text-xs px-3 py-1.5 rounded bg-gray-700 text-gray-300">Cancel</button>
             ) : tiktokStatus !== 'connecting' ? (
               <button type="button" disabled={isBusy || !tiktokUsernameInput.trim()} onClick={() => void connectTiktok()} className="text-xs px-3 py-1.5 rounded bg-pink-600 text-white disabled:opacity-50">Connect</button>
             ) : null}
           </div>
 
-          {tiktokStatus !== 'connected' && (
+          {tiktokStatus === 'captcha' && (
+            <div className="mt-3 flex items-start gap-2 bg-orange-500/10 border border-orange-500/30 rounded-lg px-3 py-2.5">
+              <svg className="w-4 h-4 text-orange-400 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              </svg>
+              <p className="text-xs text-orange-300 leading-snug">
+                TikTok is requesting verification. A popup window appeared — solve the CAPTCHA there to continue connecting.
+              </p>
+            </div>
+          )}
+
+          {tiktokStatus !== 'connected' && tiktokStatus !== 'captcha' && (
             <div className="mt-4 space-y-3">
               <div>
                 <label className="block text-xs text-gray-400 mb-1">TikTok Username <span className="text-pink-400">*</span></label>

@@ -1653,6 +1653,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       onError: (cause) => logTikTokConnectionError('Connection error', c.username, cause),
       onStatusChange: (status) => setTiktokStatus(status),
       onLiveStats: (stats) => options.stateHub.pushTiktokLiveStats(stats),
+      onCaptchaDetected: () => logService.warn('tiktok', 'CAPTCHA detected — window shown to user'),
     }));
   });
   ipcMain.handle(IPC_CHANNELS.tiktokDisconnect, async () => {
@@ -1772,6 +1773,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         onError: (cause) => logTikTokConnectionError('Auto-reconnect connection error', settings.username, cause),
         onStatusChange: (status) => setTiktokStatus(status),
         onLiveStats: (stats) => options.stateHub.pushTiktokLiveStats(stats),
+        onCaptchaDetected: () => logService.warn('tiktok', 'CAPTCHA detected — window shown to user'),
       }));
       logService.info('tiktok', 'Auto-reconnected from saved settings', { username: settings.username });
     } catch (cause) {

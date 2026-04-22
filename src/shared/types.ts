@@ -519,7 +519,7 @@ export interface YouTubeSettings {
   autoConnect: boolean;
 }
 
-export type TikTokConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+export type TikTokConnectionStatus = 'disconnected' | 'connecting' | 'captcha' | 'connected' | 'error';
 
 export interface TikTokSettings {
   username: string;

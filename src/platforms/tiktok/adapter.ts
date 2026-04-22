@@ -371,9 +371,18 @@ interface WsCaptureResult {
   roomId: string;
 }
 
-async function captureWsCredentials(username: string): Promise<WsCaptureResult> {
+interface WsCaptureConfig {
+  username: string;
+  onCaptchaDetected?: () => void;
+}
+
+const CAPTCHA_TIMEOUT_MS = 180_000; // 3 min to solve CAPTCHA
+
+async function captureWsCredentials(config: WsCaptureConfig): Promise<WsCaptureResult> {
+  const { username, onCaptchaDetected } = config;
   return new Promise<WsCaptureResult>((resolve, reject) => {
     let captured = false;
+    let captchaShown = false;
     let win: BrowserWindow | null = null;
 
     const cleanup = () => {
@@ -383,7 +392,7 @@ async function captureWsCredentials(username: string): Promise<WsCaptureResult> 
       win = null;
     };
 
-    const timer = setTimeout(() => {
+    let timer: NodeJS.Timeout = setTimeout(() => {
       cleanup();
       reject(new Error(`TikTok: timed out waiting for live stream — is @${username} currently live?`));
     }, CAPTURE_TIMEOUT_MS);
@@ -420,6 +429,24 @@ async function captureWsCredentials(username: string): Promise<WsCaptureResult> 
     }
 
     void wc.debugger.sendCommand('Network.enable').catch(() => {});
+
+    // Detect CAPTCHA / challenge pages and surface them to the user
+    wc.on('did-navigate', (_, url) => {
+      if (captured || captchaShown) return;
+      if (/captcha|\/verify|challenge/i.test(url)) {
+        captchaShown = true;
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          cleanup();
+          reject(new Error('TikTok: timed out waiting for CAPTCHA to be solved'));
+        }, CAPTCHA_TIMEOUT_MS);
+        win?.show();
+        win?.focus();
+        win?.setSkipTaskbar(false);
+        win?.setTitle('TikTok — Solve the verification to continue');
+        onCaptchaDetected?.();
+      }
+    });
 
     wc.debugger.on('message', async (_, method, params: Record<string, unknown>) => {
       if (captured) return;
@@ -466,6 +493,7 @@ export interface TikTokAdapterOptions {
   onStatusChange?: (status: TikTokConnectionStatus) => void;
   onError?: (error: unknown) => void;
   onLiveStats?: (stats: { viewerCount: number }) => void;
+  onCaptchaDetected?: () => void;
 }
 
 export function createTikTokChatAdapter(options: TikTokAdapterOptions): TikTokChatAdapter {
@@ -502,7 +530,13 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
 
     // 1. Open a hidden browser window, let TikTok's JS build the signed WebSocket
     //    URL, intercept the upgrade request before it goes out, capture URL + cookies
-    const { wsUrl, cookieHeader, roomId } = await captureWsCredentials(username);
+    const { wsUrl, cookieHeader, roomId } = await captureWsCredentials({
+      username,
+      onCaptchaDetected: () => {
+        this.options.onStatusChange?.('captcha');
+        this.options.onCaptchaDetected?.();
+      },
+    });
     this.roomId = roomId;
 
     // 2. Connect undici WebSocket (supports custom headers, no extra npm packages)
