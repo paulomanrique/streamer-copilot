@@ -118,8 +118,7 @@ export class SuggestionRepository {
     if (!file.entries[input.listId]) file.entries[input.listId] = [];
     const bucket = file.entries[input.listId];
 
-    // Enforce uniqueness per user per list (same as SQLite UNIQUE constraint)
-    if (bucket.some((e) => e.userKey === input.userKey)) return null;
+    if (!list.allowDuplicates && bucket.some((e) => e.userKey === input.userKey)) return null;
 
     const record: SuggestionEntryRecord = {
       id: randomUUID(),
