@@ -129,6 +129,7 @@ export const textSettingsSchema = z.object({
 
 export const textCommandUpsertInputSchema = z.object({
   id: z.string().min(1).optional(),
+  name: z.string().min(1).max(80),
   trigger: z.string().max(80).nullable(),
   response: z.string().min(1).max(500),
   permissions: z.array(permissionLevelSchema).min(1),
@@ -192,6 +193,7 @@ export const soundSettingsSchema = z.object({
 
 export const soundCommandUpsertInputSchema = z.object({
   id: z.string().min(1).optional(),
+  name: z.string().min(1).max(80),
   trigger: z.string().max(80).nullable(),
   filePath: z.string().min(1),
   permissions: z.array(permissionLevelSchema).min(1),

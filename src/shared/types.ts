@@ -242,6 +242,7 @@ export interface TextSettings {
 
 export interface TextCommand {
   id: string;
+  name: string;
   trigger: string | null;
   response: string;
   permissions: PermissionLevel[];
@@ -254,6 +255,7 @@ export interface TextCommand {
 
 export interface TextCommandUpsertInput {
   id?: string;
+  name: string;
   trigger: string | null;
   response: string;
   permissions: PermissionLevel[];
@@ -342,6 +344,7 @@ export interface SoundSettings {
 
 export interface SoundCommand {
   id: string;
+  name: string;
   trigger: string | null;
   filePath: string;
   permissions: PermissionLevel[];
@@ -354,6 +357,7 @@ export interface SoundCommand {
 
 export interface SoundCommandUpsertInput {
   id?: string;
+  name: string;
   trigger: string | null;
   filePath: string;
   permissions: PermissionLevel[];

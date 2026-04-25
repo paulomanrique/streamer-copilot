@@ -46,6 +46,7 @@ export class SoundCommandRepository {
       : null;
     const next: SoundCommand = {
       id,
+      name: input.name,
       trigger: input.trigger?.trim() ?? null,
       filePath: input.filePath,
       permissions: input.permissions,

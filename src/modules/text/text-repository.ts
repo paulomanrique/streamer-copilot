@@ -46,6 +46,7 @@ export class TextCommandRepository {
       : null;
     const next: TextCommand = {
       id,
+      name: input.name,
       trigger: input.trigger?.trim() ?? null,
       response: input.response,
       permissions: input.permissions,
