@@ -472,13 +472,14 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
             </button>
             {suggestionLists.map((list) => {
               const active = selectedListId === list.id;
+              const count = suggestionEntries[list.id]?.length ?? list.entryCount;
               return (
                 <button key={list.id} type="button" title={list.title}
                   onClick={() => void selectSuggestionList(list.id)}
                   className={active ? 'px-2 py-1 rounded bg-violet-600 text-white shrink-0' : 'px-2 py-1 rounded text-gray-400 hover:text-white shrink-0'}>
                   <span className="max-w-[80px] truncate inline-block align-bottom">{list.trigger}</span>
-                  {list.entryCount > 0 && (
-                    <span className={`ml-1 text-[10px] ${active ? 'text-violet-200' : 'text-gray-500'}`}>{list.entryCount}</span>
+                  {count > 0 && (
+                    <span className={`ml-1 text-[10px] ${active ? 'text-violet-200' : 'text-gray-500'}`}>{count}</span>
                   )}
                 </button>
               );
@@ -760,12 +761,13 @@ interface SuggestionEntriesPanelProps {
 }
 
 function SuggestionEntriesPanel({ list, entries, onClear }: SuggestionEntriesPanelProps) {
+  const { t } = useI18n();
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800 shrink-0">
         <div>
           <span className="text-sm font-medium text-gray-200">{list.title}</span>
-          <span className="ml-2 text-xs text-gray-500">{entries.length} suggestion{entries.length !== 1 ? 's' : ''}</span>
+          <span className="ml-2 text-xs text-gray-500">{entries.length} {entries.length !== 1 ? t('suggestions') : t('suggestion')}</span>
         </div>
         <button type="button" onClick={onClear}
           className="text-xs text-gray-400 hover:text-red-300 transition-colors px-2 py-1 rounded hover:bg-red-500/10">
