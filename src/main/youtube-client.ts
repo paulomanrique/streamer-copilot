@@ -88,22 +88,24 @@ export class YTLiveClient {
   static async getChatChannels(): Promise<Array<{ pageId: string; name: string; handle: string; isSelected: boolean }>> {
     const cookies = await session.defaultSession.cookies.get({ url: 'https://www.youtube.com' });
     const hasCookies = cookies.some((c) => c.name === 'SAPISID' || c.name === '__Secure-3PAPISID');
-    if (!hasCookies) return [];
+    if (!hasCookies) throw new Error('Log in to YouTube in Platforms first.');
 
     const cookieStr = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
     const yt = await Innertube.create({ cookie: cookieStr });
     const items: any[] = await yt.account.getInfo(true) as any[];
-    if (!Array.isArray(items)) return [];
+    if (!Array.isArray(items) || items.length === 0) throw new Error('No channels found. Make sure you are logged in to YouTube.');
 
     return items
       .filter((item: any) => item.has_channel || item.channel_handle?.text)
-      .map((item: any) => ({
-        pageId: item.endpoint?.payload?.obou ?? '',
-        name: item.account_name?.text ?? item.account_name?.toString?.() ?? '',
-        handle: item.channel_handle?.text ?? item.channel_handle?.toString?.() ?? '',
-        isSelected: !!item.is_selected,
-      }))
-      .filter((ch) => ch.pageId);
+      .map((item: any) => {
+        const payload = item.endpoint?.payload ?? {};
+        // InnerTube selectActiveIdentityEndpoint uses `obou` for the page ID
+        const pageId: string = payload.obou ?? payload.pageId ?? payload.delegatedSessionId ?? '';
+        const name: string = item.account_name?.text ?? item.account_name?.toString?.() ?? '';
+        const handle: string = item.channel_handle?.text ?? item.channel_handle?.toString?.() ?? '';
+        return { pageId, name, handle, isSelected: !!item.is_selected };
+      })
+      .filter((ch) => ch.name || ch.handle);
   }
 
   private handleItem(item: any): void {

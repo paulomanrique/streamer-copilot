@@ -105,6 +105,7 @@ export function PlatformsSettingsPage() {
   const [liveCheckResult, setLiveCheckResult] = useState<LiveCheckResult | null>(null);
   const [ytChatChannels, setYtChatChannels] = useState<YouTubeChatChannel[]>([]);
   const [isLoadingChatChannels, setIsLoadingChatChannels] = useState(false);
+  const [chatChannelError, setChatChannelError] = useState<string | null>(null);
 
   // Kick
   const [kickStatus, setKickStatus] = useState<KickConnectionStatus>('disconnected');
@@ -249,11 +250,13 @@ export function PlatformsSettingsPage() {
 
   const loadYtChatChannels = async () => {
     setIsLoadingChatChannels(true);
+    setChatChannelError(null);
     try {
       const channels = await (window.copilot as any).youtubeGetChatChannels() as YouTubeChatChannel[];
       setYtChatChannels(channels);
-    } catch { setYtChatChannels([]); }
-    finally { setIsLoadingChatChannels(false); }
+    } catch (cause) {
+      setChatChannelError(cause instanceof Error ? cause.message : 'Failed to load channels');
+    } finally { setIsLoadingChatChannels(false); }
   };
 
   const selectYtChatChannel = async (pageId: string) => {
@@ -501,7 +504,7 @@ export function PlatformsSettingsPage() {
                             type="button"
                             onClick={() => void toggleYouTubeChannel(c.id)}
                             disabled={isSavingYtSettings}
-                            className={`w-8 h-4 rounded-full transition-colors relative shrink-0 ${c.enabled ? 'bg-red-600' : 'bg-gray-600'} disabled:opacity-50`}
+                            className={`w-8 h-4 rounded-full transition-colors relative shrink-0 overflow-hidden ${c.enabled ? 'bg-red-600' : 'bg-gray-600'} disabled:opacity-50`}
                           >
                             <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${c.enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
                           </button>
@@ -546,7 +549,7 @@ export function PlatformsSettingsPage() {
                   type="button"
                   disabled={isSavingYtSettings}
                   onClick={() => void saveYtSettings({ ...ytSettings, autoConnect: !ytSettings.autoConnect })}
-                  className={`w-8 h-4 rounded-full transition-colors relative shrink-0 ${ytSettings.autoConnect ? 'bg-red-600' : 'bg-gray-600'} disabled:opacity-50`}
+                  className={`w-8 h-4 rounded-full transition-colors relative shrink-0 overflow-hidden ${ytSettings.autoConnect ? 'bg-red-600' : 'bg-gray-600'} disabled:opacity-50`}
                 >
                   <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${ytSettings.autoConnect ? 'translate-x-4' : 'translate-x-0.5'}`} />
                 </button>
@@ -582,15 +585,21 @@ export function PlatformsSettingsPage() {
                     </button>
                   </div>
 
+                  {chatChannelError && (
+                    <p className="text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 rounded px-2 py-1.5">{chatChannelError}</p>
+                  )}
                   {ytChatChannels.length > 0 ? (
                     <div className="space-y-1">
-                      {ytChatChannels.map((ch) => {
-                        const isSelected = ytSettings.chatChannelPageId === ch.pageId;
+                      {ytChatChannels.map((ch, i) => {
+                        const key = ch.pageId || ch.handle || String(i);
+                        const isSelected = ch.pageId
+                          ? ytSettings.chatChannelPageId === ch.pageId
+                          : !ytSettings.chatChannelPageId && ch.isSelected;
                         return (
                           <button
-                            key={ch.pageId}
+                            key={key}
                             type="button"
-                            onClick={() => void selectYtChatChannel(isSelected ? '' : ch.pageId)}
+                            onClick={() => void selectYtChatChannel(ch.pageId)}
                             disabled={isSavingYtSettings}
                             className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-xs transition-colors ${
                               isSelected
@@ -601,16 +610,13 @@ export function PlatformsSettingsPage() {
                             <span className={`w-3 h-3 rounded-full border-2 shrink-0 flex items-center justify-center ${isSelected ? 'border-red-400 bg-red-400' : 'border-gray-600'}`}>
                               {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
                             </span>
-                            <span className="font-medium truncate">{ch.name}</span>
-                            <span className="font-mono text-gray-500 ml-auto shrink-0">{ch.handle}</span>
+                            <span className="font-medium truncate">{ch.name || ch.handle}</span>
+                            {ch.handle && <span className="font-mono text-gray-500 ml-auto shrink-0">{ch.handle}</span>}
                           </button>
                         );
                       })}
-                      {!ytSettings.chatChannelPageId && (
-                        <p className="text-[10px] text-gray-600 italic px-1">Using default channel. Select one above to override.</p>
-                      )}
                     </div>
-                  ) : (
+                  ) : !chatChannelError && (
                     <p className="text-[10px] text-gray-600 italic">Click &quot;Load channels&quot; after logging in to choose which channel sends messages.</p>
                   )}
                 </div>
@@ -680,7 +686,7 @@ export function PlatformsSettingsPage() {
                     id="kick-auto-connect"
                     type="button"
                     onClick={() => { const next = { ...kickSettings, autoConnect: !kickSettings.autoConnect }; setKickSettings(next); void saveKickSettings(next); }}
-                    className={`w-8 h-4 rounded-full transition-colors relative shrink-0 ${kickSettings.autoConnect ? 'bg-green-600' : 'bg-gray-600'}`}
+                    className={`w-8 h-4 rounded-full transition-colors relative shrink-0 overflow-hidden ${kickSettings.autoConnect ? 'bg-green-600' : 'bg-gray-600'}`}
                   >
                     <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${kickSettings.autoConnect ? 'translate-x-4' : 'translate-x-0.5'}`} />
                   </button>
