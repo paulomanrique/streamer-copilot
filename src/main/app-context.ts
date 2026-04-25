@@ -872,10 +872,15 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       const streamsResponse = await net.fetch(`https://www.youtube.com/${normalizedHandle}/streams`, { headers });
       let streams: LiveStreamInfo[] = [];
       let subscriberCount: number | null = null;
+      logService.info('youtube', `checkLive ${normalizedHandle}: HTTP ${streamsResponse.status} url=${streamsResponse.url}`);
       if (streamsResponse.ok) {
         const html = await streamsResponse.text();
+        const hasInitialData = html.includes('var ytInitialData = ');
+        const hasLiveStyle = html.includes('"style":"LIVE"');
+        logService.info('youtube', `checkLive ${normalizedHandle}: htmlLen=${html.length} hasInitialData=${hasInitialData} hasLiveStyle=${hasLiveStyle}`);
         streams = extractYtLiveVideoIds(html);
         subscriberCount = extractYtSubscriberCount(html);
+        logService.info('youtube', `checkLive ${normalizedHandle}: found ${streams.length} live stream(s): ${streams.map(s => s.videoId).join(', ')}`);
       }
 
       // Fallback: /@handle/live redirects to the active live stream video page
@@ -883,6 +888,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         const liveResponse = await net.fetch(`https://www.youtube.com/${normalizedHandle}/live`, { headers });
         if (liveResponse.ok) {
           const finalUrl = liveResponse.url;
+          logService.info('youtube', `checkLive fallback /live → ${finalUrl}`);
           const videoIdMatch = finalUrl.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
           if (videoIdMatch) {
             const html = await liveResponse.text();
