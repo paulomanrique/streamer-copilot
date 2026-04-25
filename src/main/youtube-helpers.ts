@@ -105,8 +105,9 @@ function findYtSubscriberCount(obj: unknown): number | null {
 
   const record = obj as Record<string, unknown>;
   const candidates: string[] = [];
-  if ('subscriberCountText' in record) candidates.push(getYtText(record.subscriberCountText));
-  if ('subscribersText' in record) candidates.push(getYtText(record.subscribersText));
+  for (const key of ['subscriberCountText', 'shortSubscriberCountText', 'subscribersText']) {
+    if (key in record) candidates.push(getYtText(record[key]));
+  }
 
   for (const value of Object.values(record)) {
     if (typeof value === 'string' && /subscriber|inscrito/i.test(value)) candidates.push(value);

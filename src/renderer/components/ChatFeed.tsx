@@ -214,8 +214,14 @@ function resolveProfileUrl(platform: string, author: string): string {
     case 'tiktok':
       return `https://www.tiktok.com/@${encodeURIComponent(username)}`;
     case 'youtube':
-    case 'youtube-v':
-      return `https://www.youtube.com/@${encodeURIComponent(username)}`;
+    case 'youtube-v': {
+      // YouTube handles can't have spaces or special chars — if the display name
+      // looks like a valid handle, use it directly; otherwise fall back to search.
+      const handle = username.replace(/\s+/g, '');
+      return /^[\w.-]+$/.test(handle)
+        ? `https://www.youtube.com/@${handle}`
+        : `https://www.youtube.com/results?search_query=${encodeURIComponent('@' + username)}`;
+    }
     default:
       return '';
   }

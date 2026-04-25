@@ -913,6 +913,18 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }
   };
 
+  const fetchYtLiveViewerCount = async (videoId: string): Promise<number | null> => {
+    try {
+      const resp = await net.fetch(`https://www.youtube.com/live_stats?v=${videoId}`);
+      if (!resp.ok) return null;
+      const text = (await resp.text()).trim();
+      const count = parseInt(text, 10);
+      return Number.isFinite(count) && count >= 0 ? count : null;
+    } catch {
+      return null;
+    }
+  };
+
   const runYoutubeMonitor = async () => {
     const store = await getYoutubeSettingsStore();
     if (!store) return;
@@ -927,6 +939,15 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       const streams = await checkYouTubeLive(channel.handle);
       if (streams === null) { anyCheckFailed = true; continue; }
       for (const s of streams) if (!allLiveStreams.find((x) => x.videoId === s.videoId)) allLiveStreams.push(s);
+    }
+
+    // For streams where the HTML scraping didn't yield a viewer count, try the
+    // lightweight live_stats endpoint which returns just the concurrent viewer number.
+    for (let i = 0; i < allLiveStreams.length; i++) {
+      if (allLiveStreams[i].viewCount === null) {
+        const count = await fetchYtLiveViewerCount(allLiveStreams[i].videoId);
+        if (count !== null) allLiveStreams[i] = { ...allLiveStreams[i], viewCount: count };
+      }
     }
 
     // Update viewer counts for existing scrapers and stop those no longer live.
@@ -945,7 +966,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         youtubeScrapers.delete(videoId);
         youtubeStreamData.delete(videoId);
         logService.info('youtube', `Stopped scraper for ${videoId} (no longer live)`);
-      } else if (updated.viewCount !== null || updated.subscriberCount !== null) {
+      } else {
         const data = youtubeStreamData.get(videoId);
         if (data) {
           youtubeStreamData.set(videoId, {
