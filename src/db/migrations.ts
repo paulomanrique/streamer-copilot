@@ -375,4 +375,18 @@ export const MIGRATIONS: SqlMigration[] = [
     name: 'voice_commands_user_cooldown_backfill',
     sql: `ALTER TABLE voice_commands ADD COLUMN user_cooldown_seconds INTEGER NOT NULL DEFAULT 0;`,
   },
+  {
+    version: 19,
+    name: 'drop_migrated_to_json_tables',
+    sql: `
+      DROP TABLE IF EXISTS raffle_rounds;
+      DROP TABLE IF EXISTS raffle_entries;
+      DROP TABLE IF EXISTS raffles;
+      DROP TABLE IF EXISTS suggestion_entries;
+      DROP TABLE IF EXISTS suggestion_lists;
+      DROP TABLE IF EXISTS text_commands;
+      DROP TABLE IF EXISTS sound_commands;
+      DROP TABLE IF EXISTS voice_commands;
+    `,
+  },
 ];
