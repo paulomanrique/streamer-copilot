@@ -25,28 +25,33 @@ export class YTLiveClient {
     const livechat = info.getLiveChat();
     this.livechat = livechat;
 
+    livechat.on('start', (initial: any) => {
+      this.options.onLog?.(`[YT] live chat ready — initial actions: ${initial?.actions?.length ?? 0}`);
+    });
+
     // chat-update fires once per action (individual nodes, not a batch container)
     livechat.on('chat-update', (action: any) => {
       if (this.stopped) return;
+      this.options.onLog?.(`[YT] action: ${action?.type ?? 'unknown'}`);
       try {
         if (action.type === 'AddChatItemAction' && action.item) {
           this.handleItem(action.item);
         }
       } catch (err) {
-        this.options.onLog?.(`Chat update error: ${String(err)}`);
+        this.options.onLog?.(`[YT] chat update error: ${String(err)}`);
       }
     });
 
     livechat.on('error', (err: Error) => {
-      this.options.onLog?.(`YouTube live chat error: ${err.message}`);
+      this.options.onLog?.(`[YT] error: ${err.message}`);
     });
 
     livechat.on('end', () => {
-      this.options.onLog?.('YouTube live chat ended');
+      this.options.onLog?.('[YT] live chat ended');
     });
 
     livechat.start();
-    this.options.onLog?.(`YouTube live chat started for ${this.options.videoId}`);
+    this.options.onLog?.(`[YT] started for ${this.options.videoId} — is_replay: ${livechat.is_replay}`);
   }
 
   stop(): void {
@@ -79,6 +84,7 @@ export class YTLiveClient {
 
   private handleItem(item: any): void {
     const type: string = item.type ?? '';
+    this.options.onLog?.(`[YT] item type: ${type}`);
 
     if (type === 'LiveChatTextMessage') {
       this.handleTextMessage(item);
