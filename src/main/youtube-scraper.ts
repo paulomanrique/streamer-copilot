@@ -11,7 +11,8 @@ export interface YouTubeScraperOptions {
 export class YouTubeScraper {
   private window: BrowserWindow | null = null;
   private isDestroyed = false;
-  private reinjectionTimer: ReturnType<typeof setInterval> | null = null;
+  private healthTimer: ReturnType<typeof setInterval> | null = null;
+  private lastHeartbeatAt = Date.now();
 
   constructor(private readonly options: YouTubeScraperOptions) {}
 
@@ -78,6 +79,8 @@ export class YouTubeScraper {
         }
       } else if (message.startsWith('COPILOT_LOG:')) {
         this.options.onLog?.(message.substring('COPILOT_LOG:'.length).trim());
+      } else if (message.startsWith('COPILOT_ALIVE:')) {
+        this.lastHeartbeatAt = Date.now();
       }
     });
 
@@ -87,19 +90,28 @@ export class YouTubeScraper {
       void this.injectScraper();
     }, 5000);
 
-    // Periodic re-injection: the injected script clears __COPILOT_SCRAPER_RUNNING__ when it
-    // detects a freeze, so this loop picks it up and restores the scraper.
-    this.reinjectionTimer = setInterval(() => {
+    // Health check every 15s: the injected script sends COPILOT_ALIVE: every 15s.
+    // If we haven't heard from it in 45s, the scraper is frozen — reload the full page.
+    // Otherwise, attempt a re-injection so the script restarts if its flag was cleared.
+    this.lastHeartbeatAt = Date.now();
+    this.healthTimer = setInterval(() => {
       if (this.isDestroyed || !this.window) return;
-      void this.injectScraper();
-    }, 45_000);
+      const elapsed = Date.now() - this.lastHeartbeatAt;
+      if (elapsed > 45_000) {
+        this.options.onLog?.(`YouTube scraper heartbeat stale (${Math.round(elapsed / 1000)}s) — reloading page`);
+        this.lastHeartbeatAt = Date.now(); // prevent cascade reloads during page load
+        void this.reloadPage();
+      } else {
+        void this.injectScraper();
+      }
+    }, 15_000);
   }
 
   stop(): void {
     this.isDestroyed = true;
-    if (this.reinjectionTimer) {
-      clearInterval(this.reinjectionTimer);
-      this.reinjectionTimer = null;
+    if (this.healthTimer) {
+      clearInterval(this.healthTimer);
+      this.healthTimer = null;
     }
     if (this.window) {
       this.window.destroy();
@@ -142,6 +154,14 @@ export class YouTubeScraper {
     }
   }
 
+  private async reloadPage(): Promise<void> {
+    if (!this.window || this.isDestroyed || this.window.isDestroyed()) return;
+    const url = `https://www.youtube.com/live_chat?v=${this.options.videoId}`;
+    const userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+    this.options.onLog?.('Reloading YouTube chat page after freeze detection');
+    await this.window.loadURL(url, { userAgent });
+  }
+
   private async injectScraper(): Promise<void> {
     if (!this.window) return;
 
@@ -156,7 +176,6 @@ export class YouTubeScraper {
         console.log('COPILOT_LOG: YouTube Scraper Deep-Injection Started');
 
         const seenIds = new Set();
-        let lastChatMessageTime = Date.now();
         let initialSweepDone = false;
         
         function processElement(el) {
@@ -222,7 +241,6 @@ export class YouTubeScraper {
             return;
           }
 
-          lastChatMessageTime = Date.now();
           console.log('COPILOT_CHAT:' + JSON.stringify({ author, content, badges, avatarUrl, isInitial: !initialSweepDone }));
         }
 
@@ -287,15 +305,11 @@ export class YouTubeScraper {
         // Auto-switch and maintain
         setInterval(switchToLiveChat, 5000);
 
-        // Health check: if no chat messages received in 90s, the scraper may be frozen.
-        // Disconnect the observer, clear the running flag, and let the Electron-side re-inject.
+        // Heartbeat — Electron uses this to detect a frozen scraper and reload the page.
+        console.log('COPILOT_ALIVE:' + Date.now());
         setInterval(() => {
-          if (Date.now() - lastChatMessageTime > 90000) {
-            console.log('COPILOT_LOG: No chat messages for 90s — releasing scraper for re-injection');
-            observer.disconnect();
-            window.__COPILOT_SCRAPER_RUNNING__ = false;
-          }
-        }, 30000);
+          console.log('COPILOT_ALIVE:' + Date.now());
+        }, 15000);
 
       })();
     `;
