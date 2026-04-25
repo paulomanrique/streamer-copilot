@@ -180,7 +180,8 @@ export class YouTubeScraper {
         console.log('COPILOT_LOG: YouTube Scraper Deep-Injection Started');
 
         const seenIds = new Set();
-        let initialSweepDone = false;
+        const scraperStartTime = Date.now();
+        const INITIAL_HISTORY_WINDOW_MS = 10000;
         
         function processElement(el) {
           if (!el || el.nodeType !== 1) return;
@@ -245,7 +246,7 @@ export class YouTubeScraper {
             return;
           }
 
-          console.log('COPILOT_CHAT:' + JSON.stringify({ author, content, badges, avatarUrl, isInitial: !initialSweepDone }));
+          console.log('COPILOT_CHAT:' + JSON.stringify({ author, content, badges, avatarUrl, isInitial: Date.now() - scraperStartTime < INITIAL_HISTORY_WINDOW_MS }));
         }
 
         function parseAmount(raw) {
@@ -301,13 +302,10 @@ export class YouTubeScraper {
         observer.observe(document.body, { childList: true, subtree: true });
         console.log('COPILOT_LOG: Body observer active');
 
-        // Skip initial sweep to avoid flooding the message pipeline on connect.
-        // Existing messages are already visible in YouTube's UI; skipping them means
-        // the app only shows messages that arrive after connection, which is fine.
-        initialSweepDone = true;
-
-        // Mark pre-existing DOM nodes as seen so they don't get re-emitted
-        // if the observer fires for them during the first few mutations.
+        // Mark pre-existing DOM nodes as seen so they don't get re-emitted if the
+        // observer fires for them during the first mutations (e.g. after a reload).
+        // Messages that arrive within INITIAL_HISTORY_WINDOW_MS are emitted as
+        // isHistory=true so they appear in the UI but don't trigger commands.
         document.querySelectorAll('yt-live-chat-text-message-renderer, yt-live-chat-paid-message-renderer, yt-live-chat-paid-sticker-renderer, yt-live-chat-membership-item-renderer')
                 .forEach(el => { const id = el.getAttribute('id'); if (id) seenIds.add(id); });
 
