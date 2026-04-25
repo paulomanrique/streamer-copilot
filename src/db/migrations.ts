@@ -370,4 +370,9 @@ export const MIGRATIONS: SqlMigration[] = [
       ALTER TABLE voice_commands ADD COLUMN user_cooldown_seconds INTEGER NOT NULL DEFAULT 0;
     `,
   },
+  {
+    version: 18,
+    name: 'voice_commands_user_cooldown_backfill',
+    sql: `ALTER TABLE voice_commands ADD COLUMN user_cooldown_seconds INTEGER NOT NULL DEFAULT 0;`,
+  },
 ];

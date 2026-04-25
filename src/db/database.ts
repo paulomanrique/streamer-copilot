@@ -31,7 +31,20 @@ function runMigrations(db: Database.Database): void {
   const appliedVersions = new Set<number>((getApplied.all() as Array<{ version: number }>).map((row) => row.version));
 
   const applyMigration = db.transaction((version: number, name: string, sql: string) => {
-    db.exec(sql);
+    // Execute each statement individually so an ALTER TABLE ADD COLUMN that targets
+    // a column that already exists (from a partial previous migration) is tolerated.
+    const statements = sql.split(';').map((s) => s.trim()).filter(Boolean);
+    for (const stmt of statements) {
+      try {
+        db.exec(stmt);
+      } catch (err) {
+        const isDuplicateColumn =
+          err instanceof Error &&
+          /duplicate column name/i.test(err.message) &&
+          /ALTER\s+TABLE\s+\S+\s+ADD\s+COLUMN/i.test(stmt);
+        if (!isDuplicateColumn) throw err;
+      }
+    }
     db.prepare('INSERT INTO schema_migrations (version, name) VALUES (?, ?)').run(version, name);
   });
 
