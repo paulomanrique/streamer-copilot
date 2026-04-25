@@ -231,17 +231,21 @@ export function TextCommandModal({
           ) : (
             <>
               <div className={`rounded-lg border overflow-hidden transition-colors ${commandEnabled ? 'border-violet-600/50' : 'border-gray-700'}`}>
-                <button
-                  type="button"
-                  className="w-full flex items-center justify-between px-4 py-3 bg-gray-800/60 hover:bg-gray-800/80 transition-colors"
+                <div
+                  role="button"
+                  tabIndex={0}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-gray-800/60 hover:bg-gray-800/80 transition-colors cursor-pointer select-none"
                   onClick={() => setCommandEnabled((v) => !v)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setCommandEnabled((v) => !v); }}
                 >
                   <div className="text-left">
                     <p className="text-sm font-medium text-gray-200">Chat command</p>
                     <p className="text-xs text-gray-500 mt-0.5">Replies when someone types a trigger in chat</p>
                   </div>
-                  <ToggleSwitch checked={commandEnabled} onChange={setCommandEnabled} />
-                </button>
+                  <span className="pointer-events-none">
+                    <ToggleSwitch checked={commandEnabled} onChange={() => {}} />
+                  </span>
+                </div>
                 {commandEnabled ? (
                   <div className="px-4 pb-4 pt-3 border-t border-gray-700 space-y-3 bg-gray-900/30">
                     <div>
@@ -322,17 +326,21 @@ export function TextCommandModal({
               </div>
 
               <div className={`rounded-lg border overflow-hidden transition-colors ${scheduleEnabled ? 'border-cyan-600/50' : 'border-gray-700'}`}>
-                <button
-                  type="button"
-                  className="w-full flex items-center justify-between px-4 py-3 bg-gray-800/60 hover:bg-gray-800/80 transition-colors"
+                <div
+                  role="button"
+                  tabIndex={0}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-gray-800/60 hover:bg-gray-800/80 transition-colors cursor-pointer select-none"
                   onClick={() => setScheduleEnabled((v) => !v)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setScheduleEnabled((v) => !v); }}
                 >
                   <div className="text-left">
                     <p className="text-sm font-medium text-gray-200">Schedule</p>
                     <p className="text-xs text-gray-500 mt-0.5">Sends automatically at regular intervals</p>
                   </div>
-                  <ToggleSwitch checked={scheduleEnabled} onChange={setScheduleEnabled} />
-                </button>
+                  <span className="pointer-events-none">
+                    <ToggleSwitch checked={scheduleEnabled} onChange={() => {}} />
+                  </span>
+                </div>
                 {scheduleEnabled ? (
                   <div className="px-4 pb-4 pt-3 border-t border-gray-700 space-y-3 bg-gray-900/30">
                     <div className="grid grid-cols-2 gap-3">
