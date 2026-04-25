@@ -271,7 +271,8 @@ export function PlatformsSettingsPage() {
   };
 
   const selectYtChatChannel = async (pageId: string) => {
-    await saveYtSettings({ ...ytSettings, chatChannelPageId: pageId || undefined });
+    const ch = ytChatChannels.find((c) => c.pageId === pageId);
+    await saveYtSettings({ ...ytSettings, chatChannelPageId: pageId || undefined, chatChannelName: ch?.name || undefined });
   };
 
   // ── Kick Actions ──────────────────────────────────────────────────────────

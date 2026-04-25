@@ -285,6 +285,7 @@ export const youtubeSettingsSchema = z.object({
   channels: z.array(youtubeChannelConfigSchema),
   autoConnect: z.boolean(),
   chatChannelPageId: z.string().optional(),
+  chatChannelName: z.string().optional(),
 });
 
 export const tiktokConnectSchema = z.object({

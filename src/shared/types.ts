@@ -532,6 +532,7 @@ export interface YouTubeSettings {
   channels: YouTubeChannelConfig[];
   autoConnect: boolean;
   chatChannelPageId?: string;
+  chatChannelName?: string;
 }
 
 export type TikTokConnectionStatus = 'disconnected' | 'connecting' | 'captcha' | 'connected' | 'error';

@@ -360,6 +360,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
   let twitchStatus: TwitchConnectionStatus = 'disconnected';
   let twitchChannel: string | null = null;
+  // Maps platform → display name of the account that sends messages (used to skip self-welcomes)
+  const selfSenderName: Partial<Record<string, string>> = {};
   let twitchStatsTimer: ReturnType<typeof setInterval> | null = null;
   let kickStatsTimer: ReturnType<typeof setInterval> | null = null;
   const userAvatarCache = new Map<string, string>();
@@ -438,6 +440,13 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       .then(() => store.save(settings));
 
     await youtubeSettingsWrite;
+    if (settings.chatChannelName) {
+      selfSenderName.youtube = settings.chatChannelName.toLowerCase();
+      selfSenderName['youtube-v'] = settings.chatChannelName.toLowerCase();
+    } else if (!settings.chatChannelPageId) {
+      delete selfSenderName.youtube;
+      delete selfSenderName['youtube-v'];
+    }
     startYoutubeMonitor();
     return settings;
   };
@@ -1298,7 +1307,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       options.stateHub.pushChatMessage(message);
       if (!message.isHistory) {
         try { chatLogService.recordMessage(message); } catch { /* DB may not be open yet */ }
-        welcomeService.handleMessage(message);
+        const self = selfSenderName[message.platform];
+        if (!self || message.author.toLowerCase() !== self) {
+          welcomeService.handleMessage(message);
+        }
       }
     },
     onEvent: (event) => {
@@ -1570,9 +1582,11 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     await loadTwitchBadges(c.channel, c.oauthToken.replace(/^oauth:/, ''));
     chatLogService.openSession('twitch', c.channel);
     suggestionService.clearSessionEntries();
+    selfSenderName.twitch = c.username.toLowerCase();
     await chatService.replaceAdapter(createTwitchChatAdapter({ channels: [c.channel], username: c.username, password: c.oauthToken, onStatusChange: setTwitchStatus, resolveBadgeUrls }));
   });
   ipcMain.handle(IPC_CHANNELS.twitchDisconnect, async () => {
+    delete selfSenderName.twitch;
     chatLogService.closeSession('twitch');
     await chatService.removeAdapter('twitch'); setTwitchStatus('disconnected', null); const s = await getTwitchCredentialsStore(); if (s) await s.clear();
   });
@@ -1822,6 +1836,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       chatLogService.openSession('twitch', creds.channel);
       suggestionService.clearSessionEntries();
       twitchChannel = creds.channel;
+      selfSenderName.twitch = creds.username.toLowerCase();
       await chatService.replaceAdapter(createTwitchChatAdapter({
         channels: [creds.channel],
         username: creds.username,
@@ -1836,6 +1851,13 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   })();
 
   startYoutubeMonitor();
+
+  void loadYoutubeSettings().then((s) => {
+    if (s.chatChannelName) {
+      selfSenderName.youtube = s.chatChannelName.toLowerCase();
+      selfSenderName['youtube-v'] = s.chatChannelName.toLowerCase();
+    }
+  }).catch(() => undefined);
 
   // TIKTOK_DISABLED: auto-reconnect desativado temporariamente
   // void (async () => {
