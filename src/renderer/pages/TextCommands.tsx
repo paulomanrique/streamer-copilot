@@ -473,7 +473,7 @@ export function TextCommandsPage() {
                 <input
                   ref={triggerInputRef}
                   type="text"
-                  value={trigger}
+                  value={trigger ?? ''}
                   disabled={!commandEnabled}
                   onChange={(event) => {
                     setTrigger(event.target.value);
