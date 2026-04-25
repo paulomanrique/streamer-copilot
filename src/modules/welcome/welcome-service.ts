@@ -20,12 +20,12 @@ export class WelcomeService {
    * welcome message and optionally plays a sound.
    */
   handleMessage(message: ChatMessage): void {
+    const settings = this.options.getSettings();
+    if (!settings.enabled) return;
+
     const key = `${message.platform}:${message.author}`;
     if (this.seenUsers.has(key)) return;
     this.seenUsers.add(key);
-
-    const settings = this.options.getSettings();
-    if (!settings.enabled) return;
 
     // Look up per-user override (case-insensitive)
     const override = settings.userOverrides?.find(

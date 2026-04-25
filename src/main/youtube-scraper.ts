@@ -11,6 +11,7 @@ export interface YouTubeScraperOptions {
 export class YouTubeScraper {
   private window: BrowserWindow | null = null;
   private isDestroyed = false;
+  private reinjectionTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(private readonly options: YouTubeScraperOptions) {}
 
@@ -37,6 +38,11 @@ export class YouTubeScraper {
     await this.window.loadURL(url, { userAgent });
 
     this.window.webContents.on('dom-ready', () => {
+      if (this.isDestroyed || !this.window) return;
+      void this.injectScraper();
+    });
+
+    this.window.webContents.on('did-finish-load', () => {
       if (this.isDestroyed || !this.window) return;
       void this.injectScraper();
     });
@@ -75,15 +81,26 @@ export class YouTubeScraper {
       }
     });
 
-    // Fallback injection
+    // Fallback injection after initial load
     setTimeout(() => {
       if (this.isDestroyed || !this.window) return;
       void this.injectScraper();
     }, 5000);
+
+    // Periodic re-injection: the injected script clears __COPILOT_SCRAPER_RUNNING__ when it
+    // detects a freeze, so this loop picks it up and restores the scraper.
+    this.reinjectionTimer = setInterval(() => {
+      if (this.isDestroyed || !this.window) return;
+      void this.injectScraper();
+    }, 45_000);
   }
 
   stop(): void {
     this.isDestroyed = true;
+    if (this.reinjectionTimer) {
+      clearInterval(this.reinjectionTimer);
+      this.reinjectionTimer = null;
+    }
     if (this.window) {
       this.window.destroy();
       this.window = null;
@@ -135,11 +152,11 @@ export class YouTubeScraper {
           return;
         }
         window.__COPILOT_SCRAPER_RUNNING__ = true;
-        
+
         console.log('COPILOT_LOG: YouTube Scraper Deep-Injection Started');
-        
+
         const seenIds = new Set();
-        let lastMutationTime = Date.now();
+        let lastChatMessageTime = Date.now();
         let initialSweepDone = false;
         
         function processElement(el) {
@@ -205,6 +222,7 @@ export class YouTubeScraper {
             return;
           }
 
+          lastChatMessageTime = Date.now();
           console.log('COPILOT_CHAT:' + JSON.stringify({ author, content, badges, avatarUrl, isInitial: !initialSweepDone }));
         }
 
@@ -246,7 +264,6 @@ export class YouTubeScraper {
 
         // Global observer on body to handle container being destroyed/recreated
         const observer = new MutationObserver((mutations) => {
-          lastMutationTime = Date.now();
           for (const mutation of mutations) {
             mutation.addedNodes.forEach(node => {
               if (node.nodeType === 1) {
@@ -269,14 +286,16 @@ export class YouTubeScraper {
 
         // Auto-switch and maintain
         setInterval(switchToLiveChat, 5000);
-        
-        // Health check: if no mutations for 30s, something might be wrong
+
+        // Health check: if no chat messages received in 90s, the scraper may be frozen.
+        // Disconnect the observer, clear the running flag, and let the Electron-side re-inject.
         setInterval(() => {
-          if (Date.now() - lastMutationTime > 30000) {
-            console.log('COPILOT_LOG: No activity for 30s, checking chat health...');
-            switchToLiveChat();
+          if (Date.now() - lastChatMessageTime > 90000) {
+            console.log('COPILOT_LOG: No chat messages for 90s — releasing scraper for re-injection');
+            observer.disconnect();
+            window.__COPILOT_SCRAPER_RUNNING__ = false;
           }
-        }, 15000);
+        }, 30000);
 
       })();
     `;

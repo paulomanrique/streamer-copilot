@@ -244,7 +244,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   // Load caches on startup (non-blocking, best-effort).
   // Also resolve the active profile directory so all per-profile JSON repos are immediately usable.
-  void (async () => {
+  // Resolve active profile directory before starting OBS, which needs it synchronously via hasUserSettings().
+  // Returns a promise so obsService.start() can be deferred until after the directory is known.
+  const activeProfileDirectoryReady = (async () => {
     const snapshot = await profileStore.list();
     const active = snapshot.profiles.find((p) => p.id === snapshot.activeProfileId);
     if (active) activeProfileDirectory = active.directory;
@@ -1834,7 +1836,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   void raffleOverlayServer.start();
   raffleDeadlineRunner.start();
   schedulerService.start();
-  obsService.start();
+  void activeProfileDirectoryReady.then(() => obsService.start());
 
   return async () => {
     isShuttingDown = true;
