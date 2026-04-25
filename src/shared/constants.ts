@@ -8,6 +8,9 @@ export const PROFILE_CONFIG_FILES = {
   textCommands: 'commands.text.json',
   voiceCommands: 'commands.voice.json',
   scheduled: 'scheduled.json',
+  raffles: 'raffles.json',
+  suggestions: 'suggestions.json',
+  obsSettings: 'obs-settings.json',
 } as const;
 
 export const DEFAULT_APP_LANGUAGE: AppLanguage = 'pt-BR';

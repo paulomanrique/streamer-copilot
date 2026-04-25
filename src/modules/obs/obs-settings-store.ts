@@ -1,7 +1,10 @@
+import path from 'node:path';
+
 import { safeStorage } from 'electron';
 
 import type { ObsConnectionSettings } from '../../shared/types.js';
-import { AppSettingsRepository } from '../settings/app-settings-repository.js';
+import { JsonStore } from '../../db/json-store.js';
+import { PROFILE_CONFIG_FILES } from '../../shared/constants.js';
 
 interface ObsSettingsRecord {
   host: string;
@@ -9,36 +12,40 @@ interface ObsSettingsRecord {
   encryptedPassword: string;
 }
 
-const OBS_SETTINGS_KEY = 'obs.connection';
-
 const DEFAULT_SETTINGS: ObsConnectionSettings = {
   host: '127.0.0.1',
   port: 4455,
   password: '',
 };
 
-export class ObsSettingsStore {
-  constructor(private readonly repository: AppSettingsRepository) {}
+const EMPTY_RECORD: ObsSettingsRecord = {
+  host: DEFAULT_SETTINGS.host,
+  port: DEFAULT_SETTINGS.port,
+  encryptedPassword: '',
+};
 
-  /** Returns true when the user has explicitly saved OBS settings at least once. */
+export class ObsSettingsStore {
+  constructor(private readonly getDirectory: () => string) {}
+
+  private store(): JsonStore<ObsSettingsRecord | null> {
+    return new JsonStore<ObsSettingsRecord | null>(
+      path.join(this.getDirectory(), PROFILE_CONFIG_FILES.obsSettings),
+      null,
+    );
+  }
+
   hasUserSettings(): boolean {
-    return this.repository.get(OBS_SETTINGS_KEY) !== null;
+    return this.store().exists();
   }
 
   get(): ObsConnectionSettings {
-    const raw = this.repository.get(OBS_SETTINGS_KEY);
-    if (!raw) return DEFAULT_SETTINGS;
-
-    try {
-      const parsed = JSON.parse(raw) as Partial<ObsSettingsRecord>;
-      return {
-        host: parsed.host || DEFAULT_SETTINGS.host,
-        port: typeof parsed.port === 'number' ? parsed.port : DEFAULT_SETTINGS.port,
-        password: parsed.encryptedPassword ? this.decryptPassword(parsed.encryptedPassword) : '',
-      };
-    } catch {
-      return DEFAULT_SETTINGS;
-    }
+    const raw = this.store().read();
+    if (!raw) return { ...DEFAULT_SETTINGS };
+    return {
+      host: raw.host || DEFAULT_SETTINGS.host,
+      port: typeof raw.port === 'number' ? raw.port : DEFAULT_SETTINGS.port,
+      password: raw.encryptedPassword ? this.decryptPassword(raw.encryptedPassword) : '',
+    };
   }
 
   save(input: ObsConnectionSettings): ObsConnectionSettings {
@@ -48,12 +55,12 @@ export class ObsSettingsStore {
       password: input.password,
     };
     const record: ObsSettingsRecord = {
+      ...EMPTY_RECORD,
       host: normalized.host,
       port: normalized.port,
       encryptedPassword: normalized.password ? this.encryptPassword(normalized.password) : '',
     };
-
-    this.repository.set(OBS_SETTINGS_KEY, `${JSON.stringify(record, null, 2)}\n`);
+    this.store().write(record);
     return normalized;
   }
 
@@ -61,7 +68,6 @@ export class ObsSettingsStore {
     if (!safeStorage.isEncryptionAvailable()) {
       throw new Error('safeStorage encryption is not available on this machine');
     }
-
     return safeStorage.encryptString(password).toString('base64');
   }
 

@@ -1,87 +1,60 @@
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 
-import type Database from 'better-sqlite3';
-
-import type { PermissionLevel, VoiceCommand, VoiceCommandUpsertInput } from '../../shared/types.js';
-
-interface VoiceCommandRow {
-  id: string;
-  trigger: string;
-  template: string | null;
-  language: string;
-  permissions_json: string;
-  cooldown_seconds: number;
-  user_cooldown_seconds: number;
-  announce_username: number;
-  character_limit: number;
-  enabled: number;
-}
+import type { VoiceCommand, VoiceCommandUpsertInput } from '../../shared/types.js';
+import { JsonStore } from '../../db/json-store.js';
+import { PROFILE_CONFIG_FILES } from '../../shared/constants.js';
 
 export class VoiceCommandRepository {
-  constructor(private readonly db: Database.Database) {}
+  private cache: { dir: string; data: VoiceCommand[] } | null = null;
+
+  constructor(private readonly getDirectory: () => string) {}
+
+  private filePath(): string {
+    return path.join(this.getDirectory(), PROFILE_CONFIG_FILES.voiceCommands);
+  }
+
+  private readAll(): VoiceCommand[] {
+    const dir = this.getDirectory();
+    if (this.cache?.dir === dir) return this.cache.data;
+    const data = new JsonStore<VoiceCommand[]>(this.filePath(), []).read();
+    this.cache = { dir, data };
+    return data;
+  }
+
+  private writeAll(data: VoiceCommand[]): void {
+    new JsonStore<VoiceCommand[]>(this.filePath(), []).write(data);
+    this.cache = { dir: this.getDirectory(), data };
+  }
 
   list(): VoiceCommand[] {
-    const rows = this.db
-      .prepare(
-        `SELECT id, trigger, template, language, permissions_json, cooldown_seconds, user_cooldown_seconds,
-                announce_username, character_limit, enabled
-         FROM voice_commands
-         ORDER BY created_at ASC, id ASC`,
-      )
-      .all() as VoiceCommandRow[];
-
-    return rows.map((row) => ({
-      id: row.id,
-      trigger: row.trigger,
-      template: row.template,
-      language: row.language,
-      permissions: JSON.parse(row.permissions_json) as PermissionLevel[],
-      cooldownSeconds: row.cooldown_seconds,
-      userCooldownSeconds: row.user_cooldown_seconds,
-      announceUsername: row.announce_username === 1,
-      characterLimit: row.character_limit,
-      enabled: row.enabled === 1,
-    }));
+    return this.readAll();
   }
 
   upsert(input: VoiceCommandUpsertInput): VoiceCommand[] {
-    const nextId = input.id ?? randomUUID();
-    this.db
-      .prepare(
-        `INSERT INTO voice_commands (
-           id, trigger, template, language, permissions_json, cooldown_seconds, user_cooldown_seconds,
-           announce_username, character_limit, enabled, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-         ON CONFLICT(id) DO UPDATE SET
-           trigger = excluded.trigger,
-           template = excluded.template,
-           language = excluded.language,
-           permissions_json = excluded.permissions_json,
-           cooldown_seconds = excluded.cooldown_seconds,
-           user_cooldown_seconds = excluded.user_cooldown_seconds,
-           announce_username = excluded.announce_username,
-           character_limit = excluded.character_limit,
-           enabled = excluded.enabled,
-           updated_at = datetime('now')`,
-      )
-      .run(
-        nextId,
-        input.trigger,
-        input.template,
-        input.language,
-        JSON.stringify(input.permissions),
-        input.cooldownSeconds,
-        input.userCooldownSeconds,
-        input.announceUsername ? 1 : 0,
-        input.characterLimit,
-        input.enabled ? 1 : 0,
-      );
-
-    return this.list();
+    const all = this.readAll();
+    const id = input.id ?? randomUUID();
+    const next: VoiceCommand = {
+      id,
+      trigger: input.trigger,
+      template: input.template,
+      language: input.language,
+      permissions: input.permissions,
+      cooldownSeconds: input.cooldownSeconds,
+      userCooldownSeconds: input.userCooldownSeconds,
+      announceUsername: input.announceUsername,
+      characterLimit: input.characterLimit,
+      enabled: input.enabled,
+    };
+    const idx = all.findIndex((c) => c.id === id);
+    if (idx >= 0) all[idx] = next; else all.push(next);
+    this.writeAll(all);
+    return all;
   }
 
   delete(id: string): VoiceCommand[] {
-    this.db.prepare('DELETE FROM voice_commands WHERE id = ?').run(id);
-    return this.list();
+    const next = this.readAll().filter((c) => c.id !== id);
+    this.writeAll(next);
+    return next;
   }
 }

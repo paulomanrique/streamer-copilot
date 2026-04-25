@@ -1,32 +1,37 @@
 import { randomUUID } from 'node:crypto';
-
-import type Database from 'better-sqlite3';
+import path from 'node:path';
 
 import type { PermissionLevel, SuggestionEntry, SuggestionList, SuggestionListUpsertInput } from '../../shared/types.js';
+import { JsonStore } from '../../db/json-store.js';
+import { PROFILE_CONFIG_FILES } from '../../shared/constants.js';
 
-interface SuggestionListRow {
+interface SuggestionsFile {
+  lists: SuggestionListRecord[];
+  entries: Record<string, SuggestionEntryRecord[]>;
+}
+
+interface SuggestionListRecord {
   id: string;
   title: string;
   trigger: string;
-  feedback_template: string;
-  feedback_sound_path: string;
-  mode: string;
-  allow_duplicates: number;
-  permissions_json: string;
-  cooldown_seconds: number;
-  user_cooldown_seconds: number;
-  enabled: number;
-  entry_count: number;
+  feedbackTemplate: string;
+  feedbackSoundPath: string | null;
+  mode: 'global' | 'session';
+  allowDuplicates: boolean;
+  permissions: PermissionLevel[];
+  cooldownSeconds: number;
+  userCooldownSeconds: number;
+  enabled: boolean;
 }
 
-interface SuggestionEntryRow {
+interface SuggestionEntryRecord {
   id: string;
-  list_id: string;
+  listId: string;
   platform: string;
-  user_key: string;
-  display_name: string;
+  userKey: string;
+  displayName: string;
   content: string;
-  created_at: string;
+  createdAt: string;
 }
 
 export interface AddEntryInput {
@@ -37,145 +42,142 @@ export interface AddEntryInput {
   content: string;
 }
 
+const EMPTY_FILE: SuggestionsFile = { lists: [], entries: {} };
+
 export class SuggestionRepository {
-  constructor(private readonly db: Database.Database) {}
+  private cache: { dir: string; data: SuggestionsFile } | null = null;
+
+  constructor(private readonly getDirectory: () => string) {}
+
+  private filePath(): string {
+    return path.join(this.getDirectory(), PROFILE_CONFIG_FILES.suggestions);
+  }
+
+  private readFile(): SuggestionsFile {
+    const dir = this.getDirectory();
+    if (this.cache?.dir === dir) return this.cache.data;
+    const data = new JsonStore<SuggestionsFile>(this.filePath(), EMPTY_FILE).read();
+    if (!data.lists) data.lists = [];
+    if (!data.entries) data.entries = {};
+    this.cache = { dir, data };
+    return data;
+  }
+
+  private writeFile(data: SuggestionsFile): void {
+    new JsonStore<SuggestionsFile>(this.filePath(), EMPTY_FILE).write(data);
+    this.cache = { dir: this.getDirectory(), data };
+  }
 
   listLists(): SuggestionList[] {
-    const rows = this.db
-      .prepare(
-        `SELECT id, title, trigger, feedback_template, feedback_sound_path, mode, allow_duplicates, permissions_json,
-                cooldown_seconds, user_cooldown_seconds, enabled,
-                (SELECT COUNT(*) FROM suggestion_entries e WHERE e.list_id = suggestion_lists.id) AS entry_count
-         FROM suggestion_lists
-         ORDER BY created_at ASC, id ASC`,
-      )
-      .all() as SuggestionListRow[];
-
-    return rows.map((row) => this.mapListRow(row));
+    const { lists, entries } = this.readFile();
+    return lists.map((r) => this.mapList(r, (entries[r.id] ?? []).length));
   }
 
   upsertList(input: SuggestionListUpsertInput): SuggestionList[] {
-    const nextId = input.id ?? randomUUID();
-    this.db
-      .prepare(
-        `INSERT INTO suggestion_lists (
-           id, title, trigger, feedback_template, feedback_sound_path, mode, allow_duplicates, permissions_json,
-           cooldown_seconds, user_cooldown_seconds, enabled, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-         ON CONFLICT(id) DO UPDATE SET
-           title = excluded.title,
-           trigger = excluded.trigger,
-           feedback_template = excluded.feedback_template,
-           feedback_sound_path = excluded.feedback_sound_path,
-           mode = excluded.mode,
-           allow_duplicates = excluded.allow_duplicates,
-           permissions_json = excluded.permissions_json,
-           cooldown_seconds = excluded.cooldown_seconds,
-           user_cooldown_seconds = excluded.user_cooldown_seconds,
-           enabled = excluded.enabled,
-           updated_at = datetime('now')`,
-      )
-      .run(
-        nextId,
-        input.title.trim(),
-        input.trigger.trim(),
-        input.feedbackTemplate.trim(),
-        input.feedbackSoundPath ?? '',
-        input.mode,
-        input.allowDuplicates ? 1 : 0,
-        JSON.stringify(input.permissions),
-        input.cooldownSeconds,
-        input.userCooldownSeconds,
-        input.enabled ? 1 : 0,
-      );
-
+    const file = this.readFile();
+    const id = input.id ?? randomUUID();
+    const record: SuggestionListRecord = {
+      id,
+      title: input.title.trim(),
+      trigger: input.trigger.trim(),
+      feedbackTemplate: input.feedbackTemplate.trim(),
+      feedbackSoundPath: input.feedbackSoundPath ?? null,
+      mode: input.mode,
+      allowDuplicates: input.allowDuplicates,
+      permissions: input.permissions,
+      cooldownSeconds: input.cooldownSeconds,
+      userCooldownSeconds: input.userCooldownSeconds,
+      enabled: input.enabled,
+    };
+    const idx = file.lists.findIndex((l) => l.id === id);
+    if (idx >= 0) file.lists[idx] = record; else file.lists.push(record);
+    this.writeFile(file);
     return this.listLists();
   }
 
   deleteList(id: string): SuggestionList[] {
-    this.db.prepare('DELETE FROM suggestion_lists WHERE id = ?').run(id);
+    const file = this.readFile();
+    file.lists = file.lists.filter((l) => l.id !== id);
+    delete file.entries[id];
+    this.writeFile(file);
     return this.listLists();
   }
 
   listEntries(listId: string): SuggestionEntry[] {
-    const rows = this.db
-      .prepare(
-        `SELECT id, list_id, platform, user_key, display_name, content, created_at
-         FROM suggestion_entries
-         WHERE list_id = ?
-         ORDER BY created_at ASC`,
-      )
-      .all(listId) as SuggestionEntryRow[];
-
-    return rows.map((row) => this.mapEntryRow(row));
+    const { entries } = this.readFile();
+    return (entries[listId] ?? []).map((r) => this.mapEntry(r));
   }
 
   addEntry(input: AddEntryInput): SuggestionEntry | null {
-    const id = randomUUID();
-    try {
-      this.db
-        .prepare(
-          `INSERT INTO suggestion_entries (id, list_id, platform, user_key, display_name, content)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-        )
-        .run(id, input.listId, input.platform, input.userKey, input.displayName, input.content);
-    } catch {
-      return null;
-    }
+    const file = this.readFile();
+    const list = file.lists.find((l) => l.id === input.listId);
+    if (!list) return null;
 
-    const row = this.db
-      .prepare('SELECT id, list_id, platform, user_key, display_name, content, created_at FROM suggestion_entries WHERE id = ?')
-      .get(id) as SuggestionEntryRow | undefined;
+    if (!file.entries[input.listId]) file.entries[input.listId] = [];
+    const bucket = file.entries[input.listId];
 
-    return row ? this.mapEntryRow(row) : null;
+    // Enforce uniqueness per user per list (same as SQLite UNIQUE constraint)
+    if (bucket.some((e) => e.userKey === input.userKey)) return null;
+
+    const record: SuggestionEntryRecord = {
+      id: randomUUID(),
+      listId: input.listId,
+      platform: input.platform,
+      userKey: input.userKey,
+      displayName: input.displayName,
+      content: input.content,
+      createdAt: new Date().toISOString(),
+    };
+    bucket.push(record);
+    this.writeFile(file);
+    return this.mapEntry(record);
   }
 
   hasUserEntry(listId: string, userKey: string): boolean {
-    const row = this.db
-      .prepare('SELECT 1 FROM suggestion_entries WHERE list_id = ? AND user_key = ? LIMIT 1')
-      .get(listId, userKey);
-    return !!row;
+    const { entries } = this.readFile();
+    return (entries[listId] ?? []).some((e) => e.userKey === userKey);
   }
 
   clearEntries(listId: string): void {
-    this.db.prepare('DELETE FROM suggestion_entries WHERE list_id = ?').run(listId);
+    const file = this.readFile();
+    file.entries[listId] = [];
+    this.writeFile(file);
   }
 
   clearSessionEntries(): void {
-    this.db
-      .prepare(
-        `DELETE FROM suggestion_entries
-         WHERE list_id IN (SELECT id FROM suggestion_lists WHERE mode = 'session')`,
-      )
-      .run();
+    const file = this.readFile();
+    for (const list of file.lists) {
+      if (list.mode === 'session') file.entries[list.id] = [];
+    }
+    this.writeFile(file);
   }
 
-  private mapListRow(row: SuggestionListRow): SuggestionList {
+  private mapList(r: SuggestionListRecord, entryCount: number): SuggestionList {
     return {
-      id: row.id,
-      title: row.title,
-      trigger: row.trigger,
-      feedbackTemplate: row.feedback_template,
-      feedbackSoundPath: row.feedback_sound_path || null,
-      mode: row.mode as SuggestionList['mode'],
-      allowDuplicates: row.allow_duplicates === 1,
-      permissions: JSON.parse(row.permissions_json) as PermissionLevel[],
-      cooldownSeconds: row.cooldown_seconds,
-      userCooldownSeconds: row.user_cooldown_seconds,
-      enabled: row.enabled === 1,
-      entryCount: row.entry_count,
+      id: r.id,
+      title: r.title,
+      trigger: r.trigger,
+      feedbackTemplate: r.feedbackTemplate,
+      feedbackSoundPath: r.feedbackSoundPath,
+      mode: r.mode,
+      allowDuplicates: r.allowDuplicates,
+      permissions: r.permissions,
+      cooldownSeconds: r.cooldownSeconds,
+      userCooldownSeconds: r.userCooldownSeconds,
+      enabled: r.enabled,
+      entryCount,
     };
   }
 
-  private mapEntryRow(row: SuggestionEntryRow): SuggestionEntry {
+  private mapEntry(r: SuggestionEntryRecord): SuggestionEntry {
     return {
-      id: row.id,
-      listId: row.list_id,
-      platform: row.platform as SuggestionEntry['platform'],
-      userKey: row.user_key,
-      displayName: row.display_name,
-      content: row.content,
-      createdAt: row.created_at,
+      id: r.id,
+      listId: r.listId,
+      platform: r.platform as SuggestionEntry['platform'],
+      userKey: r.userKey,
+      displayName: r.displayName,
+      content: r.content,
+      createdAt: r.createdAt,
     };
   }
 }

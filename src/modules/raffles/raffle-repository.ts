@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
-
-import type Database from 'better-sqlite3';
+import path from 'node:path';
 
 import type {
   PlatformId,
@@ -14,59 +13,65 @@ import type {
   RaffleStatus,
   RaffleUpdateInput,
 } from '../../shared/types.js';
+import { JsonStore } from '../../db/json-store.js';
+import { PROFILE_CONFIG_FILES } from '../../shared/constants.js';
 
-interface RaffleRow {
+interface RaffleRecord {
   id: string;
   title: string;
-  entry_command: string;
+  entryCommand: string;
   mode: Raffle['mode'];
   status: RaffleStatus;
-  entry_deadline_at: string | null;
-  accepted_platforms_json: string;
-  staff_trigger_command: string;
-  open_announcement_template: string | null;
-  elimination_announcement_template: string | null;
-  winner_announcement_template: string;
-  spin_sound_file: string | null;
-  eliminated_sound_file: string | null;
-  winner_sound_file: string | null;
-  winner_entry_id: string | null;
-  top2_entry_ids_json: string;
-  last_spin_at: string | null;
-  current_round: number;
-  overlay_session_id: string | null;
-  enabled: number;
-  created_at: string;
-  updated_at: string;
-  entries_count: number;
-  active_entries_count: number;
+  entryDeadlineAt: string | null;
+  acceptedPlatforms: PlatformId[];
+  staffTriggerCommand: string;
+  openAnnouncementTemplate: string;
+  eliminationAnnouncementTemplate: string;
+  winnerAnnouncementTemplate: string;
+  spinSoundFile: string | null;
+  eliminatedSoundFile: string | null;
+  winnerSoundFile: string | null;
+  winnerEntryId: string | null;
+  top2EntryIds: string[];
+  lastSpinAt: string | null;
+  currentRound: number;
+  overlaySessionId: string | null;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
-interface RaffleEntryRow {
+interface RaffleEntryRecord {
   id: string;
-  raffle_id: string;
+  raffleId: string;
   platform: PlatformId;
-  user_key: string;
-  display_name: string;
-  source_message_id: string | null;
-  entered_at: string;
-  is_eliminated: number;
-  elimination_order: number | null;
-  is_winner: number;
+  userKey: string;
+  displayName: string;
+  sourceMessageId: string | null;
+  enteredAt: string;
+  isEliminated: boolean;
+  eliminationOrder: number | null;
+  isWinner: boolean;
 }
 
-interface RaffleRoundRow {
+interface RaffleRoundRecord {
   id: string;
-  raffle_id: string;
-  round_number: number;
-  action_type: RaffleRoundActionType;
-  selected_entry_id: string;
-  selected_entry_name: string;
-  result_type: RaffleRoundResultType;
-  participant_count_before: number;
-  participant_count_after: number;
-  animation_seed_json: string | null;
-  created_at: string;
+  raffleId: string;
+  roundNumber: number;
+  actionType: RaffleRoundActionType;
+  selectedEntryId: string;
+  selectedEntryName: string;
+  resultType: RaffleRoundResultType;
+  participantCountBefore: number;
+  participantCountAfter: number;
+  animationSeedJson: string | null;
+  createdAt: string;
+}
+
+interface RafflesFile {
+  raffles: RaffleRecord[];
+  entries: Record<string, RaffleEntryRecord[]>;
+  rounds: Record<string, RaffleRoundRecord[]>;
 }
 
 export interface RecordRoundInput {
@@ -90,214 +95,174 @@ export interface RegisterEntryInput {
   enteredAt: string;
 }
 
+const EMPTY_FILE: RafflesFile = { raffles: [], entries: {}, rounds: {} };
+
 export class RaffleRepository {
-  constructor(private readonly db: Database.Database) {}
+  private cache: { dir: string; data: RafflesFile } | null = null;
+
+  constructor(private readonly getDirectory: () => string) {}
+
+  private filePath(): string {
+    return path.join(this.getDirectory(), PROFILE_CONFIG_FILES.raffles);
+  }
+
+  private readFile(): RafflesFile {
+    const dir = this.getDirectory();
+    if (this.cache?.dir === dir) return this.cache.data;
+    const data = new JsonStore<RafflesFile>(this.filePath(), EMPTY_FILE).read();
+    if (!data.raffles) data.raffles = [];
+    if (!data.entries) data.entries = {};
+    if (!data.rounds) data.rounds = {};
+    this.cache = { dir, data };
+    return data;
+  }
+
+  private writeFile(data: RafflesFile): void {
+    new JsonStore<RafflesFile>(this.filePath(), EMPTY_FILE).write(data);
+    this.cache = { dir: this.getDirectory(), data };
+  }
 
   list(): Raffle[] {
-    return this.listRows().map((row) => this.mapRaffleRow(row));
+    const file = this.readFile();
+    return file.raffles.map((r) => this.mapRaffle(r, file));
   }
 
   getById(id: string): Raffle | null {
-    const row = this.getRaffleRow(id);
-    return row ? this.mapRaffleRow(row) : null;
+    const file = this.readFile();
+    const record = file.raffles.find((r) => r.id === id);
+    return record ? this.mapRaffle(record, file) : null;
   }
 
   getActive(): Raffle | null {
-    const row = this.db
-      .prepare(
-        `
-          SELECT
-            r.*,
-            (SELECT COUNT(*) FROM raffle_entries e WHERE e.raffle_id = r.id) AS entries_count,
-            (SELECT COUNT(*) FROM raffle_entries e WHERE e.raffle_id = r.id AND e.is_eliminated = 0) AS active_entries_count
-          FROM raffles r
-          WHERE r.status IN ('collecting', 'ready_to_spin', 'spinning', 'paused_top2')
-          ORDER BY r.updated_at DESC, r.created_at DESC
-          LIMIT 1
-        `,
-      )
-      .get() as RaffleRow | undefined;
-
-    return row ? this.mapRaffleRow(row) : null;
+    const file = this.readFile();
+    const active = file.raffles
+      .filter((r) => ['collecting', 'ready_to_spin', 'spinning', 'paused_top2'].includes(r.status))
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.createdAt.localeCompare(a.createdAt))
+      .at(0);
+    return active ? this.mapRaffle(active, file) : null;
   }
 
   create(input: RaffleCreateInput): Raffle[] {
-    const id = randomUUID();
-    this.db
-      .prepare(
-        `
-          INSERT INTO raffles (
-            id,
-            title,
-            entry_command,
-            mode,
-            status,
-            entry_deadline_at,
-            accepted_platforms_json,
-            staff_trigger_command,
-            open_announcement_template,
-            elimination_announcement_template,
-            winner_announcement_template,
-            spin_sound_file,
-            eliminated_sound_file,
-            winner_sound_file,
-            enabled,
-            top2_entry_ids_json,
-            created_at,
-            updated_at
-          ) VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', datetime('now'), datetime('now'))
-        `,
-      )
-      .run(
-        id,
-        input.title,
-        input.entryCommand,
-        input.mode,
-        input.entryDeadlineAt ?? null,
-        JSON.stringify(input.acceptedPlatforms ?? []),
-        input.staffTriggerCommand ?? '',
-        input.openAnnouncementTemplate ?? '',
-        input.eliminationAnnouncementTemplate ?? '',
-        input.winnerAnnouncementTemplate ?? '',
-        input.spinSoundFile ?? null,
-        input.eliminatedSoundFile ?? null,
-        input.winnerSoundFile ?? null,
-        input.enabled ? 1 : 0,
-      );
-
+    const file = this.readFile();
+    const now = new Date().toISOString();
+    const record: RaffleRecord = {
+      id: randomUUID(),
+      title: input.title,
+      entryCommand: input.entryCommand,
+      mode: input.mode,
+      status: 'draft',
+      entryDeadlineAt: input.entryDeadlineAt ?? null,
+      acceptedPlatforms: input.acceptedPlatforms ?? [],
+      staffTriggerCommand: input.staffTriggerCommand ?? '',
+      openAnnouncementTemplate: input.openAnnouncementTemplate ?? '',
+      eliminationAnnouncementTemplate: input.eliminationAnnouncementTemplate ?? '',
+      winnerAnnouncementTemplate: input.winnerAnnouncementTemplate ?? '',
+      spinSoundFile: input.spinSoundFile ?? null,
+      eliminatedSoundFile: input.eliminatedSoundFile ?? null,
+      winnerSoundFile: input.winnerSoundFile ?? null,
+      winnerEntryId: null,
+      top2EntryIds: [],
+      lastSpinAt: null,
+      currentRound: 0,
+      overlaySessionId: null,
+      enabled: input.enabled,
+      createdAt: now,
+      updatedAt: now,
+    };
+    file.raffles.push(record);
+    this.writeFile(file);
     return this.list();
   }
 
   update(input: RaffleUpdateInput): Raffle[] {
-    this.db
-      .prepare(
-        `
-          UPDATE raffles
-          SET title = ?,
-              entry_command = ?,
-              mode = ?,
-              entry_deadline_at = ?,
-              accepted_platforms_json = ?,
-              staff_trigger_command = ?,
-              open_announcement_template = ?,
-              elimination_announcement_template = ?,
-              winner_announcement_template = ?,
-              spin_sound_file = ?,
-              eliminated_sound_file = ?,
-              winner_sound_file = ?,
-              enabled = ?,
-              updated_at = datetime('now')
-          WHERE id = ?
-        `,
-      )
-      .run(
-        input.title,
-        input.entryCommand,
-        input.mode,
-        input.entryDeadlineAt ?? null,
-        JSON.stringify(input.acceptedPlatforms ?? []),
-        input.staffTriggerCommand ?? '',
-        input.openAnnouncementTemplate ?? '',
-        input.eliminationAnnouncementTemplate ?? '',
-        input.winnerAnnouncementTemplate ?? '',
-        input.spinSoundFile ?? null,
-        input.eliminatedSoundFile ?? null,
-        input.winnerSoundFile ?? null,
-        input.enabled ? 1 : 0,
-        input.id,
-      );
-
+    const file = this.readFile();
+    const idx = file.raffles.findIndex((r) => r.id === input.id);
+    if (idx < 0) return this.list();
+    const existing = file.raffles[idx];
+    file.raffles[idx] = {
+      ...existing,
+      title: input.title,
+      entryCommand: input.entryCommand,
+      mode: input.mode,
+      entryDeadlineAt: input.entryDeadlineAt ?? null,
+      acceptedPlatforms: input.acceptedPlatforms ?? [],
+      staffTriggerCommand: input.staffTriggerCommand ?? '',
+      openAnnouncementTemplate: input.openAnnouncementTemplate ?? '',
+      eliminationAnnouncementTemplate: input.eliminationAnnouncementTemplate ?? '',
+      winnerAnnouncementTemplate: input.winnerAnnouncementTemplate ?? '',
+      spinSoundFile: input.spinSoundFile ?? null,
+      eliminatedSoundFile: input.eliminatedSoundFile ?? null,
+      winnerSoundFile: input.winnerSoundFile ?? null,
+      enabled: input.enabled,
+      updatedAt: new Date().toISOString(),
+    };
+    this.writeFile(file);
     return this.list();
   }
 
   delete(id: string): Raffle[] {
-    this.db.prepare('DELETE FROM raffles WHERE id = ?').run(id);
+    const file = this.readFile();
+    file.raffles = file.raffles.filter((r) => r.id !== id);
+    delete file.entries[id];
+    delete file.rounds[id];
+    this.writeFile(file);
     return this.list();
   }
 
   listEntries(raffleId: string): RaffleEntry[] {
-    const rows = this.db
-      .prepare(
-        `
-          SELECT id, raffle_id, platform, user_key, display_name, source_message_id, entered_at, is_eliminated, elimination_order, is_winner
-          FROM raffle_entries
-          WHERE raffle_id = ?
-          ORDER BY entered_at ASC, id ASC
-        `,
-      )
-      .all(raffleId) as RaffleEntryRow[];
-
-    return rows.map((row) => this.mapEntryRow(row));
+    const { entries } = this.readFile();
+    return (entries[raffleId] ?? [])
+      .slice()
+      .sort((a, b) => a.enteredAt.localeCompare(b.enteredAt) || a.id.localeCompare(b.id))
+      .map((r) => this.mapEntry(r));
   }
 
   listActiveEntries(raffleId: string): RaffleEntry[] {
-    return this.listEntries(raffleId).filter((entry) => !entry.isEliminated && !entry.isWinner);
+    return this.listEntries(raffleId).filter((e) => !e.isEliminated && !e.isWinner);
   }
 
   listRounds(raffleId: string): RaffleRoundResult[] {
-    const rows = this.db
-      .prepare(
-        `
-          SELECT id, raffle_id, round_number, action_type, selected_entry_id, selected_entry_name, result_type, participant_count_before, participant_count_after, animation_seed_json, created_at
-          FROM raffle_rounds
-          WHERE raffle_id = ?
-          ORDER BY round_number ASC, created_at ASC, id ASC
-        `,
-      )
-      .all(raffleId) as RaffleRoundRow[];
-
-    return rows.map((row) => this.mapRoundRow(row));
+    const { rounds } = this.readFile();
+    return (rounds[raffleId] ?? [])
+      .slice()
+      .sort((a, b) => a.roundNumber - b.roundNumber || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
+      .map((r) => this.mapRound(r));
   }
 
   getSnapshot(raffleId: string): RaffleSnapshot | null {
     const raffle = this.getById(raffleId);
     if (!raffle) return null;
     const entries = this.listEntries(raffleId);
-    const activeEntries = entries.filter((entry) => !entry.isEliminated && !entry.isWinner);
     return {
       raffle,
       entries,
-      activeEntries,
+      activeEntries: entries.filter((e) => !e.isEliminated && !e.isWinner),
       overlay: null,
       history: this.listRounds(raffleId),
     };
   }
 
   registerEntry(input: RegisterEntryInput): RaffleEntry | null {
-    try {
-      this.db
-        .prepare(
-          `
-            INSERT INTO raffle_entries (
-              id,
-              raffle_id,
-              platform,
-              user_key,
-              display_name,
-              source_message_id,
-              entered_at,
-              is_eliminated,
-              is_winner
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)
-          `,
-        )
-        .run(randomUUID(), input.raffleId, input.platform, input.userKey, input.displayName, input.sourceMessageId, input.enteredAt);
-    } catch (error) {
-      if (error instanceof Error && error.message.includes('UNIQUE')) return null;
-      throw error;
-    }
-
-    const row = this.db
-      .prepare(
-        `
-          SELECT id, raffle_id, platform, user_key, display_name, source_message_id, entered_at, is_eliminated, elimination_order, is_winner
-          FROM raffle_entries
-          WHERE raffle_id = ? AND user_key = ?
-        `,
-      )
-      .get(input.raffleId, input.userKey) as RaffleEntryRow | undefined;
-
-    return row ? this.mapEntryRow(row) : null;
+    const file = this.readFile();
+    if (!file.raffles.some((r) => r.id === input.raffleId)) return null;
+    if (!file.entries[input.raffleId]) file.entries[input.raffleId] = [];
+    const bucket = file.entries[input.raffleId];
+    if (bucket.some((e) => e.userKey === input.userKey)) return null;
+    const record: RaffleEntryRecord = {
+      id: randomUUID(),
+      raffleId: input.raffleId,
+      platform: input.platform,
+      userKey: input.userKey,
+      displayName: input.displayName,
+      sourceMessageId: input.sourceMessageId,
+      enteredAt: input.enteredAt,
+      isEliminated: false,
+      eliminationOrder: null,
+      isWinner: false,
+    };
+    bucket.push(record);
+    this.writeFile(file);
+    return this.mapEntry(record);
   }
 
   transitionStatus(raffleId: string, status: RaffleStatus, extras: {
@@ -307,217 +272,150 @@ export class RaffleRepository {
     currentRound?: number;
     overlaySessionId?: string | null;
   } = {}): void {
-    const current = this.getById(raffleId);
-    if (!current) throw new Error(`Raffle "${raffleId}" not found`);
-
-    this.db
-      .prepare(
-        `
-          UPDATE raffles
-          SET status = ?,
-              winner_entry_id = ?,
-              top2_entry_ids_json = ?,
-              last_spin_at = ?,
-              current_round = ?,
-              overlay_session_id = ?,
-              updated_at = datetime('now')
-          WHERE id = ?
-        `,
-      )
-      .run(
-        status,
-        extras.winnerEntryId ?? current.winnerEntryId,
-        JSON.stringify(extras.top2EntryIds ?? current.top2EntryIds),
-        extras.lastSpinAt ?? current.lastSpinAt,
-        extras.currentRound ?? current.currentRound,
-        extras.overlaySessionId ?? current.overlaySessionId,
-        raffleId,
-      );
+    const file = this.readFile();
+    const idx = file.raffles.findIndex((r) => r.id === raffleId);
+    if (idx < 0) throw new Error(`Raffle "${raffleId}" not found`);
+    const r = file.raffles[idx];
+    file.raffles[idx] = {
+      ...r,
+      status,
+      winnerEntryId: extras.winnerEntryId !== undefined ? extras.winnerEntryId : r.winnerEntryId,
+      top2EntryIds: extras.top2EntryIds !== undefined ? extras.top2EntryIds : r.top2EntryIds,
+      lastSpinAt: extras.lastSpinAt !== undefined ? extras.lastSpinAt : r.lastSpinAt,
+      currentRound: extras.currentRound !== undefined ? extras.currentRound : r.currentRound,
+      overlaySessionId: extras.overlaySessionId !== undefined ? extras.overlaySessionId : r.overlaySessionId,
+      updatedAt: new Date().toISOString(),
+    };
+    this.writeFile(file);
   }
 
   eliminateEntry(raffleId: string, entryId: string, eliminationOrder: number): void {
-    this.db
-      .prepare(
-        `
-          UPDATE raffle_entries
-          SET is_eliminated = 1,
-              elimination_order = ?
-          WHERE raffle_id = ? AND id = ?
-        `,
-      )
-      .run(eliminationOrder, raffleId, entryId);
+    const file = this.readFile();
+    const bucket = file.entries[raffleId] ?? [];
+    const idx = bucket.findIndex((e) => e.id === entryId);
+    if (idx >= 0) {
+      bucket[idx] = { ...bucket[idx], isEliminated: true, eliminationOrder };
+      this.writeFile(file);
+    }
   }
 
   markWinner(raffleId: string, entryId: string): void {
-    this.db
-      .prepare(
-        `
-          UPDATE raffle_entries
-          SET is_winner = CASE WHEN id = ? THEN 1 ELSE is_winner END
-          WHERE raffle_id = ?
-        `,
-      )
-      .run(entryId, raffleId);
+    const file = this.readFile();
+    const bucket = file.entries[raffleId] ?? [];
+    let changed = false;
+    for (let i = 0; i < bucket.length; i++) {
+      if (bucket[i].id === entryId && !bucket[i].isWinner) {
+        bucket[i] = { ...bucket[i], isWinner: true };
+        changed = true;
+      }
+    }
+    if (changed) this.writeFile(file);
   }
 
   recordRound(input: RecordRoundInput): RaffleRoundResult {
-    const id = randomUUID();
-    this.db
-      .prepare(
-        `
-          INSERT INTO raffle_rounds (
-            id,
-            raffle_id,
-            round_number,
-            action_type,
-            selected_entry_id,
-            selected_entry_name,
-            result_type,
-            participant_count_before,
-            participant_count_after,
-            animation_seed_json,
-            created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-        `,
-      )
-      .run(
-        id,
-        input.raffleId,
-        input.roundNumber,
-        input.actionType,
-        input.selectedEntryId,
-        input.selectedEntryName,
-        input.resultType,
-        input.participantCountBefore,
-        input.participantCountAfter,
-        input.animationSeedJson,
-      );
-
-    return this.listRounds(input.raffleId).at(-1) as RaffleRoundResult;
+    const file = this.readFile();
+    if (!file.rounds[input.raffleId]) file.rounds[input.raffleId] = [];
+    const record: RaffleRoundRecord = {
+      id: randomUUID(),
+      raffleId: input.raffleId,
+      roundNumber: input.roundNumber,
+      actionType: input.actionType,
+      selectedEntryId: input.selectedEntryId,
+      selectedEntryName: input.selectedEntryName,
+      resultType: input.resultType,
+      participantCountBefore: input.participantCountBefore,
+      participantCountAfter: input.participantCountAfter,
+      animationSeedJson: input.animationSeedJson,
+      createdAt: new Date().toISOString(),
+    };
+    file.rounds[input.raffleId].push(record);
+    this.writeFile(file);
+    return this.mapRound(record);
   }
 
   reset(raffleId: string): void {
-    const tx = this.db.transaction((id: string) => {
-      this.db.prepare('DELETE FROM raffle_rounds WHERE raffle_id = ?').run(id);
-      this.db
-        .prepare(
-          `
-            UPDATE raffle_entries
-            SET is_eliminated = 0,
-                elimination_order = NULL,
-                is_winner = 0
-            WHERE raffle_id = ?
-          `,
-        )
-        .run(id);
-      this.db
-        .prepare(
-          `
-            UPDATE raffles
-            SET status = 'draft',
-                winner_entry_id = NULL,
-                top2_entry_ids_json = '[]',
-                last_spin_at = NULL,
-                current_round = 0,
-                overlay_session_id = NULL,
-                updated_at = datetime('now')
-            WHERE id = ?
-          `,
-        )
-        .run(id);
-    });
-    tx(raffleId);
+    const file = this.readFile();
+    const idx = file.raffles.findIndex((r) => r.id === raffleId);
+    if (idx < 0) return;
+    file.rounds[raffleId] = [];
+    const bucket = file.entries[raffleId] ?? [];
+    file.entries[raffleId] = bucket.map((e) => ({
+      ...e,
+      isEliminated: false,
+      eliminationOrder: null,
+      isWinner: false,
+    }));
+    file.raffles[idx] = {
+      ...file.raffles[idx],
+      status: 'draft',
+      winnerEntryId: null,
+      top2EntryIds: [],
+      lastSpinAt: null,
+      currentRound: 0,
+      overlaySessionId: null,
+      updatedAt: new Date().toISOString(),
+    };
+    this.writeFile(file);
   }
 
-  private listRows(): RaffleRow[] {
-    return this.db
-      .prepare(
-        `
-          SELECT
-            r.*,
-            (SELECT COUNT(*) FROM raffle_entries e WHERE e.raffle_id = r.id) AS entries_count,
-            (SELECT COUNT(*) FROM raffle_entries e WHERE e.raffle_id = r.id AND e.is_eliminated = 0 AND e.is_winner = 0) AS active_entries_count
-          FROM raffles r
-          ORDER BY r.created_at DESC, r.id DESC
-        `,
-      )
-      .all() as RaffleRow[];
-  }
-
-  private getRaffleRow(id: string): RaffleRow | null {
-    const row = this.db
-      .prepare(
-        `
-          SELECT
-            r.*,
-            (SELECT COUNT(*) FROM raffle_entries e WHERE e.raffle_id = r.id) AS entries_count,
-            (SELECT COUNT(*) FROM raffle_entries e WHERE e.raffle_id = r.id AND e.is_eliminated = 0 AND e.is_winner = 0) AS active_entries_count
-          FROM raffles r
-          WHERE r.id = ?
-        `,
-      )
-      .get(id) as RaffleRow | undefined;
-
-    return row ?? null;
-  }
-
-  private mapRaffleRow(row: RaffleRow): Raffle {
+  private mapRaffle(r: RaffleRecord, file: RafflesFile): Raffle {
+    const entries = file.entries[r.id] ?? [];
     return {
-      id: row.id,
-      title: row.title,
-      entryCommand: row.entry_command,
-      mode: row.mode,
-      status: row.status,
-      entryDeadlineAt: row.entry_deadline_at,
-      acceptedPlatforms: JSON.parse(row.accepted_platforms_json) as PlatformId[],
-      staffTriggerCommand: row.staff_trigger_command,
-      openAnnouncementTemplate: row.open_announcement_template ?? '',
-      eliminationAnnouncementTemplate: row.elimination_announcement_template ?? '',
-      winnerAnnouncementTemplate: row.winner_announcement_template,
-      spinSoundFile: row.spin_sound_file ?? null,
-      eliminatedSoundFile: row.eliminated_sound_file ?? null,
-      winnerSoundFile: row.winner_sound_file ?? null,
-      winnerEntryId: row.winner_entry_id,
-      top2EntryIds: JSON.parse(row.top2_entry_ids_json || '[]') as string[],
-      entriesCount: row.entries_count ?? 0,
-      activeEntriesCount: row.active_entries_count ?? 0,
-      lastSpinAt: row.last_spin_at,
-      currentRound: row.current_round,
-      overlaySessionId: row.overlay_session_id,
-      enabled: row.enabled === 1,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
+      id: r.id,
+      title: r.title,
+      entryCommand: r.entryCommand,
+      mode: r.mode,
+      status: r.status,
+      entryDeadlineAt: r.entryDeadlineAt,
+      acceptedPlatforms: r.acceptedPlatforms,
+      staffTriggerCommand: r.staffTriggerCommand,
+      openAnnouncementTemplate: r.openAnnouncementTemplate,
+      eliminationAnnouncementTemplate: r.eliminationAnnouncementTemplate,
+      winnerAnnouncementTemplate: r.winnerAnnouncementTemplate,
+      spinSoundFile: r.spinSoundFile,
+      eliminatedSoundFile: r.eliminatedSoundFile,
+      winnerSoundFile: r.winnerSoundFile,
+      winnerEntryId: r.winnerEntryId,
+      top2EntryIds: r.top2EntryIds,
+      entriesCount: entries.length,
+      activeEntriesCount: entries.filter((e) => !e.isEliminated && !e.isWinner).length,
+      lastSpinAt: r.lastSpinAt,
+      currentRound: r.currentRound,
+      overlaySessionId: r.overlaySessionId,
+      enabled: r.enabled,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
     };
   }
 
-  private mapEntryRow(row: RaffleEntryRow): RaffleEntry {
+  private mapEntry(r: RaffleEntryRecord): RaffleEntry {
     return {
-      id: row.id,
-      raffleId: row.raffle_id,
-      platform: row.platform,
-      userKey: row.user_key,
-      displayName: row.display_name,
-      sourceMessageId: row.source_message_id,
-      enteredAt: row.entered_at,
-      isEliminated: row.is_eliminated === 1,
-      eliminationOrder: row.elimination_order,
-      isWinner: row.is_winner === 1,
+      id: r.id,
+      raffleId: r.raffleId,
+      platform: r.platform,
+      userKey: r.userKey,
+      displayName: r.displayName,
+      sourceMessageId: r.sourceMessageId,
+      enteredAt: r.enteredAt,
+      isEliminated: r.isEliminated,
+      eliminationOrder: r.eliminationOrder,
+      isWinner: r.isWinner,
     };
   }
 
-  private mapRoundRow(row: RaffleRoundRow): RaffleRoundResult {
+  private mapRound(r: RaffleRoundRecord): RaffleRoundResult {
     return {
-      id: row.id,
-      raffleId: row.raffle_id,
-      roundNumber: row.round_number,
-      actionType: row.action_type,
-      selectedEntryId: row.selected_entry_id,
-      selectedEntryName: row.selected_entry_name,
-      resultType: row.result_type,
-      participantCountBefore: row.participant_count_before,
-      participantCountAfter: row.participant_count_after,
-      animationSeedJson: row.animation_seed_json,
-      createdAt: row.created_at,
+      id: r.id,
+      raffleId: r.raffleId,
+      roundNumber: r.roundNumber,
+      actionType: r.actionType,
+      selectedEntryId: r.selectedEntryId,
+      selectedEntryName: r.selectedEntryName,
+      resultType: r.resultType,
+      participantCountBefore: r.participantCountBefore,
+      participantCountAfter: r.participantCountAfter,
+      animationSeedJson: r.animationSeedJson,
+      createdAt: r.createdAt,
     };
   }
 }

@@ -22,7 +22,6 @@ import { RaffleOverlayServer } from '../modules/raffles/raffle-overlay-server.js
 import { RaffleRepository } from '../modules/raffles/raffle-repository.js';
 import { RaffleService } from '../modules/raffles/raffle-service.js';
 import { SchedulerService, type ScheduledRunState, type ScheduledTask } from '../modules/scheduled/scheduler-service.js';
-import { AppSettingsRepository } from '../modules/settings/app-settings-repository.js';
 import { GeneralSettingsStore } from '../modules/settings/general-settings-store.js';
 import { ProfileStore } from '../modules/settings/profile-store.js';
 import { SoundCommandRepository } from '../modules/sounds/sound-repository.js';
@@ -159,19 +158,24 @@ async function listBundledSounds(): Promise<Record<'spinning' | 'eliminated' | '
 export function createAppContext(options: AppContextOptions): () => Promise<void> {
   const execFile = promisify(execFileCallback);
   const profileStore = new ProfileStore(options.userDataPath);
-  const appSettingsRepository = new AppSettingsRepository(options.databaseHandle.db);
   const generalSettingsStore = options.generalSettingsStore;
-  const obsSettingsStore = new ObsSettingsStore(appSettingsRepository);
   const logRepository = new LogRepository(options.databaseHandle.db);
   const logService = new LogService(logRepository);
   logService.setMinLevel(generalSettingsStore.load().diagnosticLogLevel);
   const chatLogRepository = new ChatLogRepository(options.databaseHandle.db);
   const chatLogService = new ChatLogService(chatLogRepository);
-  const raffleRepository = new RaffleRepository(options.databaseHandle.db);
-  const soundRepository = new SoundCommandRepository(options.databaseHandle.db);
-  const textRepository = new TextCommandRepository(options.databaseHandle.db);
-  const voiceRepository = new VoiceCommandRepository(options.databaseHandle.db);
-  const suggestionRepository = new SuggestionRepository(options.databaseHandle.db);
+
+  // Active profile directory — kept in sync with profile selection so all JSON repositories
+  // resolve to the correct per-profile folder automatically.
+  let activeProfileDirectory = '';
+  const getActiveProfileDirectory = () => activeProfileDirectory;
+
+  const raffleRepository = new RaffleRepository(getActiveProfileDirectory);
+  const soundRepository = new SoundCommandRepository(getActiveProfileDirectory);
+  const textRepository = new TextCommandRepository(getActiveProfileDirectory);
+  const voiceRepository = new VoiceCommandRepository(getActiveProfileDirectory);
+  const suggestionRepository = new SuggestionRepository(getActiveProfileDirectory);
+  const obsSettingsStore = new ObsSettingsStore(getActiveProfileDirectory);
 
   // Sound settings: file-based, per-profile. Cached in memory for synchronous access in canRun().
   let soundSettingsCache: SoundSettings = { defaultCooldownSeconds: 0, defaultUserCooldownSeconds: 0 };
@@ -239,6 +243,12 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   };
 
   // Load caches on startup (non-blocking, best-effort).
+  // Also resolve the active profile directory so all per-profile JSON repos are immediately usable.
+  void (async () => {
+    const snapshot = await profileStore.list();
+    const active = snapshot.profiles.find((p) => p.id === snapshot.activeProfileId);
+    if (active) activeProfileDirectory = active.directory;
+  })();
   void reloadSoundSettingsCache();
   void reloadTextSettingsCache();
   void reloadWelcomeSettingsCache();
@@ -1271,6 +1281,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.profilesList, async () => profileStore.list());
   ipcMain.handle(IPC_CHANNELS.profilesSelect, async (_, raw) => {
     const snapshot = await profileStore.select(selectProfileInputSchema.parse(raw).profileId);
+    const active = snapshot.profiles.find((p) => p.id === snapshot.activeProfileId);
+    if (active) activeProfileDirectory = active.directory;
     chatService.clearRecent();
     suggestionService.clearSessionEntries();
     welcomeService.reset();

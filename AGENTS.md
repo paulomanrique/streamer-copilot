@@ -90,6 +90,7 @@ streamer-copilot/
 5. **Arquivos de som** ficam em `app.getPath('userData')/sounds/`. Nunca bundle de mídia do usuário no pacote do app.
 6. **Tokens** são criptografados com `electron.safeStorage`. Nunca armazene em texto plano no SQLite.
 7. O renderer **nunca acessa o filesystem diretamente**. Use IPC para solicitar caminhos (dialog) e conteúdo de arquivos.
+8. **Toda configuração (comandos, rifas, sugestões, plataformas, OBS, etc.) é salva em JSON por perfil**, na pasta do perfil. O SQLite é usado apenas para logs de diagnóstico e sessões de chat. O objetivo é portabilidade total — o streamer pode copiar a pasta do perfil para outro computador e tudo funciona.
 
 ---
 
