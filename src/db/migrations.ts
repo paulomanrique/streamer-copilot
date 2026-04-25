@@ -356,4 +356,9 @@ export const MIGRATIONS: SqlMigration[] = [
       ALTER TABLE text_commands_new RENAME TO text_commands;
     `,
   },
+  {
+    version: 16,
+    name: 'suggestion_lists_feedback_sound',
+    sql: `ALTER TABLE suggestion_lists ADD COLUMN feedback_sound_path TEXT NOT NULL DEFAULT '';`,
+  },
 ];

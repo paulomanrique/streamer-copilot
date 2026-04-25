@@ -343,6 +343,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         });
       }
     },
+    onPlaySound: (payload) => soundService.previewPlay(payload),
   });
   let twitchStatus: TwitchConnectionStatus = 'disconnected';
   let twitchChannel: string | null = null;

@@ -15,6 +15,7 @@ interface SuggestionServiceOptions {
   repository: SuggestionRepository;
   onState: (payload: SuggestionSnapshot) => void;
   onFeedback: (payload: TextCommandResponsePayload) => void | Promise<void>;
+  onPlaySound?: (payload: { filePath: string }) => void;
   now?: () => number;
 }
 
@@ -92,6 +93,9 @@ export class SuggestionService implements CommandModule {
         const feedback = this.formatFeedback(list.feedbackTemplate, message);
         if (feedback) {
           void this.options.onFeedback({ platform: message.platform, content: feedback });
+        }
+        if (list.feedbackSoundPath) {
+          this.options.onPlaySound?.({ filePath: list.feedbackSoundPath });
         }
       }
 

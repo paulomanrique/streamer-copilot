@@ -9,6 +9,7 @@ interface SuggestionListRow {
   title: string;
   trigger: string;
   feedback_template: string;
+  feedback_sound_path: string;
   mode: string;
   allow_duplicates: number;
   permissions_json: string;
@@ -42,7 +43,7 @@ export class SuggestionRepository {
   listLists(): SuggestionList[] {
     const rows = this.db
       .prepare(
-        `SELECT id, title, trigger, feedback_template, mode, allow_duplicates, permissions_json,
+        `SELECT id, title, trigger, feedback_template, feedback_sound_path, mode, allow_duplicates, permissions_json,
                 cooldown_seconds, user_cooldown_seconds, enabled,
                 (SELECT COUNT(*) FROM suggestion_entries e WHERE e.list_id = suggestion_lists.id) AS entry_count
          FROM suggestion_lists
@@ -58,13 +59,14 @@ export class SuggestionRepository {
     this.db
       .prepare(
         `INSERT INTO suggestion_lists (
-           id, title, trigger, feedback_template, mode, allow_duplicates, permissions_json,
+           id, title, trigger, feedback_template, feedback_sound_path, mode, allow_duplicates, permissions_json,
            cooldown_seconds, user_cooldown_seconds, enabled, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
          ON CONFLICT(id) DO UPDATE SET
            title = excluded.title,
            trigger = excluded.trigger,
            feedback_template = excluded.feedback_template,
+           feedback_sound_path = excluded.feedback_sound_path,
            mode = excluded.mode,
            allow_duplicates = excluded.allow_duplicates,
            permissions_json = excluded.permissions_json,
@@ -78,6 +80,7 @@ export class SuggestionRepository {
         input.title.trim(),
         input.trigger.trim(),
         input.feedbackTemplate.trim(),
+        input.feedbackSoundPath ?? '',
         input.mode,
         input.allowDuplicates ? 1 : 0,
         JSON.stringify(input.permissions),
@@ -153,6 +156,7 @@ export class SuggestionRepository {
       title: row.title,
       trigger: row.trigger,
       feedbackTemplate: row.feedback_template,
+      feedbackSoundPath: row.feedback_sound_path || null,
       mode: row.mode as SuggestionList['mode'],
       allowDuplicates: row.allow_duplicates === 1,
       permissions: JSON.parse(row.permissions_json) as PermissionLevel[],

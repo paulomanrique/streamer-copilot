@@ -589,6 +589,7 @@ export interface SuggestionList {
   title: string;
   trigger: string;
   feedbackTemplate: string;
+  feedbackSoundPath: string | null;
   mode: SuggestionListMode;
   allowDuplicates: boolean;
   permissions: PermissionLevel[];
@@ -613,6 +614,7 @@ export interface SuggestionListUpsertInput {
   title: string;
   trigger: string;
   feedbackTemplate: string;
+  feedbackSoundPath: string | null;
   mode: SuggestionListMode;
   allowDuplicates: boolean;
   permissions: PermissionLevel[];

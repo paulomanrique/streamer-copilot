@@ -8,6 +8,7 @@ const EMPTY_FORM: SuggestionListUpsertInput = {
   title: '',
   trigger: '!',
   feedbackTemplate: '',
+  feedbackSoundPath: null,
   mode: 'session',
   allowDuplicates: false,
   permissions: ['everyone'],
@@ -15,6 +16,12 @@ const EMPTY_FORM: SuggestionListUpsertInput = {
   userCooldownSeconds: 0,
   enabled: true,
 };
+
+function getFileName(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, '/');
+  const parts = normalized.split('/');
+  return parts[parts.length - 1] || filePath;
+}
 
 const PERMISSION_LABELS: Record<PermissionLevel, string> = {
   everyone: 'Everyone',
@@ -49,6 +56,7 @@ export function SuggestionsPage() {
   const [cooldownSeconds, setCooldownSeconds] = useState(EMPTY_FORM.cooldownSeconds);
   const [userCooldownSeconds, setUserCooldownSeconds] = useState(EMPTY_FORM.userCooldownSeconds);
   const [enabled, setEnabled] = useState(EMPTY_FORM.enabled);
+  const [feedbackSoundPath, setFeedbackSoundPath] = useState<string | null>(EMPTY_FORM.feedbackSoundPath);
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -88,6 +96,7 @@ export function SuggestionsPage() {
     setCooldownSeconds(EMPTY_FORM.cooldownSeconds);
     setUserCooldownSeconds(EMPTY_FORM.userCooldownSeconds);
     setEnabled(EMPTY_FORM.enabled);
+    setFeedbackSoundPath(EMPTY_FORM.feedbackSoundPath);
     setError(null);
   };
 
@@ -108,6 +117,7 @@ export function SuggestionsPage() {
     setCooldownSeconds(list.cooldownSeconds);
     setUserCooldownSeconds(list.userCooldownSeconds);
     setEnabled(list.enabled);
+    setFeedbackSoundPath(list.feedbackSoundPath);
     setError(null);
     setIsModalOpen(true);
     setTimeout(() => triggerInputRef.current?.focus(), 50);
@@ -136,6 +146,7 @@ export function SuggestionsPage() {
         title: title.trim(),
         trigger: trimmedTrigger,
         feedbackTemplate: feedbackTemplate.trim(),
+        feedbackSoundPath,
         mode,
         allowDuplicates,
         permissions: levels,
@@ -195,6 +206,15 @@ export function SuggestionsPage() {
     } catch {
       // silently ignore
     }
+  };
+
+  const pickFeedbackSound = async () => {
+    const path = await window.copilot.pickSoundFile();
+    if (path) setFeedbackSoundPath(path);
+  };
+
+  const previewFeedbackSound = async () => {
+    if (feedbackSoundPath) await window.copilot.previewPlay({ filePath: feedbackSoundPath });
   };
 
   const toggleLevel = (level: PermissionLevel) => {
@@ -376,6 +396,37 @@ export function SuggestionsPage() {
                   className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white text-sm focus:border-purple-500 focus:outline-none"
                 />
                 <p className="text-xs text-gray-500 mt-1">Use <code className="text-purple-300">{'{username}'}</code> for the viewer name.</p>
+              </div>
+
+              {/* Feedback Sound */}
+              <div>
+                <label className="block text-sm text-gray-300 mb-1.5">Feedback Sound <span className="text-gray-600">(optional)</span></label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={feedbackSoundPath ? getFileName(feedbackSoundPath) : ''}
+                    readOnly
+                    placeholder="no sound selected"
+                    className="flex-1 bg-gray-900 border border-gray-700 rounded text-sm text-gray-300 px-3 py-2 placeholder-gray-600"
+                  />
+                  {feedbackSoundPath && (
+                    <button type="button" onClick={() => void previewFeedbackSound()}
+                      className="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">
+                      Test
+                    </button>
+                  )}
+                  <button type="button" onClick={() => void pickFeedbackSound()}
+                    className="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors whitespace-nowrap">
+                    Choose file...
+                  </button>
+                  {feedbackSoundPath && (
+                    <button type="button" onClick={() => setFeedbackSoundPath(null)}
+                      className="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm transition-colors">
+                      ✕
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-gray-600 mt-1">Plays once for every accepted suggestion.</p>
               </div>
 
               {/* Mode */}
