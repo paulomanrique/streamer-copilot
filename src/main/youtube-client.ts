@@ -64,7 +64,7 @@ export class YTLiveClient {
     this.livechat = null as any;
   }
 
-  async sendMessage(content: string): Promise<void> {
+  async sendMessage(content: string, onBehalfOfUser?: string): Promise<void> {
     if (!this.livechat) {
       throw new Error('YouTube chat input not available (login or chat not ready)');
     }
@@ -76,10 +76,34 @@ export class YTLiveClient {
     }
 
     const cookieStr = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
-    const authedYt = await Innertube.create({ cookie: cookieStr });
+    const authedYt = await Innertube.create({
+      cookie: cookieStr,
+      ...(onBehalfOfUser ? { on_behalf_of_user: onBehalfOfUser } : {}),
+    });
     const info = await authedYt.getInfo(this.options.videoId);
     const authedChat = info.getLiveChat();
     await authedChat.sendMessage(content);
+  }
+
+  static async getChatChannels(): Promise<Array<{ pageId: string; name: string; handle: string; isSelected: boolean }>> {
+    const cookies = await session.defaultSession.cookies.get({ url: 'https://www.youtube.com' });
+    const hasCookies = cookies.some((c) => c.name === 'SAPISID' || c.name === '__Secure-3PAPISID');
+    if (!hasCookies) return [];
+
+    const cookieStr = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+    const yt = await Innertube.create({ cookie: cookieStr });
+    const items: any[] = await yt.account.getInfo(true) as any[];
+    if (!Array.isArray(items)) return [];
+
+    return items
+      .filter((item: any) => item.has_channel || item.channel_handle?.text)
+      .map((item: any) => ({
+        pageId: item.endpoint?.payload?.obou ?? '',
+        name: item.account_name?.text ?? item.account_name?.toString?.() ?? '',
+        handle: item.channel_handle?.text ?? item.channel_handle?.toString?.() ?? '',
+        isSelected: !!item.is_selected,
+      }))
+      .filter((ch) => ch.pageId);
   }
 
   private handleItem(item: any): void {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { KickAuthStatus, KickConnectionStatus, KickSettings, TikTokConnectionStatus, TikTokSettings, TwitchConnectionStatus, TwitchCredentials, YouTubeSettings, YouTubeStreamInfo } from '../../shared/types.js';
+import type { KickAuthStatus, KickConnectionStatus, KickSettings, TikTokConnectionStatus, TikTokSettings, TwitchConnectionStatus, TwitchCredentials, YouTubeChatChannel, YouTubeSettings, YouTubeStreamInfo } from '../../shared/types.js';
 
 interface LiveCheckResult {
   handle: string;
@@ -103,6 +103,8 @@ export function PlatformsSettingsPage() {
   const [isSavingYtSettings, setIsSavingYtSettings] = useState(false);
   const [checkingHandle, setCheckingHandle] = useState<string | null>(null);
   const [liveCheckResult, setLiveCheckResult] = useState<LiveCheckResult | null>(null);
+  const [ytChatChannels, setYtChatChannels] = useState<YouTubeChatChannel[]>([]);
+  const [isLoadingChatChannels, setIsLoadingChatChannels] = useState(false);
 
   // Kick
   const [kickStatus, setKickStatus] = useState<KickConnectionStatus>('disconnected');
@@ -243,6 +245,19 @@ export function PlatformsSettingsPage() {
       const result = await window.copilot.youtubeCheckLive(handle);
       setLiveCheckResult({ handle, videoIds: result.videoIds });
     } finally { setCheckingHandle(null); }
+  };
+
+  const loadYtChatChannels = async () => {
+    setIsLoadingChatChannels(true);
+    try {
+      const channels = await (window.copilot as any).youtubeGetChatChannels() as YouTubeChatChannel[];
+      setYtChatChannels(channels);
+    } catch { setYtChatChannels([]); }
+    finally { setIsLoadingChatChannels(false); }
+  };
+
+  const selectYtChatChannel = async (pageId: string) => {
+    await saveYtSettings({ ...ytSettings, chatChannelPageId: pageId || undefined });
   };
 
   // ── Kick Actions ──────────────────────────────────────────────────────────
@@ -537,7 +552,7 @@ export function PlatformsSettingsPage() {
                 </button>
               </div>
 
-              <div className="pt-1 border-t border-gray-700/30">
+              <div className="pt-1 border-t border-gray-700/30 space-y-3">
                 <button
                   type="button"
                   onClick={() => void window.copilot.youtubeOpenLogin()}
@@ -548,6 +563,57 @@ export function PlatformsSettingsPage() {
                   </svg>
                   Log in to YouTube (to read member-only chat & send messages)
                 </button>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Channel for sending messages</p>
+                    <button
+                      type="button"
+                      onClick={() => void loadYtChatChannels()}
+                      disabled={isLoadingChatChannels}
+                      className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-300 transition-colors disabled:opacity-50"
+                    >
+                      {isLoadingChatChannels ? <Spinner /> : (
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                      )}
+                      Load channels
+                    </button>
+                  </div>
+
+                  {ytChatChannels.length > 0 ? (
+                    <div className="space-y-1">
+                      {ytChatChannels.map((ch) => {
+                        const isSelected = ytSettings.chatChannelPageId === ch.pageId;
+                        return (
+                          <button
+                            key={ch.pageId}
+                            type="button"
+                            onClick={() => void selectYtChatChannel(isSelected ? '' : ch.pageId)}
+                            disabled={isSavingYtSettings}
+                            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-xs transition-colors ${
+                              isSelected
+                                ? 'bg-red-500/15 border-red-500/40 text-gray-200'
+                                : 'bg-gray-900/60 border-gray-700/40 text-gray-400 hover:border-gray-600 hover:text-gray-300'
+                            } disabled:opacity-50`}
+                          >
+                            <span className={`w-3 h-3 rounded-full border-2 shrink-0 flex items-center justify-center ${isSelected ? 'border-red-400 bg-red-400' : 'border-gray-600'}`}>
+                              {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                            </span>
+                            <span className="font-medium truncate">{ch.name}</span>
+                            <span className="font-mono text-gray-500 ml-auto shrink-0">{ch.handle}</span>
+                          </button>
+                        );
+                      })}
+                      {!ytSettings.chatChannelPageId && (
+                        <p className="text-[10px] text-gray-600 italic px-1">Using default channel. Select one above to override.</p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-gray-600 italic">Click &quot;Load channels&quot; after logging in to choose which channel sends messages.</p>
+                  )}
+                </div>
               </div>
             </div>
           </PlatformCard>

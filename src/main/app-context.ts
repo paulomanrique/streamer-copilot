@@ -1149,9 +1149,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       for (const target of resolveRaffleAnnouncementTargets(raffle.acceptedPlatforms)) {
         try {
           if (target === 'youtube' || target === 'youtube-v') {
-            const scraper = getYoutubeScraperByPlatform(target);
-            if (!scraper) throw new Error(`${target}: scraper not connected`);
-            await scraper.sendMessage(content);
+            await sendYoutubeMessage(target, content);
           } else {
             await chatService.sendMessage(target, content);
           }
@@ -1172,9 +1170,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       for (const target of resolveRaffleAnnouncementTargets(raffle.acceptedPlatforms)) {
         try {
           if (target === 'youtube' || target === 'youtube-v') {
-            const scraper = getYoutubeScraperByPlatform(target);
-            if (!scraper) throw new Error(`${target}: scraper not connected`);
-            await scraper.sendMessage(content);
+            await sendYoutubeMessage(target, content);
           } else {
             await chatService.sendMessage(target, content);
           }
@@ -1193,9 +1189,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       for (const target of resolveRaffleAnnouncementTargets(raffle.acceptedPlatforms)) {
         try {
           if (target === 'youtube' || target === 'youtube-v') {
-            const scraper = getYoutubeScraperByPlatform(target);
-            if (!scraper) throw new Error(`${target}: scraper not connected`);
-            await scraper.sendMessage(content);
+            await sendYoutubeMessage(target, content);
           } else {
             await chatService.sendMessage(target, content);
           }
@@ -1274,7 +1268,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     onMessage: (message) => {
       options.stateHub.pushChatMessage(message);
       if (!message.isHistory) {
-        chatLogService.recordMessage(message);
+        try { chatLogService.recordMessage(message); } catch { /* DB may not be open yet */ }
         welcomeService.handleMessage(message);
       }
     },
@@ -1703,6 +1697,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const streams = await checkYouTubeLive(String(handle ?? ''));
     return { videoIds: (streams ?? []).map((s) => s.videoId) };
   });
+  ipcMain.handle(IPC_CHANNELS.youtubeGetChatChannels, async () => {
+    return YTLiveClient.getChatChannels();
+  });
 
   // TikTok Handlers
   ipcMain.handle(IPC_CHANNELS.tiktokGetSettings, async () => { const s = await getTiktokSettingsStore(); return s ? s.load() : { username: '', autoConnect: false }; });
@@ -1927,12 +1924,11 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   async function sendPlatformMessage(platform: PlatformId, content: string): Promise<void> {
     if (platform === 'youtube' || platform === 'youtube-v') {
-      const scraper = getYoutubeScraperByPlatform(platform);
-      if (!scraper) {
+      if (!getYoutubeScraperByPlatform(platform)) {
         throw new Error('Log in to YouTube in Platforms before sending messages.');
       }
       try {
-        await scraper.sendMessage(content);
+        await sendYoutubeMessage(platform, content);
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
         if (/login|not available|not ready|not connected/i.test(message)) {
@@ -2038,6 +2034,13 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     return null;
   }
 
+  async function sendYoutubeMessage(platform: 'youtube' | 'youtube-v', content: string): Promise<void> {
+    const scraper = getYoutubeScraperByPlatform(platform);
+    if (!scraper) throw new Error(`${platform}: scraper not connected`);
+    const ytSettings = await loadYoutubeSettings();
+    await scraper.sendMessage(content, ytSettings.chatChannelPageId);
+  }
+
   function listCommandScheduleTasks(): ScheduledTask[] {
     const textTasks = textRepository.list()
       .filter((command) => command.enabled && command.schedule?.enabled)
@@ -2125,14 +2128,13 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         }
 
         if (target === 'youtube' || target === 'youtube-v') {
-          const scraper = getYoutubeScraperByPlatform(target);
-          if (!scraper) {
+          if (!getYoutubeScraperByPlatform(target)) {
             const reason = `${target}: disconnected`;
             skipped.push(reason);
             logService.warn('scheduled', 'Skipped', { platform: target, reason, content });
             continue;
           }
-          await scraper.sendMessage(content);
+          await sendYoutubeMessage(target, content);
           sent.push(target);
           logService.info('scheduled', 'Sent', { platform: target, content });
           continue;

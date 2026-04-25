@@ -521,9 +521,17 @@ export interface YouTubeChannelConfig {
   enabled: boolean;
 }
 
+export interface YouTubeChatChannel {
+  pageId: string;
+  name: string;
+  handle: string;
+  isSelected: boolean;
+}
+
 export interface YouTubeSettings {
   channels: YouTubeChannelConfig[];
   autoConnect: boolean;
+  chatChannelPageId?: string;
 }
 
 export type TikTokConnectionStatus = 'disconnected' | 'connecting' | 'captcha' | 'connected' | 'error';

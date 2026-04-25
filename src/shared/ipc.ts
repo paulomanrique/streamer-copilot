@@ -149,6 +149,7 @@ export const IPC_CHANNELS = {
   youtubeGetSettings: 'youtube:get-settings',
   youtubeSaveSettings: 'youtube:save-settings',
   youtubeCheckLive: 'youtube:check-live',
+  youtubeGetChatChannels: 'youtube:get-chat-channels',
   tiktokConnect: 'tiktok:connect',
   tiktokDisconnect: 'tiktok:disconnect',
   tiktokGetStatus: 'tiktok:get-status',
@@ -282,6 +283,7 @@ export interface CopilotApi {
   youtubeGetSettings: () => Promise<import('./types.js').YouTubeSettings>;
   youtubeSaveSettings: (settings: import('./types.js').YouTubeSettings) => Promise<import('./types.js').YouTubeSettings>;
   youtubeCheckLive: (handle: string) => Promise<{ videoIds: string[] }>;
+  youtubeGetChatChannels: () => Promise<import('./types.js').YouTubeChatChannel[]>;
   tiktokConnect: (input: { username: string }) => Promise<void>;
   tiktokDisconnect: () => Promise<void>;
   tiktokGetStatus: () => Promise<import('./types.js').TikTokConnectionStatus>;
