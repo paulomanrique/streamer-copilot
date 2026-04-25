@@ -25,14 +25,12 @@ export class YTLiveClient {
     const livechat = info.getLiveChat();
     this.livechat = livechat;
 
-    livechat.on('start', (initial: any) => {
-      this.options.onLog?.(`[YT] live chat ready — initial actions: ${initial?.actions?.length ?? 0}`);
+    livechat.on('start', () => {
+      // chat is ready, polling begins
     });
 
-    // chat-update fires once per action (individual nodes, not a batch container)
     livechat.on('chat-update', (action: any) => {
       if (this.stopped) return;
-      this.options.onLog?.(`[YT] action: ${action?.type ?? 'unknown'}`);
       try {
         if (action.type === 'AddChatItemAction' && action.item) {
           this.handleItem(action.item);
@@ -127,7 +125,6 @@ export class YTLiveClient {
 
   private handleItem(item: any): void {
     const type: string = item.type ?? '';
-    this.options.onLog?.(`[YT] item type: ${type}`);
 
     if (type === 'LiveChatTextMessage') {
       this.handleTextMessage(item);

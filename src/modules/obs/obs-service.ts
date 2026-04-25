@@ -38,7 +38,6 @@ export class ObsService {
     this.started = true;
 
     if (!this.options.settingsStore.hasUserSettings()) {
-      console.log('[obs] No saved settings — skipping auto-connect (configure via Settings)');
       return;
     }
 
