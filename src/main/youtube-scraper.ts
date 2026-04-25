@@ -52,6 +52,7 @@ export class YouTubeScraper {
             content: raw.content,
             badges: raw.badges as ChatBadge[],
             avatarUrl: raw.avatarUrl,
+            ...(raw.isInitial ? { isHistory: true } : {}),
           });
         } catch (e) {
           this.options.onLog?.(`Failed to parse scraped message: ${String(e)}`);
@@ -139,6 +140,7 @@ export class YouTubeScraper {
         
         const seenIds = new Set();
         let lastMutationTime = Date.now();
+        let initialSweepDone = false;
         
         function processElement(el) {
           if (!el || el.nodeType !== 1) return;
@@ -203,7 +205,7 @@ export class YouTubeScraper {
             return;
           }
 
-          console.log('COPILOT_CHAT:' + JSON.stringify({ author, content, badges, avatarUrl }));
+          console.log('COPILOT_CHAT:' + JSON.stringify({ author, content, badges, avatarUrl, isInitial: !initialSweepDone }));
         }
 
         function parseAmount(raw) {
@@ -260,9 +262,10 @@ export class YouTubeScraper {
         observer.observe(document.body, { childList: true, subtree: true });
         console.log('COPILOT_LOG: Body observer active');
 
-        // Initial sweep
+        // Initial sweep — mark these as history so commands don't fire
         document.querySelectorAll('yt-live-chat-text-message-renderer, yt-live-chat-paid-message-renderer, yt-live-chat-paid-sticker-renderer, yt-live-chat-membership-item-renderer')
                 .forEach(processElement);
+        initialSweepDone = true;
 
         // Auto-switch and maintain
         setInterval(switchToLiveChat, 5000);

@@ -39,7 +39,11 @@ export class CommandDispatcher {
 
     const permissionLevel = this.resolvePermission(message);
     for (const mod of this.modules) {
-      mod.handle(message, permissionLevel);
+      try {
+        mod.handle(message, permissionLevel);
+      } catch {
+        // Swallow per-module errors so one failing command never breaks the pipeline
+      }
     }
   }
 

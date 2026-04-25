@@ -121,8 +121,12 @@ export class ChatService {
   }
 
   private handleMessage(message: ChatMessage): void {
-    if (!message.isHistory) {
-      this.dispatcher.dispatch(message);
+    try {
+      if (!message.isHistory) {
+        this.dispatcher.dispatch(message);
+      }
+    } catch {
+      // Guard: dispatch errors must never prevent the message from reaching the UI
     }
 
     this.messages.push(message);
