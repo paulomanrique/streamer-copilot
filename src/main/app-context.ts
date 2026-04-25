@@ -1701,7 +1701,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
   ipcMain.handle(IPC_CHANNELS.youtubeCheckLive, async (_, handle: unknown) => {
     const streams = await checkYouTubeLive(String(handle ?? ''));
-    return { videoIds: streams.map((s) => s.videoId) };
+    return { videoIds: (streams ?? []).map((s) => s.videoId) };
   });
 
   // TikTok Handlers
