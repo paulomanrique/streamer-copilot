@@ -42,7 +42,7 @@ interface PendingAnimation {
 
 interface RaffleServiceOptions {
   repository: RaffleRepository;
-  getOverlayInfo: (raffleId: string) => RaffleOverlayInfo;
+  getOverlayInfo: () => RaffleOverlayInfo;
   onState: (payload: RaffleSnapshot | null) => void;
   onEntry: (payload: RaffleEntry) => void;
   onResult: (payload: RaffleRoundResult) => void;
@@ -105,9 +105,8 @@ export class RaffleService implements CommandModule {
     };
   }
 
-  getOverlayInfo(raffleId: string): RaffleOverlayInfo {
-    this.requireRaffle(raffleId);
-    return this.options.getOverlayInfo(raffleId);
+  getOverlayInfo(): RaffleOverlayInfo {
+    return this.options.getOverlayInfo();
   }
 
   async control(input: RaffleControlActionInput): Promise<RaffleSnapshot> {

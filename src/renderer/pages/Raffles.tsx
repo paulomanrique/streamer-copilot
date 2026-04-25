@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type {
   PlatformId,
@@ -148,10 +148,8 @@ async function getConfiguredPlatformOptions(): Promise<PlatformOption[]> {
 
 export function RafflesPage() {
   const titleInputRef = useRef<HTMLInputElement | null>(null);
-  const [rows, setRows] = useState<Raffle[]>([]);
-  const [activeSnapshot, setActiveSnapshot] = useState<RaffleSnapshot | null>(null);
-  const [selectedRaffleId, setSelectedRaffleId] = useState('');
-  const [selectedSnapshot, setSelectedSnapshot] = useState<RaffleSnapshot | null>(null);
+  const [raffle, setRaffle] = useState<Raffle | null>(null);
+  const [snapshot, setSnapshot] = useState<RaffleSnapshot | null>(null);
   const [overlayInfo, setOverlayInfo] = useState<RaffleOverlayInfo | null>(null);
   const [platformOptions, setPlatformOptions] = useState<PlatformOption[]>([]);
   const [form, setForm] = useState<RaffleFormState>(createFormState(null, []));
@@ -163,30 +161,20 @@ export function RafflesPage() {
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const [availableSounds, setAvailableSounds] = useState<Record<'spinning' | 'eliminated' | 'winner', string[]>>({ spinning: [], eliminated: [], winner: [] });
 
-  const selectedRaffle = useMemo(
-    () => rows.find((raffle) => raffle.id === selectedRaffleId) ?? activeSnapshot?.raffle ?? null,
-    [rows, selectedRaffleId, activeSnapshot],
-  );
-
-  const visibleSnapshot = selectedSnapshot ?? activeSnapshot;
-  const topTwoEntries = visibleSnapshot
-    ? visibleSnapshot.entries.filter((entry) => visibleSnapshot.raffle.top2EntryIds.includes(entry.id))
+  const topTwoEntries = snapshot
+    ? snapshot.entries.filter((entry) => snapshot.raffle.top2EntryIds.includes(entry.id))
     : [];
-  const currentStatus = visibleSnapshot?.raffle.status ?? selectedRaffle?.status ?? 'draft';
+  const currentStatus = snapshot?.raffle.status ?? raffle?.status ?? 'draft';
 
   useEffect(() => {
     void load();
 
     const disconnectState = window.copilot.onRaffleState((payload) => {
-      setActiveSnapshot(payload);
-      if (payload) {
-        setSelectedRaffleId((current) => current || payload.raffle.id);
-        setSelectedSnapshot((current) => (current?.raffle.id === payload.raffle.id ? payload : current));
-      }
-      void window.copilot.listRaffles().then(setRows).catch(() => {});
+      setSnapshot(payload);
+      void window.copilot.listRaffles().then((rows) => setRaffle(rows[0] ?? null)).catch(() => {});
     });
     const disconnectEntry = window.copilot.onRaffleEntry((entry) => {
-      setSelectedSnapshot((current) => {
+      setSnapshot((current) => {
         if (!current || current.raffle.id !== entry.raffleId) return current;
         const nextEntries = [...current.entries, entry];
         return {
@@ -197,7 +185,7 @@ export function RafflesPage() {
       });
     });
     const disconnectResult = window.copilot.onRaffleResult((result) => {
-      setSelectedSnapshot((current) => {
+      setSnapshot((current) => {
         if (!current || current.raffle.id !== result.raffleId) return current;
         return { ...current, history: [...current.history, result] };
       });
@@ -211,19 +199,14 @@ export function RafflesPage() {
   }, []);
 
   useEffect(() => {
-    if (!selectedRaffleId) return;
-    void refreshSelected(selectedRaffleId);
-  }, [selectedRaffleId]);
-
-  useEffect(() => {
-    if (!selectedRaffle?.id) {
+    if (!raffle) {
       setOverlayInfo(null);
       return;
     }
-    void window.copilot.getRaffleOverlayInfo(selectedRaffle.id)
+    void window.copilot.getRaffleOverlayInfo()
       .then(setOverlayInfo)
       .catch(() => setOverlayInfo(null));
-  }, [selectedRaffle?.id]);
+  }, [raffle?.id]);
 
   useEffect(() => {
     if (!isModalOpen) return;
@@ -233,33 +216,19 @@ export function RafflesPage() {
   async function load(): Promise<void> {
     try {
       setError(null);
-      const [nextRows, active, nextPlatformOptions, sounds] = await Promise.all([
+      const [rows, active, nextPlatformOptions, sounds] = await Promise.all([
         window.copilot.listRaffles(),
         window.copilot.getActiveRaffle(),
         getConfiguredPlatformOptions(),
         window.copilot.listRaffleSounds(),
       ]);
       setAvailableSounds(sounds);
-
-      setRows(nextRows);
+      setRaffle(rows[0] ?? null);
       setPlatformOptions(nextPlatformOptions);
       setForm((current) => current.id ? current : createFormState(null, nextPlatformOptions));
-
-      const nextSelectedId = active?.id ?? nextRows[0]?.id ?? '';
-      setSelectedRaffleId(nextSelectedId);
-      if (nextSelectedId) await refreshSelected(nextSelectedId);
-      setActiveSnapshot(active ? await window.copilot.getRaffleSnapshot(active.id) : null);
+      if (active) setSnapshot(await window.copilot.getRaffleSnapshot(active.id));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Failed to load raffles');
-    }
-  }
-
-  async function refreshSelected(raffleId: string): Promise<void> {
-    try {
-      setSelectedSnapshot(await window.copilot.getRaffleSnapshot(raffleId));
-    } catch (cause) {
-      setSelectedSnapshot(null);
-      setError(cause instanceof Error ? cause.message : 'Failed to load raffle snapshot');
     }
   }
 
@@ -273,8 +242,8 @@ export function RafflesPage() {
     setIsModalOpen(true);
   }
 
-  function openEdit(raffle: Raffle): void {
-    setForm(createFormState(raffle, platformOptions));
+  function openEdit(r: Raffle): void {
+    setForm(createFormState(r, platformOptions));
     setModalError(null);
     setIsModalOpen(true);
   }
@@ -334,16 +303,11 @@ export function RafflesPage() {
         enabled: form.enabled,
       };
 
-      const nextRows = form.id
+      const rows = form.id
         ? await window.copilot.updateRaffle({ ...payload, id: form.id } satisfies RaffleUpdateInput)
         : await window.copilot.createRaffle(payload);
 
-      setRows(nextRows);
-      const targetId = form.id ?? nextRows[0]?.id ?? '';
-      if (targetId) {
-        setSelectedRaffleId(targetId);
-        await refreshSelected(targetId);
-      }
+      setRaffle(rows[0] ?? null);
       closeModal();
     } catch (cause) {
       setModalError(cause instanceof Error ? cause.message : 'Failed to save raffle');
@@ -352,29 +316,16 @@ export function RafflesPage() {
     }
   }
 
-  async function _deleteRaffle(id: string): Promise<void> {
-    try {
-      const nextRows = await window.copilot.deleteRaffle({ id });
-      setRows(nextRows);
-      const nextSelectedId = nextRows[0]?.id ?? '';
-      setSelectedRaffleId(nextSelectedId);
-      if (nextSelectedId) await refreshSelected(nextSelectedId);
-      else setSelectedSnapshot(null);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Failed to delete raffle');
-    }
-  }
-
   async function runAction(action: RaffleControlAction): Promise<void> {
-    if (!selectedRaffle) return;
-    if (!canRunAction(selectedRaffle.status, action)) return;
+    if (!raffle) return;
+    if (!canRunAction(raffle.status, action)) return;
     setIsBusy(true);
     setError(null);
     try {
-      const snapshot = await window.copilot.controlRaffle({ raffleId: selectedRaffle.id, action });
-      setSelectedSnapshot(snapshot);
-      setActiveSnapshot(['draft', 'completed', 'cancelled'].includes(snapshot.raffle.status) ? null : snapshot);
-      setRows(await window.copilot.listRaffles());
+      const snap = await window.copilot.controlRaffle({ raffleId: raffle.id, action });
+      setSnapshot(snap);
+      const rows = await window.copilot.listRaffles();
+      setRaffle(rows[0] ?? null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Failed to run raffle action');
     } finally {
@@ -400,7 +351,7 @@ export function RafflesPage() {
           <h2 className="text-lg font-semibold">Raffle</h2>
           <button
             type="button"
-            onClick={rows[0] ? () => openEdit(rows[0]) : openCreate}
+            onClick={raffle ? () => openEdit(raffle) : openCreate}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-sm font-medium transition-colors"
           >
             Edit Settings
@@ -409,19 +360,19 @@ export function RafflesPage() {
 
         {error ? <p className="mb-4 text-sm text-red-400">{error}</p> : null}
 
-        {rows[0] ? (
+        {raffle ? (
           <div className="bg-gray-800/40 rounded-xl border border-gray-700 p-4 flex items-center gap-4 mb-6">
             <div className="flex-1 min-w-0">
-              <span className="text-gray-100 font-medium">{rows[0].title}</span>
-              <span className="ml-3 font-mono text-violet-300 text-sm">{rows[0].entryCommand}</span>
-              <span className="ml-3 text-gray-400 text-sm">{rows[0].mode === 'single-winner' ? 'Single winner' : 'Survivor final'}</span>
+              <span className="text-gray-100 font-medium">{raffle.title}</span>
+              <span className="ml-3 font-mono text-violet-300 text-sm">{raffle.entryCommand}</span>
+              <span className="ml-3 text-gray-400 text-sm">{raffle.mode === 'single-winner' ? 'Single winner' : 'Survivor final'}</span>
               <div className="mt-1 flex gap-1 flex-wrap">
-                {rows[0].acceptedPlatforms.map((platform) => (
+                {raffle.acceptedPlatforms.map((platform) => (
                   <span key={platform} className="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{platform}</span>
                 ))}
               </div>
             </div>
-            <span className="text-sm text-gray-400">{statusLabel(rows[0].status)}</span>
+            <span className="text-sm text-gray-400">{statusLabel(raffle.status)}</span>
           </div>
         ) : (
           <div className="bg-gray-800/40 rounded-xl border border-gray-700 p-4 mb-6">
@@ -429,14 +380,14 @@ export function RafflesPage() {
           </div>
         )}
 
-        {visibleSnapshot ? (
+        {snapshot ? (
           <div className="mt-6 space-y-6">
             <div className="grid grid-cols-4 gap-3">
               {[
-                { label: 'Status', value: statusLabel(visibleSnapshot.raffle.status) },
-                { label: 'Entries', value: String(visibleSnapshot.raffle.entriesCount) },
-                { label: 'Active', value: String(visibleSnapshot.raffle.activeEntriesCount) },
-                { label: 'Round', value: String(visibleSnapshot.raffle.currentRound) },
+                { label: 'Status', value: statusLabel(snapshot.raffle.status) },
+                { label: 'Entries', value: String(snapshot.raffle.entriesCount) },
+                { label: 'Active', value: String(snapshot.raffle.activeEntriesCount) },
+                { label: 'Round', value: String(snapshot.raffle.currentRound) },
               ].map((item) => (
                 <div key={item.label} className="bg-gray-800/40 rounded-xl border border-gray-700 p-4">
                   <p className="text-xs uppercase tracking-wider text-gray-500 mb-2">{item.label}</p>
@@ -448,12 +399,12 @@ export function RafflesPage() {
             <div className="bg-gray-800/40 rounded-xl border border-gray-700 p-4">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h3 className="text-base font-semibold text-gray-100">{visibleSnapshot.raffle.title}</h3>
+                  <h3 className="text-base font-semibold text-gray-100">{snapshot.raffle.title}</h3>
                   <p className="text-sm text-gray-400 mt-1">
-                    {visibleSnapshot.raffle.entryCommand} · {visibleSnapshot.raffle.mode === 'single-winner' ? 'Single winner' : 'Survivor final'}
+                    {snapshot.raffle.entryCommand} · {snapshot.raffle.mode === 'single-winner' ? 'Single winner' : 'Survivor final'}
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    Deadline {formatDateTime(visibleSnapshot.raffle.entryDeadlineAt)} · Staff trigger {visibleSnapshot.raffle.staffTriggerCommand}
+                    Deadline {formatDateTime(snapshot.raffle.entryDeadlineAt)} · Staff trigger {snapshot.raffle.staffTriggerCommand}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -466,8 +417,8 @@ export function RafflesPage() {
                 </div>
               </div>
 
-              {visibleSnapshot.raffle.status === 'completed' && visibleSnapshot.raffle.winnerEntryId ? (() => {
-                const winner = visibleSnapshot.entries.find((e) => e.id === visibleSnapshot.raffle.winnerEntryId);
+              {snapshot.raffle.status === 'completed' && snapshot.raffle.winnerEntryId ? (() => {
+                const winner = snapshot.entries.find((e) => e.id === snapshot.raffle.winnerEntryId);
                 return winner ? (
                   <div className="mt-4 flex items-center gap-3 px-4 py-3 rounded-lg bg-yellow-500/10 border border-yellow-400/30">
                     <span className="text-yellow-400 font-bold text-sm">Winner</span>
@@ -502,7 +453,7 @@ export function RafflesPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {visibleSnapshot.entries.map((entry: RaffleEntry) => (
+                      {snapshot.entries.map((entry: RaffleEntry) => (
                         <tr key={entry.id} className="border-b border-gray-800 hover:bg-gray-800/50">
                           <td className="px-4 py-3 text-gray-100">{entry.displayName}</td>
                           <td className="px-4 py-3 text-gray-400">{entry.platform}</td>
@@ -512,13 +463,13 @@ export function RafflesPage() {
                               ? 'Winner'
                               : entry.isEliminated
                                 ? `Eliminated #${entry.eliminationOrder ?? '—'}`
-                                : visibleSnapshot.raffle.status === 'completed' && visibleSnapshot.raffle.mode === 'survivor-final'
+                                : snapshot.raffle.status === 'completed' && snapshot.raffle.mode === 'survivor-final'
                                   ? 'Runner-up'
                                   : 'Active'}
                           </td>
                         </tr>
                       ))}
-                      {visibleSnapshot.entries.length === 0 ? (
+                      {snapshot.entries.length === 0 ? (
                         <tr>
                           <td className="px-4 py-4 text-sm text-gray-500" colSpan={4}>No entries yet.</td>
                         </tr>
@@ -540,7 +491,7 @@ export function RafflesPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {visibleSnapshot.history.map((item: RaffleRoundResult) => (
+                      {snapshot.history.map((item: RaffleRoundResult) => (
                         <tr key={item.id} className="border-b border-gray-800 hover:bg-gray-800/50">
                           <td className="px-4 py-3 text-gray-100">#{item.roundNumber}</td>
                           <td className="px-4 py-3 text-gray-400">{item.actionType}</td>
@@ -549,7 +500,7 @@ export function RafflesPage() {
                           <td className="px-4 py-3 text-gray-400">{item.participantCountAfter}</td>
                         </tr>
                       ))}
-                      {visibleSnapshot.history.length === 0 ? (
+                      {snapshot.history.length === 0 ? (
                         <tr>
                           <td className="px-4 py-4 text-sm text-gray-500" colSpan={5}>No rounds executed yet.</td>
                         </tr>

@@ -1104,9 +1104,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   };
 
   const raffleOverlayServer = new RaffleOverlayServer({
-    getOverlayState: (raffleId) => {
+    getOverlayState: () => {
       try {
-        return raffleService.getSnapshot(raffleId).overlay;
+        const active = raffleService.getActive();
+        return active ? raffleService.getSnapshot(active.id).overlay : null;
       } catch {
         return null;
       }
@@ -1116,7 +1117,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   raffleService = new RaffleService({
     repository: raffleRepository,
-    getOverlayInfo: (raffleId) => raffleOverlayServer.getOverlayInfo(raffleId),
+    getOverlayInfo: () => raffleOverlayServer.getOverlayInfo(),
     onState: (payload) => options.stateHub.pushRaffleState(payload),
     onEntry: (payload) => options.stateHub.pushRaffleEntry(payload),
     onResult: (payload) => options.stateHub.pushRaffleResult(payload),
@@ -1341,7 +1342,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.rafflesGetActive, async () => raffleService.getActive());
   ipcMain.handle(IPC_CHANNELS.rafflesGetSnapshot, async (_, raw) => raffleService.getSnapshot(String(raw ?? '')));
   ipcMain.handle(IPC_CHANNELS.rafflesControl, async (_, raw) => raffleService.control(raffleControlActionInputSchema.parse(raw)));
-  ipcMain.handle(IPC_CHANNELS.rafflesOverlayInfo, async (_, raw) => raffleService.getOverlayInfo(String(raw ?? '')));
+  ipcMain.handle(IPC_CHANNELS.rafflesOverlayInfo, async () => raffleService.getOverlayInfo());
   ipcMain.handle(IPC_CHANNELS.rafflesSoundsList, async () => listBundledSounds());
   ipcMain.handle(IPC_CHANNELS.rafflesSoundsPreview, async (_, raw) => {
     const { event, filename } = raw as { event: 'spinning' | 'eliminated' | 'winner'; filename: string };

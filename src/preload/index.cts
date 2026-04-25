@@ -219,7 +219,7 @@ const copilotApi: CopilotApi = {
   getActiveRaffle: () => ipcRenderer.invoke(IPC_CHANNELS.rafflesGetActive) as Promise<Raffle | null>,
   getRaffleSnapshot: (raffleId: string) => ipcRenderer.invoke(IPC_CHANNELS.rafflesGetSnapshot, raffleId) as Promise<RaffleSnapshot>,
   controlRaffle: (input: RaffleControlActionInput) => ipcRenderer.invoke(IPC_CHANNELS.rafflesControl, input) as Promise<RaffleSnapshot>,
-  getRaffleOverlayInfo: (raffleId: string) => ipcRenderer.invoke(IPC_CHANNELS.rafflesOverlayInfo, raffleId) as Promise<RaffleOverlayInfo>,
+  getRaffleOverlayInfo: () => ipcRenderer.invoke(IPC_CHANNELS.rafflesOverlayInfo) as Promise<RaffleOverlayInfo>,
   onRaffleState: (listener: (payload: RaffleSnapshot | null) => void) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, payload: RaffleSnapshot | null) => listener(payload);
     ipcRenderer.on(IPC_CHANNELS.rafflesState, wrappedListener);

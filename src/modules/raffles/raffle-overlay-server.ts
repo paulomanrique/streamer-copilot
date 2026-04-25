@@ -6,7 +6,7 @@ import type { RecentChatSnapshot } from '../../shared/ipc.js';
 import type { ChatOverlayInfo, RaffleOverlayInfo, RaffleOverlayState } from '../../shared/types.js';
 
 interface RaffleOverlayServerOptions {
-  getOverlayState: (raffleId: string) => RaffleOverlayState | null;
+  getOverlayState: () => RaffleOverlayState | null;
   getChatSnapshot: () => RecentChatSnapshot;
 }
 
@@ -56,12 +56,11 @@ export class RaffleOverlayServer {
         return;
       }
 
-      if (path.startsWith('/raffles/overlay/') && path.endsWith('/state')) {
-        const raffleId = decodeURIComponent(path.replace('/raffles/overlay/', '').replace('/state', '').replace(/\/$/, ''));
-        const state = this.options.getOverlayState(raffleId);
+      if (path === '/raffles/overlay/state') {
+        const state = this.options.getOverlayState();
         if (!state) {
           res.writeHead(404, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Raffle not found' }));
+          res.end(JSON.stringify({ error: 'No active raffle' }));
           return;
         }
         res.writeHead(200, {
@@ -73,29 +72,21 @@ export class RaffleOverlayServer {
         return;
       }
 
-      if (path.startsWith('/raffles/overlay/') && path.endsWith('/overlay.css')) {
+      if (path === '/raffles/overlay/overlay.css') {
         res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'no-store' });
         res.end(overlayCss);
         return;
       }
 
-      if (path.startsWith('/raffles/overlay/') && path.endsWith('/overlay.js')) {
+      if (path === '/raffles/overlay/overlay.js') {
         res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
         res.end(overlayJs);
         return;
       }
 
-      if (path.startsWith('/raffles/overlay/')) {
-        const raffleId = decodeURIComponent(path.replace('/raffles/overlay/', '').replace(/\/$/, ''));
-        const state = this.options.getOverlayState(raffleId);
-        if (!state) {
-          res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-          res.end('Raffle not found');
-          return;
-        }
-
+      if (path === '/raffles/overlay' || path === '/raffles/overlay/') {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-        res.end(this.renderHtml(raffleId));
+        res.end(this.renderHtml());
         return;
       }
 
@@ -104,15 +95,7 @@ export class RaffleOverlayServer {
     });
 
     this.startPromise = new Promise<void>((resolve, reject) => {
-      server.once('error', (err: NodeJS.ErrnoException) => {
-        if (err.code === 'EADDRINUSE') {
-          server.removeAllListeners('error');
-          server.once('error', reject);
-          server.listen(0, '127.0.0.1', () => resolve());
-        } else {
-          reject(err);
-        }
-      });
+      server.once('error', reject);
       server.listen(OVERLAY_PORT, '127.0.0.1', () => resolve());
     });
 
@@ -135,16 +118,14 @@ export class RaffleOverlayServer {
     });
   }
 
-  getOverlayInfo(raffleId: string): RaffleOverlayInfo {
+  getOverlayInfo(): RaffleOverlayInfo {
     if (!this.server || this.port === 0) {
       throw new Error('Raffle overlay server is not running');
     }
 
-    const encoded = encodeURIComponent(raffleId);
     return {
-      raffleId,
-      overlayUrl: `http://127.0.0.1:${this.port}/raffles/overlay/${encoded}`,
-      stateUrl: `http://127.0.0.1:${this.port}/raffles/overlay/${encoded}/state`,
+      overlayUrl: `http://127.0.0.1:${this.port}/raffles/overlay`,
+      stateUrl: `http://127.0.0.1:${this.port}/raffles/overlay/state`,
     };
   }
 
@@ -177,7 +158,7 @@ export class RaffleOverlayServer {
 </html>`;
   }
 
-  private renderHtml(raffleId: string): string {
+  private renderHtml(): string {
     return `<!DOCTYPE html>
 <html lang="pt-BR">
   <head>
@@ -187,9 +168,9 @@ export class RaffleOverlayServer {
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/raffles/overlay/${encodeURIComponent(raffleId)}/overlay.css" />
+    <link rel="stylesheet" href="/raffles/overlay/overlay.css" />
   </head>
-  <body data-raffle-id="${escapeHtml(raffleId)}">
+  <body>
     <div class="overlay">
       <header class="header">
         <div class="header-left">
@@ -228,7 +209,7 @@ export class RaffleOverlayServer {
         </div>
       </main>
     </div>
-    <script src="/raffles/overlay/${encodeURIComponent(raffleId)}/overlay.js"></script>
+    <script src="/raffles/overlay/overlay.js"></script>
   </body>
 </html>`;
   }
@@ -1099,8 +1080,6 @@ var PALETTE = [
   '#90be6d', '#f72585', '#43aa8b', '#3a86ff'
 ];
 
-var body = document.body;
-var raffleId = body.dataset.raffleId;
 var titleEl = document.getElementById('raffle-title');
 var statusEl = document.getElementById('raffle-status');
 var wheelEl = document.getElementById('wheel');
@@ -1339,7 +1318,7 @@ function applyState(state) {
 }
 
 async function fetchState() {
-  var response = await fetch('/raffles/overlay/' + encodeURIComponent(raffleId) + '/state', { cache: 'no-store' });
+  var response = await fetch('/raffles/overlay/state', { cache: 'no-store' });
   if (!response.ok) throw new Error('Erro ao buscar estado (' + response.status + ')');
   return response.json();
 }

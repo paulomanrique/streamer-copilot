@@ -222,7 +222,7 @@ export interface CopilotApi {
   getActiveRaffle: () => Promise<Raffle | null>;
   getRaffleSnapshot: (raffleId: string) => Promise<RaffleSnapshot>;
   controlRaffle: (input: RaffleControlActionInput) => Promise<RaffleSnapshot>;
-  getRaffleOverlayInfo: (raffleId: string) => Promise<RaffleOverlayInfo>;
+  getRaffleOverlayInfo: () => Promise<RaffleOverlayInfo>;
   onRaffleState: (listener: (payload: RaffleSnapshot | null) => void) => () => void;
   onRaffleEntry: (listener: (payload: RaffleEntry) => void) => () => void;
   onRaffleResult: (listener: (payload: RaffleRoundResult) => void) => () => void;

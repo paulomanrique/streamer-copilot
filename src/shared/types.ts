@@ -489,7 +489,6 @@ export interface RaffleControlActionInput {
 }
 
 export interface RaffleOverlayInfo {
-  raffleId: string;
   overlayUrl: string;
   stateUrl: string;
 }
