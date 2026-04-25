@@ -153,6 +153,43 @@ export function extractYtLiveVideoIds(html: string): LiveStreamInfo[] {
   return findLiveVideoIds(data);
 }
 
+/** Returns a diagnostic string listing every videoId and its live-related fields. */
+export function diagnoseYtVideoRenderers(html: string): string {
+  const data = extractYtInitialData(html);
+  if (!data) return 'no ytInitialData';
+  const entries: string[] = [];
+  collectVideoInfo(data, entries);
+  return entries.slice(0, 10).join(' | ') || 'no video renderers found';
+}
+
+function collectVideoInfo(obj: unknown, out: string[], depth = 0): void {
+  if (depth > 40 || !obj || typeof obj !== 'object') return;
+  if (Array.isArray(obj)) { for (const item of obj) collectVideoInfo(item, out, depth + 1); return; }
+  const r = obj as Record<string, unknown>;
+  if (typeof r.videoId === 'string') {
+    const overlayStyles = Array.isArray(r.thumbnailOverlays)
+      ? r.thumbnailOverlays.map((o: unknown) => {
+          if (!o || typeof o !== 'object') return '';
+          const tots = (o as Record<string, unknown>).thumbnailOverlayTimeStatusRenderer as Record<string, unknown> | undefined;
+          return tots?.style ?? '';
+        }).filter(Boolean).join(',')
+      : '';
+    const badgeStyles = Array.isArray(r.badges)
+      ? r.badges.map((b: unknown) => {
+          if (!b || typeof b !== 'object') return '';
+          const meta = (b as Record<string, unknown>).metadataBadgeRenderer as Record<string, unknown> | undefined;
+          return `${meta?.style ?? ''}/${meta?.label ?? ''}`;
+        }).filter(Boolean).join(',')
+      : '';
+    const vc = getYtText(r.viewCountText);
+    const svc = getYtText(r.shortViewCountText);
+    const isLive = r.isLive;
+    const isLiveContent = r.isLiveContent;
+    out.push(`[${r.videoId} overlays=${overlayStyles || 'none'} badges=${badgeStyles || 'none'} vc="${vc}" svc="${svc}" isLive=${isLive} isLiveContent=${isLiveContent}]`);
+  }
+  for (const v of Object.values(r)) collectVideoInfo(v, out, depth + 1);
+}
+
 /**
  * Normalize a Kick channel input (slug, URL, @handle) to a lowercase slug.
  */

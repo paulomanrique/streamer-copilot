@@ -58,6 +58,7 @@ import {
   getLabelFromTitle,
   extractYtLiveVideoIds,
   extractYtSubscriberCount,
+  diagnoseYtVideoRenderers,
   normalizeKickChannelInput,
   escapeHtml,
 } from './youtube-helpers.js';
@@ -881,6 +882,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         streams = extractYtLiveVideoIds(html);
         subscriberCount = extractYtSubscriberCount(html);
         logService.info('youtube', `checkLive ${normalizedHandle}: found ${streams.length} live stream(s): ${streams.map(s => s.videoId).join(', ')}`);
+        if (streams.length === 0) logService.info('youtube', `checkLive diagnosis: ${diagnoseYtVideoRenderers(html)}`);
       }
 
       // Fallback: /@handle/live redirects to the active live stream video page
