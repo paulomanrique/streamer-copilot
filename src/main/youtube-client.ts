@@ -98,11 +98,13 @@ export class YTLiveClient {
     return items
       .filter((item: any) => item.has_channel || item.channel_handle?.text)
       .map((item: any) => {
+        const endpointName: string = item.endpoint?.name ?? '';
         const payload = item.endpoint?.payload ?? {};
         // InnerTube selectActiveIdentityEndpoint uses `obou` for the page ID
         const pageId: string = payload.obou ?? payload.pageId ?? payload.delegatedSessionId ?? '';
         const name: string = item.account_name?.text ?? item.account_name?.toString?.() ?? '';
         const handle: string = item.channel_handle?.text ?? item.channel_handle?.toString?.() ?? '';
+        console.log('[YT getChatChannels] item:', { name, handle, endpointName, payloadKeys: Object.keys(payload), pageId });
         return { pageId, name, handle, isSelected: !!item.is_selected };
       })
       .filter((ch) => ch.name || ch.handle);

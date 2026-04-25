@@ -223,9 +223,20 @@ export function PlatformsSettingsPage() {
     } finally { setIsSavingYtSettings(false); }
   };
 
+  const normalizeYtHandle = (raw: string): string => {
+    try {
+      const url = new URL(raw);
+      const parts = url.pathname.replace(/^\//, '').split('/');
+      return parts[0] ?? raw;
+    } catch {
+      return raw.startsWith('@') ? raw : `@${raw}`;
+    }
+  };
+
   const addYouTubeChannel = async () => {
-    const handle = newChannelHandle.trim();
-    if (!handle || isSavingYtSettings) return;
+    const raw = newChannelHandle.trim();
+    if (!raw || isSavingYtSettings) return;
+    const handle = normalizeYtHandle(raw);
     await saveYtSettings({ ...ytSettings, channels: [...ytSettings.channels, { id: crypto.randomUUID(), handle, enabled: true }] });
     setNewChannelHandle('');
   };
@@ -446,32 +457,55 @@ export function PlatformsSettingsPage() {
               status={<StatusPill {...ytStatus()} />}
             />
 
+            {/* Active live streams */}
             {ytStreams.length > 0 && (
-              <div className="px-5 pb-4 border-t border-gray-700/40 pt-3">
-                <div className="space-y-2 mb-3">
-                  {ytStreams.map((stream) => (
-                    <div key={stream.videoId} className="flex items-center justify-between bg-red-500/8 border border-red-500/20 rounded-lg px-3 py-2.5">
-                      <div className="flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse shrink-0" />
-                        <span className="text-xs text-gray-200 font-medium">{stream.channelHandle ?? stream.videoId}</span>
-                        {stream.viewerCount !== null && (
-                          <span className="text-[10px] text-gray-500">{stream.viewerCount.toLocaleString()} viewers</span>
-                        )}
-                      </div>
-                      <a href={stream.liveUrl} target="_blank" rel="noreferrer" className="text-[10px] text-red-400/60 hover:text-red-400">
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                      </a>
-                    </div>
-                  ))}
+              <div className="mx-5 mb-4 rounded-lg bg-red-500/8 border border-red-500/20 overflow-hidden">
+                <div className="px-3 py-2 border-b border-red-500/15 flex items-center justify-between">
+                  <span className="text-[10px] font-semibold text-red-400 uppercase tracking-wider">Live now</span>
+                  <button
+                    type="button"
+                    onClick={() => void window.copilot.youtubeDisconnect()}
+                    className="text-[10px] text-red-400/70 hover:text-red-400 transition-colors"
+                  >
+                    Disconnect all
+                  </button>
                 </div>
-                <button type="button" onClick={() => void window.copilot.youtubeDisconnect()} className="text-xs px-3 py-1.5 rounded-lg bg-red-900/30 text-red-400 hover:bg-red-900/50 transition-colors border border-red-900/40">
-                  Stop connections
-                </button>
+                {ytStreams.map((stream) => (
+                  <div key={stream.videoId} className="flex items-center justify-between px-3 py-2 border-b border-red-500/10 last:border-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse shrink-0" />
+                      <span className="text-xs text-gray-200 font-medium truncate">{stream.channelHandle ?? stream.videoId}</span>
+                      {stream.viewerCount !== null && (
+                        <span className="text-[10px] text-gray-500 shrink-0">{stream.viewerCount.toLocaleString()} viewers</span>
+                      )}
+                    </div>
+                    <a href={stream.liveUrl} target="_blank" rel="noreferrer" className="text-red-400/50 hover:text-red-400 ml-2 shrink-0">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                    </a>
+                  </div>
+                ))}
               </div>
             )}
 
-            <div className="px-5 pb-4 border-t border-gray-700/40 pt-3 space-y-3">
-              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Monitored channels</p>
+            {/* Channel monitoring */}
+            <div className="px-5 pb-4 border-t border-gray-700/40 pt-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-gray-200">Channel monitoring</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5">Channels watched for live detection</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[10px] text-gray-500">Auto-connect</span>
+                  <button
+                    type="button"
+                    disabled={isSavingYtSettings}
+                    onClick={() => void saveYtSettings({ ...ytSettings, autoConnect: !ytSettings.autoConnect })}
+                    className={`w-8 h-4 rounded-full transition-colors relative shrink-0 overflow-hidden ${ytSettings.autoConnect ? 'bg-red-600' : 'bg-gray-600'} disabled:opacity-50`}
+                  >
+                    <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${ytSettings.autoConnect ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                  </button>
+                </div>
+              </div>
 
               <div className="flex gap-2">
                 <input
@@ -496,7 +530,9 @@ export function PlatformsSettingsPage() {
               {ytSettings.channels.length > 0 ? (
                 <div className="space-y-1.5">
                   {ytSettings.channels.map(c => {
-                    const isActive = ytStreams.some(s => s.channelHandle === c.handle || s.channelHandle === (c.handle.startsWith('@') ? c.handle : `@${c.handle}`));
+                    const normalHandle = c.handle.startsWith('@') ? c.handle : `@${c.handle}`;
+                    const isActive = ytStreams.some(s => s.channelHandle === c.handle || s.channelHandle === normalHandle);
+                    const result = liveCheckResult?.handle === c.handle ? liveCheckResult : null;
                     return (
                       <div key={c.id} className="flex items-center justify-between px-3 py-2 bg-gray-900/60 rounded-lg border border-gray-700/40">
                         <div className="flex items-center gap-2.5 min-w-0">
@@ -509,7 +545,12 @@ export function PlatformsSettingsPage() {
                             <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${c.enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
                           </button>
                           <span className={`text-xs font-mono truncate ${c.enabled ? 'text-gray-200' : 'text-gray-500'}`}>{c.handle}</span>
-                          {isActive && <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />}
+                          {isActive && <span className="text-[9px] font-semibold text-red-400 bg-red-500/15 px-1.5 py-0.5 rounded shrink-0">LIVE</span>}
+                          {result && !isActive && (
+                            <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded shrink-0 ${result.videoIds.length > 0 ? 'text-red-400 bg-red-500/15' : 'text-gray-500 bg-gray-700/60'}`}>
+                              {result.videoIds.length > 0 ? 'LIVE' : 'offline'}
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-1 shrink-0 ml-2">
                           <button
@@ -518,18 +559,13 @@ export function PlatformsSettingsPage() {
                             onClick={() => void checkChannelLive(c.handle)}
                             className="text-[10px] px-2 py-1 rounded bg-gray-700/80 text-gray-400 hover:bg-gray-700 hover:text-gray-200 disabled:opacity-40 flex items-center gap-1 transition-colors"
                           >
-                            {checkingHandle === c.handle ? <Spinner /> : (
-                              <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.069A1 1 0 0121 8.882V15.12a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                              </svg>
-                            )}
-                            Check
+                            {checkingHandle === c.handle ? <Spinner /> : 'Check'}
                           </button>
                           <button
                             type="button"
                             disabled={isSavingYtSettings}
                             onClick={() => void removeYouTubeChannel(c.id)}
-                            className="p-1 text-gray-600 hover:text-red-400 disabled:opacity-40 transition-colors"
+                            className="p-1.5 text-gray-600 hover:text-red-400 disabled:opacity-40 transition-colors"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
                           </button>
@@ -539,87 +575,79 @@ export function PlatformsSettingsPage() {
                   })}
                 </div>
               ) : (
-                <p className="text-xs text-gray-600 italic text-center py-2">Add a channel to start monitoring lives automatically.</p>
+                <p className="text-xs text-gray-600 italic text-center py-2">No channels added yet. Paste a @handle or channel URL above.</p>
               )}
+            </div>
 
-              <div className="flex items-center justify-between pt-1">
-                <label htmlFor="yt-auto-connect" className="text-xs text-gray-400 cursor-pointer select-none">Auto-connect when live detected</label>
-                <button
-                  id="yt-auto-connect"
-                  type="button"
-                  disabled={isSavingYtSettings}
-                  onClick={() => void saveYtSettings({ ...ytSettings, autoConnect: !ytSettings.autoConnect })}
-                  className={`w-8 h-4 rounded-full transition-colors relative shrink-0 overflow-hidden ${ytSettings.autoConnect ? 'bg-red-600' : 'bg-gray-600'} disabled:opacity-50`}
-                >
-                  <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${ytSettings.autoConnect ? 'translate-x-4' : 'translate-x-0.5'}`} />
-                </button>
-              </div>
-
-              <div className="pt-1 border-t border-gray-700/30 space-y-3">
+            {/* Account / login */}
+            <div className="mx-5 mb-5 rounded-lg border border-gray-700/50 bg-gray-900/40 overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-700/40 flex items-center justify-between">
+                <p className="text-xs font-semibold text-gray-300">YouTube account</p>
                 <button
                   type="button"
                   onClick={() => void window.copilot.youtubeOpenLogin()}
-                  className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                  className="flex items-center gap-1.5 text-[11px] text-red-400/80 hover:text-red-400 transition-colors font-medium"
                 >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                   </svg>
-                  Log in to YouTube (to read member-only chat & send messages)
+                  Log in / switch account
                 </button>
+              </div>
 
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Channel for sending messages</p>
-                    <button
-                      type="button"
-                      onClick={() => void loadYtChatChannels()}
-                      disabled={isLoadingChatChannels}
-                      className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-300 transition-colors disabled:opacity-50"
-                    >
-                      {isLoadingChatChannels ? <Spinner /> : (
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                      )}
-                      Load channels
-                    </button>
-                  </div>
-
-                  {chatChannelError && (
-                    <p className="text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 rounded px-2 py-1.5">{chatChannelError}</p>
-                  )}
-                  {ytChatChannels.length > 0 ? (
-                    <div className="space-y-1">
-                      {ytChatChannels.map((ch, i) => {
-                        const key = ch.pageId || ch.handle || String(i);
-                        const isSelected = ch.pageId
-                          ? ytSettings.chatChannelPageId === ch.pageId
-                          : !ytSettings.chatChannelPageId && ch.isSelected;
-                        return (
-                          <button
-                            key={key}
-                            type="button"
-                            onClick={() => void selectYtChatChannel(ch.pageId)}
-                            disabled={isSavingYtSettings}
-                            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-xs transition-colors ${
-                              isSelected
-                                ? 'bg-red-500/15 border-red-500/40 text-gray-200'
-                                : 'bg-gray-900/60 border-gray-700/40 text-gray-400 hover:border-gray-600 hover:text-gray-300'
-                            } disabled:opacity-50`}
-                          >
-                            <span className={`w-3 h-3 rounded-full border-2 shrink-0 flex items-center justify-center ${isSelected ? 'border-red-400 bg-red-400' : 'border-gray-600'}`}>
-                              {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
-                            </span>
-                            <span className="font-medium truncate">{ch.name || ch.handle}</span>
-                            {ch.handle && <span className="font-mono text-gray-500 ml-auto shrink-0">{ch.handle}</span>}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : !chatChannelError && (
-                    <p className="text-[10px] text-gray-600 italic">Click &quot;Load channels&quot; after logging in to choose which channel sends messages.</p>
-                  )}
+              <div className="px-4 py-3 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] text-gray-400">Channel for sending messages</p>
+                  <button
+                    type="button"
+                    onClick={() => void loadYtChatChannels()}
+                    disabled={isLoadingChatChannels}
+                    className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-300 transition-colors disabled:opacity-50"
+                  >
+                    {isLoadingChatChannels ? <Spinner /> : (
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    )}
+                    Load
+                  </button>
                 </div>
+
+                {chatChannelError && (
+                  <p className="text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 rounded px-2 py-1.5">{chatChannelError}</p>
+                )}
+
+                {ytChatChannels.length > 0 ? (
+                  <div className="space-y-1">
+                    {ytChatChannels.map((ch, i) => {
+                      const key = ch.pageId || ch.handle || String(i);
+                      const isSelected = ch.pageId
+                        ? ytSettings.chatChannelPageId === ch.pageId
+                        : !ytSettings.chatChannelPageId && ch.isSelected;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => void selectYtChatChannel(ch.pageId)}
+                          disabled={isSavingYtSettings}
+                          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-xs transition-colors ${
+                            isSelected
+                              ? 'bg-red-500/15 border-red-500/40 text-gray-200'
+                              : 'bg-gray-800/60 border-gray-700/40 text-gray-400 hover:border-gray-600 hover:text-gray-300'
+                          } disabled:opacity-50`}
+                        >
+                          <span className={`w-3 h-3 rounded-full border-2 shrink-0 flex items-center justify-center ${isSelected ? 'border-red-400 bg-red-400' : 'border-gray-600'}`}>
+                            {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                          </span>
+                          <span className="font-medium truncate">{ch.name || ch.handle}</span>
+                          {ch.handle && ch.name && <span className="font-mono text-[10px] text-gray-500 ml-auto shrink-0">{ch.handle}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : !chatChannelError && (
+                  <p className="text-[10px] text-gray-600 italic">After logging in, click &quot;Load&quot; to choose which channel sends messages.</p>
+                )}
               </div>
             </div>
           </PlatformCard>
