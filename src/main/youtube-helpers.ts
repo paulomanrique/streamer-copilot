@@ -153,20 +153,21 @@ export function extractYtLiveVideoIds(html: string): LiveStreamInfo[] {
   return findLiveVideoIds(data);
 }
 
-/** Returns a diagnostic string listing every videoId and its live-related fields. */
+/** Returns a diagnostic string listing unique videoIds and their live-related fields. */
 export function diagnoseYtVideoRenderers(html: string): string {
   const data = extractYtInitialData(html);
   if (!data) return 'no ytInitialData';
-  const entries: string[] = [];
-  collectVideoInfo(data, entries);
-  return entries.slice(0, 10).join(' | ') || 'no video renderers found';
+  const seen = new Map<string, string>();
+  collectVideoInfo(data, seen);
+  const entries = Array.from(seen.values());
+  return entries.slice(0, 15).join(' | ') || 'no video renderers found';
 }
 
-function collectVideoInfo(obj: unknown, out: string[], depth = 0): void {
-  if (depth > 40 || !obj || typeof obj !== 'object') return;
-  if (Array.isArray(obj)) { for (const item of obj) collectVideoInfo(item, out, depth + 1); return; }
+function collectVideoInfo(obj: unknown, seen: Map<string, string>, depth = 0): void {
+  if (depth > 60 || !obj || typeof obj !== 'object') return;
+  if (Array.isArray(obj)) { for (const item of obj) collectVideoInfo(item, seen, depth + 1); return; }
   const r = obj as Record<string, unknown>;
-  if (typeof r.videoId === 'string') {
+  if (typeof r.videoId === 'string' && !seen.has(r.videoId)) {
     const overlayStyles = Array.isArray(r.thumbnailOverlays)
       ? r.thumbnailOverlays.map((o: unknown) => {
           if (!o || typeof o !== 'object') return '';
@@ -183,11 +184,9 @@ function collectVideoInfo(obj: unknown, out: string[], depth = 0): void {
       : '';
     const vc = getYtText(r.viewCountText);
     const svc = getYtText(r.shortViewCountText);
-    const isLive = r.isLive;
-    const isLiveContent = r.isLiveContent;
-    out.push(`[${r.videoId} overlays=${overlayStyles || 'none'} badges=${badgeStyles || 'none'} vc="${vc}" svc="${svc}" isLive=${isLive} isLiveContent=${isLiveContent}]`);
+    seen.set(r.videoId, `[${r.videoId} overlays=${overlayStyles || 'none'} badges=${badgeStyles || 'none'} vc="${vc}" svc="${svc}" isLive=${r.isLive} isLiveContent=${r.isLiveContent}]`);
   }
-  for (const v of Object.values(r)) collectVideoInfo(v, out, depth + 1);
+  for (const v of Object.values(r)) collectVideoInfo(v, seen, depth + 1);
 }
 
 /**
