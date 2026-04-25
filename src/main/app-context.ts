@@ -58,7 +58,7 @@ import {
   getLabelFromTitle,
   extractYtLiveVideoIds,
   extractYtSubscriberCount,
-  diagnoseYtVideoRenderers,
+  extractYtLiveFromPlayerResponse,
   normalizeKickChannelInput,
   escapeHtml,
 } from './youtube-helpers.js';
@@ -869,40 +869,27 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         'Accept-Language': 'en-US,en;q=0.9',
       };
 
-      // Primary: /streams page lists live + upcoming + past streams
+      // Primary: /streams page — detect via thumbnailOverlayTimeStatusRenderer.style LIVE
       const streamsResponse = await net.fetch(`https://www.youtube.com/${normalizedHandle}/streams`, { headers });
       let streams: LiveStreamInfo[] = [];
       let subscriberCount: number | null = null;
-      logService.info('youtube', `checkLive ${normalizedHandle}: HTTP ${streamsResponse.status} url=${streamsResponse.url}`);
       if (streamsResponse.ok) {
         const html = await streamsResponse.text();
-        const hasInitialData = html.includes('var ytInitialData = ');
-        const hasLiveStyle = html.includes('"style":"LIVE"');
-        logService.info('youtube', `checkLive ${normalizedHandle}: htmlLen=${html.length} hasInitialData=${hasInitialData} hasLiveStyle=${hasLiveStyle}`);
         streams = extractYtLiveVideoIds(html);
         subscriberCount = extractYtSubscriberCount(html);
-        logService.info('youtube', `checkLive ${normalizedHandle}: found ${streams.length} live stream(s): ${streams.map(s => s.videoId).join(', ')}`);
-        if (streams.length === 0) logService.info('youtube', `checkLive diagnosis: ${diagnoseYtVideoRenderers(html)}`);
       }
 
-      // Fallback: /@handle/live redirects to the active live stream video page
+      // Fallback: /@handle/live serves the live stream watch page directly.
+      // Parse ytInitialPlayerResponse which has videoDetails.isLive explicitly —
+      // more reliable when Electron's net.fetch gets a page without overlay metadata.
       if (streams.length === 0) {
         const liveResponse = await net.fetch(`https://www.youtube.com/${normalizedHandle}/live`, { headers });
         if (liveResponse.ok) {
-          const finalUrl = liveResponse.url;
-          logService.info('youtube', `checkLive fallback /live → ${finalUrl}`);
-          const videoIdMatch = finalUrl.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
-          if (videoIdMatch) {
-            const html = await liveResponse.text();
-            const liveStreams = extractYtLiveVideoIds(html);
-            if (liveStreams.length > 0) {
-              streams = liveStreams;
-            } else {
-              // The redirect confirmed a live video; extract title from page if possible
-              const titleMatch = html.match(/"title":"([^"]+)"/);
-              streams = [{ videoId: videoIdMatch[1], title: titleMatch ? titleMatch[1] : '', viewCount: null, subscriberCount: null, channelHandle: '' }];
-            }
-            if (subscriberCount === null) subscriberCount = extractYtSubscriberCount(html);
+          const liveHtml = await liveResponse.text();
+          const liveStream = extractYtLiveFromPlayerResponse(liveHtml);
+          if (liveStream) {
+            streams = [liveStream];
+            if (subscriberCount === null) subscriberCount = extractYtSubscriberCount(liveHtml);
           }
         }
       }

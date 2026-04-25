@@ -153,41 +153,32 @@ export function extractYtLiveVideoIds(html: string): LiveStreamInfo[] {
   return findLiveVideoIds(data);
 }
 
-/** Returns a diagnostic string listing unique videoIds and their live-related fields. */
-export function diagnoseYtVideoRenderers(html: string): string {
-  const data = extractYtInitialData(html);
-  if (!data) return 'no ytInitialData';
-  const seen = new Map<string, string>();
-  collectVideoInfo(data, seen);
-  const entries = Array.from(seen.values());
-  return entries.slice(0, 15).join(' | ') || 'no video renderers found';
+/** Parses ytInitialPlayerResponse and returns live stream info if the page is a live stream. */
+export function extractYtLiveFromPlayerResponse(html: string): LiveStreamInfo | null {
+  const marker = 'var ytInitialPlayerResponse = ';
+  const start = html.indexOf(marker);
+  if (start === -1) return null;
+  const jsonStart = start + marker.length;
+  let depth = 0;
+  let end = jsonStart;
+  for (let i = jsonStart; i < html.length; i++) {
+    if (html[i] === '{') depth++;
+    else if (html[i] === '}') { depth--; if (depth === 0) { end = i + 1; break; } }
+  }
+  let data: unknown;
+  try { data = JSON.parse(html.slice(jsonStart, end)); } catch { return null; }
+  if (!data || typeof data !== 'object') return null;
+  const d = data as Record<string, unknown>;
+  const videoDetails = d.videoDetails as Record<string, unknown> | undefined;
+  if (!videoDetails) return null;
+  const isLive = videoDetails.isLive === true || videoDetails.isLiveContent === true;
+  if (!isLive) return null;
+  const videoId = typeof videoDetails.videoId === 'string' ? videoDetails.videoId : null;
+  if (!videoId) return null;
+  const title = typeof videoDetails.title === 'string' ? videoDetails.title : '';
+  return { videoId, title, viewCount: null, subscriberCount: null, channelHandle: '' };
 }
 
-function collectVideoInfo(obj: unknown, seen: Map<string, string>, depth = 0): void {
-  if (depth > 60 || !obj || typeof obj !== 'object') return;
-  if (Array.isArray(obj)) { for (const item of obj) collectVideoInfo(item, seen, depth + 1); return; }
-  const r = obj as Record<string, unknown>;
-  if (typeof r.videoId === 'string' && !seen.has(r.videoId)) {
-    const overlayStyles = Array.isArray(r.thumbnailOverlays)
-      ? r.thumbnailOverlays.map((o: unknown) => {
-          if (!o || typeof o !== 'object') return '';
-          const tots = (o as Record<string, unknown>).thumbnailOverlayTimeStatusRenderer as Record<string, unknown> | undefined;
-          return tots?.style ?? '';
-        }).filter(Boolean).join(',')
-      : '';
-    const badgeStyles = Array.isArray(r.badges)
-      ? r.badges.map((b: unknown) => {
-          if (!b || typeof b !== 'object') return '';
-          const meta = (b as Record<string, unknown>).metadataBadgeRenderer as Record<string, unknown> | undefined;
-          return `${meta?.style ?? ''}/${meta?.label ?? ''}`;
-        }).filter(Boolean).join(',')
-      : '';
-    const vc = getYtText(r.viewCountText);
-    const svc = getYtText(r.shortViewCountText);
-    seen.set(r.videoId, `[${r.videoId} overlays=${overlayStyles || 'none'} badges=${badgeStyles || 'none'} vc="${vc}" svc="${svc}" isLive=${r.isLive} isLiveContent=${r.isLiveContent}]`);
-  }
-  for (const v of Object.values(r)) collectVideoInfo(v, seen, depth + 1);
-}
 
 /**
  * Normalize a Kick channel input (slug, URL, @handle) to a lowercase slug.
