@@ -104,7 +104,15 @@ export class RaffleOverlayServer {
     });
 
     this.startPromise = new Promise<void>((resolve, reject) => {
-      server.once('error', reject);
+      server.once('error', (err: NodeJS.ErrnoException) => {
+        if (err.code === 'EADDRINUSE') {
+          server.removeAllListeners('error');
+          server.once('error', reject);
+          server.listen(0, '127.0.0.1', () => resolve());
+        } else {
+          reject(err);
+        }
+      });
       server.listen(OVERLAY_PORT, '127.0.0.1', () => resolve());
     });
 
