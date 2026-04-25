@@ -92,7 +92,12 @@ export class SuggestionService implements CommandModule {
         this.options.onState({ list, entries });
         const feedback = this.formatFeedback(list.feedbackTemplate, message);
         if (feedback) {
-          void this.options.onFeedback({ platform: message.platform, content: feedback });
+          const targets = list.feedbackTargetPlatforms.length > 0
+            ? list.feedbackTargetPlatforms
+            : [message.platform];
+          for (const platform of targets) {
+            void this.options.onFeedback({ platform, content: feedback });
+          }
         }
         if (list.feedbackSoundPath) {
           this.options.onPlaySound?.({ filePath: list.feedbackSoundPath });

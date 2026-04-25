@@ -1,14 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { PERMISSION_LEVELS } from '../../shared/constants.js';
-import type { PermissionLevel, SuggestionEntry, SuggestionList, SuggestionListMode, SuggestionListUpsertInput } from '../../shared/types.js';
+import type { PermissionLevel, PlatformId, SuggestionEntry, SuggestionList, SuggestionListMode, SuggestionListUpsertInput } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
+
+const FEEDBACK_PLATFORMS: { id: PlatformId; label: string }[] = [
+  { id: 'twitch', label: 'Twitch' },
+  { id: 'youtube', label: 'YouTube' },
+  { id: 'kick', label: 'Kick' },
+];
 
 const EMPTY_FORM: SuggestionListUpsertInput = {
   title: '',
   trigger: '!',
   feedbackTemplate: '',
   feedbackSoundPath: null,
+  feedbackTargetPlatforms: [],
   mode: 'session',
   allowDuplicates: false,
   permissions: ['everyone'],
@@ -57,6 +64,7 @@ export function SuggestionsPage() {
   const [userCooldownSeconds, setUserCooldownSeconds] = useState(EMPTY_FORM.userCooldownSeconds);
   const [enabled, setEnabled] = useState(EMPTY_FORM.enabled);
   const [feedbackSoundPath, setFeedbackSoundPath] = useState<string | null>(EMPTY_FORM.feedbackSoundPath);
+  const [feedbackTargetPlatforms, setFeedbackTargetPlatforms] = useState<PlatformId[]>(EMPTY_FORM.feedbackTargetPlatforms);
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -97,6 +105,7 @@ export function SuggestionsPage() {
     setUserCooldownSeconds(EMPTY_FORM.userCooldownSeconds);
     setEnabled(EMPTY_FORM.enabled);
     setFeedbackSoundPath(EMPTY_FORM.feedbackSoundPath);
+    setFeedbackTargetPlatforms(EMPTY_FORM.feedbackTargetPlatforms);
     setError(null);
   };
 
@@ -118,6 +127,7 @@ export function SuggestionsPage() {
     setUserCooldownSeconds(list.userCooldownSeconds);
     setEnabled(list.enabled);
     setFeedbackSoundPath(list.feedbackSoundPath);
+    setFeedbackTargetPlatforms(list.feedbackTargetPlatforms ?? []);
     setError(null);
     setIsModalOpen(true);
     setTimeout(() => triggerInputRef.current?.focus(), 50);
@@ -147,6 +157,7 @@ export function SuggestionsPage() {
         trigger: trimmedTrigger,
         feedbackTemplate: feedbackTemplate.trim(),
         feedbackSoundPath,
+        feedbackTargetPlatforms,
         mode,
         allowDuplicates,
         permissions: levels,
@@ -206,6 +217,12 @@ export function SuggestionsPage() {
     } catch {
       // silently ignore
     }
+  };
+
+  const toggleFeedbackPlatform = (id: PlatformId) => {
+    setFeedbackTargetPlatforms((prev) =>
+      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id],
+    );
   };
 
   const pickFeedbackSound = async () => {
@@ -396,6 +413,27 @@ export function SuggestionsPage() {
                   className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white text-sm focus:border-purple-500 focus:outline-none"
                 />
                 <p className="text-xs text-gray-500 mt-1">Use <code className="text-purple-300">{'{username}'}</code> for the viewer name.</p>
+              </div>
+
+              {/* Feedback Target Platforms */}
+              <div>
+                <label className="block text-sm text-gray-300 mb-1.5">
+                  Reply to
+                  <span className="text-gray-500 ml-1 text-xs">(leave all unchecked to reply only on the platform the suggestion came from)</span>
+                </label>
+                <div className="flex gap-3">
+                  {FEEDBACK_PLATFORMS.map(({ id, label }) => (
+                    <label key={id} className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={feedbackTargetPlatforms.includes(id)}
+                        onChange={() => toggleFeedbackPlatform(id)}
+                        className="accent-purple-500"
+                      />
+                      <span className="text-sm text-gray-300">{label}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
 
               {/* Feedback Sound */}

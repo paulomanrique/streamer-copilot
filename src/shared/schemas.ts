@@ -229,6 +229,7 @@ export const suggestionListUpsertInputSchema = z.object({
   trigger: z.string().min(2).max(80),
   feedbackTemplate: z.string().max(500),
   feedbackSoundPath: z.string().nullable(),
+  feedbackTargetPlatforms: z.array(platformIdSchema).default([]),
   mode: z.enum(['global', 'session']),
   allowDuplicates: z.boolean(),
   permissions: z.array(permissionLevelSchema).min(1),

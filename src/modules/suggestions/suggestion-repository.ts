@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 
-import type { PermissionLevel, SuggestionEntry, SuggestionList, SuggestionListUpsertInput } from '../../shared/types.js';
+import type { PermissionLevel, PlatformId, SuggestionEntry, SuggestionList, SuggestionListUpsertInput } from '../../shared/types.js';
 import { JsonStore } from '../../db/json-store.js';
 import { PROFILE_CONFIG_FILES } from '../../shared/constants.js';
 
@@ -16,6 +16,7 @@ interface SuggestionListRecord {
   trigger: string;
   feedbackTemplate: string;
   feedbackSoundPath: string | null;
+  feedbackTargetPlatforms: PlatformId[];
   mode: 'global' | 'session';
   allowDuplicates: boolean;
   permissions: PermissionLevel[];
@@ -82,6 +83,7 @@ export class SuggestionRepository {
       trigger: input.trigger.trim(),
       feedbackTemplate: input.feedbackTemplate.trim(),
       feedbackSoundPath: input.feedbackSoundPath ?? null,
+      feedbackTargetPlatforms: input.feedbackTargetPlatforms ?? [],
       mode: input.mode,
       allowDuplicates: input.allowDuplicates,
       permissions: input.permissions,
@@ -159,6 +161,7 @@ export class SuggestionRepository {
       trigger: r.trigger,
       feedbackTemplate: r.feedbackTemplate,
       feedbackSoundPath: r.feedbackSoundPath,
+      feedbackTargetPlatforms: r.feedbackTargetPlatforms ?? [],
       mode: r.mode,
       allowDuplicates: r.allowDuplicates,
       permissions: r.permissions,
