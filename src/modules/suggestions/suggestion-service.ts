@@ -72,10 +72,6 @@ export class SuggestionService implements CommandModule {
 
       const userKey = `${message.platform}:${message.author.toLowerCase()}`;
 
-      if (!list.allowDuplicates && this.options.repository.hasUserEntry(list.id, userKey)) {
-        continue;
-      }
-
       const entry = this.options.repository.addEntry({
         listId: list.id,
         platform: message.platform,

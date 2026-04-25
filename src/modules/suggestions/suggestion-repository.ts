@@ -118,8 +118,6 @@ export class SuggestionRepository {
     if (!file.entries[input.listId]) file.entries[input.listId] = [];
     const bucket = file.entries[input.listId];
 
-    if (!list.allowDuplicates && bucket.some((e) => e.userKey === input.userKey)) return null;
-
     const record: SuggestionEntryRecord = {
       id: randomUUID(),
       listId: input.listId,
@@ -129,6 +127,17 @@ export class SuggestionRepository {
       content: input.content,
       createdAt: new Date().toISOString(),
     };
+
+    if (!list.allowDuplicates) {
+      // Replace the user's existing entry instead of blocking
+      const existingIdx = bucket.findIndex((e) => e.userKey === input.userKey);
+      if (existingIdx >= 0) {
+        bucket[existingIdx] = record;
+        this.writeFile(file);
+        return this.mapEntry(record);
+      }
+    }
+
     bucket.push(record);
     this.writeFile(file);
     return this.mapEntry(record);
