@@ -107,6 +107,7 @@ export const voiceCommandUpsertInputSchema = z.object({
   language: z.string().min(2).max(200),
   permissions: z.array(permissionLevelSchema).min(1),
   cooldownSeconds: z.number().int().min(0).max(3600),
+  userCooldownSeconds: z.number().int().min(0).max(3600),
   announceUsername: z.boolean(),
   characterLimit: z.number().int().min(10).max(500),
   enabled: z.boolean(),

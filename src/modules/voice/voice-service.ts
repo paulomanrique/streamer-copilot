@@ -16,6 +16,7 @@ interface ChatPermissionContext {
 export class VoiceService implements CommandModule {
   readonly name = 'voice';
   private readonly commandCooldowns = new Map<string, number>();
+  private readonly userCooldowns = new Map<string, number>();
 
   constructor(private readonly options: VoiceServiceOptions) {}
 
@@ -47,7 +48,7 @@ export class VoiceService implements CommandModule {
       if (!command.enabled) continue;
       if (!content.startsWith(command.trigger)) continue;
       if (!isPermissionAllowed(command.permissions, context.permissionLevel)) continue;
-      if (!this.canRun(command)) continue;
+      if (!this.canRun(command, context.author)) continue;
 
       let extractedText = command.template ?? content.slice(command.trigger.length).trim();
       if (!extractedText) return null;
@@ -63,6 +64,7 @@ export class VoiceService implements CommandModule {
       const payload = { text: extractedText, lang: command.language };
 
       this.commandCooldowns.set(command.id, this.now());
+      if (context.author) this.userCooldowns.set(`${command.id}:${context.author}`, this.now());
       this.options.onSpeak(payload);
       return payload;
     }
@@ -70,10 +72,17 @@ export class VoiceService implements CommandModule {
     return null;
   }
 
-  private canRun(command: VoiceCommand): boolean {
-    const lastRunAt = this.commandCooldowns.get(command.id);
-    if (!lastRunAt) return true;
-    return this.now() - lastRunAt >= command.cooldownSeconds * 1000;
+  private canRun(command: VoiceCommand, author?: string): boolean {
+    const now = this.now();
+    if (command.cooldownSeconds > 0) {
+      const last = this.commandCooldowns.get(command.id);
+      if (last && now - last < command.cooldownSeconds * 1000) return false;
+    }
+    if (command.userCooldownSeconds > 0 && author) {
+      const last = this.userCooldowns.get(`${command.id}:${author}`);
+      if (last && now - last < command.userCooldownSeconds * 1000) return false;
+    }
+    return true;
   }
 
   private now(): number {

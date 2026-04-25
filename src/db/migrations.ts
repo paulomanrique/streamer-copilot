@@ -367,6 +367,7 @@ export const MIGRATIONS: SqlMigration[] = [
     sql: `
       ALTER TABLE voice_commands ADD COLUMN announce_username INTEGER NOT NULL DEFAULT 1;
       ALTER TABLE voice_commands ADD COLUMN character_limit INTEGER NOT NULL DEFAULT 200;
+      ALTER TABLE voice_commands ADD COLUMN user_cooldown_seconds INTEGER NOT NULL DEFAULT 0;
     `,
   },
 ];

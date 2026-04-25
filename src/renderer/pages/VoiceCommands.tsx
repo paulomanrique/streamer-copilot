@@ -68,6 +68,7 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
   const [announceUsername, setAnnounceUsername] = useState(true);
   const [permissions, setPermissions] = useState<PermissionLevel[]>(['everyone']);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const [userCooldownSeconds, setUserCooldownSeconds] = useState(0);
 
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [soundTriggers, setSoundTriggers] = useState<Set<string>>(new Set());
@@ -101,6 +102,7 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
           setAnnounceUsername(cmd.announceUsername);
           setPermissions(cmd.permissions);
           setCooldownSeconds(cmd.cooldownSeconds);
+          setUserCooldownSeconds(cmd.userCooldownSeconds);
         }
         setCommandLoaded(true);
       } catch (cause) {
@@ -148,6 +150,7 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
     language: selectedVoiceName,
     permissions: overrides?.permissions ?? permissions,
     cooldownSeconds,
+    userCooldownSeconds,
     announceUsername,
     characterLimit,
     enabled: overrides?.enabled ?? enabled,
@@ -281,18 +284,30 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
           </div>
         </div>
 
-        {/* Cooldown */}
-        <div className="px-5 py-4">
-          <label className="block text-sm text-gray-400 mb-1.5">Global Cooldown (s)</label>
-          <input
-            type="number"
-            min={0}
-            max={3600}
-            value={cooldownSeconds}
-            onChange={(e) => setCooldownSeconds(Number(e.target.value))}
-            className="w-28 bg-gray-700 border border-gray-600 rounded text-sm text-gray-200 px-3 py-2 focus:outline-none focus:border-violet-500"
-          />
-          <p className="text-xs text-gray-600 mt-1">Minimum seconds between TTS requests from anyone.</p>
+        {/* Cooldowns */}
+        <div className="px-5 py-4 grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm text-gray-400 mb-1.5">Global Cooldown (s)</label>
+            <input
+              type="number"
+              min={0}
+              max={3600}
+              value={cooldownSeconds}
+              onChange={(e) => setCooldownSeconds(Number(e.target.value))}
+              className="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-200 px-3 py-2 focus:outline-none focus:border-violet-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-400 mb-1.5">Per-User Cooldown (s)</label>
+            <input
+              type="number"
+              min={0}
+              max={3600}
+              value={userCooldownSeconds}
+              onChange={(e) => setUserCooldownSeconds(Number(e.target.value))}
+              className="w-full bg-gray-700 border border-gray-600 rounded text-sm text-gray-200 px-3 py-2 focus:outline-none focus:border-violet-500"
+            />
+          </div>
         </div>
 
         {/* TTS Engine */}

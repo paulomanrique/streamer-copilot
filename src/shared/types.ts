@@ -205,6 +205,7 @@ export interface VoiceCommand {
   language: string;
   permissions: PermissionLevel[];
   cooldownSeconds: number;
+  userCooldownSeconds: number;
   announceUsername: boolean;
   characterLimit: number;
   enabled: boolean;
@@ -217,6 +218,7 @@ export interface VoiceCommandUpsertInput {
   language: string;
   permissions: PermissionLevel[];
   cooldownSeconds: number;
+  userCooldownSeconds: number;
   announceUsername: boolean;
   characterLimit: number;
   enabled: boolean;
