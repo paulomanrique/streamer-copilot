@@ -37,10 +37,10 @@ export class VoiceService implements CommandModule {
 
   /** CommandModule entry point — called by CommandDispatcher with resolved permission. */
   handle(message: ChatMessage, permissionLevel: PermissionLevel): void {
-    this.handleChatMessage(message.content, { permissionLevel });
+    this.handleChatMessage(message.content, { permissionLevel, author: message.author });
   }
 
-  handleChatMessage(content: string, context: ChatPermissionContext): VoiceSpeakPayload | null {
+  handleChatMessage(content: string, context: ChatPermissionContext & { author?: string }): VoiceSpeakPayload | null {
     const commands = this.options.repository.list();
 
     for (const command of commands) {
@@ -49,13 +49,18 @@ export class VoiceService implements CommandModule {
       if (!isPermissionAllowed(command.permissions, context.permissionLevel)) continue;
       if (!this.canRun(command)) continue;
 
-      const extractedText = command.template ?? content.slice(command.trigger.length).trim();
+      let extractedText = command.template ?? content.slice(command.trigger.length).trim();
       if (!extractedText) return null;
 
-      const payload = {
-        text: extractedText,
-        lang: command.language,
-      };
+      if (extractedText.length > command.characterLimit) {
+        extractedText = extractedText.slice(0, command.characterLimit);
+      }
+
+      if (command.announceUsername && context.author) {
+        extractedText = `${context.author} disse: ${extractedText}`;
+      }
+
+      const payload = { text: extractedText, lang: command.language };
 
       this.commandCooldowns.set(command.id, this.now());
       this.options.onSpeak(payload);

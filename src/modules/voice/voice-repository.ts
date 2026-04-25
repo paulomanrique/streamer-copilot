@@ -11,6 +11,8 @@ interface VoiceCommandRow {
   language: string;
   permissions_json: string;
   cooldown_seconds: number;
+  announce_username: number;
+  character_limit: number;
   enabled: number;
 }
 
@@ -20,11 +22,10 @@ export class VoiceCommandRepository {
   list(): VoiceCommand[] {
     const rows = this.db
       .prepare(
-        `
-          SELECT id, trigger, template, language, permissions_json, cooldown_seconds, enabled
-          FROM voice_commands
-          ORDER BY created_at ASC, id ASC
-        `,
+        `SELECT id, trigger, template, language, permissions_json, cooldown_seconds,
+                announce_username, character_limit, enabled
+         FROM voice_commands
+         ORDER BY created_at ASC, id ASC`,
       )
       .all() as VoiceCommandRow[];
 
@@ -35,6 +36,8 @@ export class VoiceCommandRepository {
       language: row.language,
       permissions: JSON.parse(row.permissions_json) as PermissionLevel[],
       cooldownSeconds: row.cooldown_seconds,
+      announceUsername: row.announce_username === 1,
+      characterLimit: row.character_limit,
       enabled: row.enabled === 1,
     }));
   }
@@ -43,26 +46,20 @@ export class VoiceCommandRepository {
     const nextId = input.id ?? randomUUID();
     this.db
       .prepare(
-        `
-          INSERT INTO voice_commands (
-            id,
-            trigger,
-            template,
-            language,
-            permissions_json,
-            cooldown_seconds,
-            enabled,
-            updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
-          ON CONFLICT(id) DO UPDATE SET
-            trigger = excluded.trigger,
-            template = excluded.template,
-            language = excluded.language,
-            permissions_json = excluded.permissions_json,
-            cooldown_seconds = excluded.cooldown_seconds,
-            enabled = excluded.enabled,
-            updated_at = datetime('now')
-        `,
+        `INSERT INTO voice_commands (
+           id, trigger, template, language, permissions_json, cooldown_seconds,
+           announce_username, character_limit, enabled, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+         ON CONFLICT(id) DO UPDATE SET
+           trigger = excluded.trigger,
+           template = excluded.template,
+           language = excluded.language,
+           permissions_json = excluded.permissions_json,
+           cooldown_seconds = excluded.cooldown_seconds,
+           announce_username = excluded.announce_username,
+           character_limit = excluded.character_limit,
+           enabled = excluded.enabled,
+           updated_at = datetime('now')`,
       )
       .run(
         nextId,
@@ -71,6 +68,8 @@ export class VoiceCommandRepository {
         input.language,
         JSON.stringify(input.permissions),
         input.cooldownSeconds,
+        input.announceUsername ? 1 : 0,
+        input.characterLimit,
         input.enabled ? 1 : 0,
       );
 

@@ -361,4 +361,12 @@ export const MIGRATIONS: SqlMigration[] = [
     name: 'suggestion_lists_feedback_sound',
     sql: `ALTER TABLE suggestion_lists ADD COLUMN feedback_sound_path TEXT NOT NULL DEFAULT '';`,
   },
+  {
+    version: 17,
+    name: 'voice_commands_announce_username_character_limit',
+    sql: `
+      ALTER TABLE voice_commands ADD COLUMN announce_username INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE voice_commands ADD COLUMN character_limit INTEGER NOT NULL DEFAULT 200;
+    `,
+  },
 ];

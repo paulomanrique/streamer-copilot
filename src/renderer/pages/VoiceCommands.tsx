@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
-import type { VoiceCommand } from '../../shared/types.js';
+import { PERMISSION_LEVELS } from '../../shared/constants.js';
+import type { PermissionLevel, VoiceCommand } from '../../shared/types.js';
 import { ToggleSwitch } from '../components/ToggleSwitch.js';
 
 const GOOGLE_TTS_LANGUAGES = [
@@ -38,6 +39,15 @@ const GOOGLE_TTS_LANGUAGES = [
   { code: 'fil', label: 'Filipino' },
 ];
 
+const PERMISSION_LABELS: Record<PermissionLevel, string> = {
+  everyone: 'Everyone',
+  follower: 'Followers',
+  subscriber: 'Subscribers',
+  vip: 'VIP',
+  moderator: 'Moderators',
+  broadcaster: 'Broadcaster',
+};
+
 interface VoiceCommandsPageProps {
   voiceRate: number;
   voiceVolume: number;
@@ -48,32 +58,25 @@ interface VoiceCommandsPageProps {
 export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
   const triggerInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Existing singleton command
   const [commandId, setCommandId] = useState<string | undefined>(undefined);
   const [commandLoaded, setCommandLoaded] = useState(false);
 
-  // Form state
   const [enabled, setEnabled] = useState(true);
   const [trigger, setTrigger] = useState('!voice');
   const [selectedVoiceName, setSelectedVoiceName] = useState('');
   const [characterLimit, setCharacterLimit] = useState(200);
   const [announceUsername, setAnnounceUsername] = useState(true);
+  const [permissions, setPermissions] = useState<PermissionLevel[]>(['everyone']);
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
 
-  // Voices from Web Speech API
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-
-  // Validation
   const [soundTriggers, setSoundTriggers] = useState<Set<string>>(new Set());
   const [triggerError, setTriggerError] = useState<string | null>(null);
-
   const [previewText, setPreviewText] = useState('');
-
-  // UI state
   const [isBusy, setIsBusy] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // ── Load voices from Web Speech API ──────────────────────────────────
   useEffect(() => {
     const load = () => {
       const list = window.speechSynthesis.getVoices();
@@ -84,9 +87,8 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
     return () => window.speechSynthesis.removeEventListener('voiceschanged', load);
   }, []);
 
-  // ── Load singleton command ────────────────────────────────────────────
   useEffect(() => {
-    const loadCommands = async () => {
+    void (async () => {
       try {
         const commands = await window.copilot.listVoiceCommands();
         if (commands.length > 0) {
@@ -95,43 +97,37 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
           setEnabled(cmd.enabled);
           setTrigger(cmd.trigger);
           setSelectedVoiceName(cmd.language);
+          setCharacterLimit(cmd.characterLimit);
+          setAnnounceUsername(cmd.announceUsername);
+          setPermissions(cmd.permissions);
+          setCooldownSeconds(cmd.cooldownSeconds);
         }
         setCommandLoaded(true);
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : 'Failed to load voice command');
         setCommandLoaded(true);
       }
-    };
-
-    void loadCommands();
+    })();
   }, []);
 
-  // ── Load sound command triggers for validation ────────────────────────
   useEffect(() => {
-    const loadSoundTriggers = async () => {
+    void (async () => {
       try {
         const sounds = await window.copilot.listSoundCommands();
-        setSoundTriggers(new Set(sounds.map((s) => s.trigger?.toLowerCase()).filter((trigger): trigger is string => Boolean(trigger))));
-      } catch {
-        // non-critical
-      }
-    };
-
-    void loadSoundTriggers();
+        setSoundTriggers(new Set(sounds.map((s) => s.trigger?.toLowerCase()).filter((t): t is string => Boolean(t))));
+      } catch { /* non-critical */ }
+    })();
   }, []);
 
-  // Sync selected voice only after both voices and the DB command have loaded.
-  // This prevents overwriting the saved voice when voices arrive before the DB load.
   useEffect(() => {
     if (voices.length === 0 || !commandLoaded) return;
     const match = voices.find((v) => v.name === selectedVoiceName);
-    if (!match) {
+    if (!match && !selectedVoiceName.startsWith('google:')) {
       const defaultVoice = voices.find((v) => v.default) ?? voices[0];
       setSelectedVoiceName(defaultVoice.name);
     }
   }, [voices, commandLoaded]);
 
-  // ── Validation ───────────────────────────────────────────────────────
   const validateTrigger = (value: string): string | null => {
     if (!value.startsWith('!')) return 'Command must start with !';
     if (value.trim().length < 2) return 'Command must have at least one character after !';
@@ -145,33 +141,32 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
     setStatusMessage(null);
   };
 
-  // ── Save ─────────────────────────────────────────────────────────────
-  const save = async () => {
+  const buildInput = (overrides?: Partial<{ enabled: boolean; permissions: PermissionLevel[] }>) => ({
+    id: commandId,
+    trigger: trigger.trim(),
+    template: null as null,
+    language: selectedVoiceName,
+    permissions: overrides?.permissions ?? permissions,
+    cooldownSeconds,
+    announceUsername,
+    characterLimit,
+    enabled: overrides?.enabled ?? enabled,
+  });
+
+  const save = async (overrides?: Partial<{ enabled: boolean; permissions: PermissionLevel[] }>) => {
     const validationError = validateTrigger(trigger);
     if (validationError) {
       setTriggerError(validationError);
       triggerInputRef.current?.focus();
       return;
     }
-
     setIsBusy(true);
     setError(null);
     setStatusMessage(null);
-
     try {
-      const commands = await window.copilot.upsertVoiceCommand({
-        id: commandId,
-        trigger: trigger.trim(),
-        template: null,
-        language: selectedVoiceName,
-        permissions: ['everyone'],
-        cooldownSeconds: 0,
-        enabled,
-      });
-
+      const commands = await window.copilot.upsertVoiceCommand(buildInput(overrides));
       const saved = commands[0] as VoiceCommand | undefined;
       if (saved) setCommandId(saved.id);
-
       props.onChangeVoiceRate(props.voiceRate);
       props.onChangeVoiceVolume(props.voiceVolume);
       setStatusMessage('Saved');
@@ -183,7 +178,19 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
     }
   };
 
-  // ── Preview ──────────────────────────────────────────────────────────
+  const handleToggle = (value: boolean) => {
+    setEnabled(value);
+    void save({ enabled: value });
+  };
+
+  const toggleLevel = (level: PermissionLevel) => {
+    const next = permissions.includes(level)
+      ? permissions.filter((l) => l !== level)
+      : [...permissions, level];
+    if (next.length === 0) return;
+    setPermissions(next);
+  };
+
   const preview = async () => {
     const text = previewText.trim() || 'Hello, I am your stream copilot!';
     try {
@@ -193,7 +200,6 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
     }
   };
 
-  // ── Engine detection ──────────────────────────────────────────────────
   const isGoogleEngine = selectedVoiceName.startsWith('google:');
   const googleLangCode = isGoogleEngine ? selectedVoiceName.slice('google:'.length) : '';
 
@@ -206,7 +212,6 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
     }
   };
 
-  // ── Voices grouped by language ────────────────────────────────────────
   const voicesByLang = voices.reduce<Record<string, SpeechSynthesisVoice[]>>((acc, voice) => {
     const lang = voice.lang || 'Other';
     (acc[lang] ??= []).push(voice);
@@ -224,13 +229,13 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
 
       <div className="bg-gray-800/40 rounded-xl border border-gray-700 divide-y divide-gray-700">
 
-        {/* Enable toggle */}
+        {/* Enable toggle — auto-saves immediately */}
         <div className="flex items-center justify-between px-5 py-4">
           <div>
             <p className="text-sm font-medium">Enable TTS</p>
             <p className="text-xs text-gray-500 mt-0.5">Respond to the trigger command in chat</p>
           </div>
-          <ToggleSwitch checked={enabled} onChange={setEnabled} />
+          <ToggleSwitch checked={enabled} onChange={handleToggle} />
         </div>
 
         {/* Command trigger */}
@@ -253,6 +258,41 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
           ) : (
             <p className="mt-1.5 text-xs text-gray-600">Text typed after the command is spoken aloud.</p>
           )}
+        </div>
+
+        {/* Permissions */}
+        <div className="px-5 py-4">
+          <label className="block text-sm text-gray-400 mb-2">Who can use</label>
+          <div className="flex flex-wrap gap-2">
+            {PERMISSION_LEVELS.map((level) => (
+              <button
+                key={level}
+                type="button"
+                onClick={() => toggleLevel(level)}
+                className={
+                  permissions.includes(level)
+                    ? 'px-3 py-1 text-xs rounded-full bg-violet-600 text-white'
+                    : 'px-3 py-1 text-xs rounded-full bg-gray-700 text-gray-400 hover:text-white'
+                }
+              >
+                {PERMISSION_LABELS[level]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Cooldown */}
+        <div className="px-5 py-4">
+          <label className="block text-sm text-gray-400 mb-1.5">Global Cooldown (s)</label>
+          <input
+            type="number"
+            min={0}
+            max={3600}
+            value={cooldownSeconds}
+            onChange={(e) => setCooldownSeconds(Number(e.target.value))}
+            className="w-28 bg-gray-700 border border-gray-600 rounded text-sm text-gray-200 px-3 py-2 focus:outline-none focus:border-violet-500"
+          />
+          <p className="text-xs text-gray-600 mt-1">Minimum seconds between TTS requests from anyone.</p>
         </div>
 
         {/* TTS Engine */}
@@ -282,7 +322,7 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
               Google Translate
             </button>
           </div>
-          <p className="text-xs text-gray-600 mb-3">
+          <p className="text-xs text-gray-600">
             {isGoogleEngine
               ? 'Uses Google Translate TTS. Requires internet.'
               : 'Uses voices installed on this computer.'}
