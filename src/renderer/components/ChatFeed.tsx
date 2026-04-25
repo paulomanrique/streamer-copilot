@@ -506,13 +506,15 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
 
       {/* ── messages / suggestions ─────────────────────────────────── */}
       <div className="flex-1 min-h-0 relative">
-        {selectedListId ? (
-          <SuggestionEntriesPanel
-            list={suggestionLists.find((l) => l.id === selectedListId)!}
-            entries={suggestionEntries[selectedListId] ?? []}
-            onClear={() => void clearSelectedEntries()}
-          />
-        ) : (
+        {(() => {
+          const selectedList = selectedListId ? (suggestionLists.find((l) => l.id === selectedListId) ?? null) : null;
+          return selectedList ? (
+            <SuggestionEntriesPanel
+              list={selectedList}
+              entries={suggestionEntries[selectedList.id] ?? []}
+              onClear={() => void clearSelectedEntries()}
+            />
+          ) : (
           <>
             {items.length === 0 ? (
               <div className="flex h-full items-center justify-center text-sm text-gray-500">
@@ -548,7 +550,8 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
               </button>
             )}
           </>
-        )}
+          );
+        })()}
       </div>
 
       {/* ── input ──────────────────────────────────────────────────── */}

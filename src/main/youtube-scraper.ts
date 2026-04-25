@@ -33,10 +33,6 @@ export class YouTubeScraper {
 
     const userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
     const url = `https://www.youtube.com/live_chat?v=${this.options.videoId}`;
-    
-    this.options.onLog?.(`Loading YouTube chat: ${url}`);
-
-    await this.window.loadURL(url, { userAgent });
 
     this.window.webContents.on('dom-ready', () => {
       if (this.isDestroyed || !this.window) return;
@@ -47,6 +43,10 @@ export class YouTubeScraper {
       if (this.isDestroyed || !this.window) return;
       void this.injectScraper();
     });
+
+    this.options.onLog?.(`Loading YouTube chat: ${url}`);
+
+    await this.window.loadURL(url, { userAgent });
 
     this.window.webContents.on('console-message', (event) => {
       const message = event.message;
@@ -159,11 +159,15 @@ export class YouTubeScraper {
     const url = `https://www.youtube.com/live_chat?v=${this.options.videoId}`;
     const userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
     this.options.onLog?.('Reloading YouTube chat page after freeze detection');
-    await this.window.loadURL(url, { userAgent });
+    try {
+      await this.window.loadURL(url, { userAgent });
+    } catch (e) {
+      this.options.onLog?.(`YouTube page reload failed: ${String(e)}`);
+    }
   }
 
   private async injectScraper(): Promise<void> {
-    if (!this.window) return;
+    if (!this.window || this.window.isDestroyed()) return;
 
     const script = `
       (function() {
@@ -319,6 +323,10 @@ export class YouTubeScraper {
       })();
     `;
 
-    await this.window.webContents.executeJavaScript(script);
+    try {
+      await this.window.webContents.executeJavaScript(script);
+    } catch (e) {
+      this.options.onLog?.(`YouTube scraper injection failed: ${String(e)}`);
+    }
   }
 }
