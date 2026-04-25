@@ -1231,8 +1231,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     raffleService, soundService, textService, voiceService, suggestionService, musicService,
     onMessage: (message) => {
       options.stateHub.pushChatMessage(message);
-      chatLogService.recordMessage(message);
-      welcomeService.handleMessage(message);
+      if (!message.isHistory) {
+        chatLogService.recordMessage(message);
+        welcomeService.handleMessage(message);
+      }
     },
     onEvent: (event) => {
       options.stateHub.pushChatEvent(event);

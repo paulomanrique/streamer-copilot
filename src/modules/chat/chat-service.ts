@@ -121,7 +121,9 @@ export class ChatService {
   }
 
   private handleMessage(message: ChatMessage): void {
-    this.dispatcher.dispatch(message);
+    if (!message.isHistory) {
+      this.dispatcher.dispatch(message);
+    }
 
     this.messages.push(message);
     if (this.messages.length > this.maxHistory) {

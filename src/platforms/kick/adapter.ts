@@ -231,6 +231,7 @@ export class KickChatAdapter implements PlatformChatAdapter {
           contentParts?: ChatMessageContentPart[];
           timestampLabel?: string;
           badges?: string[];
+          isInitial?: boolean;
         };
         const author = typeof raw.author === 'string' && raw.author.trim() ? raw.author.trim() : 'Kick user';
         const content = typeof raw.content === 'string' ? raw.content.trim() : '';
@@ -252,6 +253,7 @@ export class KickChatAdapter implements PlatformChatAdapter {
           contentParts: Array.isArray(raw.contentParts) ? raw.contentParts : undefined,
           badges: Array.isArray(raw.badges) ? raw.badges.filter((b): b is string => typeof b === 'string') : [],
           timestampLabel,
+          ...(raw.isInitial ? { isHistory: true } : {}),
         });
       } catch {
         // Ignore malformed scraper logs.
@@ -286,6 +288,7 @@ export class KickChatAdapter implements PlatformChatAdapter {
           messageObserver: null,
           bodyObserver: null,
           connectionLogged: false,
+          initialScanDone: false,
         };
         window.__COPILOT_KICK_SCRAPER__ = state;
 
@@ -430,7 +433,7 @@ export class KickChatAdapter implements PlatformChatAdapter {
           if (!id || state.seen.has(id)) return;
           state.seen.add(id);
 
-          emitChat({ id, author, content, contentParts, timestampLabel, badges: extractBadges(wrapper) });
+          emitChat({ id, author, content, contentParts, timestampLabel, badges: extractBadges(wrapper), isInitial: !state.initialScanDone });
         };
 
         const scan = () => {
@@ -468,6 +471,7 @@ export class KickChatAdapter implements PlatformChatAdapter {
         state.bodyObserver.observe(document.body, { childList: true, subtree: true });
 
         scan();
+        state.initialScanDone = true;
         setInterval(scan, 2000);
         log('Kick DOM scraper injected');
         return true;

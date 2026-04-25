@@ -80,6 +80,7 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
   private nextPageToken: string | null = null;
   private currentPollingIntervalMillis = DEFAULT_POLLING_INTERVAL_MILLIS;
+  private isFirstPoll = true;
 
   constructor(options: YouTubeAdapterOptions = {}) {
     this.options = options;
@@ -121,6 +122,7 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
       this.mockMode = false;
       this.connected = true;
       this.nextPageToken = null;
+      this.isFirstPoll = true;
       this.currentPollingIntervalMillis = this.options.pollingIntervalMillis ?? DEFAULT_POLLING_INTERVAL_MILLIS;
       void this.pollOnce(config.liveChatId);
     } catch (err) {
@@ -290,6 +292,9 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
   private async pollOnce(liveChatId: string): Promise<void> {
     if (!this.connected || this.mockMode || !this.client) return;
 
+    const isHistory = this.isFirstPoll;
+    this.isFirstPoll = false;
+
     try {
       const response = await this.client.listMessages({
         liveChatId,
@@ -300,7 +305,7 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
       this.currentPollingIntervalMillis = this.clampPollingInterval(
         response.pollingIntervalMillis ?? this.options.pollingIntervalMillis ?? DEFAULT_POLLING_INTERVAL_MILLIS,
       );
-      this.emitApiResponse(response.items ?? []);
+      this.emitApiResponse(response.items ?? [], isHistory);
       this.scheduleNextPoll(liveChatId, this.currentPollingIntervalMillis);
     } catch {
       this.scheduleNextPoll(liveChatId, this.clampPollingInterval(this.currentPollingIntervalMillis * 2));
@@ -316,12 +321,12 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
     }, delayMillis);
   }
 
-  private emitApiResponse(items: YouTubeMessagePart[]): void {
+  private emitApiResponse(items: YouTubeMessagePart[], isHistory = false): void {
     for (const item of items) {
       const type = item.snippet?.type ?? '';
       if (type === 'textMessageEvent') {
         const message = this.toChatMessage(item);
-        if (message) this.emitMessage(message, item.snippet?.publishedAt);
+        if (message) this.emitMessage(message, item.snippet?.publishedAt, isHistory);
         continue;
       }
 
@@ -391,11 +396,12 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
     return null;
   }
 
-  private emitMessage(message: Omit<ChatMessage, 'id' | 'timestampLabel'>, timestampSource?: string): void {
+  private emitMessage(message: Omit<ChatMessage, 'id' | 'timestampLabel'>, timestampSource?: string, isHistory = false): void {
     const payload: ChatMessage = {
       id: this.buildId(),
       timestampLabel: this.formatTimestamp(timestampSource),
       ...message,
+      ...(isHistory ? { isHistory: true } : {}),
     };
 
     for (const handler of this.messageHandlers) {

@@ -53,6 +53,8 @@ export interface ChatMessage {
   avatarUrl?: string;
   badgeUrls?: string[];
   streamLabel?: string;
+  /** True for messages that were already in chat when the adapter connected — commands and welcome messages are skipped for these. */
+  isHistory?: boolean;
 }
 
 export interface TwitchLiveStats {
