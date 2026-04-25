@@ -461,13 +461,17 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
       <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800 shrink-0 gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <h2 className="text-sm font-semibold text-gray-200 shrink-0">Unified Chat</h2>
-          <div className="inline-flex items-center bg-gray-800 border border-gray-700 rounded-lg p-0.5 text-xs overflow-x-auto max-w-full">
+          <div className="inline-flex items-center gap-0.5 bg-gray-900/70 border border-gray-700/60 rounded-xl p-1 text-xs overflow-x-auto max-w-full">
             <button type="button" onClick={() => { setFeedMode('all'); setSelectedListId(null); }}
-              className={feedMode === 'all' && !selectedListId ? 'px-2 py-1 rounded bg-violet-600 text-white shrink-0' : 'px-2 py-1 rounded text-gray-400 hover:text-white shrink-0'}>
+              className={feedMode === 'all' && !selectedListId
+                ? 'px-3 py-1.5 rounded-lg bg-violet-600 text-white font-medium shrink-0 transition-all duration-150 shadow-sm shadow-violet-900/50'
+                : 'px-3 py-1.5 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-gray-700/60 shrink-0 transition-all duration-150'}>
               All Chats
             </button>
             <button type="button" onClick={() => { setFeedMode('superchat'); setSelectedListId(null); }}
-              className={feedMode === 'superchat' && !selectedListId ? 'px-2 py-1 rounded bg-violet-600 text-white shrink-0' : 'px-2 py-1 rounded text-gray-400 hover:text-white shrink-0'}>
+              className={feedMode === 'superchat' && !selectedListId
+                ? 'px-3 py-1.5 rounded-lg bg-violet-600 text-white font-medium shrink-0 transition-all duration-150 shadow-sm shadow-violet-900/50'
+                : 'px-3 py-1.5 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-gray-700/60 shrink-0 transition-all duration-150'}>
               Super Chats Only
             </button>
             {suggestionLists.map((list) => {
@@ -476,10 +480,14 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
               return (
                 <button key={list.id} type="button" title={list.title}
                   onClick={() => void selectSuggestionList(list.id)}
-                  className={active ? 'px-2 py-1 rounded bg-violet-600 text-white shrink-0' : 'px-2 py-1 rounded text-gray-400 hover:text-white shrink-0'}>
-                  <span className="max-w-[80px] truncate inline-block align-bottom">{list.trigger}</span>
+                  className={active
+                    ? 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600 text-white font-medium shrink-0 transition-all duration-150 shadow-sm shadow-violet-900/50'
+                    : 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-gray-700/60 shrink-0 transition-all duration-150'}>
+                  <span className="max-w-[80px] truncate">{list.trigger}</span>
                   {count > 0 && (
-                    <span className={`ml-1 text-[10px] ${active ? 'text-violet-200' : 'text-gray-500'}`}>{count}</span>
+                    <span className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-semibold tabular-nums ${
+                      active ? 'bg-white/20 text-violet-100' : 'bg-gray-700 text-gray-400'
+                    }`}>{count}</span>
                   )}
                 </button>
               );
