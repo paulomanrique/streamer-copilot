@@ -101,13 +101,13 @@ export class YTLiveClient {
         const name: string = item.account_name?.text ?? item.account_name?.toString?.() ?? '';
         const handle: string = item.channel_handle?.text ?? item.channel_handle?.toString?.() ?? '';
         // Deep-search the endpoint for any 'obou' field regardless of nesting
-        const pageId: string = YTLiveClient.findObou(item.endpoint) ?? '';
-        let _debug: string | undefined;
-        try {
-          _debug = JSON.stringify({ endpointName: item.endpoint?.name, payload: item.endpoint?.payload });
-        } catch { /* ignore */ }
-        console.log('[YT getChatChannels]', { name, handle, pageId, _debug });
-        return { pageId, name, handle, isSelected: !!item.is_selected, _debug };
+        const payload = item.endpoint?.payload ?? {};
+        // InnerTube returns pageId inside supportedTokens[].pageIdToken.pageId
+        const pageId: string =
+          (payload.supportedTokens as any[])?.find((t: any) => t?.pageIdToken?.pageId)?.pageIdToken?.pageId
+          ?? YTLiveClient.findObou(item.endpoint)
+          ?? '';
+        return { pageId, name, handle, isSelected: !!item.is_selected };
       })
       .filter((ch) => ch.name || ch.handle);
   }

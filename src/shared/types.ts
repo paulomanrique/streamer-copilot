@@ -526,7 +526,6 @@ export interface YouTubeChatChannel {
   name: string;
   handle: string;
   isSelected: boolean;
-  _debug?: string;
 }
 
 export interface YouTubeSettings {
