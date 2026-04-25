@@ -373,6 +373,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     channelHandle: string | null;
   }>();
   let youtubeMonitorTimer: ReturnType<typeof setInterval> | null = null;
+  let youtubeStatsTimer: ReturnType<typeof setInterval> | null = null;
   let _lastDetectedVideoIds: Set<string> = new Set();
 
   // Ordered list of platform IDs for YouTube streams (first = horizontal, second = vertical)
@@ -966,6 +967,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         youtubeScrapers.delete(videoId);
         youtubeStreamData.delete(videoId);
         logService.info('youtube', `Stopped scraper for ${videoId} (no longer live)`);
+        if (youtubeScrapers.size === 0) stopYoutubeStatsPoll();
       } else {
         const data = youtubeStreamData.get(videoId);
         if (data) {
@@ -1019,6 +1021,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       });
       youtubeScrapers.set(videoId, scraper);
       await scraper.start();
+      ensureYoutubeStatsPoll();
     }
 
     _lastDetectedVideoIds = new Set(allLiveStreams.map((s) => s.videoId));
@@ -1029,6 +1032,32 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     if (youtubeMonitorTimer) clearInterval(youtubeMonitorTimer);
     void runYoutubeMonitor();
     youtubeMonitorTimer = setInterval(runYoutubeMonitor, 120_000);
+  };
+
+  const pollYoutubeViewerCounts = async () => {
+    if (youtubeScrapers.size === 0) return;
+    let changed = false;
+    for (const [videoId] of youtubeScrapers) {
+      const count = await fetchYtLiveViewerCount(videoId);
+      if (count !== null) {
+        const data = youtubeStreamData.get(videoId);
+        if (data && data.viewerCount !== count) {
+          youtubeStreamData.set(videoId, { ...data, viewerCount: count });
+          changed = true;
+        }
+      }
+    }
+    if (changed) options.stateHub.pushYoutubeStatus(getYoutubeStreams());
+  };
+
+  const ensureYoutubeStatsPoll = () => {
+    if (youtubeStatsTimer) return;
+    void pollYoutubeViewerCounts();
+    youtubeStatsTimer = setInterval(pollYoutubeViewerCounts, 60_000);
+  };
+
+  const stopYoutubeStatsPoll = () => {
+    if (youtubeStatsTimer) { clearInterval(youtubeStatsTimer); youtubeStatsTimer = null; }
   };
 
   const pollTwitchStats = async (channel: string, accessToken: string): Promise<void> => {
@@ -1652,6 +1681,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       });
       youtubeScrapers.set(i.videoId, scraper);
       await scraper.start();
+      ensureYoutubeStatsPoll();
     }
     options.stateHub.pushYoutubeStatus(getYoutubeStreams());
   });
@@ -1663,6 +1693,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     for (const scraper of youtubeScrapers.values()) scraper.stop();
     youtubeScrapers.clear();
     youtubeStreamData.clear();
+    stopYoutubeStatsPoll();
     options.stateHub.pushYoutubeStatus([]);
   });
   ipcMain.handle(IPC_CHANNELS.youtubeGetStatus, async () => getYoutubeStreams());

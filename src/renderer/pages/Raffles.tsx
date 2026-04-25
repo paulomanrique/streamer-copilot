@@ -223,10 +223,12 @@ export function RafflesPage() {
         window.copilot.listRaffleSounds(),
       ]);
       setAvailableSounds(sounds);
-      setRaffle(rows[0] ?? null);
+      const latestRaffle = rows[0] ?? null;
+      setRaffle(latestRaffle);
       setPlatformOptions(nextPlatformOptions);
       setForm((current) => current.id ? current : createFormState(null, nextPlatformOptions));
-      if (active) setSnapshot(await window.copilot.getRaffleSnapshot(active.id));
+      const snapshotTarget = active ?? latestRaffle;
+      if (snapshotTarget) setSnapshot(await window.copilot.getRaffleSnapshot(snapshotTarget.id));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Failed to load raffles');
     }
