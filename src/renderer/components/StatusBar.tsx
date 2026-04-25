@@ -64,13 +64,6 @@ export function StatusBar({ activeProfileName, obsConnected, twitchStatus, twitc
       </div>
 
       <div className="flex items-center gap-1.5 ml-2">
-        <span className={`w-2 h-2 rounded-full ${tiktokStatus === 'connected' ? 'bg-pink-500 pulse-dot' : tiktokStatus === 'connecting' ? 'bg-yellow-400 animate-pulse' : tiktokStatus === 'captcha' ? 'bg-orange-400 animate-pulse' : tiktokStatus === 'error' ? 'bg-red-500' : 'bg-gray-600'}`} />
-        <span>
-          TikTok: <span className={tiktokStatus === 'captcha' ? 'text-orange-300' : 'text-gray-300'}>{tiktokStatus === 'connected' && tiktokUsername ? `@${tiktokUsername}` : tiktokStatus === 'captcha' ? 'Verification required' : statusLabel(tiktokStatus)}</span>
-        </span>
-      </div>
-
-      <div className="flex items-center gap-1.5 ml-2">
         <span className={`w-2 h-2 rounded-full ${kickStatus === 'connected' ? 'bg-green-500 pulse-dot' : kickStatus === 'connecting' ? 'bg-yellow-400 animate-pulse' : kickStatus === 'error' ? 'bg-red-500' : 'bg-gray-600'}`} />
         <span>
           Kick: <span className="text-gray-300">{kickStatus === 'connected' ? (kickSlug ?? messages.common.status.connected) : statusLabel(kickStatus)}</span>

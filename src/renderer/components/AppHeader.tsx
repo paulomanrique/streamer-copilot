@@ -44,7 +44,7 @@ export function AppHeader({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const appName = appInfo?.appName ?? 'Streamer Copilot';
   const isKickLive = kickStatus === 'connected' && Boolean(kickSlug) && kickLiveStats?.isLive !== false;
-  const isAnyLive = Boolean(twitchLiveStats?.isLive) || youtubeStreams.length > 0 || tiktokStatus === 'connected' || isKickLive;
+  const isAnyLive = Boolean(twitchLiveStats?.isLive) || youtubeStreams.length > 0 || isKickLive;
   const liveLinks = [
     ...(twitchLiveStats?.isLive && twitchChannel
       ? [{
@@ -85,18 +85,6 @@ export function AppHeader({
           color: 'text-green-400',
           border: 'border-green-500/30',
           btnBg: 'bg-green-600/30 hover:bg-green-600/50 text-green-300',
-        }]
-      : []),
-    ...(tiktokStatus === 'connected' && tiktokUsername
-      ? [{
-          id: 'tiktok',
-          label: `TikTok @${tiktokUsername}`,
-          url: `tiktok.com/@${tiktokUsername}/live`,
-          full: `https://www.tiktok.com/@${tiktokUsername}/live`,
-          icon: TIKTOK_ICON,
-          color: 'text-pink-400',
-          border: 'border-pink-500/30',
-          btnBg: 'bg-pink-600/30 hover:bg-pink-600/50 text-pink-300',
         }]
       : []),
   ];

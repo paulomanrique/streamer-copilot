@@ -569,7 +569,8 @@ export function PlatformsSettingsPage() {
           </div>
         </div>
 
-        {/* TikTok */}
+        {/* TikTok — desativado temporariamente */}
+        {false && (
         <div className="px-5 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -662,6 +663,7 @@ export function PlatformsSettingsPage() {
             </div>
           )}
         </div>
+        )} {/* end TIKTOK_DISABLED */}
 
         {/* Kick */}
         <div className="px-5 py-4">

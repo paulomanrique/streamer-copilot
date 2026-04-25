@@ -93,7 +93,7 @@ export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtube
           <div className="text-xs text-gray-500 mt-0.5 leading-tight">{t('Dropped Frames')}<br />({t('render')})</div>
         </div>
 
-        {(twitchConnected || youtubeStreams.length > 0 || tiktokStatus === 'connected' || kickStatus === 'connected') && (
+        {(twitchConnected || youtubeStreams.length > 0 || kickStatus === 'connected') && (
           <div className="col-span-4 grid grid-cols-2 gap-2">
             {twitchConnected && (
               <ViewerCard
@@ -122,16 +122,6 @@ export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtube
                 secondaryLabel={t('subscribers')}
               />
             ))}
-            {tiktokStatus === 'connected' && (
-              <ViewerCard
-                label={tiktokUsername ? `TikTok @${tiktokUsername}` : 'TikTok'}
-                icon={ICONS.tiktok}
-                classes="bg-pink-500/10 border-pink-500/20 text-pink-300"
-                metaClass="text-pink-400"
-                value={tiktokLiveStats ? fmtNum(tiktokLiveStats.viewerCount) : '—'}
-                isLive
-              />
-            )}
             {kickStatus === 'connected' && (
               <ViewerCard
                 label={kickSlug ? `Kick · ${kickSlug}` : 'Kick'}
