@@ -297,10 +297,15 @@ export class YouTubeScraper {
         observer.observe(document.body, { childList: true, subtree: true });
         console.log('COPILOT_LOG: Body observer active');
 
-        // Initial sweep — mark these as history so commands don't fire
-        document.querySelectorAll('yt-live-chat-text-message-renderer, yt-live-chat-paid-message-renderer, yt-live-chat-paid-sticker-renderer, yt-live-chat-membership-item-renderer')
-                .forEach(processElement);
+        // Skip initial sweep to avoid flooding the message pipeline on connect.
+        // Existing messages are already visible in YouTube's UI; skipping them means
+        // the app only shows messages that arrive after connection, which is fine.
         initialSweepDone = true;
+
+        // Mark pre-existing DOM nodes as seen so they don't get re-emitted
+        // if the observer fires for them during the first few mutations.
+        document.querySelectorAll('yt-live-chat-text-message-renderer, yt-live-chat-paid-message-renderer, yt-live-chat-paid-sticker-renderer, yt-live-chat-membership-item-renderer')
+                .forEach(el => { const id = el.getAttribute('id'); if (id) seenIds.add(id); });
 
         // Auto-switch and maintain
         setInterval(switchToLiveChat, 5000);
