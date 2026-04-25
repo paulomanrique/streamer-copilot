@@ -870,7 +870,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     options.stateHub.pushTiktokStatus(status, tiktokUsername);
   };
 
-  const checkYouTubeLive = async (handle: string): Promise<LiveStreamInfo[]> => {
+  const checkYouTubeLive = async (handle: string): Promise<LiveStreamInfo[] | null> => {
     try {
       // Extract handle from full URL if needed (e.g. https://www.youtube.com/@user)
       const handleMatch = handle.match(/(?:youtube\.com\/)?(@?[\w-]+)(?:\/.*)?$/);
@@ -909,7 +909,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       return streams.map((stream) => ({ ...stream, subscriberCount: stream.subscriberCount ?? subscriberCount, channelHandle: normalizedHandle }));
     } catch (err) {
       logService.warn('youtube', 'Failed to check YouTube live', { error: err instanceof Error ? err.message : String(err) });
-      return [];
+      return null;
     }
   };
 
@@ -921,16 +921,24 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
     // Collect all live streams across all enabled channels
     const allLiveStreams: LiveStreamInfo[] = [];
+    let anyCheckFailed = false;
     for (const channel of settings.channels) {
       if (!channel.enabled) continue;
       const streams = await checkYouTubeLive(channel.handle);
+      if (streams === null) { anyCheckFailed = true; continue; }
       for (const s of streams) if (!allLiveStreams.find((x) => x.videoId === s.videoId)) allLiveStreams.push(s);
     }
 
-    // Update viewer counts for existing scrapers and stop those no longer live
+    // Update viewer counts for existing scrapers and stop those no longer live.
+    // If any channel check failed (network error etc.), keep all scrapers running —
+    // a failed check is not proof the stream ended.
     for (const [videoId, scraper] of youtubeScrapers) {
       const updated = allLiveStreams.find((s) => s.videoId === videoId);
       if (!updated) {
+        if (anyCheckFailed) {
+          logService.info('youtube', `Keeping scraper for ${videoId} alive (channel check failed this cycle)`);
+          continue;
+        }
         const staleData = youtubeStreamData.get(videoId);
         if (staleData) chatLogService.closeSession(staleData.platform);
         scraper.stop();
