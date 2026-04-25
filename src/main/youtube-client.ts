@@ -10,31 +10,27 @@ export interface YTLiveClientOptions {
 }
 
 export class YTLiveClient {
-  private livechat: Awaited<ReturnType<InstanceType<typeof Innertube>['getInfo']>> extends { getLiveChat: () => infer T } ? T : never | null = null as any;
+  private livechat: any = null;
   private stopped = false;
-  private isFirstUpdate = true;
+  private startedAt = 0;
 
   constructor(private readonly options: YTLiveClientOptions) {}
 
   async start(): Promise<void> {
     this.stopped = false;
-    this.isFirstUpdate = true;
+    this.startedAt = Date.now();
 
     const yt = await Innertube.create();
     const info = await yt.getInfo(this.options.videoId);
     const livechat = info.getLiveChat();
     this.livechat = livechat;
 
+    // chat-update fires once per action (individual nodes, not a batch container)
     livechat.on('chat-update', (action: any) => {
       if (this.stopped) return;
-      const isHistory = this.isFirstUpdate;
-      this.isFirstUpdate = false;
       try {
-        const actions: any[] = action.actions ?? [];
-        for (const a of actions) {
-          if (a.type === 'AddChatItemAction' && a.item) {
-            this.handleItem(a.item, isHistory);
-          }
+        if (action.type === 'AddChatItemAction' && action.item) {
+          this.handleItem(action.item);
         }
       } catch (err) {
         this.options.onLog?.(`Chat update error: ${String(err)}`);
@@ -81,11 +77,11 @@ export class YTLiveClient {
     await authedChat.sendMessage(content);
   }
 
-  private handleItem(item: any, isHistory: boolean): void {
+  private handleItem(item: any): void {
     const type: string = item.type ?? '';
 
     if (type === 'LiveChatTextMessage') {
-      this.handleTextMessage(item, isHistory);
+      this.handleTextMessage(item);
     } else if (type === 'LiveChatPaidMessage') {
       this.handleSuperChat(item);
     } else if (type === 'LiveChatMembershipItem') {
@@ -95,13 +91,15 @@ export class YTLiveClient {
     }
   }
 
-  private handleTextMessage(item: any, isHistory: boolean): void {
+  private handleTextMessage(item: any): void {
     const author = this.authorName(item.author);
     const content: string = item.message?.toString()?.trim() ?? '';
     if (!content) return;
 
     const badges = this.parseBadges(item.author);
     const avatarUrl: string | undefined = item.author?.thumbnails?.[0]?.url ?? undefined;
+    // item.timestamp is in milliseconds (timestampUsec / 1000)
+    const isHistory = (item.timestamp ?? 0) < this.startedAt;
 
     this.options.onMessage({
       platform: 'youtube',
