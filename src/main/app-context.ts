@@ -863,18 +863,43 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       const handleMatch = handle.match(/(?:youtube\.com\/)?(@?[\w-]+)(?:\/.*)?$/);
       const rawHandle = handleMatch ? handleMatch[1] : handle;
       const normalizedHandle = rawHandle.startsWith('@') ? rawHandle : `@${rawHandle}`;
-      const url = `https://www.youtube.com/${normalizedHandle}/streams`;
-      const response = await net.fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-          'Accept-Language': 'en-US,en;q=0.9',
-        },
-      });
-      if (!response.ok) return [];
-      const html = await response.text();
-      const streams = extractYtLiveVideoIds(html);
-      const subscriberCount = extractYtSubscriberCount(html);
-      return streams.map((stream) => ({ ...stream, subscriberCount, channelHandle: normalizedHandle }));
+      const headers = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+      };
+
+      // Primary: /streams page lists live + upcoming + past streams
+      const streamsResponse = await net.fetch(`https://www.youtube.com/${normalizedHandle}/streams`, { headers });
+      let streams: LiveStreamInfo[] = [];
+      let subscriberCount: number | null = null;
+      if (streamsResponse.ok) {
+        const html = await streamsResponse.text();
+        streams = extractYtLiveVideoIds(html);
+        subscriberCount = extractYtSubscriberCount(html);
+      }
+
+      // Fallback: /@handle/live redirects to the active live stream video page
+      if (streams.length === 0) {
+        const liveResponse = await net.fetch(`https://www.youtube.com/${normalizedHandle}/live`, { headers });
+        if (liveResponse.ok) {
+          const finalUrl = liveResponse.url;
+          const videoIdMatch = finalUrl.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+          if (videoIdMatch) {
+            const html = await liveResponse.text();
+            const liveStreams = extractYtLiveVideoIds(html);
+            if (liveStreams.length > 0) {
+              streams = liveStreams;
+            } else {
+              // The redirect confirmed a live video; extract title from page if possible
+              const titleMatch = html.match(/"title":"([^"]+)"/);
+              streams = [{ videoId: videoIdMatch[1], title: titleMatch ? titleMatch[1] : '', viewCount: null, subscriberCount: null, channelHandle: '' }];
+            }
+            if (subscriberCount === null) subscriberCount = extractYtSubscriberCount(html);
+          }
+        }
+      }
+
+      return streams.map((stream) => ({ ...stream, subscriberCount: stream.subscriberCount ?? subscriberCount, channelHandle: normalizedHandle }));
     } catch (err) {
       logService.warn('youtube', 'Failed to check YouTube live', { error: err instanceof Error ? err.message : String(err) });
       return [];

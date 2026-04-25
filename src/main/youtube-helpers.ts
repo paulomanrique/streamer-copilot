@@ -47,17 +47,40 @@ export function findLiveVideoIds(obj: unknown, found: LiveStreamInfo[] = []): Li
     return found;
   }
   const record = obj as Record<string, unknown>;
-  if (typeof record.videoId === 'string' && Array.isArray(record.thumbnailOverlays)) {
-    const isLive = record.thumbnailOverlays.some((overlay: unknown) => {
-      if (!overlay || typeof overlay !== 'object') return false;
-      const tots = (overlay as Record<string, unknown>).thumbnailOverlayTimeStatusRenderer as Record<string, unknown> | undefined;
-      return tots?.style === 'LIVE';
-    });
-    if (isLive) {
+  if (typeof record.videoId === 'string') {
+    let isLive = false;
+
+    // Method 1: thumbnailOverlays with LIVE style
+    if (Array.isArray(record.thumbnailOverlays)) {
+      isLive = record.thumbnailOverlays.some((overlay: unknown) => {
+        if (!overlay || typeof overlay !== 'object') return false;
+        const tots = (overlay as Record<string, unknown>).thumbnailOverlayTimeStatusRenderer as Record<string, unknown> | undefined;
+        return tots?.style === 'LIVE' || tots?.style === 'LIVE_NOW';
+      });
+    }
+
+    // Method 2: badges array with live style or label
+    if (!isLive && Array.isArray(record.badges)) {
+      isLive = record.badges.some((badge: unknown) => {
+        if (!badge || typeof badge !== 'object') return false;
+        const meta = (badge as Record<string, unknown>).metadataBadgeRenderer as Record<string, unknown> | undefined;
+        const style = String(meta?.style ?? '');
+        const label = String(meta?.label ?? '').toLowerCase();
+        return style === 'BADGE_STYLE_TYPE_LIVE_NOW' || label === 'live now' || label === 'ao vivo';
+      });
+    }
+
+    // Method 3: viewCountText containing "watching" / "assistindo" (live-only phrasing)
+    if (!isLive) {
+      const vcText = getYtText(record.viewCountText).toLowerCase();
+      if (vcText.includes('watching') || vcText.includes('assistindo')) isLive = true;
+    }
+
+    if (isLive && !found.some((f) => f.videoId === record.videoId)) {
       const title = getYtText(record.title);
       const viewCountRaw = getYtText(record.viewCountText);
       const viewCount = viewCountRaw ? parseInt(viewCountRaw.replace(/[^0-9]/g, ''), 10) || null : null;
-      found.push({ videoId: record.videoId, title, viewCount, subscriberCount: null, channelHandle: '' });
+      found.push({ videoId: record.videoId as string, title, viewCount, subscriberCount: null, channelHandle: '' });
     }
   }
   for (const value of Object.values(record)) findLiveVideoIds(value, found);
