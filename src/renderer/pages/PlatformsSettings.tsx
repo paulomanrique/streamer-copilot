@@ -6,78 +6,88 @@ interface LiveCheckResult {
   videoIds: string[];
 }
 
-const STATUS_LABEL: Record<TwitchConnectionStatus, string> = {
-  disconnected: 'Disconnected',
-  connecting: 'Connecting…',
-  connected: 'Connected',
-  error: 'Connection error',
-};
-
-const STATUS_COLOR: Record<TwitchConnectionStatus, string> = {
-  disconnected: 'text-gray-400',
-  connecting: 'text-yellow-400',
-  connected: 'text-green-400',
-  error: 'text-red-400',
-};
-
-const STATUS_DOT: Record<TwitchConnectionStatus, string> = {
-  disconnected: 'bg-gray-500',
-  connecting: 'bg-yellow-400 animate-pulse',
-  connected: 'bg-green-400',
-  error: 'bg-red-500',
-};
-
-const TIKTOK_STATUS_LABEL: Record<TikTokConnectionStatus, string> = {
-  disconnected: 'Disconnected',
-  connecting: 'Connecting…',
-  captcha: 'Verification required',
-  connected: 'Connected',
-  error: 'Connection error',
-};
-
-const TIKTOK_STATUS_COLOR: Record<TikTokConnectionStatus, string> = {
-  disconnected: 'text-gray-400',
-  connecting: 'text-yellow-400',
-  captcha: 'text-orange-400',
-  connected: 'text-green-400',
-  error: 'text-red-400',
-};
-
-const TIKTOK_STATUS_DOT: Record<TikTokConnectionStatus, string> = {
-  disconnected: 'bg-gray-500',
-  connecting: 'bg-yellow-400 animate-pulse',
-  captcha: 'bg-orange-400 animate-pulse',
-  connected: 'bg-green-400',
-  error: 'bg-red-500',
-};
-
-const KICK_STATUS_LABEL: Record<KickConnectionStatus, string> = {
-  disconnected: 'Disconnected',
-  connecting: 'Connecting…',
-  connected: 'Connected',
-  error: 'Connection error',
-};
-
-const KICK_STATUS_COLOR: Record<KickConnectionStatus, string> = {
-  disconnected: 'text-gray-400',
-  connecting: 'text-yellow-400',
-  connected: 'text-green-400',
-  error: 'text-red-400',
-};
-
-const KICK_STATUS_DOT: Record<KickConnectionStatus, string> = {
-  disconnected: 'bg-gray-500',
-  connecting: 'bg-yellow-400 animate-pulse',
-  connected: 'bg-green-400',
-  error: 'bg-red-500',
-};
-
 type Step = 'idle' | 'waiting-browser' | 'confirm-channel';
+
+// ── Shared UI Atoms ───────────────────────────────────────────────────────────
+
+function StatusPill({ color, label, pulse = false }: { color: 'green' | 'yellow' | 'red' | 'gray'; label: string; pulse?: boolean }) {
+  const bg = { green: 'bg-green-500/15 text-green-400', yellow: 'bg-yellow-500/15 text-yellow-400', red: 'bg-red-500/15 text-red-400', gray: 'bg-gray-700 text-gray-400' }[color];
+  const dot = { green: 'bg-green-400', yellow: 'bg-yellow-400', red: 'bg-red-400', gray: 'bg-gray-500' }[color];
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${bg}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${dot} ${pulse ? 'animate-pulse' : ''}`} />
+      {label}
+    </span>
+  );
+}
+
+function PlatformCard({ accent, children }: { accent: string; children: React.ReactNode }) {
+  return (
+    <div className={`bg-gray-800/50 border border-gray-700/60 rounded-xl overflow-hidden border-l-4 ${accent}`}>
+      {children}
+    </div>
+  );
+}
+
+function CardHeader({ icon, name, status }: { icon: React.ReactNode; name: string; status: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between px-5 py-4">
+      <div className="flex items-center gap-3">
+        {icon}
+        <span className="text-sm font-semibold text-gray-100">{name}</span>
+      </div>
+      {status}
+    </div>
+  );
+}
+
+function Spinner() {
+  return (
+    <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+    </svg>
+  );
+}
+
+// ── Platform Icons ────────────────────────────────────────────────────────────
+
+function TwitchIcon() {
+  return (
+    <div className="w-9 h-9 rounded-lg bg-purple-500/20 flex items-center justify-center shrink-0">
+      <svg className="w-4.5 h-4.5 text-purple-400 w-[18px] h-[18px]" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z" />
+      </svg>
+    </div>
+  );
+}
+
+function YouTubeIcon() {
+  return (
+    <div className="w-9 h-9 rounded-lg bg-red-500/20 flex items-center justify-center shrink-0">
+      <svg className="w-[18px] h-[18px] text-red-400" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z" />
+      </svg>
+    </div>
+  );
+}
+
+function KickIcon() {
+  return (
+    <div className="w-9 h-9 rounded-lg bg-green-500/20 flex items-center justify-center shrink-0">
+      <svg className="w-[18px] h-[18px] text-green-400" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M2 2h4v8l4-4h4l-6 6 6 6h-4l-4-4v4H2V2zm14 0h4v20h-4z" />
+      </svg>
+    </div>
+  );
+}
+
+// ── Main Component ────────────────────────────────────────────────────────────
 
 export function PlatformsSettingsPage() {
   const channelRef = useRef<HTMLInputElement>(null);
 
-  // Twitch state
+  // Twitch
   const [status, setStatus] = useState<TwitchConnectionStatus>('disconnected');
   const [savedCreds, setSavedCreds] = useState<TwitchCredentials | null>(null);
   const [step, setStep] = useState<Step>('idle');
@@ -86,38 +96,34 @@ export function PlatformsSettingsPage() {
   const [channel, setChannel] = useState('');
   const [isEditingChannel, setIsEditingChannel] = useState(false);
 
-  // YouTube state
+  // YouTube
   const [ytStreams, setYtStreams] = useState<YouTubeStreamInfo[]>([]);
   const [ytSettings, setYtSettings] = useState<YouTubeSettings>({ channels: [], autoConnect: true });
   const [newChannelHandle, setNewChannelHandle] = useState('');
-
-  const [isBusy, setIsBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isSavingYtSettings, setIsSavingYtSettings] = useState(false);
   const [checkingHandle, setCheckingHandle] = useState<string | null>(null);
   const [liveCheckResult, setLiveCheckResult] = useState<LiveCheckResult | null>(null);
-  const [isSavingYtSettings, setIsSavingYtSettings] = useState(false);
 
-  // TikTok state
-  const [tiktokStatus, setTiktokStatus] = useState<TikTokConnectionStatus>('disconnected');
-  const [tiktokSettings, setTiktokSettings] = useState<TikTokSettings>({ username: '', autoConnect: false });
-  const [tiktokUsernameInput, setTiktokUsernameInput] = useState('');
-  const [tiktokCheckingLive, setTiktokCheckingLive] = useState(false);
-  const [tiktokLiveResult, setTiktokLiveResult] = useState<boolean | null>(null);
-
-  // Kick state
+  // Kick
   const [kickStatus, setKickStatus] = useState<KickConnectionStatus>('disconnected');
   const [kickSlug, setKickSlug] = useState<string | null>(null);
   const [kickAuth, setKickAuth] = useState<KickAuthStatus>({ channelSlug: null, expiresAt: null, scope: null, isAuthorized: false });
-  const [kickSettings, setKickSettings] = useState<KickSettings>({
-    channelInput: '',
-    clientId: '',
-    clientSecret: '',
-    autoConnect: false,
-  });
+  const [kickSettings, setKickSettings] = useState<KickSettings>({ channelInput: '', clientId: '', clientSecret: '', autoConnect: false });
+
+  // TikTok (disabled but still tracked)
+  const [, setTiktokStatus] = useState<TikTokConnectionStatus>('disconnected');
+  const [, setTiktokSettings] = useState<TikTokSettings>({ username: '', autoConnect: false });
+
+  const [isBusy, setIsBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     void (async () => {
-      const [currentStatus, creds, ytConnectedStatus, ytSavedSettings, tiktokCurrentStatus, tiktokSavedSettings, kickCurrentStatus, kickSavedSettings, kickAuthStatus] = await Promise.all([
+      const [
+        currentStatus, creds, ytConnected, ytSaved,
+        tiktokCurrentStatus, tiktokSaved,
+        kickCurrentStatus, kickSaved, kickAuthStatus,
+      ] = await Promise.all([
         window.copilot.twitchGetStatus(),
         window.copilot.twitchGetCredentials(),
         window.copilot.youtubeGetStatus(),
@@ -130,33 +136,25 @@ export function PlatformsSettingsPage() {
       ]);
       setStatus(currentStatus);
       setSavedCreds(creds);
-      setYtStreams(ytConnectedStatus);
-      setYtSettings(ytSavedSettings);
+      setYtStreams(ytConnected);
+      setYtSettings(ytSaved);
       setTiktokStatus(tiktokCurrentStatus);
-      setTiktokSettings(tiktokSavedSettings);
-      setTiktokUsernameInput(tiktokSavedSettings.username);
+      setTiktokSettings(tiktokSaved);
       setKickStatus(kickCurrentStatus);
-      setKickSettings(kickSavedSettings);
+      setKickSettings(kickSaved);
       setKickAuth(kickAuthStatus);
     })();
 
     const unsubTwitch = window.copilot.onTwitchStatus((s) => setStatus(s));
     const unsubYt = window.copilot.onYoutubeStatus((s) => setYtStreams(s));
     const unsubTiktok = window.copilot.onTiktokStatus((s) => setTiktokStatus(s));
-    const unsubKick = window.copilot.onKickStatus((s, slug) => {
-      setKickStatus(s);
-      setKickSlug(slug);
-    });
+    const unsubKick = window.copilot.onKickStatus((s, slug) => { setKickStatus(s); setKickSlug(slug); });
 
-    return () => {
-      unsubTwitch();
-      unsubYt();
-      unsubTiktok();
-      unsubKick();
-    };
+    return () => { unsubTwitch(); unsubYt(); unsubTiktok(); unsubKick(); };
   }, []);
 
-  // ── Twitch Actions ────────────────────────────────────────────────
+  // ── Twitch Actions ────────────────────────────────────────────────────────
+
   const startOAuth = async () => {
     setError(null);
     setStep('waiting-browser');
@@ -178,13 +176,8 @@ export function PlatformsSettingsPage() {
     setIsBusy(true);
     setError(null);
     try {
-      await window.copilot.twitchConnect({
-        channel: channel.trim().replace(/^#/, '').toLowerCase(),
-        username: pendingUsername,
-        oauthToken: `oauth:${pendingToken}`,
-      });
-      const creds = await window.copilot.twitchGetCredentials();
-      setSavedCreds(creds);
+      await window.copilot.twitchConnect({ channel: channel.trim().replace(/^#/, '').toLowerCase(), username: pendingUsername, oauthToken: `oauth:${pendingToken}` });
+      setSavedCreds(await window.copilot.twitchGetCredentials());
       setStep('idle');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Failed to connect');
@@ -192,18 +185,12 @@ export function PlatformsSettingsPage() {
   };
 
   const saveEditedChannel = async () => {
-    if (!channel.trim()) { setError('Channel is required'); return; }
-    if (!savedCreds) return;
+    if (!channel.trim() || !savedCreds) return;
     setIsBusy(true);
     setError(null);
     try {
-      await window.copilot.twitchConnect({
-        channel: channel.trim().replace(/^#/, '').toLowerCase(),
-        username: savedCreds.username,
-        oauthToken: savedCreds.oauthToken,
-      });
-      const creds = await window.copilot.twitchGetCredentials();
-      setSavedCreds(creds);
+      await window.copilot.twitchConnect({ channel: channel.trim().replace(/^#/, '').toLowerCase(), username: savedCreds.username, oauthToken: savedCreds.oauthToken });
+      setSavedCreds(await window.copilot.twitchGetCredentials());
       setIsEditingChannel(false);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Failed to update channel');
@@ -212,67 +199,42 @@ export function PlatformsSettingsPage() {
 
   const disconnectTwitch = async () => {
     setIsBusy(true);
-    try {
-      await window.copilot.twitchDisconnect();
-      setSavedCreds(null);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Failed to disconnect');
-    } finally { setIsBusy(false); }
+    try { await window.copilot.twitchDisconnect(); setSavedCreds(null); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'Failed to disconnect'); }
+    finally { setIsBusy(false); }
   };
 
-  // ── YouTube Actions ───────────────────────────────────────────────
+  // ── YouTube Actions ───────────────────────────────────────────────────────
+
   const saveYtSettings = async (next: YouTubeSettings) => {
-    const previous = ytSettings;
+    const prev = ytSettings;
     setYtSettings(next);
     setIsSavingYtSettings(true);
-    setError(null);
     try {
       const saved = await window.copilot.youtubeSaveSettings(next);
       setYtSettings(saved);
       return saved;
     } catch (cause) {
-      setYtSettings(previous);
-      setError(cause instanceof Error ? cause.message : 'Failed to save YouTube settings');
+      setYtSettings(prev);
       throw cause;
-    } finally {
-      setIsSavingYtSettings(false);
-    }
+    } finally { setIsSavingYtSettings(false); }
   };
 
   const addYouTubeChannel = async () => {
     const handle = newChannelHandle.trim();
     if (!handle || isSavingYtSettings) return;
-    const next: YouTubeSettings = {
-      ...ytSettings,
-      channels: [
-        ...ytSettings.channels,
-        { id: crypto.randomUUID(), handle, enabled: true }
-      ]
-    };
-    await saveYtSettings(next);
+    await saveYtSettings({ ...ytSettings, channels: [...ytSettings.channels, { id: crypto.randomUUID(), handle, enabled: true }] });
     setNewChannelHandle('');
   };
 
   const removeYouTubeChannel = async (id: string) => {
     if (isSavingYtSettings) return;
-    const next: YouTubeSettings = {
-      ...ytSettings,
-      channels: ytSettings.channels.filter(c => c.id !== id)
-    };
-    await saveYtSettings(next);
+    await saveYtSettings({ ...ytSettings, channels: ytSettings.channels.filter(c => c.id !== id) });
   };
 
   const toggleYouTubeChannel = async (id: string) => {
     if (isSavingYtSettings) return;
-    const next: YouTubeSettings = {
-      ...ytSettings,
-      channels: ytSettings.channels.map(c => c.id === id ? { ...c, enabled: !c.enabled } : c)
-    };
-    await saveYtSettings(next);
-  };
-
-  const disconnectYoutube = async () => {
-    await window.copilot.youtubeDisconnect();
+    await saveYtSettings({ ...ytSettings, channels: ytSettings.channels.map(c => c.id === id ? { ...c, enabled: !c.enabled } : c) });
   };
 
   const checkChannelLive = async (handle: string) => {
@@ -280,70 +242,25 @@ export function PlatformsSettingsPage() {
     try {
       const result = await window.copilot.youtubeCheckLive(handle);
       setLiveCheckResult({ handle, videoIds: result.videoIds });
-    } finally {
-      setCheckingHandle(null);
-    }
+    } finally { setCheckingHandle(null); }
   };
 
-  // ── TikTok Actions ────────────────────────────────────────────────
-  const saveTiktokSettings = async (next: TikTokSettings) => {
-    setTiktokSettings(next);
-    await window.copilot.tiktokSaveSettings(next);
-  };
+  // ── Kick Actions ──────────────────────────────────────────────────────────
 
-  const connectTiktok = async () => {
-    const username = tiktokUsernameInput.trim().replace(/^@/, '');
-    if (!username) { setError('TikTok username is required'); return; }
-    setIsBusy(true);
-    setError(null);
-    try {
-      await saveTiktokSettings({ username, autoConnect: tiktokSettings.autoConnect });
-      await window.copilot.tiktokConnect({ username });
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Failed to connect to TikTok');
-    } finally { setIsBusy(false); }
-  };
-
-  const disconnectTiktok = async () => {
-    setIsBusy(true);
-    try {
-      await window.copilot.tiktokDisconnect();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Failed to disconnect TikTok');
-    } finally { setIsBusy(false); }
-  };
-
-  const checkTiktokLive = async () => {
-    const username = tiktokUsernameInput.trim().replace(/^@/, '');
-    if (!username) return;
-    setTiktokCheckingLive(true);
-    try {
-      const result = await window.copilot.tiktokCheckLive(username);
-      setTiktokLiveResult(result.isLive);
-    } finally { setTiktokCheckingLive(false); }
-  };
-
-  // ── Kick Actions ────────────────────────────────────────────────
   const saveKickSettings = async (next: KickSettings) => {
     setKickSettings(next);
     await window.copilot.kickSaveSettings(next);
   };
 
   const connectKick = async () => {
-    const channelInput = kickSettings.channelInput.trim();
-    if (!channelInput) { setError('Kick channel slug or URL is required'); return; }
+    if (!kickSettings.channelInput.trim()) { setError('Kick channel slug or URL is required'); return; }
     setIsBusy(true);
     setError(null);
     try {
       await window.copilot.kickSaveSettings(kickSettings);
-      await window.copilot.kickConnect({
-        channelInput,
-        clientId: '',
-        clientSecret: '',
-      });
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Failed to connect to Kick');
-    } finally { setIsBusy(false); }
+      await window.copilot.kickConnect({ channelInput: kickSettings.channelInput.trim(), clientId: '', clientSecret: '' });
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Failed to connect to Kick'); }
+    finally { setIsBusy(false); }
   };
 
   const authorizeKick = async () => {
@@ -354,441 +271,406 @@ export function PlatformsSettingsPage() {
       const { channelSlug } = await window.copilot.kickStartOAuth();
       const authStatus = await window.copilot.kickGetAuthStatus();
       setKickAuth({ ...authStatus, channelSlug: authStatus.channelSlug ?? channelSlug, isAuthorized: true });
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Failed to authorize Kick chat');
-    } finally {
-      setIsBusy(false);
-    }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Failed to authorize Kick'); }
+    finally { setIsBusy(false); }
   };
 
   const disconnectKick = async () => {
     setIsBusy(true);
-    try {
-      await window.copilot.kickDisconnect();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Failed to disconnect Kick');
-    } finally { setIsBusy(false); }
+    try { await window.copilot.kickDisconnect(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'Failed to disconnect Kick'); }
+    finally { setIsBusy(false); }
+  };
+
+  // ── Twitch Status Helpers ─────────────────────────────────────────────────
+
+  const twitchStatus = (): { color: 'green' | 'yellow' | 'gray' | 'red'; label: string; pulse?: boolean } => {
+    if (step === 'waiting-browser') return { color: 'yellow', label: 'Waiting for authorization…', pulse: true };
+    if (step === 'confirm-channel') return { color: 'yellow', label: 'Almost there…', pulse: true };
+    if (status === 'connected') return { color: 'green', label: savedCreds ? `#${savedCreds.channel}` : 'Connected' };
+    if (status === 'connecting') return { color: 'yellow', label: 'Connecting…', pulse: true };
+    if (status === 'error') return { color: 'red', label: 'Connection error' };
+    return { color: 'gray', label: 'Disconnected' };
+  };
+
+  const ytStatus = () => {
+    if (ytStreams.length > 0) return { color: 'green' as const, label: `${ytStreams.length} live${ytStreams.length > 1 ? 's' : ''} connected` };
+    return { color: 'gray' as const, label: 'Monitoring' };
+  };
+
+  const kickStatusInfo = () => {
+    if (kickStatus === 'connected') return { color: 'green' as const, label: kickSlug ?? 'Connected' };
+    if (kickStatus === 'connecting') return { color: 'yellow' as const, label: 'Connecting…', pulse: true };
+    if (kickStatus === 'error') return { color: 'red' as const, label: 'Connection error' };
+    return { color: 'gray' as const, label: 'Disconnected' };
   };
 
   return (
     <>
-    <div className="min-h-full p-6 max-w-lg">
-      <h2 className="text-lg font-semibold mb-1">Platforms</h2>
-      <p className="text-sm text-gray-400 mb-6">Connect your streaming accounts to enable chat integration.</p>
+      <div className="min-h-full p-6 max-w-lg">
+        <h2 className="text-base font-semibold mb-0.5">Platforms</h2>
+        <p className="text-sm text-gray-500 mb-6">Connect your streaming accounts to enable chat integration.</p>
 
-      <div className="bg-gray-800/40 rounded-xl border border-gray-700 divide-y divide-gray-700">
+        {error && (
+          <div className="mb-4 flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-2.5">
+            <svg className="w-4 h-4 text-red-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            </svg>
+            <p className="text-xs text-red-300 flex-1">{error}</p>
+            <button type="button" onClick={() => setError(null)} className="text-red-400/60 hover:text-red-400">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+        )}
 
-        {/* Twitch */}
-        <div className="px-5 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-purple-600/20 flex items-center justify-center shrink-0">
-                <svg className="w-4 h-4 text-purple-400" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"/>
-                </svg>
-              </div>
-              <div>
-                <p className="text-sm font-medium">Twitch</p>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[status]}`} />
-                  <span className={`text-xs ${STATUS_COLOR[status]}`}>
-                    {STATUS_LABEL[status]}
-                    {status === 'connected' && savedCreds && !isEditingChannel ? ` · #${savedCreds.channel}` : ''}
-                  </span>
-                  {status === 'connected' && !isEditingChannel && (
-                    <button type="button" onClick={() => setIsEditingChannel(true)} className="text-[10px] text-violet-400 hover:text-violet-300 ml-1 underline">Edit channel</button>
-                  )}
+        <div className="space-y-3">
+
+          {/* ── Twitch ──────────────────────────────────────────────────── */}
+          <PlatformCard accent="border-l-purple-500">
+            <CardHeader
+              icon={<TwitchIcon />}
+              name="Twitch"
+              status={<StatusPill {...twitchStatus()} />}
+            />
+
+            {status === 'connected' && step === 'idle' && !isEditingChannel && (
+              <div className="px-5 pb-4 flex items-center justify-between border-t border-gray-700/40 pt-3">
+                <div className="flex items-center gap-2 text-sm text-gray-300">
+                  <svg className="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <span className="font-mono text-xs">{savedCreds?.username}</span>
+                  <span className="text-gray-600">·</span>
+                  <button type="button" onClick={() => { setChannel(savedCreds?.channel ?? ''); setIsEditingChannel(true); }} className="text-xs text-purple-400 hover:text-purple-300">
+                    Edit channel
+                  </button>
                 </div>
-              </div>
-            </div>
-
-            {step === 'idle' && !isEditingChannel && (
-              <div className="flex gap-2">
-                {status === 'connected' ? (
-                  <button type="button" onClick={disconnectTwitch} className="text-xs px-3 py-1.5 rounded bg-gray-700 text-gray-300">Disconnect</button>
-                ) : (
-                  <button type="button" onClick={startOAuth} className="text-xs px-3 py-1.5 rounded bg-purple-600 text-white">Connect</button>
-                )}
+                <button type="button" onClick={() => void disconnectTwitch()} disabled={isBusy} className="text-xs px-3 py-1.5 rounded-lg bg-gray-700/80 text-gray-300 hover:bg-gray-700 disabled:opacity-50 transition-colors">
+                  Disconnect
+                </button>
               </div>
             )}
-          </div>
 
-          {/* Step: waiting for browser */}
-          {step === 'waiting-browser' && (
-            <div className="mt-4 flex items-center justify-between bg-gray-800/60 rounded-lg px-4 py-3">
-              <div className="flex items-center gap-2.5">
-                <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse shrink-0" />
-                <p className="text-sm text-gray-300">Waiting for Twitch authorization in browser…</p>
-              </div>
-              <button type="button" onClick={() => setStep('idle')} className="text-xs text-gray-500 hover:text-gray-300">Cancel</button>
-            </div>
-          )}
-
-          {/* Inline Edit Channel */}
-          {isEditingChannel && (
-            <div className="mt-4 p-3 bg-gray-800/40 rounded-lg border border-gray-700/50">
-              <label className="block text-[10px] uppercase tracking-wider font-semibold text-gray-500 mb-2">Join Different Channel</label>
-              <div className="flex gap-2">
-                <input
-                  ref={channelRef}
-                  type="text"
-                  value={channel}
-                  onChange={(e) => setChannel(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && void saveEditedChannel()}
-                  className="flex-1 bg-gray-900 border border-gray-700 rounded text-sm text-gray-200 px-3 py-1.5 focus:outline-none focus:border-violet-500 font-mono"
-                />
-                <button type="button" onClick={() => setIsEditingChannel(false)} className="px-3 py-1.5 rounded bg-gray-700 text-xs text-gray-300">Cancel</button>
-                <button type="button" disabled={isBusy} onClick={() => void saveEditedChannel()} className="px-3 py-1.5 rounded bg-violet-600 text-xs font-medium text-white disabled:opacity-50">Save</button>
-              </div>
-            </div>
-          )}
-
-          {/* Step: confirm channel */}
-          {step === 'confirm-channel' && (
-            <div className="mt-4 space-y-3">
-              <div className="flex items-center gap-2 text-sm text-green-400 mb-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
-                Authorized as <span className="font-mono font-medium">{pendingUsername}</span>
-              </div>
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Channel to join <span className="text-violet-400">*</span></label>
-                <input
-                  ref={channelRef}
-                  type="text"
-                  value={channel}
-                  onChange={(e) => setChannel(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && void confirmConnect()}
-                  placeholder="mychannel"
-                  className="w-full bg-gray-900 border border-gray-700 rounded text-sm text-gray-200 px-3 py-2 focus:outline-none focus:border-violet-500 font-mono"
-                />
-              </div>
-              <div className="flex gap-2 pt-1">
-                <button type="button" onClick={() => setStep('idle')} className="flex-1 px-3 py-2 rounded bg-gray-700 text-sm">Cancel</button>
-                <button type="button" disabled={isBusy} onClick={() => void confirmConnect()} className="flex-1 px-3 py-2 rounded bg-purple-600 text-sm font-medium disabled:opacity-60">{isBusy ? 'Connecting…' : 'Connect'}</button>
-              </div>
-            </div>
-          )}
-
-          {error && step === 'idle' && <p className="mt-3 text-xs text-red-400">{error}</p>}
-        </div>
-
-        {/* YouTube Scraper & Monitor */}
-        <div className="px-5 py-4">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-red-600/20 flex items-center justify-center shrink-0">
-                <svg className="w-4 h-4 text-red-400" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/>
-                </svg>
-              </div>
-              <div>
-                <p className="text-sm font-medium">YouTube Auto-Monitor</p>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className={`w-1.5 h-1.5 rounded-full ${ytStreams.length > 0 ? 'bg-green-400' : 'bg-gray-500'}`} />
-                  <span className={`text-xs ${ytStreams.length > 0 ? 'text-green-400' : 'text-gray-400'}`}>
-                    {ytStreams.length > 0 ? `${ytStreams.length} Scraper${ytStreams.length > 1 ? 's' : ''} Active` : 'Monitoring for Lives'}
-                  </span>
-                </div>
-              </div>
-            </div>
-            {ytStreams.length > 0 && (
-              <button type="button" onClick={disconnectYoutube} className="text-xs px-2 py-1 rounded bg-red-900/30 text-red-400 hover:bg-red-900/50">Stop Scrapers</button>
-            )}
-          </div>
-
-          <div className="space-y-3">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Channel handle (e.g. @MrBeast)"
-                value={newChannelHandle}
-                onChange={(e) => setNewChannelHandle(e.target.value)}
-                disabled={isSavingYtSettings}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void addYouTubeChannel();
-                }}
-                className="flex-1 bg-gray-900 border border-gray-700 rounded text-sm text-gray-200 px-3 py-1.5 focus:outline-none focus:border-red-500"
-              />
-              <button type="button" disabled={isSavingYtSettings} onClick={() => void addYouTubeChannel()} className="px-3 py-1.5 rounded bg-gray-700 text-xs font-medium hover:bg-gray-600 disabled:opacity-60">
-                {isSavingYtSettings ? 'Saving…' : 'Add'}
-              </button>
-            </div>
-
-            <div className="space-y-1.5">
-              {ytSettings.channels.map(c => (
-                <div key={c.id} className="flex items-center justify-between p-2 bg-gray-900/50 rounded border border-gray-700/50">
-                  <div className="flex items-center gap-2">
-                    <input type="checkbox" checked={c.enabled} disabled={isSavingYtSettings} onChange={() => void toggleYouTubeChannel(c.id)} className="accent-red-500" />
-                    <span className={`text-xs font-mono ${c.enabled ? 'text-gray-200' : 'text-gray-500'}`}>{c.handle}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      disabled={checkingHandle === c.handle}
-                      onClick={() => void checkChannelLive(c.handle)}
-                      className="text-[10px] px-2 py-0.5 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-40 flex items-center gap-1"
-                    >
-                      {checkingHandle === c.handle ? (
-                        <svg className="w-2.5 h-2.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                        </svg>
-                      ) : (
-                        <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                        </svg>
-                      )}
-                      Check
-                    </button>
-                    <button type="button" disabled={isSavingYtSettings} onClick={() => void removeYouTubeChannel(c.id)} className="text-gray-500 hover:text-red-400 disabled:opacity-40">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
-                    </button>
-                  </div>
-                </div>
-              ))}
-              {ytSettings.channels.length === 0 && (
-                <p className="text-[10px] text-gray-500 italic text-center py-2">No channels registered. Add one to auto-connect.</p>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2 pt-1">
-              <input 
-                type="checkbox" 
-                id="yt-auto-connect" 
-                checked={ytSettings.autoConnect} 
-                disabled={isSavingYtSettings}
-                onChange={(e) => void saveYtSettings({ ...ytSettings, autoConnect: e.target.checked })}
-                className="accent-red-500"
-              />
-              <label htmlFor="yt-auto-connect" className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold cursor-pointer">Auto-connect when live detected</label>
-            </div>
-          </div>
-          
-          <div className="mt-4 pt-4 border-t border-gray-700/50">
-             <button type="button" onClick={() => void window.copilot.youtubeOpenLogin()} className="text-[10px] text-gray-500 hover:text-gray-400 underline decoration-gray-500/30 underline-offset-2">YouTube Login (for members chat)</button>
-          </div>
-        </div>
-
-        {/* TikTok — desativado temporariamente */}
-        {false && (
-        <div className="px-5 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-pink-600/20 flex items-center justify-center shrink-0">
-                <svg className="w-4 h-4 text-pink-400" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1v-3.51a6.37 6.37 0 0 0-.79-.05A6.34 6.34 0 0 0 3.15 15.17a6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V8.75a8.18 8.18 0 0 0 4.76 1.52V6.84a4.84 4.84 0 0 1-1-.15z"/>
-                </svg>
-              </div>
-              <div>
-                <p className="text-sm font-medium">TikTok Live</p>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className={`w-1.5 h-1.5 rounded-full ${TIKTOK_STATUS_DOT[tiktokStatus]}`} />
-                  <span className={`text-xs ${TIKTOK_STATUS_COLOR[tiktokStatus]}`}>
-                    {TIKTOK_STATUS_LABEL[tiktokStatus]}
-                    {tiktokStatus === 'connected' && tiktokSettings.username ? ` · @${tiktokSettings.username}` : ''}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {tiktokStatus === 'connected' ? (
-              <button type="button" onClick={() => void disconnectTiktok()} className="text-xs px-3 py-1.5 rounded bg-gray-700 text-gray-300">Disconnect</button>
-            ) : tiktokStatus === 'captcha' ? (
-              <button type="button" onClick={() => void disconnectTiktok()} className="text-xs px-3 py-1.5 rounded bg-gray-700 text-gray-300">Cancel</button>
-            ) : tiktokStatus !== 'connecting' ? (
-              <button type="button" disabled={isBusy || !tiktokUsernameInput.trim()} onClick={() => void connectTiktok()} className="text-xs px-3 py-1.5 rounded bg-pink-600 text-white disabled:opacity-50">Connect</button>
-            ) : null}
-          </div>
-
-          {tiktokStatus === 'captcha' && (
-            <div className="mt-3 flex items-start gap-2 bg-orange-500/10 border border-orange-500/30 rounded-lg px-3 py-2.5">
-              <svg className="w-4 h-4 text-orange-400 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-              </svg>
-              <p className="text-xs text-orange-300 leading-snug">
-                TikTok is requesting verification. A popup window appeared — solve the CAPTCHA there to continue connecting.
-              </p>
-            </div>
-          )}
-
-          {tiktokStatus !== 'connected' && tiktokStatus !== 'captcha' && (
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">TikTok Username <span className="text-pink-400">*</span></label>
+            {isEditingChannel && (
+              <div className="px-5 pb-4 border-t border-gray-700/40 pt-3">
+                <label className="block text-[10px] uppercase tracking-wider font-semibold text-gray-500 mb-2">Join a different channel</label>
                 <div className="flex gap-2">
                   <input
+                    ref={channelRef}
                     type="text"
-                    value={tiktokUsernameInput}
-                    onChange={(e) => { setTiktokUsernameInput(e.target.value); setTiktokLiveResult(null); }}
-                    onKeyDown={(e) => e.key === 'Enter' && void connectTiktok()}
-                    placeholder="@username"
-                    className="flex-1 bg-gray-900 border border-gray-700 rounded text-sm text-gray-200 px-3 py-1.5 focus:outline-none focus:border-pink-500 font-mono"
+                    value={channel}
+                    onChange={(e) => setChannel(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && void saveEditedChannel()}
+                    className="flex-1 bg-gray-900 border border-gray-700 rounded-lg text-sm text-gray-200 px-3 py-1.5 focus:outline-none focus:border-purple-500 font-mono"
                   />
-                  <button
-                    type="button"
-                    disabled={tiktokCheckingLive || !tiktokUsernameInput.trim()}
-                    onClick={() => void checkTiktokLive()}
-                    className="text-[10px] px-2 py-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-40 flex items-center gap-1"
-                  >
-                    {tiktokCheckingLive ? (
-                      <svg className="w-2.5 h-2.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                      </svg>
-                    ) : (
-                      <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                      </svg>
-                    )}
-                    Check
+                  <button type="button" onClick={() => setIsEditingChannel(false)} className="px-3 py-1.5 rounded-lg bg-gray-700 text-xs text-gray-300">Cancel</button>
+                  <button type="button" disabled={isBusy} onClick={() => void saveEditedChannel()} className="px-3 py-1.5 rounded-lg bg-purple-600 text-xs font-medium text-white disabled:opacity-50">Save</button>
+                </div>
+              </div>
+            )}
+
+            {step === 'waiting-browser' && (
+              <div className="px-5 pb-4 border-t border-gray-700/40 pt-3">
+                <div className="flex items-center justify-between bg-yellow-500/8 border border-yellow-500/20 rounded-lg px-4 py-3">
+                  <div className="flex items-center gap-2.5">
+                    <Spinner />
+                    <p className="text-xs text-gray-300">Complete the authorization in the browser window that opened…</p>
+                  </div>
+                  <button type="button" onClick={() => setStep('idle')} className="text-xs text-gray-500 hover:text-gray-300 ml-3">Cancel</button>
+                </div>
+              </div>
+            )}
+
+            {step === 'confirm-channel' && (
+              <div className="px-5 pb-4 border-t border-gray-700/40 pt-3 space-y-3">
+                <div className="flex items-center gap-2 text-sm text-green-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
+                  Authorized as <span className="font-mono font-medium">{pendingUsername}</span>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1.5">Channel to join <span className="text-purple-400">*</span></label>
+                  <input
+                    ref={channelRef}
+                    type="text"
+                    value={channel}
+                    onChange={(e) => setChannel(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && void confirmConnect()}
+                    placeholder="mychannel"
+                    className="w-full bg-gray-900 border border-gray-700 rounded-lg text-sm text-gray-200 px-3 py-2 focus:outline-none focus:border-purple-500 font-mono"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setStep('idle')} className="flex-1 px-3 py-2 rounded-lg bg-gray-700 text-sm text-gray-300">Cancel</button>
+                  <button type="button" disabled={isBusy} onClick={() => void confirmConnect()} className="flex-1 px-3 py-2 rounded-lg bg-purple-600 text-sm font-medium disabled:opacity-60">
+                    {isBusy ? 'Connecting…' : 'Connect'}
                   </button>
                 </div>
-                {tiktokLiveResult !== null && (
-                  <p className={`text-[10px] mt-1 ${tiktokLiveResult ? 'text-green-400' : 'text-gray-500'}`}>
-                    {tiktokLiveResult ? '● Live now!' : '○ Not currently live'}
-                  </p>
-                )}
               </div>
+            )}
 
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="tiktok-auto-connect"
-                  checked={tiktokSettings.autoConnect}
-                  onChange={(e) => void saveTiktokSettings({ ...tiktokSettings, username: tiktokUsernameInput.trim().replace(/^@/, ''), autoConnect: e.target.checked })}
-                  className="accent-pink-500"
-                />
-                <label htmlFor="tiktok-auto-connect" className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold cursor-pointer">Auto-connect on startup</label>
+            {step === 'idle' && status !== 'connected' && !isEditingChannel && (
+              <div className="px-5 pb-4 border-t border-gray-700/40 pt-3">
+                <button type="button" onClick={() => void startOAuth()} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-sm font-medium transition-colors">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z" />
+                  </svg>
+                  Connect with Twitch
+                </button>
               </div>
-            </div>
-          )}
-        </div>
-        )} {/* end TIKTOK_DISABLED */}
+            )}
+          </PlatformCard>
 
-        {/* Kick */}
-        <div className="px-5 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-green-600/20 flex items-center justify-center shrink-0">
-                <svg className="w-4 h-4 text-green-400" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M2 2h4v8l4-4h4l-6 6 6 6h-4l-4-4v4H2V2zm14 0h4v20h-4z"/>
-                </svg>
-              </div>
-              <div>
-                <p className="text-sm font-medium">Kick</p>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className={`w-1.5 h-1.5 rounded-full ${KICK_STATUS_DOT[kickStatus]}`} />
-                  <span className={`text-xs ${KICK_STATUS_COLOR[kickStatus]}`}>
-                    {KICK_STATUS_LABEL[kickStatus]}
-                    {kickStatus === 'connected' && kickSlug ? ` · ${kickSlug}` : ''}
-                  </span>
+          {/* ── YouTube ─────────────────────────────────────────────────── */}
+          <PlatformCard accent="border-l-red-500">
+            <CardHeader
+              icon={<YouTubeIcon />}
+              name="YouTube"
+              status={<StatusPill {...ytStatus()} />}
+            />
+
+            {ytStreams.length > 0 && (
+              <div className="px-5 pb-4 border-t border-gray-700/40 pt-3">
+                <div className="space-y-2 mb-3">
+                  {ytStreams.map((stream) => (
+                    <div key={stream.videoId} className="flex items-center justify-between bg-red-500/8 border border-red-500/20 rounded-lg px-3 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse shrink-0" />
+                        <span className="text-xs text-gray-200 font-medium">{stream.channelHandle ?? stream.videoId}</span>
+                        {stream.viewerCount !== null && (
+                          <span className="text-[10px] text-gray-500">{stream.viewerCount.toLocaleString()} viewers</span>
+                        )}
+                      </div>
+                      <a href={stream.liveUrl} target="_blank" rel="noreferrer" className="text-[10px] text-red-400/60 hover:text-red-400">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                      </a>
+                    </div>
+                  ))}
                 </div>
+                <button type="button" onClick={() => void window.copilot.youtubeDisconnect()} className="text-xs px-3 py-1.5 rounded-lg bg-red-900/30 text-red-400 hover:bg-red-900/50 transition-colors border border-red-900/40">
+                  Stop connections
+                </button>
               </div>
-            </div>
+            )}
 
-            {kickStatus === 'connected' ? (
-              <button type="button" onClick={() => void disconnectKick()} className="text-xs px-3 py-1.5 rounded bg-gray-700 text-gray-300">Disconnect</button>
-            ) : kickStatus !== 'connecting' ? (
-              <button type="button" disabled={isBusy || !kickSettings.channelInput.trim()} onClick={() => void connectKick()} className="text-xs px-3 py-1.5 rounded bg-green-600 text-white disabled:opacity-50">Connect</button>
-            ) : null}
-          </div>
+            <div className="px-5 pb-4 border-t border-gray-700/40 pt-3 space-y-3">
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Monitored channels</p>
 
-          {kickStatus !== 'connected' && (
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Kick channel slug or URL <span className="text-green-400">*</span></label>
+              <div className="flex gap-2">
                 <input
                   type="text"
-                  value={kickSettings.channelInput}
-                  onChange={(e) => setKickSettings({ ...kickSettings, channelInput: e.target.value })}
-                  onBlur={() => void saveKickSettings(kickSettings)}
-                  onKeyDown={(e) => e.key === 'Enter' && void connectKick()}
-                  placeholder="gaules or https://kick.com/gaules"
-                  className="w-full bg-gray-900 border border-gray-700 rounded text-sm text-gray-200 px-3 py-1.5 focus:outline-none focus:border-green-500 font-mono"
+                  placeholder="@handle or channel URL"
+                  value={newChannelHandle}
+                  onChange={(e) => setNewChannelHandle(e.target.value)}
+                  disabled={isSavingYtSettings}
+                  onKeyDown={(e) => e.key === 'Enter' && void addYouTubeChannel()}
+                  className="flex-1 bg-gray-900 border border-gray-700 rounded-lg text-sm text-gray-200 px-3 py-1.5 focus:outline-none focus:border-red-500 font-mono placeholder:text-gray-600"
                 />
+                <button
+                  type="button"
+                  disabled={isSavingYtSettings || !newChannelHandle.trim()}
+                  onClick={() => void addYouTubeChannel()}
+                  className="px-3 py-1.5 rounded-lg bg-gray-700 text-xs font-medium hover:bg-gray-600 disabled:opacity-50 transition-colors"
+                >
+                  {isSavingYtSettings ? <Spinner /> : 'Add'}
+                </button>
               </div>
 
-              <div className="rounded-lg border border-gray-700 bg-gray-900/60 px-3 py-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-200">Chat authorization</p>
-                    <p className="mt-1 text-[11px] leading-5 text-gray-400">
-                      Sign in once to send messages as your Kick user. Reading chat still works without authorization.
-                    </p>
-                    <p className="mt-2 text-[11px] text-gray-500">
-                      {kickAuth.isAuthorized && kickAuth.channelSlug
-                        ? `Authorized as ${kickAuth.channelSlug}`
-                        : 'No Kick user authorized yet'}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => void authorizeKick()}
-                    disabled={isBusy}
-                    className="shrink-0 rounded bg-green-700 px-3 py-1.5 text-[11px] font-medium text-white disabled:opacity-50"
-                  >
-                    {kickAuth.isAuthorized ? 'Re-authorize' : 'Authorize'}
-                  </button>
+              {ytSettings.channels.length > 0 ? (
+                <div className="space-y-1.5">
+                  {ytSettings.channels.map(c => {
+                    const isActive = ytStreams.some(s => s.channelHandle === c.handle || s.channelHandle === (c.handle.startsWith('@') ? c.handle : `@${c.handle}`));
+                    return (
+                      <div key={c.id} className="flex items-center justify-between px-3 py-2 bg-gray-900/60 rounded-lg border border-gray-700/40">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <button
+                            type="button"
+                            onClick={() => void toggleYouTubeChannel(c.id)}
+                            disabled={isSavingYtSettings}
+                            className={`w-8 h-4 rounded-full transition-colors relative shrink-0 ${c.enabled ? 'bg-red-600' : 'bg-gray-600'} disabled:opacity-50`}
+                          >
+                            <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${c.enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                          </button>
+                          <span className={`text-xs font-mono truncate ${c.enabled ? 'text-gray-200' : 'text-gray-500'}`}>{c.handle}</span>
+                          {isActive && <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />}
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0 ml-2">
+                          <button
+                            type="button"
+                            disabled={checkingHandle === c.handle}
+                            onClick={() => void checkChannelLive(c.handle)}
+                            className="text-[10px] px-2 py-1 rounded bg-gray-700/80 text-gray-400 hover:bg-gray-700 hover:text-gray-200 disabled:opacity-40 flex items-center gap-1 transition-colors"
+                          >
+                            {checkingHandle === c.handle ? <Spinner /> : (
+                              <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.069A1 1 0 0121 8.882V15.12a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                              </svg>
+                            )}
+                            Check
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isSavingYtSettings}
+                            onClick={() => void removeYouTubeChannel(c.id)}
+                            className="p-1 text-gray-600 hover:text-red-400 disabled:opacity-40 transition-colors"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
+              ) : (
+                <p className="text-xs text-gray-600 italic text-center py-2">Add a channel to start monitoring lives automatically.</p>
+              )}
+
+              <div className="flex items-center justify-between pt-1">
+                <label htmlFor="yt-auto-connect" className="text-xs text-gray-400 cursor-pointer select-none">Auto-connect when live detected</label>
+                <button
+                  id="yt-auto-connect"
+                  type="button"
+                  disabled={isSavingYtSettings}
+                  onClick={() => void saveYtSettings({ ...ytSettings, autoConnect: !ytSettings.autoConnect })}
+                  className={`w-8 h-4 rounded-full transition-colors relative shrink-0 ${ytSettings.autoConnect ? 'bg-red-600' : 'bg-gray-600'} disabled:opacity-50`}
+                >
+                  <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${ytSettings.autoConnect ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                </button>
               </div>
 
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="kick-auto-connect"
-                  checked={kickSettings.autoConnect}
-                  onChange={(e) => {
-                    const next = { ...kickSettings, autoConnect: e.target.checked };
-                    setKickSettings(next);
-                    void saveKickSettings(next);
-                  }}
-                  className="accent-green-500"
-                />
-                <label htmlFor="kick-auto-connect" className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold cursor-pointer">Auto-connect on startup</label>
+              <div className="pt-1 border-t border-gray-700/30">
+                <button
+                  type="button"
+                  onClick={() => void window.copilot.youtubeOpenLogin()}
+                  className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  Log in to YouTube (to read member-only chat & send messages)
+                </button>
               </div>
             </div>
-          )}
-        </div>
+          </PlatformCard>
 
-      </div>
-    </div>
+          {/* ── Kick ────────────────────────────────────────────────────── */}
+          <PlatformCard accent="border-l-green-500">
+            <CardHeader
+              icon={<KickIcon />}
+              name="Kick"
+              status={<StatusPill {...kickStatusInfo()} />}
+            />
 
-    {/* Live check modal */}
-    {liveCheckResult && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setLiveCheckResult(null)}>
-        <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl p-6 w-80 text-center" onClick={(e) => e.stopPropagation()}>
-          {liveCheckResult.videoIds.length > 0 ? (
-            <>
-              <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-3">
-                <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/>
-                </svg>
+            {kickStatus === 'connected' ? (
+              <div className="px-5 pb-4 flex items-center justify-between border-t border-gray-700/40 pt-3">
+                <div className="flex items-center gap-2 text-sm text-gray-300">
+                  <svg className="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <span className="font-mono text-xs">{kickSlug}</span>
+                </div>
+                <button type="button" onClick={() => void disconnectKick()} disabled={isBusy} className="text-xs px-3 py-1.5 rounded-lg bg-gray-700/80 text-gray-300 hover:bg-gray-700 disabled:opacity-50 transition-colors">
+                  Disconnect
+                </button>
               </div>
-              <p className="text-sm font-semibold text-green-400 mb-1">
-                {liveCheckResult.videoIds.length === 1 ? 'Live detected!' : `${liveCheckResult.videoIds.length} lives detected!`}
-              </p>
-              <p className="text-xs text-gray-400 mb-2">{liveCheckResult.handle}</p>
-              <div className="space-y-1">
-                {liveCheckResult.videoIds.map((id) => (
-                  <p key={id} className="text-[10px] font-mono text-gray-500 bg-gray-800 rounded px-2 py-1">{id}</p>
-                ))}
+            ) : (
+              <div className="px-5 pb-4 border-t border-gray-700/40 pt-3 space-y-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1.5">Channel slug or URL <span className="text-green-400">*</span></label>
+                  <input
+                    type="text"
+                    value={kickSettings.channelInput}
+                    onChange={(e) => setKickSettings({ ...kickSettings, channelInput: e.target.value })}
+                    onBlur={() => void saveKickSettings(kickSettings)}
+                    onKeyDown={(e) => e.key === 'Enter' && void connectKick()}
+                    placeholder="gaules or https://kick.com/gaules"
+                    className="w-full bg-gray-900 border border-gray-700 rounded-lg text-sm text-gray-200 px-3 py-1.5 focus:outline-none focus:border-green-500 font-mono placeholder:text-gray-600"
+                  />
+                </div>
+
+                <div className="bg-gray-900/60 border border-gray-700/40 rounded-lg px-3.5 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-gray-200">Chat authorization</p>
+                      <p className="mt-0.5 text-[11px] text-gray-500 leading-snug">
+                        {kickAuth.isAuthorized && kickAuth.channelSlug
+                          ? `Authorized as ${kickAuth.channelSlug} — can send messages`
+                          : 'Authorize to send messages. Reading chat works without it.'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void authorizeKick()}
+                      disabled={isBusy}
+                      className="shrink-0 rounded-lg bg-green-700 hover:bg-green-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 transition-colors"
+                    >
+                      {kickAuth.isAuthorized ? 'Re-authorize' : 'Authorize'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <label htmlFor="kick-auto-connect" className="text-xs text-gray-400 cursor-pointer select-none">Auto-connect on startup</label>
+                  <button
+                    id="kick-auto-connect"
+                    type="button"
+                    onClick={() => { const next = { ...kickSettings, autoConnect: !kickSettings.autoConnect }; setKickSettings(next); void saveKickSettings(next); }}
+                    className={`w-8 h-4 rounded-full transition-colors relative shrink-0 ${kickSettings.autoConnect ? 'bg-green-600' : 'bg-gray-600'}`}
+                  >
+                    <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${kickSettings.autoConnect ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={isBusy || !kickSettings.channelInput.trim()}
+                  onClick={() => void connectKick()}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-green-600 hover:bg-green-500 text-sm font-medium disabled:opacity-50 transition-colors"
+                >
+                  {kickStatus === 'connecting' ? <><Spinner /> Connecting…</> : 'Connect'}
+                </button>
               </div>
-            </>
-          ) : (
-            <>
-              <div className="w-10 h-10 rounded-full bg-gray-700/50 flex items-center justify-center mx-auto mb-3">
-                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/>
-                </svg>
-              </div>
-              <p className="text-sm font-semibold text-gray-300 mb-1">No live found</p>
-              <p className="text-xs text-gray-500">{liveCheckResult.handle} doesn't appear to be streaming right now.</p>
-            </>
-          )}
-          <button type="button" onClick={() => setLiveCheckResult(null)} className="mt-4 px-4 py-1.5 rounded bg-gray-700 text-xs text-gray-300 hover:bg-gray-600">Close</button>
+            )}
+          </PlatformCard>
+
         </div>
       </div>
-    )}
+
+      {/* Live check modal */}
+      {liveCheckResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={() => setLiveCheckResult(null)}>
+          <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl p-6 w-80 text-center" onClick={(e) => e.stopPropagation()}>
+            {liveCheckResult.videoIds.length > 0 ? (
+              <>
+                <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-3">
+                  <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <p className="text-sm font-semibold text-green-400 mb-1">
+                  {liveCheckResult.videoIds.length === 1 ? 'Live detected!' : `${liveCheckResult.videoIds.length} lives detected!`}
+                </p>
+                <p className="text-xs text-gray-400 mb-2">{liveCheckResult.handle}</p>
+                <div className="space-y-1">
+                  {liveCheckResult.videoIds.map((id) => (
+                    <p key={id} className="text-[10px] font-mono text-gray-500 bg-gray-800 rounded px-2 py-1">{id}</p>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="w-10 h-10 rounded-full bg-gray-700/50 flex items-center justify-center mx-auto mb-3">
+                  <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </div>
+                <p className="text-sm font-semibold text-gray-300 mb-1">Not live right now</p>
+                <p className="text-xs text-gray-500">{liveCheckResult.handle} doesn't appear to be streaming.</p>
+              </>
+            )}
+            <button type="button" onClick={() => setLiveCheckResult(null)} className="mt-4 px-4 py-1.5 rounded-lg bg-gray-700 text-xs text-gray-300 hover:bg-gray-600">Close</button>
+          </div>
+        </div>
+      )}
     </>
   );
 }

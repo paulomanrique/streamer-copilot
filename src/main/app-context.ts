@@ -48,7 +48,7 @@ import { TikTokSettingsStore } from '../platforms/tiktok/settings-store.js';
 import { TwitchCredentialsStore } from '../platforms/twitch/credentials-store.js';
 import { createTwitchChatAdapter } from '../platforms/twitch/adapter.js';
 import { YouTubeSettingsStore } from '../platforms/youtube/settings-store.js';
-import { YouTubeScraper } from './youtube-scraper.js';
+import { YTLiveClient } from './youtube-client.js';
 import { getAllAudioBase64 } from '@sefinek/google-tts-api';
 import { APP_NAME } from '../shared/constants.js';
 import { IPC_CHANNELS } from '../shared/ipc.js';
@@ -364,7 +364,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   let kickStatsTimer: ReturnType<typeof setInterval> | null = null;
   const userAvatarCache = new Map<string, string>();
   const badgeCache = new Map<string, string>();
-  const youtubeScrapers = new Map<string, YouTubeScraper>();
+  const youtubeScrapers = new Map<string, YTLiveClient>();
   const youtubeStreamData = new Map<string, {
     label: string;
     viewerCount: number | null;
@@ -995,7 +995,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       logService.info('youtube', `Auto-detected live (${platform}, label=${label}): ${videoId} — "${title}"`);
       chatLogService.openSession(platform, videoId);
       suggestionService.clearSessionEntries();
-      const scraper = new YouTubeScraper({
+      const scraper = new YTLiveClient({
         videoId,
         onMessage: (message) => {
           chatService.injectMessage({
@@ -1650,7 +1650,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       youtubeStreamData.set(i.videoId, { label, viewerCount: null, subscriberCount: null, platform, channelHandle: null });
       chatLogService.openSession(platform, i.videoId);
       suggestionService.clearSessionEntries();
-      const scraper = new YouTubeScraper({
+      const scraper = new YTLiveClient({
         videoId: i.videoId,
         onMessage: (m) => chatService.injectMessage({ id: `yt-${Date.now()}`, timestampLabel: fmt.format(new Date()), ...m, platform, streamLabel: label }),
         onEvent: (e) => chatService.injectEvent({ id: `yt-event-${Date.now()}`, timestampLabel: fmt.format(new Date()), ...e, platform, streamLabel: label }),
@@ -2030,7 +2030,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     return Array.from(resolved);
   }
 
-  function getYoutubeScraperByPlatform(platform: 'youtube' | 'youtube-v'): YouTubeScraper | null {
+  function getYoutubeScraperByPlatform(platform: 'youtube' | 'youtube-v'): YTLiveClient | null {
     for (const [videoId, scraper] of youtubeScrapers.entries()) {
       const data = youtubeStreamData.get(videoId);
       if (data?.platform === platform) return scraper;
