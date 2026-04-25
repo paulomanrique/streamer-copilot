@@ -453,12 +453,12 @@ export function TextCommandsPage() {
       {isModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="modal-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="relative bg-gray-900 border border-gray-700 rounded-xl w-full max-w-lg shadow-2xl">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700">
+          <div className="relative bg-gray-900 border border-gray-700 rounded-xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700 shrink-0">
               <h3 className="font-semibold">{draftId ? 'Edit Text Command' : 'New Text Command'}</h3>
               <button type="button" onClick={() => { setIsModalOpen(false); resetForm(); }} className="text-gray-400 hover:text-white">✕</button>
             </div>
-            <div className="p-5 space-y-4">
+            <div className="p-5 space-y-4 overflow-y-auto flex-1">
               <div>
                 <label className="block text-sm text-gray-400 mb-1.5">
                   Command trigger
@@ -628,7 +628,7 @@ export function TextCommandsPage() {
               </label>
             </div>
 
-            <div className="flex gap-3 px-5 py-4 border-t border-gray-700">
+            <div className="flex gap-3 px-5 py-4 border-t border-gray-700 shrink-0">
               <button
                 type="button"
                 onClick={() => {
