@@ -1,72 +1,72 @@
 # AGENTS.md
 
-Guia para agentes de IA que trabalham neste repositório.
+Guide for AI agents working in this repository.
 
-## Projeto
+## Project
 
-- **Nome**: Streamer Copilot
-- **Tipo**: Aplicativo desktop Electron para automação de streams
-- **Propósito**: Chat unificado (Twitch + YouTube + Kick), comandos de som/voz, mensagens agendadas, estatísticas do OBS
-- **Fase atual**: Electron + React renderer com integrações runtime
+- **Name**: Streamer Copilot
+- **Type**: Electron desktop app for stream automation
+- **Purpose**: Unified chat (Twitch + YouTube + Kick), sound/voice commands, scheduled messages, OBS stats
+- **Current phase**: Electron + React renderer with runtime integrations
 
 ---
 
 ## Stack
 
-| Camada | Tecnologia |
-|--------|-----------|
+| Layer | Technology |
+|-------|-----------|
 | Runtime | Electron ^35 |
 | UI (Phase 2) | React 19 + TypeScript |
 | Build | Vite + @vitejs/plugin-react |
-| Estilos | Tailwind CSS |
-| Banco de dados | better-sqlite3 (SQLite) |
-| Estado | Zustand |
-| Validação | Zod |
+| Styles | Tailwind CSS |
+| Database | better-sqlite3 (SQLite) |
+| State | Zustand |
+| Validation | Zod |
 | Twitch chat | tmi.js |
 | YouTube chat | googleapis (polling) |
 | Kick chat | pusher-js |
 | OBS stats | obs-websocket-js v5 |
-| Áudio | Web Audio API (nativo) |
-| TTS | Web Speech API + fallback OS |
+| Audio | Web Audio API (native) |
+| TTS | Web Speech API + OS fallback |
 | Packaging | electron-builder |
-| Testes | Vitest + Playwright |
+| Tests | Vitest + Playwright |
 
 ---
 
-## Estrutura de Pastas
+## Folder Structure
 
 ```
 streamer-copilot/
 ├── src/                       ← Electron + React
-│   ├── main/                  ← Processo principal do Electron
+│   ├── main/                  ← Electron main process
 │   │   ├── index.ts           ← BrowserWindow, lifecycle
-│   │   ├── app-context.ts     ← Fiação dos serviços + handlers IPC
-│   │   └── state-hub.ts       ← Push de estado para o renderer
+│   │   ├── app-context.ts     ← Service wiring + IPC handlers
+│   │   └── state-hub.ts       ← State push to renderer
 │   ├── preload/
 │   │   └── index.ts           ← contextBridge → window.copilot
 │   ├── shared/
-│   │   ├── types.ts           ← Todos os tipos TypeScript compartilhados
-│   │   ├── ipc.ts             ← Interface CopilotApi + mapa IPC_CHANNELS
-│   │   ├── schemas.ts         ← Schemas Zod para validação IPC
+│   │   ├── types.ts           ← All shared TypeScript types
+│   │   ├── ipc.ts             ← CopilotApi interface + IPC_CHANNELS map
+│   │   ├── schemas.ts         ← Zod schemas for IPC validation
 │   │   └── constants.ts
 │   ├── db/
-│   │   ├── database.ts        ← Init SQLite, resolução de path
-│   │   └── migrations.ts      ← Array de migrações SQL versionadas
+│   │   ├── database.ts        ← SQLite init, path resolution
+│   │   └── migrations.ts      ← Versioned SQL migration array
 │   ├── modules/
-│   │   ├── chat/              ← ChatService: agrega adapters, emite eventos
-│   │   ├── sounds/            ← SoundService: match, permissão, cooldown
-│   │   ├── voice/             ← VoiceService: match, permissão, TTS
+│   │   ├── chat/              ← ChatService: aggregates adapters, emits events
+│   │   ├── sounds/            ← SoundService: match, permission, cooldown
+│   │   ├── voice/             ← VoiceService: match, permission, TTS
 │   │   ├── scheduled/         ← SchedulerService: loop, jitter
-│   │   ├── obs/               ← ObsService: obs-websocket-js, reconexão
+│   │   ├── obs/               ← ObsService: obs-websocket-js, reconnect
 │   │   └── settings/          ← SettingsService
 │   ├── platforms/
-│   │   ├── base.ts            ← Interface PlatformChatAdapter
+│   │   ├── base.ts            ← PlatformChatAdapter interface
 │   │   ├── twitch/adapter.ts  ← tmi.js
 │   │   ├── youtube/adapter.ts ← googleapis polling
 │   │   └── kick/adapter.ts    ← pusher-js
 │   └── renderer/
 │       ├── main.tsx
-│       ├── App.tsx            ← Shell com navegação sidebar
+│       ├── App.tsx            ← Shell with sidebar navigation
 │       ├── store.ts           ← Zustand root store
 │       ├── pages/             ← Dashboard, SoundCommands, VoiceCommands, etc.
 │       └── components/        ← ChatFeed, ObsStatsPanel, PermissionPicker, etc.
@@ -75,105 +75,105 @@ streamer-copilot/
 │   ├── unit/                  ← Vitest
 │   └── e2e/                   ← Playwright
 │
-├── AGENTS.md                  ← Este arquivo
+├── AGENTS.md                  ← This file
 └── README.md
 ```
 
 ---
 
-## Regras de Arquitetura (Phase 2)
+## Architecture Rules (Phase 2)
 
-1. **IPC é a única ponte** entre main process e renderer. Nunca importe módulos do main process no renderer.
-2. **Todos os canais IPC** são declarados em `src/shared/ipc.ts`. Adicione lá primeiro, depois implemente ambos os lados.
-3. **Todas as entradas IPC** do renderer são validadas com Zod (`src/shared/schemas.ts`) antes de serem processadas no main process.
-4. **Adapters de plataforma** implementam a interface `PlatformChatAdapter` de `src/platforms/base.ts`. Nunca chame APIs de plataforma diretamente dos services.
-5. **Arquivos de som** ficam em `app.getPath('userData')/sounds/`. Nunca bundle de mídia do usuário no pacote do app.
-6. **Tokens** são criptografados com `electron.safeStorage`. Nunca armazene em texto plano no SQLite.
-7. O renderer **nunca acessa o filesystem diretamente**. Use IPC para solicitar caminhos (dialog) e conteúdo de arquivos.
-8. **Toda configuração (comandos, rifas, sugestões, plataformas, OBS, etc.) é salva em JSON por perfil**, na pasta do perfil. O SQLite é usado apenas para logs de diagnóstico e sessões de chat. O objetivo é portabilidade total — o streamer pode copiar a pasta do perfil para outro computador e tudo funciona.
-
----
-
-## Notas de Runtime Electron
-
-- Limpe `ELECTRON_RUN_AS_NODE` nos scripts de dev e start.
-- `better-sqlite3` deve ser recompilado para o ABI do Electron: `npm run rebuild:native`.
-- Vite dev server: `127.0.0.1:5174` com `strictPort: true`.
-- OBS WebSocket deve estar habilitado: Ferramentas → Configurações do Servidor WebSocket.
+1. **IPC is the only bridge** between main process and renderer. Never import main process modules in the renderer.
+2. **All IPC channels** are declared in `src/shared/ipc.ts`. Add there first, then implement both sides.
+3. **All IPC inputs** from the renderer are validated with Zod (`src/shared/schemas.ts`) before being processed in the main process.
+4. **Platform adapters** implement the `PlatformChatAdapter` interface from `src/platforms/base.ts`. Never call platform APIs directly from services.
+5. **Sound files** live in `app.getPath('userData')/sounds/`. Never bundle user media in the app package.
+6. **Tokens** are encrypted with `electron.safeStorage`. Never store them in plain text in SQLite.
+7. The renderer **never accesses the filesystem directly**. Use IPC to request paths (dialog) and file contents.
+8. **All configuration (commands, raffles, suggestions, platforms, OBS, etc.) is saved as per-profile JSON**, inside the profile directory. SQLite is used only for diagnostic logs and chat sessions. The goal is full portability — the streamer can copy the profile folder to another machine and everything works.
 
 ---
 
-## Notas por Plataforma
+## Electron Runtime Notes
+
+- Clear `ELECTRON_RUN_AS_NODE` in dev and start scripts.
+- `better-sqlite3` must be recompiled for the Electron ABI: `npm run rebuild:native`.
+- Vite dev server: `127.0.0.1:5174` with `strictPort: true`.
+- OBS WebSocket must be enabled: Tools → WebSocket Server Settings.
+
+---
+
+## Platform Notes
 
 ### Twitch
-- Usa tmi.js IRC over WebSocket.
-- Escopos OAuth: `chat:read`, `chat:edit`, `channel:read:subscriptions`, `moderator:read:followers`.
-- Status de seguidor requer chamada à Helix API; faça cache por sessão.
-- Badges (`isModerator`, `isSubscriber`) disponíveis diretamente na mensagem tmi.js.
+- Uses tmi.js IRC over WebSocket.
+- OAuth scopes: `chat:read`, `chat:edit`, `channel:read:subscriptions`, `moderator:read:followers`.
+- Follower status requires a Helix API call; cache per session.
+- Badges (`isModerator`, `isSubscriber`) available directly on the tmi.js message.
 
 ### YouTube
-- Usa `googleapis` `youtube.liveChatMessages.list` com polling.
-- Respeite `pollingIntervalMillis` da resposta da API para não esgotar a quota.
-- OAuth requer projeto no Google Cloud com YouTube Data API v3 habilitado.
-- Redirect URI: `http://127.0.0.1:PORT` (loopback, capturado pelo Electron).
-- "Seguidor" no YouTube = channel member (nível de inscrição).
+- Uses `googleapis` `youtube.liveChatMessages.list` with polling.
+- Respect `pollingIntervalMillis` from the API response to avoid quota exhaustion.
+- OAuth requires a Google Cloud project with YouTube Data API v3 enabled.
+- Redirect URI: `http://127.0.0.1:PORT` (loopback, captured by Electron).
+- "Follower" on YouTube = channel member (subscription level).
 
 ### Kick
-- Usa pusher-js com a app key pública do Kick.
-- Sem autenticação necessária para leitura de chat público.
-- Channel do Pusher: `chatrooms.{chatroomId}.v2`.
-- Channel ID resolvido via: `https://kick.com/api/v2/channels/{slug}`.
-- **Atenção**: API não-oficial; pode quebrar sem aviso.
-- Não há conceito nativo de "seguidor"; trate como "todos".
+- Uses pusher-js with Kick's public app key.
+- No authentication required for reading public chat.
+- Pusher channel: `chatrooms.{chatroomId}.v2`.
+- Channel ID resolved via: `https://kick.com/api/v2/channels/{slug}`.
+- **Warning**: unofficial API; may break without notice.
+- No native "follower" concept; treat as "everyone".
 
 ### OBS
-- Usa obs-websocket-js v5 (protocolo OBS WebSocket v5, OBS 28+).
-- Stats coletadas: `GetStreamStatus`, `GetStats`, `GetCurrentProgramScene`.
-- Reconexão com backoff exponencial (máx 30s).
+- Uses obs-websocket-js v5 (OBS WebSocket v5 protocol, OBS 28+).
+- Stats collected: `GetStreamStatus`, `GetStats`, `GetCurrentProgramScene`.
+- Reconnect with exponential backoff (max 30s).
 
 ---
 
-## Sistema de Permissões
+## Permission System
 
 ```typescript
 type PermissionLevel = 'everyone' | 'follower' | 'subscriber' | 'moderator' | 'broadcaster';
 
 interface CommandPermission {
-  allowedLevels: PermissionLevel[];  // ex: ['subscriber', 'moderator']
-  cooldownSeconds: number;           // cooldown global do comando
-  userCooldownSeconds: number;       // cooldown por usuário
+  allowedLevels: PermissionLevel[];  // e.g. ['subscriber', 'moderator']
+  cooldownSeconds: number;           // global command cooldown
+  userCooldownSeconds: number;       // per-user cooldown
 }
 ```
 
-Ordem de resolução (maior nível ganha):
-1. `broadcaster` — sempre permitido
+Resolution order (highest level wins):
+1. `broadcaster` — always allowed
 2. `moderator`
 3. `subscriber`
 4. `follower`
 5. `everyone`
 
-Cooldowns rastreados em memória no main process: `Map<commandId, lastUsed>` e `Map<commandId:userId, lastUsed>`.
+Cooldowns tracked in memory in the main process: `Map<commandId, lastUsed>` and `Map<commandId:userId, lastUsed>`.
 
 ---
 
-## Comandos
+## Commands
 
 ```bash
 npm install
-npm run dev          # Electron em modo desenvolvimento
-npm run build        # build de produção
-npm run package      # gerar instaladores
-npm test             # testes unitários (Vitest)
-npm run test:e2e     # testes e2e (Playwright)
+npm run dev          # Electron in development mode
+npm run build        # production build
+npm run package      # generate installers
+npm test             # unit tests (Vitest)
+npm run test:e2e     # e2e tests (Playwright)
 npm run lint         # ESLint
-npm run rebuild:native  # recompilar módulos nativos para o Electron
+npm run rebuild:native  # recompile native modules for Electron
 ```
 
 ---
 
 ## GitHub Project
 
-Issues e milestones: https://github.com/users/paulomanrique/projects/4
+Issues and milestones: https://github.com/users/paulomanrique/projects/4
 
 Milestones:
 - **M0**: Foundations (Electron + React + TS setup)
@@ -189,4 +189,4 @@ Milestones:
 
 ## Commits
 
-A cada mudança de código, um commit e push devem ser feitos.
+After every code change, a commit and push must be made.
