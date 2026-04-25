@@ -98,16 +98,31 @@ export class YTLiveClient {
     return items
       .filter((item: any) => item.has_channel || item.channel_handle?.text)
       .map((item: any) => {
-        const endpointName: string = item.endpoint?.name ?? '';
-        const payload = item.endpoint?.payload ?? {};
-        // InnerTube selectActiveIdentityEndpoint uses `obou` for the page ID
-        const pageId: string = payload.obou ?? payload.pageId ?? payload.delegatedSessionId ?? '';
         const name: string = item.account_name?.text ?? item.account_name?.toString?.() ?? '';
         const handle: string = item.channel_handle?.text ?? item.channel_handle?.toString?.() ?? '';
-        console.log('[YT getChatChannels] item:', { name, handle, endpointName, payloadKeys: Object.keys(payload), pageId });
-        return { pageId, name, handle, isSelected: !!item.is_selected };
+        // Deep-search the endpoint for any 'obou' field regardless of nesting
+        const pageId: string = YTLiveClient.findObou(item.endpoint) ?? '';
+        let _debug: string | undefined;
+        try {
+          _debug = JSON.stringify({ endpointName: item.endpoint?.name, payload: item.endpoint?.payload });
+        } catch { /* ignore */ }
+        console.log('[YT getChatChannels]', { name, handle, pageId, _debug });
+        return { pageId, name, handle, isSelected: !!item.is_selected, _debug };
       })
       .filter((ch) => ch.name || ch.handle);
+  }
+
+  private static findObou(obj: unknown, depth = 0): string | undefined {
+    if (depth > 8 || obj === null || obj === undefined) return undefined;
+    if (typeof obj === 'object') {
+      const record = obj as Record<string, unknown>;
+      if (typeof record['obou'] === 'string' && record['obou']) return record['obou'];
+      for (const val of Object.values(record)) {
+        const found = YTLiveClient.findObou(val, depth + 1);
+        if (found) return found;
+      }
+    }
+    return undefined;
   }
 
   private handleItem(item: any): void {
