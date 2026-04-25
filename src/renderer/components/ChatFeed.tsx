@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { LegendList, type LegendListRef } from '@legendapp/list/react';
 
-import type { ChatMessage, PlatformId, StreamEvent } from '../../shared/types.js';
+import type { ChatMessage, PlatformId, StreamEvent, SuggestionEntry, SuggestionList } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
 import { EventBanner } from './EventBanner.js';
 import {
@@ -243,6 +243,10 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
   });
   const hasMultipleYouTubeStreams = connectedPlatforms.includes('youtube') && connectedPlatforms.includes('youtube-v');
 
+  const [suggestionLists,   setSuggestionLists]   = useState<SuggestionList[]>([]);
+  const [suggestionEntries, setSuggestionEntries] = useState<Record<string, SuggestionEntry[]>>({});
+  const [selectedListId,    setSelectedListId]    = useState<string | null>(null);
+
   useEffect(() => {
     if (connectedPlatforms.length === 0) return;
     if (!connectedPlatforms.includes(inputPlatform)) {
@@ -334,6 +338,18 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
   }, [ctxMenu.visible, hideMenu]);
 
+  // ── suggestion lists ───────────────────────────────────────────────
+  useEffect(() => {
+    void window.copilot.listSuggestionLists().then(setSuggestionLists);
+    const disconnect = window.copilot.onSuggestionState((snapshot) => {
+      setSuggestionLists((prev) =>
+        prev.map((l) => (l.id === snapshot.list.id ? snapshot.list : l)),
+      );
+      setSuggestionEntries((prev) => ({ ...prev, [snapshot.list.id]: snapshot.entries }));
+    });
+    return () => disconnect();
+  }, []);
+
   // ── adjust menu position after render ──────────────────────────────
   useEffect(() => {
     if (!ctxMenu.visible || !menuRef.current) return;
@@ -405,6 +421,20 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
     [avatarCache, handleContextMenu, hasMultipleYouTubeStreams, highlighted, replyTo],
   );
 
+  const selectSuggestionList = async (listId: string) => {
+    setSelectedListId(listId);
+    if (!suggestionEntries[listId]) {
+      const items = await window.copilot.getSuggestionEntries(listId);
+      setSuggestionEntries((prev) => ({ ...prev, [listId]: items }));
+    }
+  };
+
+  const clearSelectedEntries = async () => {
+    if (!selectedListId) return;
+    const items = await window.copilot.clearSuggestionEntries(selectedListId);
+    setSuggestionEntries((prev) => ({ ...prev, [selectedListId]: items }));
+  };
+
   const sendMessage = async () => {
     const content = inputValue.trim();
     if (!content) return;
@@ -428,76 +458,101 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
   return (
     <div className="flex flex-col w-[60%] border-r border-gray-800">
       {/* ── header ─────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800 shrink-0">
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-gray-200">Unified Chat</h2>
-          <div className="inline-flex items-center bg-gray-800 border border-gray-700 rounded-lg p-0.5 text-xs">
-            <button type="button" onClick={() => setFeedMode('all')}
-              className={feedMode === 'all' ? 'px-2 py-1 rounded bg-violet-600 text-white' : 'px-2 py-1 rounded text-gray-400 hover:text-white'}>
+      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800 shrink-0 gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <h2 className="text-sm font-semibold text-gray-200 shrink-0">Unified Chat</h2>
+          <div className="inline-flex items-center bg-gray-800 border border-gray-700 rounded-lg p-0.5 text-xs overflow-x-auto max-w-full">
+            <button type="button" onClick={() => { setFeedMode('all'); setSelectedListId(null); }}
+              className={feedMode === 'all' && !selectedListId ? 'px-2 py-1 rounded bg-violet-600 text-white shrink-0' : 'px-2 py-1 rounded text-gray-400 hover:text-white shrink-0'}>
               All Chats
             </button>
-            <button type="button" onClick={() => setFeedMode('superchat')}
-              className={feedMode === 'superchat' ? 'px-2 py-1 rounded bg-violet-600 text-white' : 'px-2 py-1 rounded text-gray-400 hover:text-white'}>
+            <button type="button" onClick={() => { setFeedMode('superchat'); setSelectedListId(null); }}
+              className={feedMode === 'superchat' && !selectedListId ? 'px-2 py-1 rounded bg-violet-600 text-white shrink-0' : 'px-2 py-1 rounded text-gray-400 hover:text-white shrink-0'}>
               Super Chats Only
             </button>
+            {suggestionLists.map((list) => {
+              const active = selectedListId === list.id;
+              return (
+                <button key={list.id} type="button" title={list.title}
+                  onClick={() => void selectSuggestionList(list.id)}
+                  className={active ? 'px-2 py-1 rounded bg-violet-600 text-white shrink-0' : 'px-2 py-1 rounded text-gray-400 hover:text-white shrink-0'}>
+                  <span className="max-w-[80px] truncate inline-block align-bottom">{list.trigger}</span>
+                  {list.entryCount > 0 && (
+                    <span className={`ml-1 text-[10px] ${active ? 'text-violet-200' : 'text-gray-500'}`}>{list.entryCount}</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5">
-          {PLATFORM_BUTTONS.filter((b) => (connectedPlatforms as readonly string[]).includes(b.id)).map(({ id }) => {
-            const meta = PLATFORM_META[platformKey(id)];
-            const on = platformFilter[id] !== false;
-            const title = getPlatformDisplayName(id, connectedPlatforms);
-            return (
-              <button key={id} type="button" title={title} aria-label={title}
-                onClick={() => setPlatformFilter((c) => ({ ...c, [id]: !c[id] }))}
-                className={`flex items-center justify-center w-8 h-8 rounded transition-all ${on ? `${meta.bg} ${meta.text} hover:opacity-90` : 'grayscale opacity-40 bg-gray-700/30 text-gray-500'}`}>
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d={meta.icon} /></svg>
-              </button>
-            );
-          })}
-        </div>
+        {!selectedListId && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            {PLATFORM_BUTTONS.filter((b) => (connectedPlatforms as readonly string[]).includes(b.id)).map(({ id }) => {
+              const meta = PLATFORM_META[platformKey(id)];
+              const on = platformFilter[id] !== false;
+              const title = getPlatformDisplayName(id, connectedPlatforms);
+              return (
+                <button key={id} type="button" title={title} aria-label={title}
+                  onClick={() => setPlatformFilter((c) => ({ ...c, [id]: !c[id] }))}
+                  className={`flex items-center justify-center w-8 h-8 rounded transition-all ${on ? `${meta.bg} ${meta.text} hover:opacity-90` : 'grayscale opacity-40 bg-gray-700/30 text-gray-500'}`}>
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d={meta.icon} /></svg>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* ── messages ───────────────────────────────────────────────── */}
+      {/* ── messages / suggestions ─────────────────────────────────── */}
       <div className="flex-1 min-h-0 relative">
-        {items.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-sm text-gray-500">
-            No messages yet.
-          </div>
-        ) : (
-          <LegendList<ChatFeedRow>
-            ref={listRef}
-            data={items}
-            keyExtractor={(item) => item.id}
-            renderItem={renderItem}
-            estimatedItemSize={64}
-            initialScrollAtEnd
-            maintainScrollAtEnd
-            maintainScrollAtEndThreshold={0.08}
-            maintainVisibleContentPosition
-            onScroll={onScroll}
-            className="h-full overflow-y-auto overflow-x-hidden py-1"
+        {selectedListId ? (
+          <SuggestionEntriesPanel
+            list={suggestionLists.find((l) => l.id === selectedListId)!}
+            entries={suggestionEntries[selectedListId] ?? []}
+            onClear={() => void clearSelectedEntries()}
           />
-        )}
+        ) : (
+          <>
+            {items.length === 0 ? (
+              <div className="flex h-full items-center justify-center text-sm text-gray-500">
+                No messages yet.
+              </div>
+            ) : (
+              <LegendList<ChatFeedRow>
+                ref={listRef}
+                data={items}
+                keyExtractor={(item) => item.id}
+                renderItem={renderItem}
+                estimatedItemSize={64}
+                initialScrollAtEnd
+                maintainScrollAtEnd
+                maintainScrollAtEndThreshold={0.08}
+                maintainVisibleContentPosition
+                onScroll={onScroll}
+                className="h-full overflow-y-auto overflow-x-hidden py-1"
+              />
+            )}
 
-        {/* Floating Scroll Button */}
-        {!isAtBottom && (
-          <button
-            type="button"
-            onClick={jumpToBottom}
-            className="sticky bottom-4 left-1/2 -translate-x-1/2 z-10 bg-violet-600 hover:bg-violet-500 text-white text-[10px] font-bold uppercase tracking-widest px-4 py-2 rounded-full shadow-2xl border border-violet-400/30 flex items-center gap-2 transition-all animate-bounce"
-          >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-            </svg>
-            New Messages Below
-          </button>
+            {/* Floating Scroll Button */}
+            {!isAtBottom && (
+              <button
+                type="button"
+                onClick={jumpToBottom}
+                className="sticky bottom-4 left-1/2 -translate-x-1/2 z-10 bg-violet-600 hover:bg-violet-500 text-white text-[10px] font-bold uppercase tracking-widest px-4 py-2 rounded-full shadow-2xl border border-violet-400/30 flex items-center gap-2 transition-all animate-bounce"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                </svg>
+                New Messages Below
+              </button>
+            )}
+          </>
         )}
       </div>
 
       {/* ── input ──────────────────────────────────────────────────── */}
-      <div className="px-3 py-2 border-t border-gray-800 shrink-0">
+      {!selectedListId && <div className="px-3 py-2 border-t border-gray-800 shrink-0">
         {sendError ? (
           <div className="mb-2 rounded border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
             {sendError}
@@ -533,7 +588,7 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
             Send
           </button>
         </div>
-      </div>
+      </div>}
 
       {/* ── context menu ───────────────────────────────────────────── */}
       {ctxMenu.visible ? (
@@ -694,6 +749,59 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highli
     </div>
   );
 });
+
+interface SuggestionEntriesPanelProps {
+  list: SuggestionList;
+  entries: SuggestionEntry[];
+  onClear: () => void;
+}
+
+function SuggestionEntriesPanel({ list, entries, onClear }: SuggestionEntriesPanelProps) {
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800 shrink-0">
+        <div>
+          <span className="text-sm font-medium text-gray-200">{list.title}</span>
+          <span className="ml-2 text-xs text-gray-500">{entries.length} suggestion{entries.length !== 1 ? 's' : ''}</span>
+        </div>
+        <button type="button" onClick={onClear}
+          className="text-xs text-gray-400 hover:text-red-300 transition-colors px-2 py-1 rounded hover:bg-red-500/10">
+          Clear all
+        </button>
+      </div>
+      {entries.length === 0 ? (
+        <div className="flex flex-col h-full items-center justify-center gap-2 text-sm text-gray-500 px-6 text-center">
+          <span>No suggestions yet.</span>
+          <span className="text-xs text-gray-600">
+            Viewers can type{' '}
+            <code className="text-violet-400 bg-gray-800 px-1 py-0.5 rounded">{list.trigger} ...</code>
+            {' '}in chat.
+          </span>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto">
+          {entries.map((entry, idx) => {
+            const badgeMeta = PLATFORM_BADGE_META[entry.platform] ?? PLATFORM_BADGE_META.twitch;
+            return (
+              <div key={entry.id} className="flex gap-3 px-4 py-2.5 border-b border-gray-800/60 hover:bg-white/[0.02]">
+                <span className="text-xs text-gray-600 mt-0.5 shrink-0 font-mono w-5 text-right">{idx + 1}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-[4px] ${badgeMeta.bg} ${badgeMeta.text}`}>
+                      {badgeMeta.label}
+                    </span>
+                    <span className="text-sm font-semibold text-gray-300">{entry.displayName}</span>
+                  </div>
+                  <p className="text-sm text-gray-200 break-words leading-snug">{entry.content}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function useStableRows(rows: ChatFeedRow[]): ChatFeedRow[] {
   const previous = useRef<StableChatFeedRowsState>({ byId: new Map(), result: [] });
