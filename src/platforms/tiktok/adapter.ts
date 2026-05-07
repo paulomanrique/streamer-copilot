@@ -2,7 +2,8 @@ import { gunzipSync } from 'node:zlib';
 import { createRequire } from 'node:module';
 import { BrowserWindow, session } from 'electron';
 import type { ChatBadge, ChatMessage, StreamEvent, TikTokConnectionStatus } from '../../shared/types.js';
-import type { PlatformChatAdapter } from '../base.js';
+import type { PlatformCapabilities } from '../../shared/moderation.js';
+import { READ_ONLY_CAPABILITIES, type PlatformChatAdapter } from '../base.js';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -534,6 +535,7 @@ export function createTikTokChatAdapter(options: TikTokAdapterOptions): TikTokCh
 
 export class TikTokChatAdapter implements PlatformChatAdapter {
   readonly platform = 'tiktok' as const;
+  readonly capabilities: PlatformCapabilities = READ_ONLY_CAPABILITIES;
 
   private ws: WsHandle | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
