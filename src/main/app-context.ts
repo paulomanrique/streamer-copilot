@@ -19,7 +19,7 @@ import { LogService } from '../modules/logs/log-service.js';
 import { ObsService } from '../modules/obs/obs-service.js';
 import { ObsSettingsStore } from '../modules/obs/obs-settings-store.js';
 import { RaffleDeadlineRunner } from '../modules/raffles/raffle-deadline-runner.js';
-import { RaffleOverlayServer } from '../modules/raffles/raffle-overlay-server.js';
+import { OverlayServer } from './overlay-server.js';
 import { RaffleRepository } from '../modules/raffles/raffle-repository.js';
 import { RaffleService } from '../modules/raffles/raffle-service.js';
 import { SchedulerService, type ScheduledRunState, type ScheduledTask } from '../modules/scheduled/scheduler-service.js';
@@ -1182,7 +1182,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     } else stopTwitchStatsPoll();
   };
 
-  const raffleOverlayServer = new RaffleOverlayServer({
+  const overlayServer = new OverlayServer({
+    port: generalSettingsStore.load().overlayServerPort,
     getOverlayState: () => {
       try {
         const active = raffleService.getActive();
@@ -1196,7 +1197,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   raffleService = new RaffleService({
     repository: raffleRepository,
-    getOverlayInfo: () => raffleOverlayServer.getOverlayInfo(),
+    getOverlayInfo: () => overlayServer.getOverlayInfo(),
     onState: (payload) => options.stateHub.pushRaffleState(payload),
     onEntry: (payload) => options.stateHub.pushRaffleEntry(payload),
     onResult: (payload) => options.stateHub.pushRaffleResult(payload),
@@ -1550,8 +1551,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   ipcMain.handle(IPC_CHANNELS.chatGetRecent, async () => chatService.getRecent());
   ipcMain.handle(IPC_CHANNELS.chatOverlayInfo, async () => {
-    await raffleOverlayServer.start();
-    return raffleOverlayServer.getChatOverlayInfo();
+    await overlayServer.start();
+    return overlayServer.getChatOverlayInfo();
   });
   ipcMain.handle(IPC_CHANNELS.chatSendMessage, async (_, raw) => {
     const i = chatSendMessageSchema.parse(raw);
@@ -2291,7 +2292,25 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }
   }
 
-  void raffleOverlayServer.start();
+  ipcMain.handle(IPC_CHANNELS.overlayServerInfo, async () => {
+    const status = overlayServer.getStatus();
+    let chat: string | null = null;
+    let raffles: string | null = null;
+    let nowPlaying: string | null = null;
+    if (status.status === 'running') {
+      try { chat = overlayServer.getChatOverlayInfo().overlayUrl; } catch { chat = null; }
+      try { raffles = overlayServer.getOverlayInfo().overlayUrl; } catch { raffles = null; }
+      try { nowPlaying = overlayServer.getNowPlayingInfo()?.overlayUrl ?? null; } catch { nowPlaying = null; }
+    }
+    return { ...status, urls: { chat, raffles, nowPlaying } };
+  });
+
+  void overlayServer.start().catch((cause) => {
+    logService.error('overlay-server', 'Failed to start (port in use?)', {
+      port: generalSettingsStore.load().overlayServerPort,
+      error: cause instanceof Error ? cause.message : String(cause),
+    });
+  });
   raffleDeadlineRunner.start();
   schedulerService.start();
   void activeProfileDirectoryReady.then(() => obsService.start());
@@ -2306,7 +2325,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     if (youtubeMonitorTimer) clearInterval(youtubeMonitorTimer);
     musicService.reset();
     musicPlayerRef?.stop();
-    await Promise.allSettled([chatService.disconnectAll(), obsService.stop(), raffleOverlayServer.stop()]);
+    await Promise.allSettled([chatService.disconnectAll(), obsService.stop(), overlayServer.stop()]);
     Object.values(IPC_CHANNELS).forEach(c => ipcMain.removeHandler(c));
   };
 

@@ -22,8 +22,6 @@ export interface KickChatAdapterOptions {
   chatroomId?: number | string;
   broadcasterUserId?: number | null;
   apiBaseUrl?: string;
-  pusherAppKey?: string;
-  pusherCluster?: string;
   clientId?: string;
   clientSecret?: string;
   oauthToken?: KickOAuthToken;

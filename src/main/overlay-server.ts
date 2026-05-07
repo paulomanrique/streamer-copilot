@@ -1,24 +1,100 @@
 import http from 'node:http';
+import { createRequire } from 'node:module';
 
 import type { AddressInfo } from 'node:net';
 
-import type { RecentChatSnapshot } from '../../shared/ipc.js';
-import type { ChatOverlayInfo, RaffleOverlayInfo, RaffleOverlayState } from '../../shared/types.js';
+import type { RecentChatSnapshot } from '../shared/ipc.js';
+import type { ChatOverlayInfo, RaffleOverlayInfo, RaffleOverlayState } from '../shared/types.js';
 
-interface RaffleOverlayServerOptions {
+interface OverlayServerOptions {
+  /** TCP port to listen on; comes from GeneralSettings.overlayServerPort. */
+  port: number;
   getOverlayState: () => RaffleOverlayState | null;
   getChatSnapshot: () => RecentChatSnapshot;
 }
 
-const OVERLAY_PORT = 7842;
 const CHAT_OVERLAY_VERSION = 'chat-feed-v3';
 
-export class RaffleOverlayServer {
+interface WsLikeServer {
+  handleUpgrade(request: unknown, socket: unknown, head: Buffer, callback: (ws: WsLikeClient) => void): void;
+  emit(event: string, ws: WsLikeClient, request: unknown): void;
+  on(event: string, handler: (ws: WsLikeClient) => void): void;
+}
+interface WsLikeClient {
+  send(data: string): void;
+  close(): void;
+  on(event: 'close' | 'message' | 'error', handler: (...args: unknown[]) => void): void;
+}
+
+export type OverlayServerStatus = 'running' | 'failed' | 'stopped';
+
+/**
+ * R3: HTTP + WebSocket server for OBS browser sources.
+ *
+ * Routes preserved from the previous RaffleOverlayServer:
+ *   GET  /chat/overlay              chat overlay HTML
+ *   GET  /chat/overlay/state        polling JSON of recent chat
+ *   GET  /chat/overlay/overlay.css|js
+ *   GET  /raffles/overlay           raffle overlay HTML
+ *   GET  /raffles/overlay/state     polling JSON of raffle state
+ *   GET  /raffles/overlay/overlay.css|js
+ *
+ * R3 additions:
+ *   GET  /now-playing               music player browser source (R4)
+ *   WS   /ws                        topic-multiplexed event stream
+ *
+ * The port is configurable via GeneralSettings.overlayServerPort. If the
+ * port is in use the server enters 'failed' status and the UI surfaces it.
+ */
+export class OverlayServer {
   private server: http.Server | null = null;
+  private wss: WsLikeServer | null = null;
+  /** Map of topic → connected clients subscribed to that topic. */
+  private readonly subscribers = new Map<string, Set<WsLikeClient>>();
+  private readonly clientsChangeHandlers = new Map<string, Set<() => void>>();
   private port = 0;
   private startPromise: Promise<void> | null = null;
+  private lastStatus: OverlayServerStatus = 'stopped';
+  private lastError: string | null = null;
 
-  constructor(private readonly options: RaffleOverlayServerOptions) {}
+  constructor(private readonly options: OverlayServerOptions) {}
+
+  getStatus(): { status: OverlayServerStatus; port: number; error: string | null } {
+    return { status: this.lastStatus, port: this.port, error: this.lastError };
+  }
+
+  /** Push payload to every client subscribed to `topic`. */
+  publish(topic: string, payload: unknown): void {
+    const clients = this.subscribers.get(topic);
+    if (!clients || clients.size === 0) return;
+    const message = JSON.stringify({ topic, payload });
+    for (const client of clients) {
+      try { client.send(message); } catch { /* ignore broken socket */ }
+    }
+  }
+
+  hasClients(topic: string): boolean {
+    const set = this.subscribers.get(topic);
+    return !!set && set.size > 0;
+  }
+
+  onClientsChange(topic: string, handler: () => void): () => void {
+    let set = this.clientsChangeHandlers.get(topic);
+    if (!set) {
+      set = new Set();
+      this.clientsChangeHandlers.set(topic, set);
+    }
+    set.add(handler);
+    return () => { set?.delete(handler); };
+  }
+
+  private notifyClientsChange(topic: string): void {
+    const handlers = this.clientsChangeHandlers.get(topic);
+    if (!handlers) return;
+    for (const handler of handlers) {
+      try { handler(); } catch { /* ignore */ }
+    }
+  }
 
   async start(): Promise<void> {
     if (this.server) return;
@@ -90,32 +166,116 @@ export class RaffleOverlayServer {
         return;
       }
 
+      if (path === '/now-playing' || path === '/now-playing/') {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(nowPlayingHtml);
+        return;
+      }
+
+      if (path === '/now-playing/now-playing.js') {
+        res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(nowPlayingJs);
+        return;
+      }
+
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('Not found');
     });
 
+    // Mount the WebSocket server on `/ws`. We attach manually via 'upgrade'
+    // so we keep a single HTTP server (simpler firewall story for OBS).
+    try {
+      const requireFn = createRequire(import.meta.url);
+      const wsModule = requireFn('ws') as { WebSocketServer: new (opts: { noServer: true }) => WsLikeServer };
+      const wss = new wsModule.WebSocketServer({ noServer: true });
+      this.wss = wss;
+      server.on('upgrade', (request, socket, head) => {
+        const reqUrl = new URL((request as { url?: string }).url ?? '/', 'http://127.0.0.1');
+        if (reqUrl.pathname !== '/ws') {
+          (socket as { destroy(): void }).destroy();
+          return;
+        }
+        wss.handleUpgrade(request, socket, head, (ws) => {
+          this.attachClient(ws);
+        });
+      });
+    } catch (cause) {
+      this.lastError = `WS init failed: ${cause instanceof Error ? cause.message : String(cause)}`;
+    }
+
     this.startPromise = new Promise<void>((resolve, reject) => {
       server.once('error', reject);
-      server.listen(OVERLAY_PORT, '127.0.0.1', () => resolve());
+      server.listen(this.options.port, '127.0.0.1', () => resolve());
     });
 
     try {
       await this.startPromise;
       this.server = server;
       this.port = (server.address() as AddressInfo).port;
+      this.lastStatus = 'running';
+      this.lastError = null;
+    } catch (cause) {
+      this.lastStatus = 'failed';
+      this.lastError = cause instanceof Error ? cause.message : String(cause);
+      throw cause;
     } finally {
       this.startPromise = null;
     }
+  }
+
+  private attachClient(ws: WsLikeClient): void {
+    const ownedTopics = new Set<string>();
+    ws.on('message', (raw) => {
+      try {
+        const text = typeof raw === 'string' ? raw : (raw as Buffer).toString('utf-8');
+        const msg = JSON.parse(text) as { type?: string; topic?: string };
+        if (!msg?.topic) return;
+        if (msg.type === 'subscribe') {
+          let set = this.subscribers.get(msg.topic);
+          if (!set) {
+            set = new Set();
+            this.subscribers.set(msg.topic, set);
+          }
+          set.add(ws);
+          ownedTopics.add(msg.topic);
+          this.notifyClientsChange(msg.topic);
+        } else if (msg.type === 'unsubscribe') {
+          this.subscribers.get(msg.topic)?.delete(ws);
+          ownedTopics.delete(msg.topic);
+          this.notifyClientsChange(msg.topic);
+        }
+      } catch { /* malformed client message */ }
+    });
+    ws.on('close', () => {
+      for (const topic of ownedTopics) {
+        this.subscribers.get(topic)?.delete(ws);
+        this.notifyClientsChange(topic);
+      }
+    });
+    ws.on('error', () => { /* swallow; close handler runs */ });
   }
 
   async stop(): Promise<void> {
     if (!this.server) return;
     const server = this.server;
     this.server = null;
+    // Close all WS clients before closing the HTTP server so close() returns.
+    for (const set of this.subscribers.values()) {
+      for (const client of set) {
+        try { client.close(); } catch { /* ignore */ }
+      }
+    }
+    this.subscribers.clear();
     this.port = 0;
+    this.lastStatus = 'stopped';
     await new Promise<void>((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));
     });
+  }
+
+  getNowPlayingInfo(): { overlayUrl: string } | null {
+    if (!this.server || this.port === 0) return null;
+    return { overlayUrl: `http://127.0.0.1:${this.port}/now-playing` };
   }
 
   getOverlayInfo(): RaffleOverlayInfo {
@@ -1336,3 +1496,134 @@ async function tick() {
 
 tick();
 `;
+
+// ── R3 / R4: now-playing browser source (visual minimal — to be styled by overlay-kit later) ─
+
+const nowPlayingHtml = `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Now Playing</title>
+    <style>
+      :root { color-scheme: dark; }
+      html, body { margin: 0; padding: 0; height: 100%; background: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #f1f5f9; }
+      .root { display: flex; align-items: center; gap: 16px; padding: 16px; max-width: 540px; }
+      .root.idle { opacity: 0.0; }
+      .thumb { width: 96px; height: 96px; border-radius: 12px; object-fit: cover; background: #1f2937; box-shadow: 0 8px 24px rgba(0,0,0,0.45); flex-shrink: 0; }
+      .info { flex: 1; min-width: 0; }
+      .title { font-size: 18px; font-weight: 700; margin: 0 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .artist { font-size: 13px; color: #94a3b8; margin: 0 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      canvas { display: block; width: 100%; height: 28px; opacity: 0.75; }
+    </style>
+  </head>
+  <body>
+    <div id="root" class="root idle">
+      <img id="thumb" class="thumb" alt="" />
+      <div class="info">
+        <h1 id="title" class="title">—</h1>
+        <p id="artist" class="artist">Waiting for the player to start…</p>
+        <canvas id="spectrum" width="400" height="28"></canvas>
+      </div>
+      <audio id="audio" crossorigin="anonymous"></audio>
+    </div>
+    <script src="/now-playing/now-playing.js"></script>
+  </body>
+</html>`;
+
+const nowPlayingJs = `
+'use strict';
+
+(function () {
+  var rootEl = document.getElementById('root');
+  var thumbEl = document.getElementById('thumb');
+  var titleEl = document.getElementById('title');
+  var artistEl = document.getElementById('artist');
+  var canvasEl = document.getElementById('spectrum');
+  var audioEl = document.getElementById('audio');
+
+  var ctx = canvasEl.getContext('2d');
+  var audioCtx = null;
+  var analyser = null;
+  var sourceNode = null;
+  var lastSrc = '';
+
+  function ensureAudioGraph() {
+    if (audioCtx) return;
+    var Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    audioCtx = new Ctx();
+    sourceNode = audioCtx.createMediaElementSource(audioEl);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 512;
+    sourceNode.connect(analyser);
+    analyser.connect(audioCtx.destination);
+    requestAnimationFrame(drawFrame);
+  }
+
+  function drawFrame() {
+    if (!analyser) return;
+    var bufferLength = analyser.frequencyBinCount;
+    var data = new Uint8Array(bufferLength);
+    analyser.getByteFrequencyData(data);
+    ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+    var barWidth = canvasEl.width / bufferLength * 2.5;
+    var x = 0;
+    for (var i = 0; i < bufferLength; i++) {
+      var height = (data[i] / 255) * canvasEl.height;
+      ctx.fillStyle = 'rgba(124, 92, 255, ' + (0.4 + (data[i] / 255) * 0.5) + ')';
+      ctx.fillRect(x, canvasEl.height - height, barWidth, height);
+      x += barWidth + 1;
+    }
+    requestAnimationFrame(drawFrame);
+  }
+
+  function applyState(state) {
+    if (!state || !state.currentItem) {
+      rootEl.classList.add('idle');
+      audioEl.pause();
+      audioEl.removeAttribute('src');
+      lastSrc = '';
+      return;
+    }
+    rootEl.classList.remove('idle');
+    titleEl.textContent = state.currentItem.title || 'Untitled';
+    artistEl.textContent = state.currentItem.requestedBy ? 'Requested by ' + state.currentItem.requestedBy : '';
+    if (state.currentItem.thumbnailUrl) {
+      thumbEl.src = state.currentItem.thumbnailUrl;
+      thumbEl.style.display = 'block';
+    } else {
+      thumbEl.style.display = 'none';
+    }
+    if (state.streamUrl && state.streamUrl !== lastSrc) {
+      lastSrc = state.streamUrl;
+      audioEl.src = state.streamUrl;
+      ensureAudioGraph();
+      audioEl.play().catch(function (err) { console.warn('autoplay blocked', err); });
+    }
+    if (typeof state.volume === 'number') {
+      audioEl.volume = Math.max(0, Math.min(1, state.volume));
+    }
+    if (state.isPlaying === false) audioEl.pause();
+  }
+
+  function connect() {
+    var ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+    ws.addEventListener('open', function () {
+      ws.send(JSON.stringify({ type: 'subscribe', topic: 'now-playing' }));
+    });
+    ws.addEventListener('message', function (event) {
+      try {
+        var msg = JSON.parse(event.data);
+        if (msg.topic === 'now-playing') applyState(msg.payload);
+      } catch (e) { /* ignore */ }
+    });
+    ws.addEventListener('close', function () {
+      setTimeout(connect, 1500);
+    });
+  }
+
+  connect();
+})();
+`;
+

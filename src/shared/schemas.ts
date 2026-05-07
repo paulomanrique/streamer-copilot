@@ -56,6 +56,7 @@ export const generalSettingsSchema = z.object({
   eventNotifications: z.boolean(),
   recommendationTemplate: z.string().max(500),
   diagnosticLogLevel: eventLogLevelSchema.default('info'),
+  overlayServerPort: z.number().int().min(1024).max(65535).default(7842),
 });
 
 export const scheduledMessageUpsertInputSchema = z.object({

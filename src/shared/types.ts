@@ -14,6 +14,8 @@ export interface GeneralSettings {
   eventNotifications: boolean;
   recommendationTemplate: string;
   diagnosticLogLevel: EventLogLevel;
+  /** R3: HTTP/WS port for the overlay server (browser sources, /now-playing, etc.). */
+  overlayServerPort: number;
 }
 
 export type AppLanguage = 'pt-BR' | 'en-US';

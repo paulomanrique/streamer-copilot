@@ -207,6 +207,7 @@ export const IPC_CHANNELS = {
   accountsDisconnect: 'accounts:disconnect',
   accountsGetStatus: 'accounts:get-status',
   accountsStatus: 'accounts:status',
+  overlayServerInfo: 'overlay:server-info',
 } as const;
 
 export interface RecentChatSnapshot {
@@ -357,6 +358,18 @@ export interface CopilotApi {
   accountsDisconnect: (input: { id: string }) => Promise<void>;
   accountsGetStatus: (input: { id: string }) => Promise<import('./types.js').PlatformAccountStatus | null>;
   onAccountStatus: (listener: (status: import('./types.js').PlatformAccountStatus) => void) => () => void;
+  getOverlayServerInfo: () => Promise<OverlayServerInfo>;
+}
+
+export interface OverlayServerInfo {
+  status: 'running' | 'failed' | 'stopped';
+  port: number;
+  error: string | null;
+  urls: {
+    chat: string | null;
+    raffles: string | null;
+    nowPlaying: string | null;
+  };
 }
 
 export interface AccountCreateInput {
