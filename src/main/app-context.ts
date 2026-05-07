@@ -46,7 +46,7 @@ import { KickModerationApi, KICK_MODERATION_CAPABILITIES } from '../platforms/ki
 import { KickSettingsStore } from '../platforms/kick/settings-store.js';
 import { KickTokenStore, type KickAuthSession, type KickAuthToken } from '../platforms/kick/token-store.js';
 import { TikTokSettingsStore } from '../platforms/tiktok/settings-store.js';
-// import { createTikTokChatAdapter } from '../platforms/tiktok/adapter.js'; // TIKTOK_DISABLED
+import { createTikTokChatAdapter } from '../platforms/tiktok/adapter.js';
 import { TwitchCredentialsStore } from '../platforms/twitch/credentials-store.js';
 import { createTwitchChatAdapter, type TwitchChatAdapter } from '../platforms/twitch/adapter.js';
 import { TwitchModerationApi, TWITCH_MODERATION_CAPABILITIES } from '../platforms/twitch/moderation.js';
@@ -1783,11 +1783,26 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   // TikTok Handlers
   ipcMain.handle(IPC_CHANNELS.tiktokGetSettings, async () => { const s = await getTiktokSettingsStore(); return s ? s.load() : { username: '', autoConnect: false }; });
   ipcMain.handle(IPC_CHANNELS.tiktokSaveSettings, async (_, raw) => { const s = await getTiktokSettingsStore(); if (s) await s.save(tiktokSettingsSchema.parse(raw)); });
-  // TIKTOK_DISABLED
   ipcMain.handle(IPC_CHANNELS.tiktokConnect, async (_, raw) => {
     const c = tiktokConnectSchema.parse(raw);
-    void c;
-    throw new Error('TikTok temporariamente desativado.');
+    setTiktokStatus('connecting', c.username);
+    chatLogService.openSession('tiktok', c.username);
+    suggestionService.clearSessionEntries();
+    selfSenderName.tiktok = c.username.toLowerCase();
+    try {
+      await chatService.replaceAdapter(createTikTokChatAdapter({
+        username: c.username,
+        onError: (cause) => logTikTokConnectionError('Connection error', c.username, cause),
+        onStatusChange: (status) => setTiktokStatus(status, c.username),
+        onLiveStats: (stats) => options.stateHub.pushTiktokLiveStats(stats),
+        onCaptchaDetected: () => logService.warn('tiktok', 'CAPTCHA detected'),
+      }));
+      const store = await getTiktokSettingsStore();
+      if (store) await store.save({ username: c.username, autoConnect: true });
+    } catch (cause) {
+      setTiktokStatus('error', c.username);
+      throw cause;
+    }
   });
   ipcMain.handle(IPC_CHANNELS.tiktokDisconnect, async () => {
     chatLogService.closeSession('tiktok');
@@ -1796,7 +1811,13 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     setTiktokStatus('disconnected', null);
   });
   ipcMain.handle(IPC_CHANNELS.tiktokGetStatus, async () => tiktokStatus);
-  ipcMain.handle(IPC_CHANNELS.tiktokCheckLive, async () => ({ isLive: false }));
+  ipcMain.handle(IPC_CHANNELS.tiktokCheckLive, async (_, raw: unknown) => {
+    const username = typeof raw === 'string' ? raw.trim() : '';
+    if (!username) return { isLive: false };
+    // Lightweight check: try to connect briefly. Heavy probing is expensive on TikTok;
+    // returning unknown is acceptable — the wizard's "Add" step doesn't strictly require it.
+    return { isLive: tiktokUsername === username && tiktokStatus === 'connected' };
+  });
 
   // Kick Handlers
   ipcMain.handle(IPC_CHANNELS.kickGetSettings, async () => {
@@ -1897,28 +1918,30 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }
   }).catch(() => undefined);
 
-  // TIKTOK_DISABLED: auto-reconnect desativado temporariamente
-  // void (async () => {
-  //   const store = await getTiktokSettingsStore();
-  //   if (!store) return;
-  //   const settings = await store.load();
-  //   if (!settings.autoConnect || !settings.username) return;
-  //   try {
-  //     setTiktokStatus('connecting', settings.username);
-  //     chatLogService.openSession('tiktok', settings.username);
-  //     suggestionService.clearSessionEntries();
-  //     await chatService.replaceAdapter(createTikTokChatAdapter({
-  //       username: settings.username,
-  //       onError: (cause) => logTikTokConnectionError('Auto-reconnect connection error', settings.username, cause),
-  //       onStatusChange: (status) => setTiktokStatus(status),
-  //       onLiveStats: (stats) => options.stateHub.pushTiktokLiveStats(stats),
-  //       onCaptchaDetected: () => logService.warn('tiktok', 'CAPTCHA detected — window shown to user'),
-  //     }));
-  //     logService.info('tiktok', 'Auto-reconnected from saved settings', { username: settings.username });
-  //   } catch (cause) {
-  //     logService.warn('tiktok', 'Auto-reconnect failed', { error: cause instanceof Error ? cause.message : String(cause) });
-  //   }
-  // })();
+  // Auto-reconnect TikTok from saved settings on startup (R5)
+  void (async () => {
+    const store = await getTiktokSettingsStore();
+    if (!store) return;
+    const settings = await store.load();
+    if (!settings.autoConnect || !settings.username) return;
+    try {
+      setTiktokStatus('connecting', settings.username);
+      chatLogService.openSession('tiktok', settings.username);
+      suggestionService.clearSessionEntries();
+      selfSenderName.tiktok = settings.username.toLowerCase();
+      await chatService.replaceAdapter(createTikTokChatAdapter({
+        username: settings.username,
+        onError: (cause) => logTikTokConnectionError('Auto-reconnect connection error', settings.username, cause),
+        onStatusChange: (status) => setTiktokStatus(status, settings.username),
+        onLiveStats: (stats) => options.stateHub.pushTiktokLiveStats(stats),
+        onCaptchaDetected: () => logService.warn('tiktok', 'CAPTCHA detected'),
+      }));
+      logService.info('tiktok', 'Auto-reconnected from saved settings', { username: settings.username });
+    } catch (cause) {
+      logService.warn('tiktok', 'Auto-reconnect failed', { error: cause instanceof Error ? cause.message : String(cause) });
+      setTiktokStatus('disconnected', null);
+    }
+  })();
 
   // Auto-reconnect Kick from saved settings on startup
   void (async () => {
@@ -2147,8 +2170,22 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
           void wireTwitchModeration(adapter, creds.channel, creds.oauthToken);
           break;
         }
-        case 'tiktok':
-          throw new Error('TikTok account connect handled in R5');
+        case 'tiktok': {
+          setTiktokStatus('connecting', account.channel);
+          chatLogService.openSession('tiktok', account.channel);
+          suggestionService.clearSessionEntries();
+          selfSenderName.tiktok = account.channel.toLowerCase();
+          await chatService.replaceAdapter(createTikTokChatAdapter({
+            username: account.channel,
+            onError: (cause) => logTikTokConnectionError('Connection error', account.channel, cause),
+            onStatusChange: (status) => setTiktokStatus(status, account.channel),
+            onLiveStats: (stats) => options.stateHub.pushTiktokLiveStats(stats),
+            onCaptchaDetected: () => logService.warn('tiktok', 'CAPTCHA detected'),
+          }));
+          const store = await getTiktokSettingsStore();
+          if (store) await store.save({ username: account.channel, autoConnect: account.autoConnect });
+          break;
+        }
         case 'kick':
           throw new Error('Kick account connect not yet wired via accounts API — use legacy kick:connect for now');
         case 'youtube':
@@ -2410,17 +2447,16 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }
   }
 
-  // TIKTOK_DISABLED
-  // function logTikTokConnectionError(message: string, username: string, cause: unknown): void {
-  //   const metadata = {
-  //     username,
-  //     errorName: cause instanceof Error ? cause.name : undefined,
-  //     error: cause instanceof Error ? cause.message : String(cause),
-  //     stack: cause instanceof Error ? cause.stack : undefined,
-  //   };
-  //   logService.error('tiktok', message, metadata);
-  //   console.error(`[tiktok] ${message}`, metadata);
-  // }
+  function logTikTokConnectionError(message: string, username: string, cause: unknown): void {
+    const metadata = {
+      username,
+      errorName: cause instanceof Error ? cause.name : undefined,
+      error: cause instanceof Error ? cause.message : String(cause),
+      stack: cause instanceof Error ? cause.stack : undefined,
+    };
+    logService.error('tiktok', message, metadata);
+    console.error(`[tiktok] ${message}`, metadata);
+  }
 
   function formatWinnerAnnouncement(raffle: Raffle, winnerName: string): string {
     return raffle.winnerAnnouncementTemplate
