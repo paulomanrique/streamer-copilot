@@ -40,13 +40,15 @@ import { searchYouTube as scrapeYouTube } from '../modules/music/youtube-search.
 import { MusicPlayer } from './music-player.js';
 import { VoiceCommandRepository } from '../modules/voice/voice-repository.js';
 import { VoiceService } from '../modules/voice/voice-service.js';
-import { createKickChatAdapter } from '../platforms/kick/adapter.js';
+import { createKickChatAdapter, type KickChatAdapter } from '../platforms/kick/adapter.js';
+import { KickModerationApi, KICK_MODERATION_CAPABILITIES } from '../platforms/kick/moderation.js';
 import { KickSettingsStore } from '../platforms/kick/settings-store.js';
 import { KickTokenStore, type KickAuthSession, type KickAuthToken } from '../platforms/kick/token-store.js';
 import { TikTokSettingsStore } from '../platforms/tiktok/settings-store.js';
 // import { createTikTokChatAdapter } from '../platforms/tiktok/adapter.js'; // TIKTOK_DISABLED
 import { TwitchCredentialsStore } from '../platforms/twitch/credentials-store.js';
-import { createTwitchChatAdapter } from '../platforms/twitch/adapter.js';
+import { createTwitchChatAdapter, type TwitchChatAdapter } from '../platforms/twitch/adapter.js';
+import { TwitchModerationApi, TWITCH_MODERATION_CAPABILITIES } from '../platforms/twitch/moderation.js';
 import { YouTubeSettingsStore } from '../platforms/youtube/settings-store.js';
 import { YTLiveClient } from './youtube-client.js';
 import { getAllAudioBase64 } from '@sefinek/google-tts-api';
@@ -84,6 +86,15 @@ import {
   suggestionListUpsertInputSchema,
   kickConnectSchema,
   kickSettingsSchema,
+  moderationGetCapabilitiesSchema,
+  moderationDeleteMessageSchema,
+  moderationBanUserSchema,
+  moderationUnbanUserSchema,
+  moderationTimeoutUserSchema,
+  moderationSetModeSchema,
+  moderationManageRoleSchema,
+  moderationRaidSchema,
+  moderationShoutoutSchema,
   selectProfileInputSchema,
   textCommandDeleteInputSchema,
   textCommandUpsertInputSchema,
@@ -546,7 +557,11 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const kickClient = new KickClient({ clientId, clientSecret, redirectUri });
     const pkce = kickClient.generatePKCEParams();
     const expectedState = pkce.state ?? '';
-    const authUrl = kickClient.getAuthorizationUrl(pkce, ['public', 'channel:read', 'chat:write']);
+    // R2: extra scopes for Kick moderation API (ban/timeout/clear-chat/chat-settings/mods/vips).
+    const authUrl = kickClient.getAuthorizationUrl(pkce, [
+      'public', 'channel:read', 'chat:write',
+      'moderation:read', 'moderation:write',
+    ]);
 
     return new Promise((resolve, reject) => {
       let finished = false;
@@ -1583,7 +1598,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     chatLogService.openSession('twitch', c.channel);
     suggestionService.clearSessionEntries();
     selfSenderName.twitch = c.username.toLowerCase();
-    await chatService.replaceAdapter(createTwitchChatAdapter({ channels: [c.channel], username: c.username, password: c.oauthToken, onStatusChange: setTwitchStatus, resolveBadgeUrls }));
+    const twitchAdapter = createTwitchChatAdapter({ channels: [c.channel], username: c.username, password: c.oauthToken, onStatusChange: setTwitchStatus, resolveBadgeUrls });
+    await chatService.replaceAdapter(twitchAdapter);
+    void wireTwitchModeration(twitchAdapter, c.channel, c.oauthToken);
   });
   ipcMain.handle(IPC_CHANNELS.twitchDisconnect, async () => {
     delete selfSenderName.twitch;
@@ -1670,7 +1687,18 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         }
       });
       server.on('error', (err) => { clearTimeout(timeout); reject(err); });
-      server.listen(TWITCH_REDIRECT_PORT, '127.0.0.1', () => shell.openExternal(`https://id.twitch.tv/oauth2/authorize?client_id=${TWITCH_CLIENT_ID}&redirect_uri=http://localhost:${TWITCH_REDIRECT_PORT}/callback&response_type=token&scope=chat:read+chat:edit`));
+      // R2: extra scopes for Twitch moderation API (ban/timeout/delete/chat-settings/raids/shoutouts/mods/vips).
+      const twitchScopes = [
+        'chat:read', 'chat:edit',
+        'moderator:manage:banned_users',
+        'moderator:manage:chat_messages',
+        'moderator:manage:chat_settings',
+        'moderator:manage:shoutouts',
+        'channel:manage:raids',
+        'channel:manage:moderators',
+        'channel:manage:vips',
+      ].join('+');
+      server.listen(TWITCH_REDIRECT_PORT, '127.0.0.1', () => shell.openExternal(`https://id.twitch.tv/oauth2/authorize?client_id=${TWITCH_CLIENT_ID}&redirect_uri=http://localhost:${TWITCH_REDIRECT_PORT}/callback&response_type=token&scope=${twitchScopes}`));
     });
   });
 
@@ -1800,13 +1828,15 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     suggestionService.clearSessionEntries();
 
     try {
-      await chatService.replaceAdapter(createKickChatAdapter({
+      const kickAdapter = createKickChatAdapter({
         channelSlug,
         broadcasterUserId: authSession?.broadcasterUserId,
         clientId: credentials.clientId,
         clientSecret: credentials.clientSecret,
         oauthToken: authSession?.token,
-      }));
+      });
+      await chatService.replaceAdapter(kickAdapter);
+      wireKickModeration(kickAdapter, authSession);
       setKickStatus('connected', channelSlug);
       startKickStatsPoll(channelSlug, credentials, authSession);
     } catch (cause) {
@@ -1837,13 +1867,15 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       suggestionService.clearSessionEntries();
       twitchChannel = creds.channel;
       selfSenderName.twitch = creds.username.toLowerCase();
-      await chatService.replaceAdapter(createTwitchChatAdapter({
+      const twitchAdapter = createTwitchChatAdapter({
         channels: [creds.channel],
         username: creds.username,
         password: creds.oauthToken,
         onStatusChange: setTwitchStatus,
         resolveBadgeUrls,
-      }));
+      });
+      await chatService.replaceAdapter(twitchAdapter);
+      void wireTwitchModeration(twitchAdapter, creds.channel, creds.oauthToken);
       logService.info('twitch', 'Auto-reconnected from saved credentials', { channel: creds.channel });
     } catch (cause) {
       logService.warn('twitch', 'Auto-reconnect failed', { error: cause instanceof Error ? cause.message : String(cause) });
@@ -1896,13 +1928,15 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       setKickStatus('connecting', slug);
       chatLogService.openSession('kick', slug);
       suggestionService.clearSessionEntries();
-      await chatService.replaceAdapter(createKickChatAdapter({
+      const kickAdapter = createKickChatAdapter({
         channelSlug: slug,
         broadcasterUserId: authSession?.channelSlug === slug ? authSession.broadcasterUserId : null,
         clientId: credentials.clientId,
         clientSecret: credentials.clientSecret,
         oauthToken: authSession?.channelSlug === slug ? authSession.token : undefined,
-      }));
+      });
+      await chatService.replaceAdapter(kickAdapter);
+      wireKickModeration(kickAdapter, authSession?.channelSlug === slug ? authSession : null);
       setKickStatus('connected', slug);
       startKickStatsPoll(slug, credentials, authSession?.channelSlug === slug ? authSession : null);
       logService.info('kick', 'Auto-reconnected from saved settings', { channelSlug: slug });
@@ -1912,6 +1946,139 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       logService.warn('kick', 'Auto-reconnect failed', { channelSlug: slug, error: cause instanceof Error ? cause.message : String(cause) });
     }
   })();
+
+  // ── R2: Moderation IPC + setModeration wiring ────────────────────────────
+
+  async function wireTwitchModeration(adapter: TwitchChatAdapter, channel: string, oauthToken: string): Promise<void> {
+    try {
+      const accessToken = oauthToken.replace(/^oauth:/, '');
+      const headers = { Authorization: `Bearer ${accessToken}`, 'Client-Id': TWITCH_CLIENT_ID };
+      // Resolve broadcaster (channel) and moderator (the authed user) ids in one pair of calls.
+      const [broadcasterRes, modRes] = await Promise.all([
+        net.fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(channel)}`, { headers }),
+        net.fetch('https://api.twitch.tv/helix/users', { headers }),
+      ]);
+      const broadcasterData = await broadcasterRes.json() as { data?: Array<{ id: string }> };
+      const modData = await modRes.json() as { data?: Array<{ id: string }> };
+      const broadcasterUserId = broadcasterData.data?.[0]?.id;
+      const moderatorUserId = modData.data?.[0]?.id;
+      if (!broadcasterUserId || !moderatorUserId) {
+        logService.warn('twitch', 'Could not resolve user ids for moderation', { hasBroadcaster: !!broadcasterUserId, hasModerator: !!moderatorUserId });
+        return;
+      }
+      const api = new TwitchModerationApi({
+        accessToken,
+        clientId: TWITCH_CLIENT_ID,
+        broadcasterUserId,
+        moderatorUserId,
+      });
+      adapter.setModeration(api, TWITCH_MODERATION_CAPABILITIES);
+    } catch (cause) {
+      logService.warn('twitch', 'Failed to wire moderation API', { error: cause instanceof Error ? cause.message : String(cause) });
+    }
+  }
+
+  function wireKickModeration(adapter: KickChatAdapter, authSession: KickAuthSession | null): void {
+    if (!authSession?.token?.accessToken || typeof authSession.broadcasterUserId !== 'number') return;
+    const api = new KickModerationApi({
+      accessToken: authSession.token.accessToken,
+      broadcasterUserId: authSession.broadcasterUserId,
+    });
+    adapter.setModeration(api, KICK_MODERATION_CAPABILITIES);
+  }
+
+  ipcMain.handle(IPC_CHANNELS.moderationGetCapabilities, async (_, raw) => {
+    const platform = moderationGetCapabilitiesSchema.parse(raw);
+    const adapter = chatService.getAdapter(platform);
+    return adapter ? adapter.capabilities : null;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.moderationDeleteMessage, async (_, raw) => {
+    const input = moderationDeleteMessageSchema.parse(raw);
+    const api = chatService.getAdapter(input.platform)?.moderation;
+    if (!api) throw new Error(`Moderation not available for platform "${input.platform}"`);
+    await api.deleteMessage(input.messageId);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.moderationBanUser, async (_, raw) => {
+    const input = moderationBanUserSchema.parse(raw);
+    const api = chatService.getAdapter(input.platform)?.moderation;
+    if (!api) throw new Error(`Moderation not available for platform "${input.platform}"`);
+    await api.banUser(input.userId, input.reason);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.moderationUnbanUser, async (_, raw) => {
+    const input = moderationUnbanUserSchema.parse(raw);
+    const api = chatService.getAdapter(input.platform)?.moderation;
+    if (!api) throw new Error(`Moderation not available for platform "${input.platform}"`);
+    await api.unbanUser(input.userId);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.moderationTimeoutUser, async (_, raw) => {
+    const input = moderationTimeoutUserSchema.parse(raw);
+    const api = chatService.getAdapter(input.platform)?.moderation;
+    if (!api) throw new Error(`Moderation not available for platform "${input.platform}"`);
+    await api.timeoutUser(input.userId, input.durationSeconds, input.reason);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.moderationSetMode, async (_, raw) => {
+    const input = moderationSetModeSchema.parse(raw);
+    const api = chatService.getAdapter(input.platform)?.moderation;
+    if (!api) throw new Error(`Moderation not available for platform "${input.platform}"`);
+    switch (input.mode) {
+      case 'slow':
+        if (!api.setSlowMode) throw new Error(`Slow mode not supported on "${input.platform}"`);
+        await api.setSlowMode(input.enabled, input.value);
+        break;
+      case 'subscribers':
+        if (!api.setSubscribersOnly) throw new Error(`Subscriber-only not supported on "${input.platform}"`);
+        await api.setSubscribersOnly(input.enabled);
+        break;
+      case 'members':
+        if (!api.setMembersOnly) throw new Error(`Members-only not supported on "${input.platform}"`);
+        await api.setMembersOnly(input.enabled, input.value);
+        break;
+      case 'followers':
+        if (!api.setFollowersOnly) throw new Error(`Follower-only not supported on "${input.platform}"`);
+        await api.setFollowersOnly(input.enabled, input.value);
+        break;
+      case 'emote':
+        if (!api.setEmoteOnly) throw new Error(`Emote-only not supported on "${input.platform}"`);
+        await api.setEmoteOnly(input.enabled);
+        break;
+      case 'unique':
+        throw new Error('Unique chat mode not yet wired');
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.moderationManageRole, async (_, raw) => {
+    const input = moderationManageRoleSchema.parse(raw);
+    const api = chatService.getAdapter(input.platform)?.moderation;
+    if (!api) throw new Error(`Moderation not available for platform "${input.platform}"`);
+    if (input.role === 'mod') {
+      const fn = input.action === 'add' ? api.addMod : api.removeMod;
+      if (!fn) throw new Error(`Mod ${input.action} not supported on "${input.platform}"`);
+      await fn.call(api, input.userId);
+    } else {
+      const fn = input.action === 'add' ? api.addVip : api.removeVip;
+      if (!fn) throw new Error(`VIP ${input.action} not supported on "${input.platform}"`);
+      await fn.call(api, input.userId);
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.moderationRaid, async (_, raw) => {
+    const input = moderationRaidSchema.parse(raw);
+    const api = chatService.getAdapter(input.platform)?.moderation;
+    if (!api?.raid) throw new Error(`Raid not supported on "${input.platform}"`);
+    await api.raid(input.targetChannel);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.moderationShoutout, async (_, raw) => {
+    const input = moderationShoutoutSchema.parse(raw);
+    const api = chatService.getAdapter(input.platform)?.moderation;
+    if (!api?.shoutout) throw new Error(`Shoutout not supported on "${input.platform}"`);
+    await api.shoutout(input.userId);
+  });
 
   void raffleOverlayServer.start();
   raffleDeadlineRunner.start();

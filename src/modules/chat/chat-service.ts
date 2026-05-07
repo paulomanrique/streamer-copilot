@@ -91,6 +91,11 @@ export class ChatService {
     await adapter.sendMessage(content);
   }
 
+  /** Returns the registered adapter for a platform, or null. Used by moderation IPC handlers. */
+  getAdapter(platform: PlatformId): PlatformChatAdapter | null {
+    return this.adapters.get(platform) ?? null;
+  }
+
   getRecent(): RecentChatSnapshot {
     return {
       messages: [...this.messages],
