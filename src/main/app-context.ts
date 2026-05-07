@@ -39,6 +39,7 @@ import { MusicSettingsStore } from '../modules/music/music-settings-store.js';
 import { MusicRequestService } from '../modules/music/music-request-service.js';
 import { searchYouTube as scrapeYouTube } from '../modules/music/youtube-search.js';
 import { MusicPlayer } from './music-player.js';
+import { MusicStreamResolver } from './music-stream-resolver.js';
 import { VoiceCommandRepository } from '../modules/voice/voice-repository.js';
 import { VoiceService } from '../modules/voice/voice-service.js';
 import { createKickChatAdapter, type KickChatAdapter } from '../platforms/kick/adapter.js';
@@ -316,24 +317,22 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   }
 
   // musicPlayer and musicService are mutually dependent; use a shared ref to avoid forward-reference issues.
+  // R4: musicPlayer is now a state machine that publishes to /now-playing via OverlayServer;
+  // it is wired below after the overlay server is constructed.
   let musicPlayerRef: MusicPlayer | null = null;
 
   const musicService = new MusicRequestService({
     getSettings: () => musicSettingsCache,
     searchYouTube,
-    onPlay: (cmd) => musicPlayerRef?.play(cmd),
+    onPlay: (cmd) => void musicPlayerRef?.play(cmd),
     onStop: () => musicPlayerRef?.stop(),
     onStateUpdate: (state) => options.stateHub.pushMusicStateUpdate(state),
     onVolumeChange: (volume) => musicPlayerRef?.setVolume(volume),
     sendMessage: (platform, content) => sendPlatformMessage(platform, content),
     logInfo: (message, metadata) => logService.info('music', message, metadata),
     logError: (message, metadata) => logService.error('music', message, metadata),
+    isBrowserSourceConnected: () => musicPlayerRef?.hasBrowserSource() ?? false,
   });
-
-  musicPlayerRef = new MusicPlayer(
-    options.getWindow,
-    (event) => musicService.onPlayerEvent(event),
-  );
 
   let rendererSpeechSynthesisAvailable = process.platform !== 'linux';
   let isShuttingDown = false;
@@ -1193,6 +1192,19 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       }
     },
     getChatSnapshot: () => chatService.getRecent(),
+  });
+
+  // R4: now that overlayServer exists, build the music player + stream resolver.
+  const musicStreamResolver = new MusicStreamResolver();
+  musicPlayerRef = new MusicPlayer(
+    overlayServer,
+    musicStreamResolver,
+    (event) => musicService.onPlayerEvent(event),
+  );
+  // When OBS browser source toggles connection, push the latest music state so the
+  // renderer warning banner updates in real time.
+  overlayServer.onClientsChange('now-playing', () => {
+    options.stateHub.pushMusicStateUpdate(musicService.getState());
   });
 
   raffleService = new RaffleService({

@@ -335,6 +335,12 @@ export interface MusicPlayerState {
   currentItem: MusicQueueItem | null;
   queue: MusicQueueItem[];
   isPlaying: boolean;
+  /** R4: streamable audio URL resolved on the main side via ytdl-core. */
+  streamUrl: string | null;
+  /** R4: 0..1 volume the browser source should apply. */
+  volume: number;
+  /** R4: true when at least one /now-playing OBS browser source is connected via WS. */
+  browserSourceConnected: boolean;
 }
 
 export interface MusicPlayCommand {
@@ -342,6 +348,10 @@ export interface MusicPlayCommand {
   videoId: string;
   title: string;
   volume: number;
+  /** R4: optional metadata for the /now-playing browser source. */
+  thumbnailUrl?: string | null;
+  requestedBy?: string | null;
+  durationSeconds?: number;
 }
 
 export interface MusicPlayerEvent {
