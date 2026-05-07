@@ -48,7 +48,13 @@ export const KICK_BROWSER_USER_AGENT = DEFAULT_USER_AGENT;
 
 export class KickChatAdapter implements PlatformChatAdapter {
   readonly platform = 'kick' as const;
-  readonly capabilities: PlatformCapabilities = READ_ONLY_CAPABILITIES;
+  capabilities: PlatformCapabilities = READ_ONLY_CAPABILITIES;
+  moderation?: import('../../shared/moderation.js').ModerationApi;
+
+  setModeration(api: import('../../shared/moderation.js').ModerationApi, capabilities: PlatformCapabilities): void {
+    this.moderation = api;
+    this.capabilities = capabilities;
+  }
 
   private readonly messageHandlers = new Set<(message: ChatMessage) => void>();
   private readonly eventHandlers = new Set<(event: StreamEvent) => void>();

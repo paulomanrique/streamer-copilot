@@ -37,7 +37,16 @@ const DEFAULT_MOCK_AUTHOR = 'Streamer';
 
 export class TwitchChatAdapter implements PlatformChatAdapter {
   readonly platform: PlatformId = 'twitch';
-  readonly capabilities: PlatformCapabilities = READ_ONLY_CAPABILITIES;
+
+  // Capabilities upgrade from READ_ONLY to TWITCH_MODERATION_CAPABILITIES once
+  // setModeration() is wired in by app-context (after broadcaster id is known).
+  capabilities: PlatformCapabilities = READ_ONLY_CAPABILITIES;
+  moderation?: import('../../shared/moderation.js').ModerationApi;
+
+  setModeration(api: import('../../shared/moderation.js').ModerationApi, capabilities: PlatformCapabilities): void {
+    this.moderation = api;
+    this.capabilities = capabilities;
+  }
 
   private readonly messageHandlers = new Set<(message: ChatMessage) => void>();
   private readonly eventHandlers = new Set<(event: StreamEvent) => void>();
