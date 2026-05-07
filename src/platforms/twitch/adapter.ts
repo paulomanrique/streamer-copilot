@@ -314,10 +314,12 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
   }
 
   private emitMessage(message: Omit<ChatMessage, 'id' | 'timestampLabel'> & { color?: string }, tags?: TmiTags): void {
+    const userId = tags?.['user-id'];
     const payload: ChatMessage = {
       id: tags?.['id']?.toString?.() ?? this.buildId(),
       timestampLabel: this.formatTimestamp(tags?.['tmi-sent-ts']),
       ...message,
+      userId: typeof userId === 'string' && userId ? userId : (typeof userId === 'number' ? String(userId) : message.userId),
     };
 
     for (const handler of this.messageHandlers) {

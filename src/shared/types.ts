@@ -68,6 +68,9 @@ export interface ChatMessage {
   /** R6: id of the PlatformAccount this message came from. Lets the UI
    *  disambiguate when more than one account from the same platform is connected. */
   accountId?: string;
+  /** Platform-native user id of the author. Required for per-message moderation
+   *  (ban/timeout) since most platform APIs key off user id, not username. */
+  userId?: string;
 }
 
 export interface TwitchLiveStats {

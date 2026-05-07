@@ -161,6 +161,7 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
         avatarUrl: avatarUrlFor(payload.user),
         role,
         unifiedLevel: resolveFromRole(role),
+        ...(payload.user?.uniqueId ? { userId: payload.user.uniqueId } : {}),
       });
     });
 

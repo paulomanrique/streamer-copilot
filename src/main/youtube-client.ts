@@ -144,6 +144,7 @@ export class YTLiveClient {
 
     const badges = this.parseBadges(item.author);
     const avatarUrl: string | undefined = item.author?.thumbnails?.[0]?.url ?? undefined;
+    const userId: string | undefined = typeof item.author?.id === 'string' && item.author.id ? item.author.id : undefined;
     // item.timestamp is in milliseconds (timestampUsec / 1000)
     const isHistory = (item.timestamp ?? 0) < this.startedAt;
 
@@ -153,6 +154,7 @@ export class YTLiveClient {
       content,
       badges,
       avatarUrl,
+      ...(userId ? { userId } : {}),
       ...(isHistory ? { isHistory: true } : {}),
     });
   }

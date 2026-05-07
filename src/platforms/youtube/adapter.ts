@@ -353,6 +353,7 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
       badges: this.resolveBadges(authorDetails),
       role,
       unifiedLevel: resolveFromRole(role),
+      userId: authorDetails?.channelId,
     };
   }
 
