@@ -52,13 +52,13 @@ import { TwitchCredentialsStore } from '../platforms/twitch/credentials-store.js
 import { createTwitchChatAdapter, type TwitchChatAdapter } from '../platforms/twitch/adapter.js';
 import { TwitchModerationApi, TWITCH_MODERATION_CAPABILITIES } from '../platforms/twitch/moderation.js';
 import { YouTubeSettingsStore } from '../platforms/youtube/settings-store.js';
+import { YouTubeChatAdapter } from '../platforms/youtube/scraper-adapter.js';
 import { YTLiveClient } from './youtube-client.js';
 import { getAllAudioBase64 } from '@sefinek/google-tts-api';
 import { APP_NAME } from '../shared/constants.js';
 import { IPC_CHANNELS } from '../shared/ipc.js';
 import {
   type LiveStreamInfo,
-  getLabelFromTitle,
   extractYtLiveVideoIds,
   extractYtSubscriberCount,
   extractYtLiveFromPlayerResponse,
@@ -381,17 +381,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   let kickStatsTimer: ReturnType<typeof setInterval> | null = null;
   const userAvatarCache = new Map<string, string>();
   const badgeCache = new Map<string, string>();
-  const youtubeScrapers = new Map<string, YTLiveClient>();
-  const youtubeStreamData = new Map<string, {
-    label: string;
-    viewerCount: number | null;
-    subscriberCount: number | null;
-    platform: 'youtube' | 'youtube-v';
-    channelHandle: string | null;
-  }>();
-  let youtubeMonitorTimer: ReturnType<typeof setInterval> | null = null;
-  let youtubeStatsTimer: ReturnType<typeof setInterval> | null = null;
-  let _lastDetectedVideoIds: Set<string> = new Set();
+  // R6 (YouTube): scraper pool + monitor lives inside YouTubeChatAdapter now
+  // (constructed after chatService below). The variable is forward-declared
+  // here so helpers defined earlier can defer to the adapter once it exists.
+  let youtubeAdapter: YouTubeChatAdapter | null = null;
 
   // Ordered list of platform IDs for YouTube streams (first = horizontal, second = vertical)
   const YT_PLATFORMS: Array<'youtube' | 'youtube-v'> = ['youtube', 'youtube-v'];
@@ -399,24 +392,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   // eslint-disable-next-line prefer-const -- forward-declared; assigned after dependent services are created
   let raffleService: RaffleService;
 
-  const getYoutubeStreams = (): YouTubeStreamInfo[] => {
-    const totalStreams = youtubeScrapers.size;
-    return Array.from(youtubeScrapers.keys()).map((videoId) => {
-      const data = youtubeStreamData.get(videoId);
-      const label = totalStreams > 1
-        ? (data?.platform === 'youtube-v' ? 'Vertical' : 'Horizontal')
-        : 'YouTube';
-      return {
-        videoId,
-        platform: data?.platform ?? 'youtube',
-        channelHandle: data?.channelHandle ?? null,
-        label,
-        viewerCount: data?.viewerCount ?? null,
-        subscriberCount: data?.subscriberCount ?? null,
-        liveUrl: `https://www.youtube.com/watch?v=${videoId}`,
-      };
-    });
-  };
+  const getYoutubeStreams = (): YouTubeStreamInfo[] => youtubeAdapter?.getCurrentStreams() ?? [];
 
   const getTwitchCredentialsStore = async (): Promise<TwitchCredentialsStore | null> => {
     const snapshot = await profileStore.list();
@@ -462,7 +438,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       delete selfSenderName.youtube;
       delete selfSenderName['youtube-v'];
     }
-    startYoutubeMonitor();
+    await refreshYoutubeAdapter();
     return settings;
   };
 
@@ -954,138 +930,16 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }
   };
 
-  const runYoutubeMonitor = async () => {
-    const store = await getYoutubeSettingsStore();
-    if (!store) return;
-    const settings = await store.load();
-    if (!settings.autoConnect || settings.channels.length === 0) return;
-
-    // Collect all live streams across all enabled channels
-    const allLiveStreams: LiveStreamInfo[] = [];
-    let anyCheckFailed = false;
-    for (const channel of settings.channels) {
-      if (!channel.enabled) continue;
-      const streams = await checkYouTubeLive(channel.handle);
-      if (streams === null) { anyCheckFailed = true; continue; }
-      for (const s of streams) if (!allLiveStreams.find((x) => x.videoId === s.videoId)) allLiveStreams.push(s);
-    }
-
-    // For streams where the HTML scraping didn't yield a viewer count, try the
-    // lightweight live_stats endpoint which returns just the concurrent viewer number.
-    for (let i = 0; i < allLiveStreams.length; i++) {
-      if (allLiveStreams[i].viewCount === null) {
-        const count = await fetchYtLiveViewerCount(allLiveStreams[i].videoId);
-        if (count !== null) allLiveStreams[i] = { ...allLiveStreams[i], viewCount: count };
-      }
-    }
-
-    // Update viewer counts for existing scrapers and stop those no longer live.
-    // If any channel check failed (network error etc.), keep all scrapers running —
-    // a failed check is not proof the stream ended.
-    for (const [videoId, scraper] of youtubeScrapers) {
-      const updated = allLiveStreams.find((s) => s.videoId === videoId);
-      if (!updated) {
-        if (anyCheckFailed) {
-          logService.info('youtube', `Keeping scraper for ${videoId} alive (channel check failed this cycle)`);
-          continue;
-        }
-        const staleData = youtubeStreamData.get(videoId);
-        if (staleData) chatLogService.closeSession(staleData.platform);
-        scraper.stop();
-        youtubeScrapers.delete(videoId);
-        youtubeStreamData.delete(videoId);
-        logService.info('youtube', `Stopped scraper for ${videoId} (no longer live)`);
-        if (youtubeScrapers.size === 0) stopYoutubeStatsPoll();
-      } else {
-        const data = youtubeStreamData.get(videoId);
-        if (data) {
-          youtubeStreamData.set(videoId, {
-            ...data,
-            viewerCount: updated.viewCount ?? data.viewerCount,
-            subscriberCount: updated.subscriberCount ?? data.subscriberCount,
-          });
-        }
-      }
-    }
-
-    // Start scrapers for newly detected streams (up to 2)
-    const fmt = new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' });
-    for (let i = 0; i < Math.min(allLiveStreams.length, YT_PLATFORMS.length); i++) {
-      const { videoId, title, viewCount, subscriberCount } = allLiveStreams[i];
-      if (youtubeScrapers.has(videoId)) continue;
-      const platform = YT_PLATFORMS[i];
-      const label = getLabelFromTitle(title, i);
-      youtubeStreamData.set(videoId, {
-        label,
-        viewerCount: viewCount,
-        subscriberCount,
-        platform,
-        channelHandle: allLiveStreams[i].channelHandle,
-      });
-      logService.info('youtube', `Auto-detected live (${platform}, label=${label}): ${videoId} — "${title}"`);
-      chatLogService.openSession(platform, videoId);
-      suggestionService.clearSessionEntries();
-      const scraper = new YTLiveClient({
-        videoId,
-        onMessage: (message) => {
-          chatService.injectMessage({
-            id: `yt-auto-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-            timestampLabel: fmt.format(new Date()),
-            ...message,
-            platform,
-            streamLabel: label,
-          });
-        },
-        onEvent: (event) => {
-          chatService.injectEvent({
-            id: `yt-auto-event-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-            timestampLabel: fmt.format(new Date()),
-            ...event,
-            platform,
-            streamLabel: label,
-          });
-        },
-        onLog: (msg) => logService.info('youtube', msg),
-      });
-      youtubeScrapers.set(videoId, scraper);
-      await scraper.start();
-      ensureYoutubeStatsPoll();
-    }
-
-    _lastDetectedVideoIds = new Set(allLiveStreams.map((s) => s.videoId));
-    options.stateHub.pushYoutubeStatus(getYoutubeStreams());
-  };
-
-  const startYoutubeMonitor = () => {
-    if (youtubeMonitorTimer) clearInterval(youtubeMonitorTimer);
-    void runYoutubeMonitor();
-    youtubeMonitorTimer = setInterval(runYoutubeMonitor, 120_000);
-  };
-
-  const pollYoutubeViewerCounts = async () => {
-    if (youtubeScrapers.size === 0) return;
-    let changed = false;
-    for (const [videoId] of youtubeScrapers) {
-      const count = await fetchYtLiveViewerCount(videoId);
-      if (count !== null) {
-        const data = youtubeStreamData.get(videoId);
-        if (data && data.viewerCount !== count) {
-          youtubeStreamData.set(videoId, { ...data, viewerCount: count });
-          changed = true;
-        }
-      }
-    }
-    if (changed) options.stateHub.pushYoutubeStatus(getYoutubeStreams());
-  };
-
-  const ensureYoutubeStatsPoll = () => {
-    if (youtubeStatsTimer) return;
-    void pollYoutubeViewerCounts();
-    youtubeStatsTimer = setInterval(pollYoutubeViewerCounts, 60_000);
-  };
-
-  const stopYoutubeStatsPoll = () => {
-    if (youtubeStatsTimer) { clearInterval(youtubeStatsTimer); youtubeStatsTimer = null; }
+  /**
+   * Re-syncs the YouTubeChatAdapter's monitored handles from the persisted
+   * YouTubeSettings. Called on save and on account connect/disconnect — the
+   * adapter applies the new list and triggers an immediate monitor pass.
+   */
+  const refreshYoutubeAdapter = async (): Promise<void> => {
+    if (!youtubeAdapter) return;
+    const settings = await loadYoutubeSettings();
+    const handles = settings.channels.filter((c) => c.enabled).map((c) => c.handle);
+    youtubeAdapter.setMonitoredChannels(handles, { autoMonitor: settings.autoConnect });
   };
 
   const pollTwitchStats = async (channel: string, accessToken: string): Promise<void> => {
@@ -1352,6 +1206,20 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         showEventNotification(event);
       }
     },
+  });
+
+  youtubeAdapter = new YouTubeChatAdapter({
+    checkYouTubeLive,
+    fetchYtLiveViewerCount,
+    openChatLogSession: (platform, videoId) => chatLogService.openSession(platform, videoId),
+    closeChatLogSession: (platform) => chatLogService.closeSession(platform),
+    onStreamsChanged: (streams) => options.stateHub.pushYoutubeStatus(streams),
+    onScraperStart: () => suggestionService.clearSessionEntries(),
+    log: {
+      info: (msg) => logService.info('youtube', msg),
+      warn: (msg) => logService.warn('youtube', msg),
+    },
+    getChatChannelPageId: async () => (await loadYoutubeSettings()).chatChannelPageId,
   });
 
   const obsService = new ObsService({
@@ -1725,36 +1593,11 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.youtubeSaveSettings, async (_, raw) => saveYoutubeSettings(raw));
   ipcMain.handle(IPC_CHANNELS.youtubeConnect, async (_, raw) => {
     const i = youtubeConnectSchema.parse(raw);
-    const fmt = new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' });
-    if (!youtubeScrapers.has(i.videoId)) {
-      const idx = youtubeScrapers.size;
-      const platform = YT_PLATFORMS[idx] ?? 'youtube-v';
-      const label = String(idx + 1);
-      youtubeStreamData.set(i.videoId, { label, viewerCount: null, subscriberCount: null, platform, channelHandle: null });
-      chatLogService.openSession(platform, i.videoId);
-      suggestionService.clearSessionEntries();
-      const scraper = new YTLiveClient({
-        videoId: i.videoId,
-        onMessage: (m) => chatService.injectMessage({ id: `yt-${Date.now()}`, timestampLabel: fmt.format(new Date()), ...m, platform, streamLabel: label }),
-        onEvent: (e) => chatService.injectEvent({ id: `yt-event-${Date.now()}`, timestampLabel: fmt.format(new Date()), ...e, platform, streamLabel: label }),
-        onLog: (msg) => logService.info('youtube', msg),
-      });
-      youtubeScrapers.set(i.videoId, scraper);
-      await scraper.start();
-      ensureYoutubeStatsPoll();
-    }
-    options.stateHub.pushYoutubeStatus(getYoutubeStreams());
+    if (!youtubeAdapter) throw new Error('YouTube adapter not yet ready');
+    await youtubeAdapter.addManualVideo(i.videoId);
   });
   ipcMain.handle(IPC_CHANNELS.youtubeDisconnect, async () => {
-    for (const [videoId] of youtubeScrapers) {
-      const data = youtubeStreamData.get(videoId);
-      if (data) chatLogService.closeSession(data.platform);
-    }
-    for (const scraper of youtubeScrapers.values()) scraper.stop();
-    youtubeScrapers.clear();
-    youtubeStreamData.clear();
-    stopYoutubeStatsPoll();
-    options.stateHub.pushYoutubeStatus([]);
+    youtubeAdapter?.stopAllScrapers();
   });
   ipcMain.handle(IPC_CHANNELS.youtubeGetStatus, async () => getYoutubeStreams());
   ipcMain.handle(IPC_CHANNELS.youtubeOpenLogin, async (event) => {
@@ -1933,14 +1776,20 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }
   })();
 
-  startYoutubeMonitor();
-
-  void loadYoutubeSettings().then((s) => {
-    if (s.chatChannelName) {
-      selfSenderName.youtube = s.chatChannelName.toLowerCase();
-      selfSenderName['youtube-v'] = s.chatChannelName.toLowerCase();
+  void (async () => {
+    if (!youtubeAdapter) return;
+    const settings = await loadYoutubeSettings().catch(() => null);
+    if (!settings) return;
+    if (settings.chatChannelName) {
+      selfSenderName.youtube = settings.chatChannelName.toLowerCase();
+      selfSenderName['youtube-v'] = settings.chatChannelName.toLowerCase();
     }
-  }).catch(() => undefined);
+    youtubeAdapter.setMonitoredChannels(
+      settings.channels.filter((c) => c.enabled).map((c) => c.handle),
+      { autoMonitor: settings.autoConnect },
+    );
+    await chatService.replaceAdapter(youtubeAdapter);
+  })();
 
   // Auto-reconnect TikTok from saved settings on startup (R5)
   void (async () => {
@@ -2218,8 +2067,24 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
           await connectKickWithCredentials(channelSlug, { clientId, clientSecret });
           break;
         }
-        case 'youtube':
-          throw new Error('YouTube account connect not yet wired via accounts API — use legacy youtube:connect for now');
+        case 'youtube': {
+          // Toggle this handle's `enabled` flag in the YouTube settings, then
+          // re-sync the adapter. The adapter monitors all enabled channels and
+          // spawns scrapers for whichever are live; account connect/disconnect
+          // is just a flip on that list.
+          const handle = account.channel;
+          if (!handle) throw new Error('YouTube account is missing a channel handle');
+          const settings = await loadYoutubeSettings();
+          const channels = [...settings.channels];
+          const idx = channels.findIndex((c) => c.handle === handle);
+          if (idx >= 0) {
+            channels[idx] = { ...channels[idx], enabled: true };
+          } else {
+            channels.push({ id: randomUUID(), handle, name: account.label || handle, enabled: true });
+          }
+          await saveYoutubeSettings({ ...settings, channels });
+          break;
+        }
         default:
           throw new Error(`Unknown providerId: ${account.providerId}`);
       }
@@ -2255,9 +2120,15 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         chatLogService.closeSession('tiktok');
         await chatService.removeAdapter('tiktok');
         break;
-      case 'youtube':
-        // Legacy youtube path is not adapter-based; nothing to do here yet.
+      case 'youtube': {
+        const handle = account.channel;
+        const settings = await loadYoutubeSettings();
+        const channels = settings.channels.map((c) =>
+          c.handle === handle ? { ...c, enabled: false } : c,
+        );
+        await saveYoutubeSettings({ ...settings, channels });
         break;
+      }
     }
     pushAccountStatus({ accountId: account.id, status: 'disconnected' });
   });
@@ -2389,7 +2260,6 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     schedulerService.stop();
     stopTwitchStatsPoll();
     stopKickStatsPoll();
-    if (youtubeMonitorTimer) clearInterval(youtubeMonitorTimer);
     musicService.reset();
     musicPlayerRef?.stop();
     await Promise.allSettled([chatService.disconnectAll(), obsService.stop(), overlayServer.stop()]);
@@ -2496,8 +2366,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   function getConnectedYoutubePlatforms(): Array<'youtube' | 'youtube-v'> {
     const connected = new Set<'youtube' | 'youtube-v'>();
-    for (const data of youtubeStreamData.values()) {
-      connected.add(data.platform);
+    for (const stream of youtubeAdapter?.getCurrentStreams() ?? []) {
+      if (stream.platform === 'youtube' || stream.platform === 'youtube-v') {
+        connected.add(stream.platform);
+      }
     }
     return YT_PLATFORMS.filter((platform) => connected.has(platform));
   }
@@ -2543,11 +2415,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   }
 
   function getYoutubeScraperByPlatform(platform: 'youtube' | 'youtube-v'): YTLiveClient | null {
-    for (const [videoId, scraper] of youtubeScrapers.entries()) {
-      const data = youtubeStreamData.get(videoId);
-      if (data?.platform === platform) return scraper;
-    }
-    return null;
+    return youtubeAdapter?.getScraperByPlatform(platform) ?? null;
   }
 
   async function sendYoutubeMessage(platform: 'youtube' | 'youtube-v', content: string): Promise<void> {
