@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { KickAuthStatus, KickConnectionStatus, KickSettings, TikTokConnectionStatus, TikTokSettings, TwitchConnectionStatus, TwitchCredentials, YouTubeChatChannel, YouTubeSettings, YouTubeStreamInfo } from '../../shared/types.js';
+import { ConnectedAccounts } from '../components/ConnectedAccounts.js';
 
 interface LiveCheckResult {
   handle: string;
@@ -340,6 +341,16 @@ export function PlatformsSettingsPage() {
       <div className="min-h-full p-6 max-w-lg">
         <h2 className="text-base font-semibold mb-0.5">Platforms</h2>
         <p className="text-sm text-gray-500 mb-6">Connect your streaming accounts to enable chat integration.</p>
+
+        <ConnectedAccounts />
+
+        <details className="mb-4 text-xs text-gray-500">
+          <summary className="cursor-pointer text-gray-400 hover:text-gray-200">Legacy connection panels</summary>
+          <p className="mt-2">
+            The panels below are kept for backward compatibility while the new wizard is rolled out. New connections
+            should use <strong>Add network</strong> above. These will be removed in a future release.
+          </p>
+        </details>
 
         {error && (
           <div className="mb-4 flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-2.5">

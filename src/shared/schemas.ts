@@ -398,3 +398,22 @@ export const moderationShoutoutSchema = z.object({
   platform: platformIdSchema,
   userId: z.string().min(1).max(200),
 });
+
+// ── Accounts (R6) ─────────────────────────────────────────────────────────────
+
+export const accountCreateInputSchema = z.object({
+  providerId: z.string().min(1).max(60),
+  label: z.string().min(1).max(120),
+  channel: z.string().min(1).max(400),
+  enabled: z.boolean(),
+  autoConnect: z.boolean(),
+  providerData: z.record(z.string(), z.unknown()),
+});
+
+export const accountUpdateInputSchema = accountCreateInputSchema.extend({
+  id: z.string().min(1).max(120),
+});
+
+export const accountIdInputSchema = z.object({
+  id: z.string().min(1).max(120),
+});
