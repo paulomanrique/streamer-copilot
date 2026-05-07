@@ -25,6 +25,7 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   eventNotifications: true,
   recommendationTemplate: 'Pessoal, visitem o {username}',
   diagnosticLogLevel: 'info',
+  overlayServerPort: 7842,
 };
 
 type ProfileFormMode = 'create' | 'rename' | 'clone';

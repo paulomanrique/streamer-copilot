@@ -17,8 +17,9 @@ import { VoiceCommandsPage } from './VoiceCommands.js';
 import { WelcomeMessagePage } from './WelcomeMessage.js';
 import { MusicRequestPage } from './MusicRequest.js';
 import { ModerationPanel } from '../components/ModerationPanel.js';
+import { OverlaysPage } from './Overlays.js';
 
-type SettingsView = 'general' | 'profiles' | 'platforms' | 'obs' | 'sound' | 'text' | 'voice' | 'welcome' | 'music' | 'raffles' | 'suggestions' | 'chat-logs' | 'event-log' | 'moderation';
+type SettingsView = 'general' | 'profiles' | 'platforms' | 'obs' | 'sound' | 'text' | 'voice' | 'welcome' | 'music' | 'raffles' | 'suggestions' | 'chat-logs' | 'event-log' | 'moderation' | 'overlays';
 
 interface SettingsWorkspaceProps {
   activeProfileId: string;
@@ -202,6 +203,16 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
           </svg>
         ),
       },
+      {
+        id: 'overlays',
+        label: 'Overlays',
+        icon: (
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <rect x="3" y="3" width="18" height="14" rx="2" strokeWidth="2" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 21h8M12 17v4" />
+          </svg>
+        ),
+      },
     ],
   },
 ];
@@ -233,6 +244,7 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
     suggestions: messages.settings.suggestions,
     moderation: 'Moderation',
     obs: 'OBS Studio',
+    overlays: 'Overlays',
   }[id] ?? label);
 
   return (
@@ -305,6 +317,7 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
         {currentView === 'raffles' ? <RafflesPage /> : null}
         {currentView === 'suggestions' ? <SuggestionsPage /> : null}
         {currentView === 'moderation' ? <ModerationPanel /> : null}
+        {currentView === 'overlays' ? <OverlaysPage /> : null}
         {currentView === 'chat-logs' ? <ChatLogsPage /> : null}
         {currentView === 'event-log' ? <EventLogPage /> : null}
       </div>

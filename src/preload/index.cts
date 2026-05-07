@@ -205,6 +205,7 @@ const IPC_CHANNELS = {
   accountsDisconnect: 'accounts:disconnect',
   accountsGetStatus: 'accounts:get-status',
   accountsStatus: 'accounts:status',
+  overlayServerInfo: 'overlay:server-info',
 } as const;
 
 const copilotApi: CopilotApi = {
@@ -459,6 +460,7 @@ const copilotApi: CopilotApi = {
     ipcRenderer.on(IPC_CHANNELS.accountsStatus, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.accountsStatus, wrappedListener); };
   },
+  getOverlayServerInfo: () => ipcRenderer.invoke(IPC_CHANNELS.overlayServerInfo),
 };
 
 contextBridge.exposeInMainWorld('copilot', copilotApi);
