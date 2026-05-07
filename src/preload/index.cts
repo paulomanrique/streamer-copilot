@@ -197,6 +197,14 @@ const IPC_CHANNELS = {
   moderationManageRole: 'moderation:manage-role',
   moderationRaid: 'moderation:raid',
   moderationShoutout: 'moderation:shoutout',
+  accountsList: 'accounts:list',
+  accountsCreate: 'accounts:create',
+  accountsUpdate: 'accounts:update',
+  accountsDelete: 'accounts:delete',
+  accountsConnect: 'accounts:connect',
+  accountsDisconnect: 'accounts:disconnect',
+  accountsGetStatus: 'accounts:get-status',
+  accountsStatus: 'accounts:status',
 } as const;
 
 const copilotApi: CopilotApi = {
@@ -439,6 +447,18 @@ const copilotApi: CopilotApi = {
   moderationManageRole: (input) => ipcRenderer.invoke(IPC_CHANNELS.moderationManageRole, input) as Promise<void>,
   moderationRaid: (input) => ipcRenderer.invoke(IPC_CHANNELS.moderationRaid, input) as Promise<void>,
   moderationShoutout: (input) => ipcRenderer.invoke(IPC_CHANNELS.moderationShoutout, input) as Promise<void>,
+  accountsList: () => ipcRenderer.invoke(IPC_CHANNELS.accountsList),
+  accountsCreate: (input) => ipcRenderer.invoke(IPC_CHANNELS.accountsCreate, input),
+  accountsUpdate: (input) => ipcRenderer.invoke(IPC_CHANNELS.accountsUpdate, input),
+  accountsDelete: (input) => ipcRenderer.invoke(IPC_CHANNELS.accountsDelete, input) as Promise<void>,
+  accountsConnect: (input) => ipcRenderer.invoke(IPC_CHANNELS.accountsConnect, input) as Promise<void>,
+  accountsDisconnect: (input) => ipcRenderer.invoke(IPC_CHANNELS.accountsDisconnect, input) as Promise<void>,
+  accountsGetStatus: (input) => ipcRenderer.invoke(IPC_CHANNELS.accountsGetStatus, input),
+  onAccountStatus: (listener) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, status: import('../shared/types.js').PlatformAccountStatus) => listener(status);
+    ipcRenderer.on(IPC_CHANNELS.accountsStatus, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.accountsStatus, wrappedListener); };
+  },
 };
 
 contextBridge.exposeInMainWorld('copilot', copilotApi);

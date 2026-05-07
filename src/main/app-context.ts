@@ -10,6 +10,7 @@ import { BrowserWindow, Notification, dialog, ipcMain, net, shell } from 'electr
 import { parseFile as parseAudioFile } from 'music-metadata';
 
 import type { DatabaseHandle } from '../db/database.js';
+import { AccountRepository } from '../modules/accounts/account-repository.js';
 import { ChatService } from '../modules/chat/chat-service.js';
 import { ChatLogRepository } from '../modules/chat-log/chat-log-repository.js';
 import { ChatLogService } from '../modules/chat-log/chat-log-service.js';
@@ -95,6 +96,9 @@ import {
   moderationManageRoleSchema,
   moderationRaidSchema,
   moderationShoutoutSchema,
+  accountCreateInputSchema,
+  accountUpdateInputSchema,
+  accountIdInputSchema,
   selectProfileInputSchema,
   textCommandDeleteInputSchema,
   textCommandUpsertInputSchema,
@@ -181,6 +185,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   let activeProfileDirectory = '';
   const getActiveProfileDirectory = () => activeProfileDirectory;
 
+  const accountRepository = new AccountRepository(getActiveProfileDirectory);
   const raffleRepository = new RaffleRepository(getActiveProfileDirectory);
   const soundRepository = new SoundCommandRepository(getActiveProfileDirectory);
   const textRepository = new TextCommandRepository(getActiveProfileDirectory);
@@ -2079,6 +2084,212 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     if (!api?.shoutout) throw new Error(`Shoutout not supported on "${input.platform}"`);
     await api.shoutout(input.userId);
   });
+
+  // ── R6: Accounts (multi-account) ─────────────────────────────────────────
+
+  function pushAccountStatus(status: import('../shared/types.js').PlatformAccountStatus): void {
+    const win = options.getWindow();
+    if (!win || win.isDestroyed()) return;
+    win.webContents.send(IPC_CHANNELS.accountsStatus, status);
+  }
+
+  ipcMain.handle(IPC_CHANNELS.accountsList, async () => {
+    return accountRepository.list();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.accountsCreate, async (_, raw) => {
+    const input = accountCreateInputSchema.parse(raw);
+    return accountRepository.upsert(input);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.accountsUpdate, async (_, raw) => {
+    const input = accountUpdateInputSchema.parse(raw);
+    return accountRepository.upsert(input);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.accountsDelete, async (_, raw) => {
+    const input = accountIdInputSchema.parse(raw);
+    await accountRepository.delete(input.id);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.accountsConnect, async (_, raw) => {
+    const input = accountIdInputSchema.parse(raw);
+    const account = await accountRepository.get(input.id);
+    if (!account) throw new Error(`Account "${input.id}" not found`);
+    pushAccountStatus({ accountId: account.id, status: 'connecting' });
+    try {
+      // Temporary delegation to legacy connect handlers per provider until R5/R6
+      // wiring is fully migrated. Each provider knows how to translate its own
+      // providerData shape; future iterations route via createAdapterFor(account).
+      switch (account.providerId) {
+        case 'twitch': {
+          const creds = {
+            channel: account.channel,
+            username: String(account.providerData.username ?? ''),
+            oauthToken: String(account.providerData.oauthToken ?? ''),
+          };
+          if (!creds.username || !creds.oauthToken) throw new Error('Twitch account missing username or oauthToken in providerData');
+          const store = await getTwitchCredentialsStore();
+          if (store) await store.save(creds);
+          await loadTwitchBadges(creds.channel, creds.oauthToken.replace(/^oauth:/, ''));
+          chatLogService.openSession('twitch', creds.channel);
+          suggestionService.clearSessionEntries();
+          selfSenderName.twitch = creds.username.toLowerCase();
+          const adapter = createTwitchChatAdapter({
+            channels: [creds.channel],
+            username: creds.username,
+            password: creds.oauthToken,
+            onStatusChange: setTwitchStatus,
+            resolveBadgeUrls,
+          });
+          await chatService.replaceAdapter(adapter);
+          void wireTwitchModeration(adapter, creds.channel, creds.oauthToken);
+          break;
+        }
+        case 'tiktok':
+          throw new Error('TikTok account connect handled in R5');
+        case 'kick':
+          throw new Error('Kick account connect not yet wired via accounts API — use legacy kick:connect for now');
+        case 'youtube':
+          throw new Error('YouTube account connect not yet wired via accounts API — use legacy youtube:connect for now');
+        default:
+          throw new Error(`Unknown providerId: ${account.providerId}`);
+      }
+      pushAccountStatus({ accountId: account.id, status: 'connected' });
+    } catch (cause) {
+      pushAccountStatus({
+        accountId: account.id,
+        status: 'error',
+        detail: cause instanceof Error ? cause.message : String(cause),
+      });
+      throw cause;
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.accountsDisconnect, async (_, raw) => {
+    const input = accountIdInputSchema.parse(raw);
+    const account = await accountRepository.get(input.id);
+    if (!account) throw new Error(`Account "${input.id}" not found`);
+    switch (account.providerId) {
+      case 'twitch':
+        delete selfSenderName.twitch;
+        chatLogService.closeSession('twitch');
+        await chatService.removeAdapter('twitch');
+        setTwitchStatus('disconnected', null);
+        break;
+      case 'kick':
+        chatLogService.closeSession('kick');
+        await chatService.removeAdapter('kick');
+        stopKickStatsPoll();
+        setKickStatus('disconnected', null);
+        break;
+      case 'tiktok':
+        chatLogService.closeSession('tiktok');
+        await chatService.removeAdapter('tiktok');
+        break;
+      case 'youtube':
+        // Legacy youtube path is not adapter-based; nothing to do here yet.
+        break;
+    }
+    pushAccountStatus({ accountId: account.id, status: 'disconnected' });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.accountsGetStatus, async (_, raw) => {
+    const input = accountIdInputSchema.parse(raw);
+    const account = await accountRepository.get(input.id);
+    if (!account) return null;
+    let status: import('../shared/types.js').PlatformAccountConnectionStatus = 'disconnected';
+    switch (account.providerId) {
+      case 'twitch':
+        status = twitchStatus === 'connected' ? 'connected' : twitchStatus === 'connecting' ? 'connecting' : twitchStatus === 'error' ? 'error' : 'disconnected';
+        break;
+      case 'kick':
+        status = kickStatus === 'connected' ? 'connected' : kickStatus === 'connecting' ? 'connecting' : kickStatus === 'error' ? 'error' : 'disconnected';
+        break;
+      case 'tiktok':
+        status = tiktokStatus === 'connected' ? 'connected' : tiktokStatus === 'connecting' ? 'connecting' : tiktokStatus === 'captcha' ? 'captcha' : tiktokStatus === 'error' ? 'error' : 'disconnected';
+        break;
+    }
+    return { accountId: account.id, status };
+  });
+
+  // Backfill: on first boot post-R6 read legacy stores and create equivalent
+  // PlatformAccount records so the new wizard UI shows existing connections.
+  void backfillAccountsFromLegacyStores().catch((cause) => {
+    logService.warn('accounts', 'Account backfill failed', { error: cause instanceof Error ? cause.message : String(cause) });
+  });
+
+  async function backfillAccountsFromLegacyStores(): Promise<void> {
+    await activeProfileDirectoryReady;
+    const existing = await accountRepository.list();
+    const seenProviders = new Set(existing.map((a) => a.providerId));
+
+    if (!seenProviders.has('twitch')) {
+      const store = await getTwitchCredentialsStore();
+      const creds = store ? await store.load() : null;
+      if (creds) {
+        await accountRepository.upsert({
+          providerId: 'twitch',
+          label: creds.channel,
+          channel: creds.channel,
+          enabled: true,
+          autoConnect: true,
+          providerData: { username: creds.username, oauthToken: creds.oauthToken },
+        });
+        logService.info('accounts', 'Backfilled Twitch account from legacy store', { channel: creds.channel });
+      }
+    }
+
+    if (!seenProviders.has('kick')) {
+      const store = await getKickSettingsStore();
+      const settings = store ? await store.load() : null;
+      if (settings && settings.channelInput) {
+        await accountRepository.upsert({
+          providerId: 'kick',
+          label: settings.channelInput,
+          channel: settings.channelInput,
+          enabled: true,
+          autoConnect: settings.autoConnect,
+          providerData: { clientId: settings.clientId, clientSecret: settings.clientSecret },
+        });
+        logService.info('accounts', 'Backfilled Kick account from legacy store', { channel: settings.channelInput });
+      }
+    }
+
+    if (!seenProviders.has('tiktok')) {
+      const store = await getTiktokSettingsStore();
+      const settings = store ? await store.load() : null;
+      if (settings && settings.username) {
+        await accountRepository.upsert({
+          providerId: 'tiktok',
+          label: settings.username,
+          channel: settings.username,
+          enabled: true,
+          autoConnect: settings.autoConnect,
+          providerData: {},
+        });
+        logService.info('accounts', 'Backfilled TikTok account from legacy store', { username: settings.username });
+      }
+    }
+
+    if (!seenProviders.has('youtube')) {
+      const store = await getYoutubeSettingsStore();
+      const settings = store ? await store.load() : null;
+      if (settings?.channels?.length) {
+        for (const channel of settings.channels) {
+          await accountRepository.upsert({
+            providerId: 'youtube',
+            label: channel.name ?? channel.handle,
+            channel: channel.handle,
+            enabled: channel.enabled,
+            autoConnect: settings.autoConnect,
+            providerData: {},
+          });
+        }
+        logService.info('accounts', 'Backfilled YouTube accounts from legacy store', { count: settings.channels.length });
+      }
+    }
+  }
 
   void raffleOverlayServer.start();
   raffleDeadlineRunner.start();

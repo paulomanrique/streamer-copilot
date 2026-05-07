@@ -63,6 +63,9 @@ export interface ChatMessage {
   unifiedLevel?: PermissionLevel;
   /** Rich event metadata (superchat amount, sub tier, gift count, etc). */
   metadata?: ChatMessageMetadata;
+  /** R6: id of the PlatformAccount this message came from. Lets the UI
+   *  disambiguate when more than one account from the same platform is connected. */
+  accountId?: string;
 }
 
 export interface TwitchLiveStats {
@@ -568,6 +571,32 @@ export interface KickAuthStatus {
   expiresAt: number | null;
   scope: string | null;
   isAuthorized: boolean;
+}
+
+/**
+ * R6: A connected platform account. The wizard creates these; adapters are
+ * instantiated from them via the per-providerId factory in adapter-factory.ts.
+ *
+ * `providerData` is opaque to the core — each provider stores its own
+ * credentials/settings shape there (OAuth tokens for Twitch/Kick, etc.).
+ */
+export interface PlatformAccount {
+  id: string;
+  providerId: string;
+  label: string;
+  channel: string;
+  enabled: boolean;
+  autoConnect: boolean;
+  createdAt: string;
+  providerData: Record<string, unknown>;
+}
+
+export type PlatformAccountConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error' | 'captcha';
+
+export interface PlatformAccountStatus {
+  accountId: string;
+  status: PlatformAccountConnectionStatus;
+  detail?: string;
 }
 
 export interface ProfileSummary {

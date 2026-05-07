@@ -199,6 +199,14 @@ export const IPC_CHANNELS = {
   moderationManageRole: 'moderation:manage-role',
   moderationRaid: 'moderation:raid',
   moderationShoutout: 'moderation:shoutout',
+  accountsList: 'accounts:list',
+  accountsCreate: 'accounts:create',
+  accountsUpdate: 'accounts:update',
+  accountsDelete: 'accounts:delete',
+  accountsConnect: 'accounts:connect',
+  accountsDisconnect: 'accounts:disconnect',
+  accountsGetStatus: 'accounts:get-status',
+  accountsStatus: 'accounts:status',
 } as const;
 
 export interface RecentChatSnapshot {
@@ -341,6 +349,27 @@ export interface CopilotApi {
   moderationManageRole: (input: { platform: PlatformId; role: 'mod' | 'vip'; action: 'add' | 'remove'; userId: string }) => Promise<void>;
   moderationRaid: (input: { platform: PlatformId; targetChannel: string }) => Promise<void>;
   moderationShoutout: (input: { platform: PlatformId; userId: string }) => Promise<void>;
+  accountsList: () => Promise<import('./types.js').PlatformAccount[]>;
+  accountsCreate: (input: AccountCreateInput) => Promise<import('./types.js').PlatformAccount>;
+  accountsUpdate: (input: AccountUpdateInput) => Promise<import('./types.js').PlatformAccount>;
+  accountsDelete: (input: { id: string }) => Promise<void>;
+  accountsConnect: (input: { id: string }) => Promise<void>;
+  accountsDisconnect: (input: { id: string }) => Promise<void>;
+  accountsGetStatus: (input: { id: string }) => Promise<import('./types.js').PlatformAccountStatus | null>;
+  onAccountStatus: (listener: (status: import('./types.js').PlatformAccountStatus) => void) => () => void;
+}
+
+export interface AccountCreateInput {
+  providerId: string;
+  label: string;
+  channel: string;
+  enabled: boolean;
+  autoConnect: boolean;
+  providerData: Record<string, unknown>;
+}
+
+export interface AccountUpdateInput extends AccountCreateInput {
+  id: string;
 }
 
 export type ModerationModeKind =
