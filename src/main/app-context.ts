@@ -1852,14 +1852,16 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     await tokenStore?.save(session);
     return { channelSlug: session.channelSlug };
   });
-  ipcMain.handle(IPC_CHANNELS.kickConnect, async (_, raw) => {
-    const input = kickConnectSchema.parse(raw);
-    const channelSlug = normalizeKickChannelInput(input.channelInput);
-    if (!channelSlug) {
-      throw new Error('Kick channel is required. Use slug or URL like https://kick.com/channel');
-    }
-
-    const credentials = await resolveKickApiCredentials(input);
+  /**
+   * Shared Kick connect flow used by both the legacy `kick:connect` handler
+   * and the per-account `accounts:connect` branch. Caller is expected to have
+   * already resolved the channel slug.
+   */
+  async function connectKickWithCredentials(
+    channelSlug: string,
+    credentialsInput: { clientId?: string; clientSecret?: string },
+  ): Promise<void> {
+    const credentials = await resolveKickApiCredentials(credentialsInput);
     const authSession = await ensureKickAuthSession(channelSlug, credentials, false);
 
     setKickStatus('connecting', channelSlug);
@@ -1883,6 +1885,16 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       setKickStatus('error', channelSlug);
       throw cause;
     }
+  }
+
+  ipcMain.handle(IPC_CHANNELS.kickConnect, async (_, raw) => {
+    const input = kickConnectSchema.parse(raw);
+    const channelSlug = normalizeKickChannelInput(input.channelInput);
+    if (!channelSlug) {
+      throw new Error('Kick channel is required. Use slug or URL like https://kick.com/channel');
+    }
+
+    await connectKickWithCredentials(channelSlug, input);
   });
   ipcMain.handle(IPC_CHANNELS.kickDisconnect, async () => {
     chatLogService.closeSession('kick');
@@ -2198,8 +2210,14 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
           if (store) await store.save({ username: account.channel, autoConnect: account.autoConnect });
           break;
         }
-        case 'kick':
-          throw new Error('Kick account connect not yet wired via accounts API — use legacy kick:connect for now');
+        case 'kick': {
+          const channelSlug = normalizeKickChannelInput(account.channel) ?? account.channel;
+          if (!channelSlug) throw new Error('Kick account is missing a channel slug');
+          const clientId = typeof account.providerData.clientId === 'string' ? account.providerData.clientId : undefined;
+          const clientSecret = typeof account.providerData.clientSecret === 'string' ? account.providerData.clientSecret : undefined;
+          await connectKickWithCredentials(channelSlug, { clientId, clientSecret });
+          break;
+        }
         case 'youtube':
           throw new Error('YouTube account connect not yet wired via accounts API — use legacy youtube:connect for now');
         default:
