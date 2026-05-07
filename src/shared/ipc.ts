@@ -190,6 +190,15 @@ export const IPC_CHANNELS = {
   musicPlay: 'music:play',
   musicStop: 'music:stop',
   musicVolume: 'music:volume',
+  moderationGetCapabilities: 'moderation:get-capabilities',
+  moderationDeleteMessage: 'moderation:delete-message',
+  moderationBanUser: 'moderation:ban-user',
+  moderationUnbanUser: 'moderation:unban-user',
+  moderationTimeoutUser: 'moderation:timeout-user',
+  moderationSetMode: 'moderation:set-mode',
+  moderationManageRole: 'moderation:manage-role',
+  moderationRaid: 'moderation:raid',
+  moderationShoutout: 'moderation:shoutout',
 } as const;
 
 export interface RecentChatSnapshot {
@@ -323,4 +332,24 @@ export interface CopilotApi {
   onMusicPlay: (listener: (cmd: MusicPlayCommand) => void) => () => void;
   onMusicStop: (listener: () => void) => () => void;
   onMusicVolume: (listener: (volume: number) => void) => () => void;
+  moderationGetCapabilities: (platform: PlatformId) => Promise<import('./moderation.js').PlatformCapabilities | null>;
+  moderationDeleteMessage: (input: { platform: PlatformId; messageId: string }) => Promise<void>;
+  moderationBanUser: (input: { platform: PlatformId; userId: string; reason?: string }) => Promise<void>;
+  moderationUnbanUser: (input: { platform: PlatformId; userId: string }) => Promise<void>;
+  moderationTimeoutUser: (input: { platform: PlatformId; userId: string; durationSeconds: number; reason?: string }) => Promise<void>;
+  moderationSetMode: (input: ModerationSetModeInput) => Promise<void>;
+  moderationManageRole: (input: { platform: PlatformId; role: 'mod' | 'vip'; action: 'add' | 'remove'; userId: string }) => Promise<void>;
+  moderationRaid: (input: { platform: PlatformId; targetChannel: string }) => Promise<void>;
+  moderationShoutout: (input: { platform: PlatformId; userId: string }) => Promise<void>;
+}
+
+export type ModerationModeKind =
+  | 'slow' | 'subscribers' | 'members' | 'followers' | 'emote' | 'unique';
+
+export interface ModerationSetModeInput {
+  platform: PlatformId;
+  mode: ModerationModeKind;
+  enabled: boolean;
+  /** seconds for `slow`, minimum follow duration in minutes for `followers`, member level for `members`. */
+  value?: number;
 }

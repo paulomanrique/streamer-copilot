@@ -188,6 +188,15 @@ const IPC_CHANNELS = {
   musicPlay: 'music:play',
   musicStop: 'music:stop',
   musicVolume: 'music:volume',
+  moderationGetCapabilities: 'moderation:get-capabilities',
+  moderationDeleteMessage: 'moderation:delete-message',
+  moderationBanUser: 'moderation:ban-user',
+  moderationUnbanUser: 'moderation:unban-user',
+  moderationTimeoutUser: 'moderation:timeout-user',
+  moderationSetMode: 'moderation:set-mode',
+  moderationManageRole: 'moderation:manage-role',
+  moderationRaid: 'moderation:raid',
+  moderationShoutout: 'moderation:shoutout',
 } as const;
 
 const copilotApi: CopilotApi = {
@@ -421,6 +430,15 @@ const copilotApi: CopilotApi = {
     ipcRenderer.on(IPC_CHANNELS.youtubeGetStatus, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.youtubeGetStatus, wrappedListener); };
   },
+  moderationGetCapabilities: (platform) => ipcRenderer.invoke(IPC_CHANNELS.moderationGetCapabilities, platform),
+  moderationDeleteMessage: (input) => ipcRenderer.invoke(IPC_CHANNELS.moderationDeleteMessage, input) as Promise<void>,
+  moderationBanUser: (input) => ipcRenderer.invoke(IPC_CHANNELS.moderationBanUser, input) as Promise<void>,
+  moderationUnbanUser: (input) => ipcRenderer.invoke(IPC_CHANNELS.moderationUnbanUser, input) as Promise<void>,
+  moderationTimeoutUser: (input) => ipcRenderer.invoke(IPC_CHANNELS.moderationTimeoutUser, input) as Promise<void>,
+  moderationSetMode: (input) => ipcRenderer.invoke(IPC_CHANNELS.moderationSetMode, input) as Promise<void>,
+  moderationManageRole: (input) => ipcRenderer.invoke(IPC_CHANNELS.moderationManageRole, input) as Promise<void>,
+  moderationRaid: (input) => ipcRenderer.invoke(IPC_CHANNELS.moderationRaid, input) as Promise<void>,
+  moderationShoutout: (input) => ipcRenderer.invoke(IPC_CHANNELS.moderationShoutout, input) as Promise<void>,
 };
 
 contextBridge.exposeInMainWorld('copilot', copilotApi);
