@@ -1,5 +1,8 @@
 import type { ChatMessage, ChatMessageContentPart, StreamEvent } from '../../shared/types.js';
-import type { PlatformChatAdapter } from '../base.js';
+import type { PlatformRole } from '../../shared/platform.js';
+import type { PlatformCapabilities } from '../../shared/moderation.js';
+import { resolveFromRole } from '../../modules/commands/permission-utils.js';
+import { READ_ONLY_CAPABILITIES, type PlatformChatAdapter } from '../base.js';
 
 type KickPayloadRecord = Record<string, unknown>;
 
@@ -45,6 +48,7 @@ export const KICK_BROWSER_USER_AGENT = DEFAULT_USER_AGENT;
 
 export class KickChatAdapter implements PlatformChatAdapter {
   readonly platform = 'kick' as const;
+  readonly capabilities: PlatformCapabilities = READ_ONLY_CAPABILITIES;
 
   private readonly messageHandlers = new Set<(message: ChatMessage) => void>();
   private readonly eventHandlers = new Set<(event: StreamEvent) => void>();
@@ -245,14 +249,18 @@ export class KickChatAdapter implements PlatformChatAdapter {
 
         if (this.seenMessageKeys.has(id)) return;
         this.seenMessageKeys.add(id);
+        const badges = Array.isArray(raw.badges) ? raw.badges.filter((b): b is string => typeof b === 'string') : [];
+        const role = this.deriveRoleFromBadges(badges);
         this.emitMessage({
           id,
           platform: 'kick',
           author,
           content,
           contentParts: Array.isArray(raw.contentParts) ? raw.contentParts : undefined,
-          badges: Array.isArray(raw.badges) ? raw.badges.filter((b): b is string => typeof b === 'string') : [],
+          badges,
           timestampLabel,
+          role,
+          unifiedLevel: resolveFromRole(role),
           ...(raw.isInitial ? { isHistory: true } : {}),
         });
       } catch {
@@ -653,6 +661,22 @@ export class KickChatAdapter implements PlatformChatAdapter {
     for (const handler of this.eventHandlers) {
       handler(event);
     }
+  }
+
+  private deriveRoleFromBadges(badges: string[]): PlatformRole {
+    const set = new Set(badges.map((b) => b.toLowerCase()));
+    const extras: Record<string, unknown> = {};
+    if (set.has('og')) extras.og = true;
+    if (set.has('founder')) extras.founder = true;
+    if (set.has('verified')) extras.verified = true;
+    return {
+      broadcaster: set.has('broadcaster'),
+      moderator: set.has('moderator'),
+      vip: set.has('vip'),
+      subscriber: set.has('subscriber'),
+      // Kick scraper today doesn't tag follower-only state.
+      extras: Object.keys(extras).length > 0 ? extras : undefined,
+    };
   }
 
   private parseNumericId(value: unknown): number | null {

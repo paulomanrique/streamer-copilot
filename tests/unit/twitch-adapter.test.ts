@@ -219,6 +219,69 @@ describe('TwitchChatAdapter', () => {
     });
   });
 
+  describe('PlatformRole + unifiedLevel (R1)', () => {
+    it('builds role from badges + badge-info', () => {
+      stub.emit('message', '#testchannel', {
+        'display-name': 'SubUser',
+        username: 'subuser',
+        badges: { subscriber: '2000' },
+        'badge-info': { subscriber: '14' },
+        id: 'msg-role-sub',
+      }, 'hi', false);
+
+      const role = messages[0].role!;
+      expect(role.subscriber).toBe(true);
+      expect(role.broadcaster).toBe(false);
+      expect(role.moderator).toBe(false);
+      expect(role.extras).toEqual({ subTier: 2, subMonths: 14 });
+      expect(messages[0].unifiedLevel).toBe('subscriber');
+    });
+
+    it('marks broadcaster when username matches channel', () => {
+      stub.emit('message', '#testchannel', {
+        'display-name': 'TestChannel',
+        username: 'testchannel',
+        badges: { broadcaster: '1' },
+        id: 'msg-role-bc',
+      }, 'hi', false);
+
+      expect(messages[0].role!.broadcaster).toBe(true);
+      expect(messages[0].unifiedLevel).toBe('broadcaster');
+    });
+
+    it('marks moderator from tags.mod even without badges', () => {
+      stub.emit('message', '#testchannel', {
+        'display-name': 'ModUser',
+        mod: true,
+        id: 'msg-role-mod',
+      }, 'hi', false);
+
+      expect(messages[0].role!.moderator).toBe(true);
+      expect(messages[0].unifiedLevel).toBe('moderator');
+    });
+
+    it('VIP > subscriber in unifiedLevel', () => {
+      stub.emit('message', '#testchannel', {
+        'display-name': 'VipSub',
+        badges: { vip: '1', subscriber: '1000' },
+        id: 'msg-role-vip',
+      }, 'hi', false);
+
+      expect(messages[0].role!.vip).toBe(true);
+      expect(messages[0].role!.subscriber).toBe(true);
+      expect(messages[0].unifiedLevel).toBe('vip');
+    });
+
+    it('defaults to everyone when no badges', () => {
+      stub.emit('message', '#testchannel', {
+        'display-name': 'Lurker',
+        id: 'msg-role-everyone',
+      }, 'hi', false);
+
+      expect(messages[0].unifiedLevel).toBe('everyone');
+    });
+  });
+
   describe('handler management', () => {
     it('allows removing message handlers', () => {
       const extraMessages: ChatMessage[] = [];

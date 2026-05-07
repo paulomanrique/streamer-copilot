@@ -1,6 +1,9 @@
 import { createRequire } from 'node:module';
 import type { ChatMessage, PlatformId, StreamEvent, TwitchConnectionStatus } from '../../shared/types.js';
-import type { PlatformChatAdapter } from '../base.js';
+import type { PlatformRole } from '../../shared/platform.js';
+import type { PlatformCapabilities } from '../../shared/moderation.js';
+import { resolveFromRole } from '../../modules/commands/permission-utils.js';
+import { READ_ONLY_CAPABILITIES, type PlatformChatAdapter } from '../base.js';
 
 /**
  * Subset of tmi.js IRC tags. Covers fields used by this adapter.
@@ -34,6 +37,7 @@ const DEFAULT_MOCK_AUTHOR = 'Streamer';
 
 export class TwitchChatAdapter implements PlatformChatAdapter {
   readonly platform: PlatformId = 'twitch';
+  readonly capabilities: PlatformCapabilities = READ_ONLY_CAPABILITIES;
 
   private readonly messageHandlers = new Set<(message: ChatMessage) => void>();
   private readonly eventHandlers = new Set<(event: StreamEvent) => void>();
@@ -157,6 +161,7 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
     client.on('message', (...args: unknown[]) => {
       const [channel, tags, message, self] = args as [string, TmiTags, string, boolean];
       if (self) return;
+      const role = this.resolveRole(tags, channel);
       this.emitMessage({
         platform: 'twitch',
         author: this.resolveAuthor(tags, channel),
@@ -164,6 +169,8 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
         badges: this.resolveBadges(tags),
         color: typeof tags.color === 'string' && tags.color ? tags.color : undefined,
         badgeUrls: this.options.resolveBadgeUrls ? this.options.resolveBadgeUrls((tags.badges as string | Record<string, string>) ?? '') : undefined,
+        role,
+        unifiedLevel: resolveFromRole(role),
       }, tags);
     });
 
@@ -348,6 +355,47 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
 
   private resolveAuthor(tags: TmiTags, channel: string | null | undefined): string {
     return String(tags['display-name'] ?? tags.username ?? this.normalizeChannelName(channel) ?? this.options.mockAuthor ?? DEFAULT_MOCK_AUTHOR);
+  }
+
+  private resolveRole(tags: TmiTags, channel: string | null | undefined): PlatformRole {
+    const rawBadges = tags.badges;
+    const badgeMap: Record<string, string> = (rawBadges && typeof rawBadges === 'object')
+      ? (rawBadges as Record<string, string>)
+      : {};
+    const badgeInfo = (tags['badge-info'] && typeof tags['badge-info'] === 'object')
+      ? (tags['badge-info'] as Record<string, string>)
+      : {};
+    const username = typeof tags.username === 'string' ? tags.username.toLowerCase() : '';
+    const channelLower = this.normalizeChannelName(channel);
+
+    const broadcaster = Boolean(badgeMap.broadcaster) || (Boolean(username) && Boolean(channelLower) && username === channelLower);
+    const moderator = this.isTruthy(tags.mod) || Boolean(badgeMap.moderator);
+    const vip = Boolean(badgeMap.vip);
+    const subscriberTierRaw = badgeMap.subscriber;
+    const subscriber = this.isTruthy(tags.subscriber) || Boolean(subscriberTierRaw);
+    const subTier: 1 | 2 | 3 | undefined = subscriberTierRaw
+      ? (Number(subscriberTierRaw) >= 3000 ? 3 : Number(subscriberTierRaw) >= 2000 ? 2 : 1)
+      : undefined;
+    const subMonths = badgeInfo.subscriber ? Number(badgeInfo.subscriber) : undefined;
+    const isFounder = Boolean(badgeMap.founder);
+    const isArtist = Boolean(badgeMap['artist-badge']);
+    const verified = Boolean(badgeMap.verified) || Boolean(badgeMap.partner);
+
+    const extras: Record<string, unknown> = {};
+    if (subTier !== undefined) extras.subTier = subTier;
+    if (subMonths !== undefined && Number.isFinite(subMonths)) extras.subMonths = subMonths;
+    if (isFounder) extras.isFounder = true;
+    if (isArtist) extras.isArtist = true;
+    if (verified) extras.verified = true;
+
+    return {
+      broadcaster,
+      moderator,
+      vip,
+      subscriber,
+      // Twitch follower status requires a Helix call; left for app-context to hydrate.
+      extras: Object.keys(extras).length > 0 ? extras : undefined,
+    };
   }
 
   private resolveBadges(tags: TmiTags): ChatMessage['badges'] {

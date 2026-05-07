@@ -1,3 +1,5 @@
+import type { PlatformRole, ChatMessageMetadata } from './platform.js';
+
 export interface AppInfo {
   appName: string;
   appVersion: string;
@@ -55,6 +57,12 @@ export interface ChatMessage {
   streamLabel?: string;
   /** True for messages that were already in chat when the adapter connected — commands and welcome messages are skipped for these. */
   isHistory?: boolean;
+  /** Plug-and-play platform role, populated incrementally by adapters (R1). */
+  role?: PlatformRole;
+  /** Permission level pre-resolved by the adapter (R1). */
+  unifiedLevel?: PermissionLevel;
+  /** Rich event metadata (superchat amount, sub tier, gift count, etc). */
+  metadata?: ChatMessageMetadata;
 }
 
 export interface TwitchLiveStats {

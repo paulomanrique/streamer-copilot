@@ -1,5 +1,8 @@
 import type { ChatMessage, PlatformId, StreamEvent } from '../../shared/types.js';
-import type { PlatformChatAdapter } from '../base.js';
+import type { PlatformRole } from '../../shared/platform.js';
+import type { PlatformCapabilities } from '../../shared/moderation.js';
+import { resolveFromRole } from '../../modules/commands/permission-utils.js';
+import { READ_ONLY_CAPABILITIES, type PlatformChatAdapter } from '../base.js';
 
 type YouTubeMessagePart = {
   snippet?: {
@@ -69,6 +72,7 @@ const MAX_POLLING_INTERVAL_MILLIS = 30000;
 
 export class YouTubeChatAdapter implements PlatformChatAdapter {
   readonly platform: PlatformId = 'youtube';
+  readonly capabilities: PlatformCapabilities = READ_ONLY_CAPABILITIES;
 
   private readonly messageHandlers = new Set<(message: ChatMessage) => void>();
   private readonly eventHandlers = new Set<(event: StreamEvent) => void>();
@@ -341,11 +345,14 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
     const content = snippet?.textMessageDetails?.messageText ?? snippet?.displayMessage ?? '';
     if (!content.trim()) return null;
 
+    const role = this.resolveRole(authorDetails);
     return {
       platform: 'youtube',
       author: authorDetails?.displayName ?? this.options.mockAuthor ?? DEFAULT_MOCK_AUTHOR,
       content,
       badges: this.resolveBadges(authorDetails),
+      role,
+      unifiedLevel: resolveFromRole(role),
     };
   }
 
@@ -386,6 +393,14 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
     if (authorDetails?.isChatModerator || authorDetails?.isChatOwner) badges.push('moderator');
     if (authorDetails?.isChatMember || authorDetails?.isChatSponsor) badges.push('member');
     return badges;
+  }
+
+  private resolveRole(authorDetails?: YouTubeMessagePart['authorDetails']): PlatformRole {
+    return {
+      broadcaster: Boolean(authorDetails?.isChatOwner),
+      moderator: Boolean(authorDetails?.isChatModerator),
+      subscriber: Boolean(authorDetails?.isChatMember || authorDetails?.isChatSponsor),
+    };
   }
 
   private resolveMicros(value: string | number | undefined): number | null {
