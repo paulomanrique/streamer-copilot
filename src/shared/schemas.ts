@@ -347,3 +347,54 @@ export type ObsConnectionSettingsSchema = z.infer<typeof obsConnectionSettingsSc
 export type EventLogFiltersSchema = z.infer<typeof eventLogFiltersSchema>;
 export type KickConnectSchema = z.infer<typeof kickConnectSchema>;
 export type KickSettingsSchema = z.infer<typeof kickSettingsSchema>;
+
+// ── Moderation (R2) ──────────────────────────────────────────────────────────
+
+export const moderationGetCapabilitiesSchema = platformIdSchema;
+
+export const moderationDeleteMessageSchema = z.object({
+  platform: platformIdSchema,
+  messageId: z.string().min(1).max(200),
+});
+
+export const moderationBanUserSchema = z.object({
+  platform: platformIdSchema,
+  userId: z.string().min(1).max(200),
+  reason: z.string().max(500).optional(),
+});
+
+export const moderationUnbanUserSchema = z.object({
+  platform: platformIdSchema,
+  userId: z.string().min(1).max(200),
+});
+
+export const moderationTimeoutUserSchema = z.object({
+  platform: platformIdSchema,
+  userId: z.string().min(1).max(200),
+  durationSeconds: z.number().int().min(1).max(1_209_600), // Twitch max: 14 days
+  reason: z.string().max(500).optional(),
+});
+
+export const moderationSetModeSchema = z.object({
+  platform: platformIdSchema,
+  mode: z.enum(['slow', 'subscribers', 'members', 'followers', 'emote', 'unique']),
+  enabled: z.boolean(),
+  value: z.number().int().min(0).max(86_400).optional(),
+});
+
+export const moderationManageRoleSchema = z.object({
+  platform: platformIdSchema,
+  role: z.enum(['mod', 'vip']),
+  action: z.enum(['add', 'remove']),
+  userId: z.string().min(1).max(200),
+});
+
+export const moderationRaidSchema = z.object({
+  platform: platformIdSchema,
+  targetChannel: z.string().min(1).max(200),
+});
+
+export const moderationShoutoutSchema = z.object({
+  platform: platformIdSchema,
+  userId: z.string().min(1).max(200),
+});
