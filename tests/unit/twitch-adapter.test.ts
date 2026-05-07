@@ -71,6 +71,27 @@ describe('TwitchChatAdapter', () => {
       expect(messages[0].color).toBe('#FF0000');
     });
 
+    it('exposes the IRCv3 user-id tag as ChatMessage.userId', () => {
+      stub.emit('message', '#testchannel', {
+        'display-name': 'TestUser',
+        'user-id': '12345',
+        id: 'msg-2',
+      }, 'Hi', false);
+
+      expect(messages).toHaveLength(1);
+      expect(messages[0].userId).toBe('12345');
+    });
+
+    it('falls back to undefined userId when the tag is missing', () => {
+      stub.emit('message', '#testchannel', {
+        'display-name': 'NoIdUser',
+        id: 'msg-3',
+      }, 'Hello', false);
+
+      expect(messages).toHaveLength(1);
+      expect(messages[0].userId).toBeUndefined();
+    });
+
     it('ignores self messages', () => {
       stub.emit('message', '#testchannel', {
         'display-name': 'Bot',
