@@ -394,6 +394,14 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   const getYoutubeStreams = (): YouTubeStreamInfo[] => youtubeAdapter?.getCurrentStreams() ?? [];
 
+  /**
+   * Type guard for the two YouTube platform slots. Needed because PlatformId
+   * is an open enum (`'twitch' | ... | (string & {})`) and the literal
+   * narrowing `target === 'youtube'` doesn't survive the wider member.
+   */
+  const isYoutubePlatform = (p: PlatformId): p is 'youtube' | 'youtube-v' =>
+    p === 'youtube' || p === 'youtube-v';
+
   const getTwitchCredentialsStore = async (): Promise<TwitchCredentialsStore | null> => {
     const snapshot = await profileStore.list();
     const active = snapshot.profiles.find((p) => p.id === snapshot.activeProfileId);
@@ -1073,7 +1081,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         .replaceAll('{command}', raffle.entryCommand);
       for (const target of resolveRaffleAnnouncementTargets(raffle.acceptedPlatforms)) {
         try {
-          if (target === 'youtube' || target === 'youtube-v') {
+          if (isYoutubePlatform(target)) {
             await sendYoutubeMessage(target, content);
           } else {
             await chatService.sendMessage(target, content);
@@ -1094,7 +1102,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         .replaceAll('{title}', raffle.title);
       for (const target of resolveRaffleAnnouncementTargets(raffle.acceptedPlatforms)) {
         try {
-          if (target === 'youtube' || target === 'youtube-v') {
+          if (isYoutubePlatform(target)) {
             await sendYoutubeMessage(target, content);
           } else {
             await chatService.sendMessage(target, content);
@@ -1113,7 +1121,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       const content = formatWinnerAnnouncement(raffle, winner.displayName);
       for (const target of resolveRaffleAnnouncementTargets(raffle.acceptedPlatforms)) {
         try {
-          if (target === 'youtube' || target === 'youtube-v') {
+          if (isYoutubePlatform(target)) {
             await sendYoutubeMessage(target, content);
           } else {
             await chatService.sendMessage(target, content);
@@ -2310,7 +2318,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   }
 
   async function sendPlatformMessage(platform: PlatformId, content: string): Promise<void> {
-    if (platform === 'youtube' || platform === 'youtube-v') {
+    if (isYoutubePlatform(platform)) {
       if (!getYoutubeScraperByPlatform(platform)) {
         throw new Error('Log in to YouTube in Platforms before sending messages.');
       }
@@ -2384,7 +2392,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   function resolveRaffleAnnouncementTargets(requestedTargets: PlatformId[]): PlatformId[] {
     const resolved = new Set<PlatformId>();
     for (const target of requestedTargets) {
-      if (target === 'youtube' || target === 'youtube-v') {
+      if (isYoutubePlatform(target)) {
         for (const ytTarget of getConnectedYoutubePlatforms()) resolved.add(ytTarget);
         continue;
       }
@@ -2511,7 +2519,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
           continue;
         }
 
-        if (target === 'youtube' || target === 'youtube-v') {
+        if (isYoutubePlatform(target)) {
           if (!getYoutubeScraperByPlatform(target)) {
             const reason = `${target}: disconnected`;
             skipped.push(reason);

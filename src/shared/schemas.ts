@@ -1,6 +1,12 @@
 import { z } from 'zod';
 
-const platformIdSchema = z.enum(['twitch', 'youtube', 'youtube-v', 'kick', 'tiktok']);
+/**
+ * Open shape validation: any non-empty slug-shaped string passes. Membership
+ * in the set of known platforms is no longer enforced here so third-party
+ * adapter modules can introduce new ids; the runtime check happens later
+ * (e.g. chatService rejects sends to a platform with no registered adapter).
+ */
+const platformIdSchema = z.string().min(1).max(64).regex(/^[a-z0-9-]+$/);
 const scheduledTargetPlatformSchema = z.enum(['twitch', 'youtube']);
 const permissionLevelSchema = z.enum(['everyone', 'follower', 'subscriber', 'moderator', 'broadcaster']);
 const eventLogLevelSchema = z.enum(['info', 'warn', 'error']);
