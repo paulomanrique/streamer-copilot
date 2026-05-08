@@ -1,24 +1,20 @@
 import { session } from 'electron';
 import { Innertube } from 'youtubei.js';
 import type { ChatMessage, ChatBadge, StreamEvent } from '../shared/types.js';
+import type { YouTubeLiveClient, YouTubeLiveClientOptions } from '../platforms/youtube/live-client.js';
 
-export interface YTLiveClientOptions {
-  videoId: string;
-  onMessage: (message: Omit<ChatMessage, 'id' | 'timestampLabel'>) => void;
-  onEvent?: (event: Omit<StreamEvent, 'id' | 'timestampLabel'>) => void;
-  onLog?: (message: string) => void;
-  /** Fires every ~5s with the live concurrent-viewer count. Driven by
-   *  youtubei.js's metadata-update event, which internally polls the same
-   *  /youtubei/v1/updated_metadata endpoint that youtube.com itself uses. */
-  onViewerCount?: (count: number) => void;
-}
+export type YTLiveClientOptions = YouTubeLiveClientOptions;
 
-export class YTLiveClient {
+export class YTLiveClient implements YouTubeLiveClient {
   private livechat: any = null;
   private stopped = false;
   private startedAt = 0;
 
   constructor(private readonly options: YTLiveClientOptions) {}
+
+  get videoId(): string {
+    return this.options.videoId;
+  }
 
   async start(): Promise<void> {
     this.stopped = false;
