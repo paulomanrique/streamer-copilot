@@ -177,9 +177,24 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
   // ── Internal ────────────────────────────────────────────────────────────
 
   private async runMonitor(): Promise<void> {
-    if (!this.autoMonitor || this.monitoredHandles.length === 0) {
-      // Even when auto-monitor is off, manual scrapers stay running. Just refresh
-      // streams view so any subscriber/viewer count from the stats timer flows.
+    if (!this.autoMonitor) {
+      // Auto-monitor disabled but explicit scrapers might still be running
+      // (e.g. legacy `youtube:connect` panel). Don't tear those down.
+      this.emitStreamsChanged();
+      return;
+    }
+
+    if (this.monitoredHandles.length === 0) {
+      // No handles enabled (account disconnect or delete). Stop every scraper
+      // we currently own so the chat actually goes quiet — without this the
+      // pool keeps polling videos that nothing in the UI references.
+      if (this.scrapers.size > 0) {
+        for (const [, scraper] of this.scrapers) scraper.stop();
+        for (const [, data] of this.streamData) this.deps.closeChatLogSession(data.platform);
+        this.scrapers.clear();
+        this.streamData.clear();
+        this.stopStatsTimer();
+      }
       this.emitStreamsChanged();
       return;
     }
