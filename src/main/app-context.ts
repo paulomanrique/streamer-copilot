@@ -1038,8 +1038,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const refreshYoutubeAdapter = async (): Promise<void> => {
     if (!youtubeAdapter) return;
     const settings = await loadYoutubeSettings();
-    const channels = settings.channels.filter((c) => c.enabled);
-    youtubeAdapter.setMonitoredChannels(channels, { autoMonitor: settings.autoConnect });
+    const handles = settings.channels.filter((c) => c.enabled).map((c) => c.handle);
+    youtubeAdapter.setMonitoredChannels(handles, { autoMonitor: settings.autoConnect });
   };
 
   const pollTwitchStats = async (channel: string, accessToken: string): Promise<void> => {
@@ -1358,20 +1358,6 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   youtubeAdapter = new YouTubeChatAdapter({
     checkYouTubeLive,
-    checkYouTubeLiveViaApi: async (channel) => {
-      if (!channel.apiAuth?.channelId) return null;
-      try {
-        const auth = youtubeApiAuth.getOAuth2Client(channel.id);
-        return await checkYouTubeLiveViaApi(channel.handle, auth);
-      } catch (cause) {
-        logService.warn('youtube-api', `Live check failed for ${channel.handle}: ${cause instanceof Error ? cause.message : String(cause)}`);
-        return null;
-      }
-    },
-    getApiOAuth2Client: (channelConfigId) => {
-      try { return youtubeApiAuth.getOAuth2Client(channelConfigId); }
-      catch { return null; }
-    },
     fetchYtLiveViewerCount,
     openChatLogSession: (platform, videoId) => chatLogService.openSession(platform, videoId),
     closeChatLogSession: (platform) => chatLogService.closeSession(platform),
@@ -2053,7 +2039,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       selfSenderName['youtube-v'] = settings.chatChannelName.toLowerCase();
     }
     youtubeAdapter.setMonitoredChannels(
-      settings.channels.filter((c) => c.enabled),
+      settings.channels.filter((c) => c.enabled).map((c) => c.handle),
       { autoMonitor: settings.autoConnect },
     );
     await chatService.replaceAdapter(youtubeAdapter);
