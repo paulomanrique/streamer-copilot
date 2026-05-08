@@ -2230,6 +2230,57 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     },
   };
 
+  // TikTok's lib needs an active live to find the room id, so unlike Twitch/Kick
+  // we can't keep a long-lived socket idle until chat starts. Instead, when the
+  // user is offline we keep retrying in the background every TIKTOK_RETRY_MS so
+  // the connection resumes automatically as soon as they go live. The IPC
+  // resolves successfully on the first attempt regardless — the system is
+  // "watching", which is the closest analog to the other adapters' auto-connect
+  // semantics.
+  const TIKTOK_RETRY_MS = 60_000;
+  let tiktokRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  let tiktokWatchedUsername: string | null = null;
+
+  function clearTiktokRetry(): void {
+    if (tiktokRetryTimer) {
+      clearTimeout(tiktokRetryTimer);
+      tiktokRetryTimer = null;
+    }
+  }
+
+  async function tryConnectTiktok(username: string, autoConnect: boolean): Promise<{ ok: boolean; error?: unknown }> {
+    try {
+      await chatService.replaceAdapter(createTikTokChatAdapter({
+        username,
+        onError: (cause) => logTikTokConnectionError('Connection error', username, cause),
+        onStatusChange: (status) => setTiktokStatus(status, username),
+        onLiveStats: (stats) => options.stateHub.pushTiktokLiveStats(stats),
+        onCaptchaDetected: () => logService.warn('tiktok', 'CAPTCHA detected'),
+      }));
+      const store = await getTiktokSettingsStore();
+      if (store) await store.save({ username, autoConnect });
+      return { ok: true };
+    } catch (cause) {
+      // Make sure the half-attached adapter is gone so the next retry starts clean.
+      try { await chatService.removeAdapter('tiktok'); } catch { /* ignore */ }
+      return { ok: false, error: cause };
+    }
+  }
+
+  function scheduleTiktokRetry(username: string, autoConnect: boolean): void {
+    clearTiktokRetry();
+    if (tiktokWatchedUsername !== username) return;
+    tiktokRetryTimer = setTimeout(() => {
+      tiktokRetryTimer = null;
+      if (tiktokWatchedUsername !== username) return;
+      void tryConnectTiktok(username, autoConnect).then((result) => {
+        if (tiktokWatchedUsername !== username) return;
+        if (result.ok) return;
+        scheduleTiktokRetry(username, autoConnect);
+      });
+    }, TIKTOK_RETRY_MS);
+  }
+
   const tiktokProvider: MainPlatformProvider = {
     providerId: 'tiktok',
     getStatus: () =>
@@ -2239,25 +2290,36 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       : tiktokStatus === 'error' ? 'error'
       : 'disconnected',
     async connect(account) {
+      tiktokWatchedUsername = account.channel;
+      clearTiktokRetry();
       setTiktokStatus('connecting', account.channel);
       chatLogService.openSession('tiktok', account.channel);
       suggestionService.clearSessionEntries();
       selfSenderName.tiktok = account.channel.toLowerCase();
-      await chatService.replaceAdapter(createTikTokChatAdapter({
+
+      const result = await tryConnectTiktok(account.channel, account.autoConnect);
+      if (result.ok) return;
+
+      // First attempt failed — most commonly because the user isn't currently
+      // live. Keep status as "connecting" (we're watching), log the reason,
+      // and retry in the background.
+      setTiktokStatus('connecting', account.channel);
+      logService.info('tiktok', 'User appears offline — will retry until they go live', {
         username: account.channel,
-        onError: (cause) => logTikTokConnectionError('Connection error', account.channel, cause),
-        onStatusChange: (status) => setTiktokStatus(status, account.channel),
-        onLiveStats: (stats) => options.stateHub.pushTiktokLiveStats(stats),
-        onCaptchaDetected: () => logService.warn('tiktok', 'CAPTCHA detected'),
-      }));
-      const store = await getTiktokSettingsStore();
-      if (store) await store.save({ username: account.channel, autoConnect: account.autoConnect });
+        retryMs: TIKTOK_RETRY_MS,
+        reason: result.error instanceof Error ? result.error.message || result.error.name : String(result.error),
+      });
+      scheduleTiktokRetry(account.channel, account.autoConnect);
     },
     async disconnect() {
+      tiktokWatchedUsername = null;
+      clearTiktokRetry();
       chatLogService.closeSession('tiktok');
       await chatService.removeAdapter('tiktok');
     },
     async purgeStores() {
+      tiktokWatchedUsername = null;
+      clearTiktokRetry();
       const store = await getTiktokSettingsStore();
       if (store) await store.clear();
     },
