@@ -63,6 +63,7 @@ import {
   extractYtLiveVideoIds,
   extractYtSubscriberCount,
   extractYtLiveFromPlayerResponse,
+  extractYtConcurrentViewers,
   normalizeKickChannelInput,
   escapeHtml,
 } from './youtube-helpers.js';
@@ -941,38 +942,43 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
     // Primary: /live_stats — cheap, plain-text counter that lights up while
     // the stream is live. YouTube has tightened this endpoint's filtering
-    // and intermittently 404s it, so we fall back to scraping the watch page
-    // for `concurrentViewers` when the primary returns nothing usable.
+    // and intermittently 404s it, so we fall back to parsing the watch page
+    // for `videoDetails.viewCount` when the primary returns nothing usable.
+    let primaryDetail = '';
     try {
       const resp = await net.fetch(`https://www.youtube.com/live_stats?v=${id}`, { headers });
       if (resp.ok) {
         const text = (await resp.text()).trim();
         const count = parseInt(text, 10);
         if (Number.isFinite(count) && count >= 0) return count;
+        primaryDetail = `live_stats returned non-numeric (${text.slice(0, 30)})`;
+      } else {
+        primaryDetail = `live_stats ${resp.status}`;
       }
-    } catch { /* fall through */ }
+    } catch (cause) {
+      primaryDetail = `live_stats threw (${cause instanceof Error ? cause.message : String(cause)})`;
+    }
 
-    // Fallback: parse concurrentViewers from the watch page's embedded JSON.
-    // Reliable as long as the stream is live and the page renders normally.
+    // Fallback: parse the watch page. extractYtConcurrentViewers reads the
+    // ytInitialPlayerResponse JSON's videoDetails.viewCount (which on live
+    // streams is the concurrent watcher count) and falls back to the
+    // "X watching now" badge string from ytInitialData.
     try {
       const resp = await net.fetch(`https://www.youtube.com/watch?v=${id}`, { headers });
-      if (!resp.ok) return null;
+      if (!resp.ok) {
+        logService.warn('youtube', 'Viewer-count fallback failed', { videoId, primaryDetail, watchStatus: resp.status });
+        return null;
+      }
       const html = await resp.text();
-      const match = html.match(/"concurrentViewers"\s*:\s*"(\d+)"/);
-      if (match) {
-        const count = parseInt(match[1], 10);
-        if (Number.isFinite(count) && count >= 0) return count;
+      const count = extractYtConcurrentViewers(html);
+      if (count === null) {
+        logService.warn('youtube', 'Viewer-count fallback parsed no value', { videoId, primaryDetail, htmlLength: html.length });
       }
-      // Some live broadcasts expose viewCount instead — usually the watching
-      // count for ongoing live streams.
-      const viewCountMatch = html.match(/"videoDetails"\s*:\s*\{[^}]*?"viewCount"\s*:\s*"(\d+)"[^}]*?"isLiveContent"\s*:\s*true/);
-      if (viewCountMatch) {
-        const count = parseInt(viewCountMatch[1], 10);
-        if (Number.isFinite(count) && count >= 0) return count;
-      }
-    } catch { /* fall through */ }
-
-    return null;
+      return count;
+    } catch (cause) {
+      logService.warn('youtube', 'Viewer-count fallback threw', { videoId, primaryDetail, error: cause instanceof Error ? cause.message : String(cause) });
+      return null;
+    }
   };
 
   /**
