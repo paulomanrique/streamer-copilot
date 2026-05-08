@@ -412,7 +412,11 @@ export function SuggestionsPage() {
                   placeholder="Thanks for the suggestion, {username}"
                   className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white text-sm focus:border-purple-500 focus:outline-none"
                 />
-                <p className="text-xs text-gray-500 mt-1">Use <code className="text-purple-300">{'{username}'}</code> for the viewer name.</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Use <code className="text-purple-300">{'{username}'}</code> for the viewer name,{' '}
+                  <code className="text-purple-300">{'{suggestion}'}</code> for what they sent, and{' '}
+                  <code className="text-purple-300">{'{position}'}</code> for the entry's position in the list.
+                </p>
               </div>
 
               {/* Feedback Target Platforms */}
