@@ -9,6 +9,7 @@ export const PROFILE_CONFIG_FILES = {
   voiceCommands: 'commands.voice.json',
   scheduled: 'scheduled.json',
   raffles: 'raffles.json',
+  polls: 'polls.json',
   suggestions: 'suggestions.json',
   obsSettings: 'obs-settings.json',
 } as const;

@@ -6,6 +6,8 @@ import type {
   MusicPlayCommand,
   MusicPlayerState,
   ObsStatsSnapshot,
+  PollSnapshot,
+  PollVote,
   RaffleEntry,
   RaffleRoundResult,
   RaffleSnapshot,
@@ -58,6 +60,18 @@ export class StateHub {
 
   pushRaffleResult(payload: RaffleRoundResult): void {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.rafflesResult, payload);
+  }
+
+  pushPollState(payload: PollSnapshot | null): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.pollsState, payload);
+  }
+
+  pushPollVote(payload: PollVote): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.pollsVote, payload);
+  }
+
+  pushPollResult(payload: PollSnapshot): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.pollsResult, payload);
   }
 
   pushVoiceSpeak(payload: VoiceSpeakPayload): void {

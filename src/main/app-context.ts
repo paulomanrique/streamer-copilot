@@ -18,6 +18,9 @@ import { LogRepository } from '../modules/logs/log-repository.js';
 import { LogService } from '../modules/logs/log-service.js';
 import { ObsService } from '../modules/obs/obs-service.js';
 import { ObsSettingsStore } from '../modules/obs/obs-settings-store.js';
+import { PollDeadlineRunner } from '../modules/polls/poll-deadline-runner.js';
+import { PollRepository } from '../modules/polls/poll-repository.js';
+import { PollService, formatPollResult } from '../modules/polls/poll-service.js';
 import { RaffleDeadlineRunner } from '../modules/raffles/raffle-deadline-runner.js';
 import { OverlayServer } from './overlay-server.js';
 import { RaffleRepository } from '../modules/raffles/raffle-repository.js';
@@ -76,6 +79,9 @@ import {
   generalSettingsSchema,
   obsConnectionSettingsSchema,
   profileSettingsSchema,
+  pollControlInputSchema,
+  pollDeleteInputSchema,
+  pollUpsertInputSchema,
   raffleControlActionInputSchema,
   raffleCreateInputSchema,
   raffleDeleteInputSchema,
@@ -191,6 +197,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const accountRepository = new AccountRepository(getActiveProfileDirectory);
   const mainPlatforms = new MainPlatformRegistry();
   const raffleRepository = new RaffleRepository(getActiveProfileDirectory);
+  const pollRepository = new PollRepository(getActiveProfileDirectory);
   const soundRepository = new SoundCommandRepository(getActiveProfileDirectory);
   const textRepository = new TextCommandRepository(getActiveProfileDirectory);
   const voiceRepository = new VoiceCommandRepository(getActiveProfileDirectory);
@@ -394,6 +401,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const SCHEDULED_SUPPORTED_TARGETS: PlatformId[] = ['twitch', 'youtube'];
   // eslint-disable-next-line prefer-const -- forward-declared; assigned after dependent services are created
   let raffleService: RaffleService;
+  // eslint-disable-next-line prefer-const -- forward-declared; assigned after dependent services are created
+  let pollService: PollService;
 
   const getYoutubeStreams = (): YouTubeStreamInfo[] => youtubeAdapter?.getCurrentStreams() ?? [];
 
@@ -1098,6 +1107,13 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         return null;
       }
     },
+    getPollsOverlayState: () => {
+      try {
+        return pollService.buildOverlayState();
+      } catch {
+        return null;
+      }
+    },
     getChatSnapshot: () => chatService.getRecent(),
   });
 
@@ -1124,7 +1140,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       const content = raffle.openAnnouncementTemplate
         .replaceAll('{title}', raffle.title)
         .replaceAll('{command}', raffle.entryCommand);
-      for (const target of resolveRaffleAnnouncementTargets(raffle.acceptedPlatforms)) {
+      for (const target of resolveAnnouncementTargets(raffle.acceptedPlatforms)) {
         try {
           if (isYoutubePlatform(target)) {
             await sendYoutubeMessage(target, content);
@@ -1145,7 +1161,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       const content = raffle.eliminationAnnouncementTemplate
         .replaceAll('{eliminated}', eliminated.displayName)
         .replaceAll('{title}', raffle.title);
-      for (const target of resolveRaffleAnnouncementTargets(raffle.acceptedPlatforms)) {
+      for (const target of resolveAnnouncementTargets(raffle.acceptedPlatforms)) {
         try {
           if (isYoutubePlatform(target)) {
             await sendYoutubeMessage(target, content);
@@ -1164,7 +1180,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     },
     onAnnounceWinner: async (raffle, winner) => {
       const content = formatWinnerAnnouncement(raffle, winner.displayName);
-      for (const target of resolveRaffleAnnouncementTargets(raffle.acceptedPlatforms)) {
+      for (const target of resolveAnnouncementTargets(raffle.acceptedPlatforms)) {
         try {
           if (isYoutubePlatform(target)) {
             await sendYoutubeMessage(target, content);
@@ -1213,6 +1229,45 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     onTick: () => raffleService.syncDeadlines(),
   });
 
+  pollService = new PollService({
+    repository: pollRepository,
+    getOverlayInfo: () => overlayServer.getPollsOverlayInfo(),
+    onState: (snapshot) => options.stateHub.pushPollState(snapshot),
+    onVote: (vote) => options.stateHub.pushPollVote(vote),
+    onAnnounceResult: async (poll, snapshot) => {
+      options.stateHub.pushPollResult(snapshot);
+      const template = poll.resultAnnouncementTemplate.trim();
+      if (!template) return;
+      const content = formatPollResult(template, poll, snapshot);
+      if (!content) return;
+      for (const target of resolveAnnouncementTargets(poll.acceptedPlatforms)) {
+        try {
+          if (isYoutubePlatform(target)) {
+            await sendYoutubeMessage(target, content);
+          } else {
+            await chatService.sendMessage(target, content);
+          }
+          await pushLocalOutboundMessage(target, content);
+        } catch (cause) {
+          logService.warn('polls', 'Failed to send poll result announcement', {
+            pollId: poll.id,
+            platform: target,
+            error: cause instanceof Error ? cause.message : String(cause),
+          });
+        }
+      }
+    },
+    onLog: (level, message, metadata) => {
+      if (level === 'error') logService.error('polls', message, metadata);
+      else if (level === 'warn') logService.warn('polls', message, metadata);
+      else logService.info('polls', message, metadata);
+    },
+  });
+
+  const pollDeadlineRunner = new PollDeadlineRunner({
+    onTick: () => pollService.syncDeadlines(),
+  });
+
   const EVENT_TYPE_LABEL: Record<StreamEventType, string> = {
     subscription: 'New Subscription',
     superchat: 'Super Chat',
@@ -1242,7 +1297,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   }
 
   const chatService = new ChatService({
-    raffleService, soundService, textService, voiceService, suggestionService, musicService,
+    commandModules: [soundService, textService, voiceService, raffleService, pollService, suggestionService, musicService],
     onMessage: (message) => {
       options.stateHub.pushChatMessage(message);
       if (!message.isHistory) {
@@ -1345,6 +1400,13 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     };
   });
 
+  ipcMain.handle(IPC_CHANNELS.pollsList, async () => pollService.list());
+  ipcMain.handle(IPC_CHANNELS.pollsUpsert, async (_, raw) => pollService.upsert(pollUpsertInputSchema.parse(raw)));
+  ipcMain.handle(IPC_CHANNELS.pollsDelete, async (_, raw) => pollService.delete(pollDeleteInputSchema.parse(raw).id));
+  ipcMain.handle(IPC_CHANNELS.pollsGetActive, async () => pollService.getActive());
+  ipcMain.handle(IPC_CHANNELS.pollsGetSnapshot, async (_, raw) => pollService.getSnapshot(String(raw ?? '')));
+  ipcMain.handle(IPC_CHANNELS.pollsControl, async (_, raw) => pollService.control(pollControlInputSchema.parse(raw)));
+  ipcMain.handle(IPC_CHANNELS.pollsOverlayInfo, async () => pollService.getOverlayInfo());
   ipcMain.handle(IPC_CHANNELS.rafflesList, async () => raffleService.list());
   ipcMain.handle(IPC_CHANNELS.rafflesCreate, async (_, raw) => raffleService.create(raffleCreateInputSchema.parse(raw)));
   ipcMain.handle(IPC_CHANNELS.rafflesUpdate, async (_, raw) => raffleService.update(raffleUpdateInputSchema.parse(raw)));
@@ -2392,13 +2454,15 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const status = overlayServer.getStatus();
     let chat: string | null = null;
     let raffles: string | null = null;
+    let polls: string | null = null;
     let nowPlaying: string | null = null;
     if (status.status === 'running') {
       try { chat = overlayServer.getChatOverlayInfo().overlayUrl; } catch { chat = null; }
       try { raffles = overlayServer.getOverlayInfo().overlayUrl; } catch { raffles = null; }
+      try { polls = overlayServer.getPollsOverlayInfo().overlayUrl; } catch { polls = null; }
       try { nowPlaying = overlayServer.getNowPlayingInfo()?.overlayUrl ?? null; } catch { nowPlaying = null; }
     }
-    return { ...status, urls: { chat, raffles, nowPlaying } };
+    return { ...status, urls: { chat, raffles, polls, nowPlaying } };
   });
 
   void overlayServer.start().catch((cause) => {
@@ -2408,12 +2472,14 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     });
   });
   raffleDeadlineRunner.start();
+  pollDeadlineRunner.start();
   schedulerService.start();
   void activeProfileDirectoryReady.then(() => obsService.start());
 
   return async () => {
     isShuttingDown = true;
     raffleDeadlineRunner.stop();
+    pollDeadlineRunner.stop();
     raffleService.dispose();
     schedulerService.stop();
     stopTwitchStatsPoll();
@@ -2539,7 +2605,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     return connected;
   }
 
-  function resolveRaffleAnnouncementTargets(requestedTargets: PlatformId[]): PlatformId[] {
+  function resolveAnnouncementTargets(requestedTargets: PlatformId[]): PlatformId[] {
     const resolved = new Set<PlatformId>();
     for (const target of requestedTargets) {
       if (isYoutubePlatform(target)) {

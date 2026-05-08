@@ -712,3 +712,97 @@ export interface SuggestionSnapshot {
   list: SuggestionList;
   entries: SuggestionEntry[];
 }
+
+// --- Polls ---
+
+export type PollStatus = 'draft' | 'active' | 'closed' | 'cancelled';
+export type PollControlAction = 'start' | 'cancel' | 'force_close';
+
+export interface PollOption {
+  id: string;
+  index: number;
+  label: string;
+}
+
+export interface Poll {
+  id: string;
+  title: string;
+  options: PollOption[];
+  durationSeconds: number;
+  acceptedPlatforms: PlatformId[];
+  resultAnnouncementTemplate: string;
+  status: PollStatus;
+  startedAt: string | null;
+  closesAt: string | null;
+  closedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PollVote {
+  pollId: string;
+  optionId: string;
+  platform: PlatformId;
+  userKey: string;
+  displayName: string;
+  votedAt: string;
+}
+
+export interface PollTallyEntry {
+  optionId: string;
+  index: number;
+  label: string;
+  votes: number;
+  percent: number;
+}
+
+export interface PollSnapshot {
+  poll: Poll;
+  totalVotes: number;
+  tally: PollTallyEntry[];
+  /** Filled only when status === 'closed'. Null on a tie. */
+  winner: PollTallyEntry | null;
+}
+
+export interface PollOverlayState {
+  pollId: string;
+  title: string;
+  status: PollStatus;
+  totalVotes: number;
+  tally: PollTallyEntry[];
+  winner: PollTallyEntry | null;
+  closesAt: string | null;
+  updatedAt: string;
+}
+
+export interface PollOverlayInfo {
+  overlayUrl: string;
+  stateUrl: string;
+}
+
+export interface PollOptionInput {
+  id?: string;
+  label: string;
+}
+
+export interface PollUpsertInput {
+  id?: string;
+  title: string;
+  options: PollOptionInput[];
+  durationSeconds: number;
+  acceptedPlatforms: PlatformId[];
+  resultAnnouncementTemplate: string;
+}
+
+export interface PollDeleteInput {
+  id: string;
+}
+
+export interface PollControlInput {
+  pollId: string;
+  action: PollControlAction;
+}
+
+export interface PollIdInput {
+  id: string;
+}
