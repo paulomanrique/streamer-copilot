@@ -120,21 +120,6 @@ export function GeneralSettingsPage({ settings, onSave, appLanguage, onSaveProfi
           </div>
         </div>
 
-        <div className="bg-gray-800/40 rounded-xl border border-gray-700 p-5">
-          <h3 className="text-sm font-medium mb-1">Overlay server port</h3>
-          <p className="text-xs text-gray-500 mb-3">
-            HTTP/WebSocket port for the local overlay server (chat, raffle, now-playing). Change if the default 7842 is in use. Restart the app after changing — already-open OBS browser sources keep using the old URL until reloaded.
-          </p>
-          <input
-            type="number"
-            min={1024}
-            max={65535}
-            value={draft.overlayServerPort ?? 7842}
-            onChange={(event) => updateDraft({ overlayServerPort: Math.max(1024, Math.min(65535, Number(event.target.value) || 7842)) })}
-            className="w-32 bg-gray-700 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
-          />
-        </div>
-
         <div className="flex items-center gap-3">
           <button
             type="button"

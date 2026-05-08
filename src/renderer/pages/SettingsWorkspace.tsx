@@ -16,10 +16,9 @@ import { EventLogPage } from './EventLog.js';
 import { VoiceCommandsPage } from './VoiceCommands.js';
 import { WelcomeMessagePage } from './WelcomeMessage.js';
 import { MusicRequestPage } from './MusicRequest.js';
-import { ModerationPanel } from '../components/ModerationPanel.js';
 import { OverlaysPage } from './Overlays.js';
 
-type SettingsView = 'general' | 'profiles' | 'platforms' | 'obs' | 'sound' | 'text' | 'voice' | 'welcome' | 'music' | 'raffles' | 'suggestions' | 'chat-logs' | 'event-log' | 'moderation' | 'overlays';
+type SettingsView = 'general' | 'profiles' | 'platforms' | 'obs' | 'sound' | 'text' | 'voice' | 'welcome' | 'music' | 'raffles' | 'suggestions' | 'chat-logs' | 'event-log' | 'overlays';
 
 interface SettingsWorkspaceProps {
   activeProfileId: string;
@@ -179,15 +178,6 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
           </svg>
         ),
       },
-      {
-        id: 'moderation',
-        label: 'Moderation',
-        icon: (
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4M12 22a10 10 0 100-20 10 10 0 000 20z" />
-          </svg>
-        ),
-      },
     ],
   },
   {
@@ -316,7 +306,6 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
         {currentView === 'music' ? <MusicRequestPage /> : null}
         {currentView === 'raffles' ? <RafflesPage /> : null}
         {currentView === 'suggestions' ? <SuggestionsPage /> : null}
-        {currentView === 'moderation' ? <ModerationPanel /> : null}
         {currentView === 'overlays' ? <OverlaysPage /> : null}
         {currentView === 'chat-logs' ? <ChatLogsPage /> : null}
         {currentView === 'event-log' ? <EventLogPage /> : null}

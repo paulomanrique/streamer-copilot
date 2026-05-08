@@ -34,9 +34,28 @@ export function EventLogPage() {
     void load(nextFilters);
   };
 
+  const clearAll = async () => {
+    if (!window.confirm('Delete every entry in the activity log? This cannot be undone.')) return;
+    try {
+      await window.copilot.eventLogClearAll();
+      setRows([]);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Failed to clear activity log');
+    }
+  };
+
   return (
     <div className="p-6 max-w-[1160px]">
-      <h2 className="text-lg font-semibold mb-1">Activity Log</h2>
+      <div className="flex items-baseline justify-between mb-1 gap-3">
+        <h2 className="text-lg font-semibold">Activity Log</h2>
+        <button
+          type="button"
+          onClick={() => void clearAll()}
+          className="px-3 py-1.5 rounded bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 text-rose-200 text-xs font-medium transition-colors"
+        >
+          Clear all
+        </button>
+      </div>
       <p className="text-sm text-gray-400 mb-6">Recent operational events from the desktop app.</p>
 
       <div className="grid gap-4">

@@ -67,4 +67,8 @@ export class LogRepository {
       )
       .run(level, category, message, metadata === undefined ? null : JSON.stringify(metadata));
   }
+
+  deleteAll(): void {
+    this.db.prepare(`DELETE FROM event_logs`).run();
+  }
 }

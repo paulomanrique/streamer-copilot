@@ -114,6 +114,13 @@ export class ChatLogRepository {
     this.db.prepare(`DELETE FROM chat_sessions WHERE id = ?`).run(sessionId);
   }
 
+  /** Wipes every session and message. Active sessions in memory are no longer
+   *  valid after this; callers must re-open them. */
+  deleteAllSessions(): void {
+    this.db.prepare(`DELETE FROM chat_sessions`).run();
+    this.db.prepare(`DELETE FROM chat_messages`).run();
+  }
+
   private mapSession(row: SessionRow): ChatSession {
     return {
       id: row.id,
