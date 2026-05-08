@@ -613,7 +613,7 @@ export interface PlatformAccount {
   providerData: Record<string, unknown>;
 }
 
-export type PlatformAccountConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error' | 'captcha';
+export type PlatformAccountConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error' | 'captcha' | 'watching';
 
 export interface PlatformAccountStatus {
   accountId: string;
