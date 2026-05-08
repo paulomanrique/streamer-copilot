@@ -19,9 +19,10 @@ const PERMISSION_LABELS: Record<PermissionLevel, string> = {
   broadcaster: 'Broadcaster',
 };
 
-const SCHEDULE_PLATFORMS: { id: 'twitch' | 'youtube'; label: string }[] = [
+const SCHEDULE_PLATFORMS: { id: 'twitch' | 'youtube' | 'youtube-api'; label: string }[] = [
   { id: 'twitch', label: 'Twitch' },
-  { id: 'youtube', label: 'YouTube (H/V)' },
+  { id: 'youtube', label: 'YouTube (Scraped)' },
+  { id: 'youtube-api', label: 'YouTube (API)' },
 ];
 
 interface TextCommandModalProps {
@@ -59,7 +60,7 @@ export function TextCommandModal({
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [scheduleIntervalMinutes, setScheduleIntervalMinutes] = useState(15);
   const [scheduleRandomWindowMinutes, setScheduleRandomWindowMinutes] = useState(0);
-  const [schedulePlatforms, setSchedulePlatforms] = useState<('twitch' | 'youtube')[]>(['twitch', 'youtube']);
+  const [schedulePlatforms, setSchedulePlatforms] = useState<('twitch' | 'youtube' | 'youtube-api')[]>(['twitch', 'youtube']);
   const [enabled, setEnabled] = useState(true);
 
   const [isBusy, setIsBusy] = useState(false);
@@ -84,7 +85,7 @@ export function TextCommandModal({
       setScheduleRandomWindowMinutes(Math.round((initialData.schedule?.randomWindowSeconds ?? 0) / 60));
       setSchedulePlatforms(
         (initialData.schedule?.targetPlatforms.filter(
-          (p): p is 'twitch' | 'youtube' => p === 'twitch' || p === 'youtube',
+          (p): p is 'twitch' | 'youtube' | 'youtube-api' => p === 'twitch' || p === 'youtube',
         ) ?? ['twitch', 'youtube']),
       );
       setEnabled(initialData.enabled);
@@ -115,7 +116,7 @@ export function TextCommandModal({
     });
   };
 
-  const toggleSchedulePlatform = (platform: 'twitch' | 'youtube') => {
+  const toggleSchedulePlatform = (platform: 'twitch' | 'youtube' | 'youtube-api') => {
     setSchedulePlatforms((current) =>
       current.includes(platform) ? current.filter((p) => p !== platform) : [...current, platform],
     );
