@@ -62,4 +62,8 @@ registerPlatformProvider({
     return null;
   },
   defaultLabel(channel) { return channel.replace(/^@/, ''); },
+  async login() {
+    await window.copilot.youtubeOpenLogin();
+    return { message: 'Logado com sucesso' };
+  },
 });

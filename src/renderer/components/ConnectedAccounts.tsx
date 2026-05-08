@@ -64,6 +64,21 @@ export function ConnectedAccounts() {
     finally { setBusyId(null); }
   }
 
+  async function login(account: PlatformAccount) {
+    const provider = getPlatformProvider(account.providerId);
+    if (!provider?.login) return;
+    setBusyId(account.id); setError(null);
+    try {
+      const result = await provider.login(account);
+      await refresh();
+      window.alert(result?.message ?? 'Logado com sucesso');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function remove(id: string) {
     if (!window.confirm('Remove this account? You can re-add it later.')) return;
     setBusyId(id); setError(null);
@@ -126,6 +141,17 @@ export function ConnectedAccounts() {
                     </div>
                   </div>
                   <div className="flex gap-1">
+                    {provider?.login ? (
+                      <button
+                        type="button"
+                        disabled={busyId === account.id}
+                        onClick={() => void login(account)}
+                        className="px-2 py-1 rounded bg-violet-600/20 border border-violet-500/40 text-xs text-violet-200 hover:bg-violet-600/30 disabled:opacity-50"
+                        title="Re-run sign-in flow for this account"
+                      >
+                        Login
+                      </button>
+                    ) : null}
                     {status === 'connected' || status === 'connecting' ? (
                       <button
                         type="button"
