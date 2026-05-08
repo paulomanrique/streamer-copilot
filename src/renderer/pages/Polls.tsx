@@ -114,6 +114,7 @@ export function PollsPage() {
   const [draft, setDraft] = useState<PollDraft>(DEFAULT_DRAFT);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [savedNote, setSavedNote] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
   const activePoll = useMemo(() => polls.find((p) => p.status === 'active') ?? null, [polls]);
@@ -211,8 +212,9 @@ export function PollsPage() {
     }));
   }
 
-  async function savePoll(): Promise<void> {
+  async function savePoll(options: { startAfter: boolean }): Promise<void> {
     setError(null);
+    setSavedNote(null);
     setBusy(true);
     try {
       const payload = toUpsert(draft);
@@ -227,7 +229,21 @@ export function PollsPage() {
       }
       const updated = await window.copilot.upsertPoll(payload);
       setPolls(updated);
-      newDraft();
+      const saved = updated.find((p) => p.title === payload.title) ?? updated[updated.length - 1];
+
+      if (options.startAfter && saved) {
+        if (activePoll && activePoll.id !== saved.id) {
+          throw new Error('Another poll is already running. Close it before starting a new one.');
+        }
+        const next = await window.copilot.controlPoll({ pollId: saved.id, action: 'start' });
+        setSnapshot(next);
+        setPolls(await window.copilot.listPolls());
+        setSavedNote('Poll started — viewers can vote now.');
+        newDraft();
+      } else {
+        setDraft(fromPoll(saved!));
+        setSavedNote('Saved as draft.');
+      }
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'Failed to save poll';
       setError(message);
@@ -467,8 +483,11 @@ export function PollsPage() {
         {error ? (
           <div className="rounded border border-rose-800 bg-rose-950/40 text-rose-200 px-3 py-2 text-sm">{error}</div>
         ) : null}
+        {savedNote ? (
+          <div className="rounded border border-emerald-800 bg-emerald-950/40 text-emerald-200 px-3 py-2 text-sm">{savedNote}</div>
+        ) : null}
 
-        <div className="flex justify-end gap-2 pt-2">
+        <div className="flex flex-wrap justify-end gap-2 pt-2">
           {editingExistingDraft ? (
             <button
               type="button"
@@ -481,10 +500,19 @@ export function PollsPage() {
           <button
             type="button"
             disabled={busy}
-            onClick={savePoll}
-            className="px-4 py-1.5 rounded bg-purple-700 text-white text-sm hover:bg-purple-600 disabled:opacity-50"
+            onClick={() => void savePoll({ startAfter: false })}
+            className="px-3 py-1.5 rounded border border-gray-700 text-gray-200 text-sm hover:bg-gray-800 disabled:opacity-50"
           >
-            {editingExistingDraft ? 'Save changes' : 'Create poll'}
+            Save draft
+          </button>
+          <button
+            type="button"
+            disabled={busy || activePoll !== null}
+            onClick={() => void savePoll({ startAfter: true })}
+            className="px-4 py-1.5 rounded bg-purple-700 text-white text-sm hover:bg-purple-600 disabled:opacity-50"
+            title={activePoll ? 'Close the active poll first' : ''}
+          >
+            {editingExistingDraft ? 'Save & start' : 'Create & start'}
           </button>
         </div>
       </section>
