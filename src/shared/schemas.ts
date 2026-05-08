@@ -339,6 +339,15 @@ export const youtubeSettingsSchema = z.object({
     .optional(),
 });
 
+export const youtubeApiSetCredentialsSchema = z.object({
+  clientId: z.string().min(1).max(200),
+  clientSecret: z.string().min(1).max(200),
+});
+
+export const youtubeApiOauthChannelSchema = z.object({
+  channelConfigId: z.string().min(1),
+});
+
 export const tiktokConnectSchema = z.object({
   username: z.string().min(1).max(80),
 });
