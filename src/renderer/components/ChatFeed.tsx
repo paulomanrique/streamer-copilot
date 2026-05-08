@@ -51,6 +51,12 @@ const PLATFORM_META = {
     border: 'border-rose-400/20',
     icon: 'M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z',
   },
+  'youtube-api': {
+    bg: 'bg-red-500/20',
+    text: 'text-red-300',
+    border: 'border-red-500/20',
+    icon: 'M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z',
+  },
   kick: {
     bg: 'bg-green-500/20',
     text: 'text-green-300',
@@ -69,6 +75,7 @@ const PLATFORM_BUTTONS = [
   { id: 'twitch' },
   { id: 'youtube' },
   { id: 'youtube-v' },
+  { id: 'youtube-api' },
   { id: 'kick' },
   { id: 'tiktok' },
 ] as const;
@@ -199,6 +206,7 @@ function getPlatformDisplayName(platformId: string, connectedPlatforms: string[]
     return connectedPlatforms.includes('youtube-v') ? 'YouTube Horizontal' : 'YouTube';
   }
   if (platformId === 'youtube-v') return 'YouTube Vertical';
+  if (platformId === 'youtube-api') return 'YouTube (API)';
   if (platformId === 'twitch') return 'Twitch';
   if (platformId === 'kick') return 'Kick';
   if (platformId === 'tiktok') return 'TikTok';
@@ -217,7 +225,8 @@ function resolveProfileUrl(platform: string, author: string): string {
     case 'tiktok':
       return `https://www.tiktok.com/@${encodeURIComponent(username)}`;
     case 'youtube':
-    case 'youtube-v': {
+    case 'youtube-v':
+    case 'youtube-api': {
       // YouTube handles can't have spaces or special chars — if the display name
       // looks like a valid handle, use it directly; otherwise fall back to search.
       const handle = username.replace(/\s+/g, '');
@@ -238,7 +247,7 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
 
   const [feedMode,       setFeedMode]       = useState<FeedMode>('all');
   const [platformFilter, setPlatformFilter] = useState<Record<string, boolean>>({
-    twitch: true, youtube: true, 'youtube-v': true, kick: true, tiktok: true,
+    twitch: true, youtube: true, 'youtube-v': true, 'youtube-api': true, kick: true, tiktok: true,
   });
   const [inputValue,    setInputValue]    = useState('');
   const [inputPlatform, setInputPlatform] = useState(() => connectedPlatforms[0] ?? 'twitch');
@@ -426,7 +435,7 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
       // Keep the renderer prop/default fallback when settings cannot be read.
     }
 
-    const username = platform === 'youtube' || platform === 'youtube-v'
+    const username = platform === 'youtube' || platform === 'youtube-v' || platform === 'youtube-api'
       ? `@${author.replace(/^@+/, '')}`
       : author;
     const profileUrl = resolveProfileUrl(platform, author);
@@ -787,7 +796,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highli
   const pKey = platformKey(message.platform);
   const meta = PLATFORM_META[pKey];
   const badgeMeta = PLATFORM_BADGE_META[pKey] ?? PLATFORM_BADGE_META.twitch;
-  const badgeLabel = (pKey === 'youtube' || pKey === 'youtube-v')
+  const badgeLabel = (pKey === 'youtube' || pKey === 'youtube-v' || pKey === 'youtube-api')
     ? getYtBadgeLabel(message.platform, hasMultipleYouTubeStreams)
     : badgeMeta.label;
   const isCommand = message.content.startsWith('!');
@@ -795,7 +804,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highli
   // STAR LOGIC: 
   // YouTube: ONLY if badge is 'member'
   // Others: if 'subscriber', 'member' or 'subscriber/'
-  const isSub = message.platform === 'youtube' || message.platform === 'youtube-v'
+  const isSub = message.platform === 'youtube' || message.platform === 'youtube-v' || message.platform === 'youtube-api'
     ? message.badges.includes('member')
     : message.badges.some((b) => b.startsWith('subscriber/') || b === 'subscriber' || b === 'member');
 
@@ -860,7 +869,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highli
           {isSub ? <span className="text-yellow-400 text-xs leading-none">★</span> : null}
 
           <span className="font-semibold text-sm" style={{ color: authorColor }} data-no-i18n="true">
-            {message.platform === 'youtube' || message.platform === 'youtube-v' ? `@${message.author}` : message.author}
+            {message.platform === 'youtube' || message.platform === 'youtube-v' || message.platform === 'youtube-api' ? `@${message.author}` : message.author}
           </span>
 
           {message.platform !== 'twitch' && isMod ? <span className="text-xs text-emerald-400 font-semibold">MOD</span> : null}

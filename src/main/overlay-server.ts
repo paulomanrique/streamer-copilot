@@ -655,19 +655,23 @@ const chatOverlayJs = `
 
   function platformClass(platform) {
     var value = String(platform || 'twitch').replace(/[^a-z0-9-]/gi, '').toLowerCase();
-    return value === 'youtube-v' ? value : (icons[value] ? value : 'twitch');
+    if (value === 'youtube-v') return value;
+    if (value === 'youtube-api') return 'youtube';
+    return icons[value] ? value : 'twitch';
   }
 
   function platformLabel(platform) {
     if (platform === 'youtube-v') return 'YouTube Vertical';
     if (platform === 'youtube') return 'YouTube';
+    if (platform === 'youtube-api') return 'YouTube';
     if (platform === 'kick') return 'Kick';
     if (platform === 'tiktok') return 'TikTok';
     return 'Twitch';
   }
 
   function iconFor(platform) {
-    return platform === 'youtube-v' ? icons.youtube : (icons[platform] || icons.twitch);
+    if (platform === 'youtube-v' || platform === 'youtube-api') return icons.youtube;
+    return icons[platform] || icons.twitch;
   }
 
   function resolveAuthorColor(message) {
@@ -687,7 +691,7 @@ const chatOverlayJs = `
   }
 
   function isSubscriber(message) {
-    if (message.platform === 'youtube' || message.platform === 'youtube-v') return hasBadge(message, 'member');
+    if (message.platform === 'youtube' || message.platform === 'youtube-v' || message.platform === 'youtube-api') return hasBadge(message, 'member');
     return hasBadge(message, 'subscriber', 'subscriber/') || hasBadge(message, 'member');
   }
 
@@ -854,7 +858,7 @@ const chatOverlayJs = `
 
       var author = document.createElement('span');
       author.className = 'author';
-      author.textContent = platform === 'youtube' || platform === 'youtube-v' ? '@' + (message.author || 'chat') : (message.author || 'chat');
+      author.textContent = platform === 'youtube' || platform === 'youtube-v' || platform === 'youtube-api' ? '@' + (message.author || 'chat') : (message.author || 'chat');
       author.style.color = authorColor;
       meta.appendChild(author);
 
