@@ -21,14 +21,15 @@ import { getLabelFromTitle, type LiveStreamInfo } from '../../main/youtube-helpe
  */
 
 const MONITOR_INTERVAL_MS = 120_000;
-const STATS_INTERVAL_MS = 60_000;
 const MAX_CONCURRENT_STREAMS = 2;
 const YT_PLATFORMS: ReadonlyArray<'youtube' | 'youtube-v'> = ['youtube', 'youtube-v'];
 
 export interface YouTubeAdapterDependencies {
   /** Returns the live streams currently active for `handle`, or `null` if the lookup failed. */
   checkYouTubeLive: (handle: string) => Promise<LiveStreamInfo[] | null>;
-  /** Lightweight live_stats endpoint that returns just the concurrent viewer count. */
+  /** Backfill for the initial viewer count when a scraper first attaches —
+   *  called once per new live; subsequent updates flow through YTLiveClient's
+   *  metadata-update event (every ~5s) instead of polling here. */
   fetchYtLiveViewerCount: (videoId: string) => Promise<number | null>;
   /** Tells the host to open a chat-log session for the given platform (called when a new scraper starts). */
   openChatLogSession: (platform: 'youtube' | 'youtube-v', videoId: string) => void;
@@ -62,7 +63,6 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
   private readonly streamData = new Map<string, StreamData>();
 
   private monitorTimer: ReturnType<typeof setInterval> | null = null;
-  private statsTimer: ReturnType<typeof setInterval> | null = null;
   private monitoredHandles: string[] = [];
   private autoMonitor = true;
   private connected = false;
@@ -81,7 +81,6 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
   async disconnect(): Promise<void> {
     this.connected = false;
     if (this.monitorTimer !== null) { clearInterval(this.monitorTimer); this.monitorTimer = null; }
-    this.stopStatsTimer();
     for (const [, scraper] of this.scrapers) scraper.stop();
     for (const [, data] of this.streamData) this.deps.closeChatLogSession(data.platform);
     this.scrapers.clear();
@@ -133,7 +132,6 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
     this.deps.openChatLogSession(platform, videoId);
     this.deps.onScraperStart?.();
     await this.startScraper(videoId, platform, this.streamData.get(videoId)!.label);
-    this.ensureStatsTimer();
     this.emitStreamsChanged();
   }
 
@@ -143,7 +141,6 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
     for (const [, data] of this.streamData) this.deps.closeChatLogSession(data.platform);
     this.scrapers.clear();
     this.streamData.clear();
-    this.stopStatsTimer();
     this.emitStreamsChanged();
   }
 
@@ -193,7 +190,6 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
         for (const [, data] of this.streamData) this.deps.closeChatLogSession(data.platform);
         this.scrapers.clear();
         this.streamData.clear();
-        this.stopStatsTimer();
       }
       this.emitStreamsChanged();
       return;
@@ -231,7 +227,6 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
         this.scrapers.delete(videoId);
         this.streamData.delete(videoId);
         this.deps.log?.info?.(`Stopped scraper for ${videoId} (no longer live)`);
-        if (this.scrapers.size === 0) this.stopStatsTimer();
       } else {
         const data = this.streamData.get(videoId);
         if (data) {
@@ -261,7 +256,6 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
       this.deps.openChatLogSession(platform, videoId);
       this.deps.onScraperStart?.();
       await this.startScraper(videoId, platform, label);
-      this.ensureStatsTimer();
     }
 
     this.emitStreamsChanged();
@@ -292,35 +286,15 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
         for (const handler of this.eventHandlers) handler(payload);
       },
       onLog: (msg) => this.deps.log?.info?.(msg),
+      onViewerCount: (count) => {
+        const data = this.streamData.get(videoId);
+        if (!data || data.viewerCount === count) return;
+        this.streamData.set(videoId, { ...data, viewerCount: count });
+        this.emitStreamsChanged();
+      },
     });
     this.scrapers.set(videoId, scraper);
     await scraper.start();
-  }
-
-  private async pollViewerCounts(): Promise<void> {
-    if (this.scrapers.size === 0) return;
-    let changed = false;
-    for (const [videoId] of this.scrapers) {
-      const count = await this.deps.fetchYtLiveViewerCount(videoId);
-      if (count !== null) {
-        const data = this.streamData.get(videoId);
-        if (data && data.viewerCount !== count) {
-          this.streamData.set(videoId, { ...data, viewerCount: count });
-          changed = true;
-        }
-      }
-    }
-    if (changed) this.emitStreamsChanged();
-  }
-
-  private ensureStatsTimer(): void {
-    if (this.statsTimer !== null) return;
-    void this.pollViewerCounts();
-    this.statsTimer = setInterval(() => void this.pollViewerCounts(), STATS_INTERVAL_MS);
-  }
-
-  private stopStatsTimer(): void {
-    if (this.statsTimer !== null) { clearInterval(this.statsTimer); this.statsTimer = null; }
   }
 
   private emitStreamsChanged(): void {
