@@ -167,11 +167,6 @@ export const IPC_CHANNELS = {
   youtubeSaveSettings: 'youtube:save-settings',
   youtubeCheckLive: 'youtube:check-live',
   youtubeGetChatChannels: 'youtube:get-chat-channels',
-  youtubeApiGetCredentialsStatus: 'youtube-api:get-credentials-status',
-  youtubeApiSetCredentials: 'youtube-api:set-credentials',
-  youtubeApiClearCredentials: 'youtube-api:clear-credentials',
-  youtubeApiStartOAuth: 'youtube-api:start-oauth',
-  youtubeApiDisconnectChannel: 'youtube-api:disconnect-channel',
   tiktokConnect: 'tiktok:connect',
   tiktokDisconnect: 'tiktok:disconnect',
   tiktokGetStatus: 'tiktok:get-status',
@@ -336,11 +331,6 @@ export interface CopilotApi {
   youtubeSaveSettings: (settings: import('./types.js').YouTubeSettings) => Promise<import('./types.js').YouTubeSettings>;
   youtubeCheckLive: (handle: string) => Promise<{ videoIds: string[] }>;
   youtubeGetChatChannels: () => Promise<import('./types.js').YouTubeChatChannel[]>;
-  youtubeApiGetCredentialsStatus: () => Promise<import('./types.js').YouTubeApiCredentialsStatus>;
-  youtubeApiSetCredentials: (input: { clientId: string; clientSecret: string }) => Promise<import('./types.js').YouTubeApiCredentialsStatus>;
-  youtubeApiClearCredentials: () => Promise<import('./types.js').YouTubeApiCredentialsStatus>;
-  youtubeApiStartOAuth: (input: { channelConfigId: string }) => Promise<{ channelId: string; channelTitle?: string }>;
-  youtubeApiDisconnectChannel: (input: { channelConfigId: string }) => Promise<void>;
   tiktokConnect: (input: { username: string }) => Promise<void>;
   tiktokDisconnect: () => Promise<void>;
   tiktokGetStatus: () => Promise<import('./types.js').TikTokConnectionStatus>;

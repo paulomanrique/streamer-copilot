@@ -56,8 +56,6 @@ import { createTwitchChatAdapter, type TwitchChatAdapter } from '../platforms/tw
 import { TwitchModerationApi, TWITCH_MODERATION_CAPABILITIES } from '../platforms/twitch/moderation.js';
 import { YouTubeSettingsStore } from '../platforms/youtube/settings-store.js';
 import { YouTubeChatAdapter } from '../platforms/youtube/scraper-adapter.js';
-import { YouTubeApiAuth, decryptSecret, encryptSecret } from '../platforms/youtube/api-auth.js';
-import { checkYouTubeLiveViaApi } from '../platforms/youtube/api-monitor.js';
 import { YTLiveClient } from './youtube-client.js';
 import { MainPlatformRegistry, type MainPlatformProvider } from './platforms/registry.js';
 import { getAllAudioBase64 } from '@sefinek/google-tts-api';
@@ -125,8 +123,6 @@ import {
   welcomeSettingsSchema,
   youtubeConnectSchema,
   youtubeSettingsSchema,
-  youtubeApiSetCredentialsSchema,
-  youtubeApiOauthChannelSchema,
 } from '../shared/schemas.js';
 import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, MusicRequestSettings, PlatformId, Raffle, SoundSettings, StreamEvent, StreamEventType, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
 
@@ -433,9 +429,6 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   };
 
   let youtubeSettingsWrite = Promise.resolve();
-  /** Synchronous mirror of the latest persisted YouTubeSettings — used by
-   *  YouTubeApiAuth to look up credentials without an async hop on hot paths. */
-  let cachedYoutubeSettings: YouTubeSettings | null = null;
 
   const defaultYoutubeSettings = (): YouTubeSettings => ({
     channels: [],
@@ -445,12 +438,11 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const loadYoutubeSettings = async (): Promise<YouTubeSettings> => {
     await youtubeSettingsWrite.catch(() => undefined);
     const store = await getYoutubeSettingsStore();
-    const settings = store ? await store.load() : defaultYoutubeSettings();
-    cachedYoutubeSettings = settings;
-    return settings;
+    return store ? store.load() : defaultYoutubeSettings();
   };
 
-  const saveYoutubeSettingsRaw = async (settings: YouTubeSettings): Promise<YouTubeSettings> => {
+  const saveYoutubeSettings = async (raw: unknown): Promise<YouTubeSettings> => {
+    const settings = youtubeSettingsSchema.parse(raw);
     const store = await getYoutubeSettingsStore();
     if (!store) throw new Error('No active profile');
 
@@ -459,7 +451,6 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       .then(() => store.save(settings));
 
     await youtubeSettingsWrite;
-    cachedYoutubeSettings = settings;
     if (settings.chatChannelName) {
       selfSenderName.youtube = settings.chatChannelName.toLowerCase();
       selfSenderName['youtube-v'] = settings.chatChannelName.toLowerCase();
@@ -470,37 +461,6 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     await refreshYoutubeAdapter();
     return settings;
   };
-
-  /** Renderer entry point — preserves API credentials and per-channel apiAuth
-   *  (which the renderer never has authority to set). */
-  const saveYoutubeSettings = async (raw: unknown): Promise<YouTubeSettings> => {
-    const incoming = youtubeSettingsSchema.parse(raw);
-    const existing = await loadYoutubeSettings();
-    const channels = incoming.channels.map((c) => {
-      const prior = existing.channels.find((x) => x.id === c.id);
-      // apiAuth is set only by the OAuth flow (main process); renderer cannot mutate it.
-      return prior?.apiAuth ? { ...c, apiAuth: prior.apiAuth } : { ...c, apiAuth: undefined };
-    });
-    return saveYoutubeSettingsRaw({
-      ...incoming,
-      channels,
-      apiCredentials: existing.apiCredentials,
-    });
-  };
-
-  const youtubeApiAuth = new YouTubeApiAuth({
-    getProfileDirectory: getActiveProfileDirectory,
-    getCredentials: () => {
-      const creds = cachedYoutubeSettings?.apiCredentials;
-      if (!creds) return null;
-      try {
-        return { clientId: creds.clientId, clientSecret: decryptSecret(creds.clientSecretEncrypted) };
-      } catch {
-        return null;
-      }
-    },
-    log: (msg) => logService.info('youtube-api', msg),
-  });
 
   const getTiktokSettingsStore = async (): Promise<TikTokSettingsStore | null> => {
     const snapshot = await profileStore.list();
@@ -1753,79 +1713,6 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.youtubeGetSettings, async () => loadYoutubeSettings());
   ipcMain.handle(IPC_CHANNELS.youtubeSaveSettings, async (_, raw) => saveYoutubeSettings(raw));
 
-  // YouTube API driver handlers
-  const buildYoutubeApiCredentialsStatus = (settings: YouTubeSettings) => ({
-    hasClientId: !!settings.apiCredentials?.clientId,
-    hasClientSecret: !!settings.apiCredentials?.clientSecretEncrypted,
-    clientId: settings.apiCredentials?.clientId,
-  });
-  ipcMain.handle(IPC_CHANNELS.youtubeApiGetCredentialsStatus, async () => {
-    const settings = await loadYoutubeSettings();
-    return buildYoutubeApiCredentialsStatus(settings);
-  });
-  ipcMain.handle(IPC_CHANNELS.youtubeApiSetCredentials, async (_, raw) => {
-    const input = youtubeApiSetCredentialsSchema.parse(raw);
-    const settings = await loadYoutubeSettings();
-    const next: YouTubeSettings = {
-      ...settings,
-      apiCredentials: {
-        clientId: input.clientId,
-        clientSecretEncrypted: encryptSecret(input.clientSecret),
-      },
-    };
-    await saveYoutubeSettingsRaw(next);
-    return buildYoutubeApiCredentialsStatus(next);
-  });
-  ipcMain.handle(IPC_CHANNELS.youtubeApiClearCredentials, async () => {
-    const settings = await loadYoutubeSettings();
-    // Wiping credentials orphans every channel's stored refresh token —
-    // clear them so the UI can prompt for re-auth on the next reconnect.
-    for (const channel of settings.channels) {
-      if (channel.apiAuth) youtubeApiAuth.removeRefreshToken(channel.id);
-    }
-    const next: YouTubeSettings = {
-      ...settings,
-      apiCredentials: undefined,
-      channels: settings.channels.map((c) => ({ ...c, apiAuth: undefined })),
-    };
-    await saveYoutubeSettingsRaw(next);
-    return buildYoutubeApiCredentialsStatus(next);
-  });
-  ipcMain.handle(IPC_CHANNELS.youtubeApiStartOAuth, async (_, raw) => {
-    const input = youtubeApiOauthChannelSchema.parse(raw);
-    const settings = await loadYoutubeSettings();
-    if (!settings.apiCredentials) throw new Error('Set YouTube API credentials before connecting a channel');
-    const channel = settings.channels.find((c) => c.id === input.channelConfigId);
-    if (!channel) throw new Error(`Channel ${input.channelConfigId} not found`);
-    const result = await youtubeApiAuth.startOAuthFlow(input.channelConfigId);
-    const next: YouTubeSettings = {
-      ...settings,
-      channels: settings.channels.map((c) =>
-        c.id === input.channelConfigId
-          ? {
-              ...c,
-              driver: 'api',
-              apiAuth: { channelId: result.channelId, hasRefreshToken: true },
-              ...(result.channelTitle ? { name: c.name ?? result.channelTitle } : {}),
-            }
-          : c,
-      ),
-    };
-    await saveYoutubeSettingsRaw(next);
-    return { channelId: result.channelId, channelTitle: result.channelTitle };
-  });
-  ipcMain.handle(IPC_CHANNELS.youtubeApiDisconnectChannel, async (_, raw) => {
-    const input = youtubeApiOauthChannelSchema.parse(raw);
-    youtubeApiAuth.removeRefreshToken(input.channelConfigId);
-    const settings = await loadYoutubeSettings();
-    const next: YouTubeSettings = {
-      ...settings,
-      channels: settings.channels.map((c) =>
-        c.id === input.channelConfigId ? { ...c, driver: 'scrape', apiAuth: undefined } : c,
-      ),
-    };
-    await saveYoutubeSettingsRaw(next);
-  });
   ipcMain.handle(IPC_CHANNELS.youtubeConnect, async (_, raw) => {
     const i = youtubeConnectSchema.parse(raw);
     if (!youtubeAdapter) throw new Error('YouTube adapter not yet ready');
