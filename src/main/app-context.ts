@@ -1450,6 +1450,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }
   });
   ipcMain.handle(IPC_CHANNELS.logsList, async (_, raw) => logService.list(eventLogFiltersSchema.parse(raw)));
+  ipcMain.handle(IPC_CHANNELS.eventLogClearAll, async () => {
+    logService.deleteAll();
+  });
 
   // Chat Log Handlers
   ipcMain.handle(IPC_CHANNELS.chatLogListSessions, async (_, raw) => {
@@ -1472,6 +1475,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
   ipcMain.handle(IPC_CHANNELS.chatLogDeleteSession, async (_, sessionId) => {
     chatLogService.deleteSession(String(sessionId ?? ''));
+  });
+  ipcMain.handle(IPC_CHANNELS.chatLogClearAll, async () => {
+    chatLogService.deleteAllSessions();
   });
 
   // Suggestions Handlers

@@ -12,7 +12,7 @@ export interface YouTubeModerationOptions {
 const API = 'https://www.googleapis.com/youtube/v3/liveChat';
 
 /**
- * Minimal YouTube Live Chat moderation surface used by ModerationPanel.
+ * Minimal YouTube Live Chat moderation surface used by the chat context menu.
  *
  * Implements:
  *  - deleteMessage  → liveChatMessages.delete

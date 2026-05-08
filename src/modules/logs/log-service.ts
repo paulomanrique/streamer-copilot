@@ -20,6 +20,10 @@ export class LogService {
     return this.repository.list(filters);
   }
 
+  deleteAll(): void {
+    this.repository.deleteAll();
+  }
+
   info(category: string, message: string, metadata?: unknown): void {
     this.log('info', category, message, metadata);
   }

@@ -169,6 +169,8 @@ export const IPC_CHANNELS = {
   chatLogGetMessages: 'chatLog:get-messages',
   chatLogExportSession: 'chatLog:export-session',
   chatLogDeleteSession: 'chatLog:delete-session',
+  chatLogClearAll: 'chatLog:clear-all',
+  eventLogClearAll: 'eventLog:clear-all',
   suggestionsList: 'suggestions:list',
   suggestionsUpsert: 'suggestions:upsert',
   suggestionsDelete: 'suggestions:delete',
@@ -321,6 +323,8 @@ export interface CopilotApi {
   chatLogGetMessages: (sessionId: string, opts?: { limit?: number; offset?: number }) => Promise<ChatLogMessage[]>;
   chatLogExportSession: (sessionId: string) => Promise<void>;
   chatLogDeleteSession: (sessionId: string) => Promise<void>;
+  chatLogClearAll: () => Promise<void>;
+  eventLogClearAll: () => Promise<void>;
   listSuggestionLists: () => Promise<SuggestionList[]>;
   upsertSuggestionList: (input: SuggestionListUpsertInput) => Promise<SuggestionList[]>;
   deleteSuggestionList: (input: SuggestionListDeleteInput) => Promise<SuggestionList[]>;

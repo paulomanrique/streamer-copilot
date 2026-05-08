@@ -60,6 +60,14 @@ export class ChatLogService {
     this.repo.deleteSession(sessionId);
   }
 
+  /** Wipes every chat-log session and message. Active in-memory sessions are
+   *  cleared too — the next message will not be persisted unless a new
+   *  session is opened (e.g. by reconnecting the chat). */
+  deleteAllSessions(): void {
+    this.activeSessions.clear();
+    this.repo.deleteAllSessions();
+  }
+
   exportSessionHtml(sessionId: string): string {
     const session = this.repo.getSession(sessionId);
     if (!session) throw new Error(`Session ${sessionId} not found`);
