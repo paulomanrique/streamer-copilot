@@ -190,49 +190,41 @@ export function extractYtLiveFromPlayerResponse(html: string): LiveStreamInfo | 
  * Extracts the current concurrent-viewer count from a YouTube watch page HTML.
  * Used as a fallback when the lightweight /live_stats endpoint is unavailable.
  *
- * IMPORTANT: ytInitialPlayerResponse.videoDetails.viewCount is the cumulative
- * lifetime view count of the live broadcast, NOT concurrent viewers — a long
- * live can rack up many more lifetime views than current watchers. Concurrent
- * viewers live in the `videoPrimaryInfoRenderer` UI block, which is what the
- * watch page renders as "X watching now".
+ * IMPORTANT: `videoDetails.viewCount` (and the duplicated `microformat.viewCount`,
+ * and the `videoPrimaryInfoRenderer.viewCount.simpleText` "X visualizações"
+ * line) are all the cumulative lifetime view count of the broadcast — even
+ * for an active live stream — not concurrent viewers.
  *
- * Tries (in order):
- *   1. ytInitialData → videoPrimaryInfoRenderer.viewCount.videoViewCountRenderer
- *      with isLive: true, reading viewCount.runs/simpleText (the literal
- *      number rendered next to "watching now"). Stops here if found.
- *   2. Regex match for the localized "X watching now" / "X assistindo agora"
- *      badge string on the raw HTML (covers en/pt). Strips non-digits.
+ * Concurrent viewers only live in `videoViewCountRenderer.viewCount` when
+ * `videoViewCountRenderer.isLive === true`. We do NOT fall back to scanning
+ * the raw HTML for a localized "watching now" / "assistindo agora" badge:
+ * the watch page sidebar can include unrelated recommended live streams,
+ * and a regex match would silently grab one of those instead of the main
+ * video's count. Returning null is correct when the page's videoPrimaryInfoRenderer
+ * isn't a live broadcast (VOD, ended live, etc.).
  */
 export function extractYtConcurrentViewers(html: string): number | null {
   const initial = parseYtInitialData(html);
-  if (initial) {
-    const contents = (((initial.contents as Record<string, unknown> | undefined)
-      ?.twoColumnWatchNextResults as Record<string, unknown> | undefined)
-      ?.results as Record<string, unknown> | undefined)
-      ?.results as Record<string, unknown> | undefined;
-    const items = contents?.contents as unknown[] | undefined;
-    if (Array.isArray(items)) {
-      for (const item of items) {
-        if (!item || typeof item !== 'object') continue;
-        const primary = (item as Record<string, unknown>).videoPrimaryInfoRenderer as Record<string, unknown> | undefined;
-        if (!primary) continue;
-        const vcr = (primary.viewCount as Record<string, unknown> | undefined)?.videoViewCountRenderer as Record<string, unknown> | undefined;
-        if (!vcr || vcr.isLive !== true) continue;
-        const vcText = vcr.viewCount as Record<string, unknown> | undefined;
-        const literal = readYtText(vcText);
-        if (literal) {
-          const count = parseInt(literal.replace(/[^0-9]/g, ''), 10);
-          if (Number.isFinite(count) && count >= 0) return count;
-        }
-      }
-    }
-  }
+  if (!initial) return null;
+  const contents = (((initial.contents as Record<string, unknown> | undefined)
+    ?.twoColumnWatchNextResults as Record<string, unknown> | undefined)
+    ?.results as Record<string, unknown> | undefined)
+    ?.results as Record<string, unknown> | undefined;
+  const items = contents?.contents as unknown[] | undefined;
+  if (!Array.isArray(items)) return null;
 
-  // Fallback: localized badge string anywhere in the HTML.
-  const watchingMatch = html.match(/"simpleText"\s*:\s*"([\d.,\s]+)\s*(?:watching now|watching|assistindo agora|assistindo)"/i);
-  if (watchingMatch) {
-    const count = parseInt(watchingMatch[1].replace(/[^0-9]/g, ''), 10);
-    if (Number.isFinite(count) && count >= 0) return count;
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue;
+    const primary = (item as Record<string, unknown>).videoPrimaryInfoRenderer as Record<string, unknown> | undefined;
+    if (!primary) continue;
+    const vcr = (primary.viewCount as Record<string, unknown> | undefined)?.videoViewCountRenderer as Record<string, unknown> | undefined;
+    if (!vcr || vcr.isLive !== true) continue;
+    const vcText = vcr.viewCount as Record<string, unknown> | undefined;
+    const literal = readYtText(vcText);
+    if (literal) {
+      const count = parseInt(literal.replace(/[^0-9]/g, ''), 10);
+      if (Number.isFinite(count) && count >= 0) return count;
+    }
   }
 
   return null;

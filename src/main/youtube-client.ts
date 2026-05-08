@@ -7,6 +7,10 @@ export interface YTLiveClientOptions {
   onMessage: (message: Omit<ChatMessage, 'id' | 'timestampLabel'>) => void;
   onEvent?: (event: Omit<StreamEvent, 'id' | 'timestampLabel'>) => void;
   onLog?: (message: string) => void;
+  /** Fires every ~5s with the live concurrent-viewer count. Driven by
+   *  youtubei.js's metadata-update event, which internally polls the same
+   *  /youtubei/v1/updated_metadata endpoint that youtube.com itself uses. */
+  onViewerCount?: (count: number) => void;
 }
 
 export class YTLiveClient {
@@ -46,6 +50,20 @@ export class YTLiveClient {
 
     livechat.on('end', () => {
       this.options.onLog?.('[YT] live chat ended');
+    });
+
+    livechat.on('metadata-update', (metadata: any) => {
+      if (this.stopped || !this.options.onViewerCount) return;
+      const node = metadata?.views?.view_count_node;
+      if (!node || node.is_live !== true) return;
+      // VideoViewCount.original_view_count is the raw concurrent count
+      // ("24"), already a number after youtubei.js parses it. Fall back to
+      // unlabeled_view_count_value text for safety.
+      const fromOriginal = typeof node.original_view_count === 'number' ? node.original_view_count : null;
+      const fallbackText: string = node.unlabeled_view_count_value?.toString?.() ?? node.view_count?.toString?.() ?? '';
+      const fromText = fallbackText ? parseInt(fallbackText.replace(/[^0-9]/g, ''), 10) : NaN;
+      const count = fromOriginal ?? (Number.isFinite(fromText) ? fromText : null);
+      if (count !== null && count >= 0) this.options.onViewerCount(count);
     });
 
     livechat.start();
