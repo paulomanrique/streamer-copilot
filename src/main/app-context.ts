@@ -402,7 +402,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   // Ordered list of platform IDs for YouTube streams (first = horizontal, second = vertical)
   const YT_PLATFORMS: Array<'youtube' | 'youtube-v'> = ['youtube', 'youtube-v'];
-  const SCHEDULED_SUPPORTED_TARGETS: PlatformId[] = ['twitch', 'youtube'];
+  const SCHEDULED_SUPPORTED_TARGETS: PlatformId[] = ['twitch', 'youtube', 'youtube-api'];
   // eslint-disable-next-line prefer-const -- forward-declared; assigned after dependent services are created
   let raffleService: RaffleService;
   // eslint-disable-next-line prefer-const -- forward-declared; assigned after dependent services are created
@@ -2887,6 +2887,13 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         for (const ytTarget of getConnectedYoutubePlatforms()) {
           resolved.add(ytTarget);
         }
+        continue;
+      }
+      if (target === 'youtube-api') {
+        // Wired up once the youtube-api adapter is registered — see step G.
+        // For now no-op so scheduled messages don't blow up before the
+        // adapter exists.
+        continue;
       }
     }
     return Array.from(resolved);

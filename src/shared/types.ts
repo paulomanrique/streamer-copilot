@@ -45,7 +45,7 @@ export interface LanguageOption {
  * without editing the core type. Validation at the IPC boundary is shape-only
  * (`z.string()` + slug regex), not membership in this list.
  */
-export type PlatformId = 'twitch' | 'youtube' | 'youtube-v' | 'kick' | 'tiktok' | (string & {});
+export type PlatformId = 'twitch' | 'youtube' | 'youtube-v' | 'youtube-api' | 'kick' | 'tiktok' | (string & {});
 
 export type ChatBadge = 'moderator' | 'subscriber' | 'member' | 'vip' | 'broadcaster' | (string & {});
 export type ChatMessageContentPart =
