@@ -41,21 +41,28 @@ const DEFAULT_DRAFT: PollDraft = {
   resultAnnouncementTemplate: DEFAULT_TEMPLATE,
 };
 
-async function getConfiguredPlatformOptions(): Promise<PlatformOption[]> {
-  const [twitchCreds, youtubeSettings] = await Promise.all([
-    window.copilot.twitchGetCredentials(),
-    window.copilot.youtubeGetSettings(),
-  ]);
+const PROVIDER_LABELS: Record<string, string> = {
+  twitch: 'Twitch',
+  youtube: 'YouTube',
+  kick: 'Kick',
+  tiktok: 'TikTok',
+};
 
-  const options: PlatformOption[] = [];
-  if (twitchCreds?.channel) {
-    options.push({ id: 'twitch', label: 'Twitch', hint: `#${twitchCreds.channel}` });
+async function getConfiguredPlatformOptions(): Promise<PlatformOption[]> {
+  const accounts = await window.copilot.accountsList();
+  const byProvider = new Map<string, { count: number; channels: string[] }>();
+  for (const account of accounts) {
+    if (!account.enabled) continue;
+    const bucket = byProvider.get(account.providerId) ?? { count: 0, channels: [] };
+    bucket.count += 1;
+    if (account.channel) bucket.channels.push(account.channel);
+    byProvider.set(account.providerId, bucket);
   }
-  const enabled = youtubeSettings.channels.filter((c) => c.enabled);
-  if (enabled.length > 0) {
-    options.push({ id: 'youtube', label: 'YouTube', hint: `${enabled.length} channel${enabled.length > 1 ? 's' : ''}` });
-  }
-  return options;
+  return Array.from(byProvider.entries()).map(([providerId, info]) => ({
+    id: providerId as PlatformId,
+    label: PROVIDER_LABELS[providerId] ?? providerId,
+    hint: info.count === 1 ? info.channels[0] ?? '' : `${info.count} accounts`,
+  }));
 }
 
 function statusLabel(status: Poll['status']): string {
@@ -210,13 +217,21 @@ export function PollsPage() {
     try {
       const payload = toUpsert(draft);
       if (!payload.title) throw new Error('Title is required');
-      if (payload.options.length < 2) throw new Error('At least 2 options are required');
-      if (payload.acceptedPlatforms.length === 0) throw new Error('Pick at least one platform');
+      if (payload.options.length < 2) throw new Error('At least 2 options with a label are required');
+      if (payload.acceptedPlatforms.length === 0) {
+        throw new Error(
+          platformOptions.length === 0
+            ? 'Configure at least one platform account in Connections before creating a poll.'
+            : 'Pick at least one platform that will accept votes.',
+        );
+      }
       const updated = await window.copilot.upsertPoll(payload);
       setPolls(updated);
       newDraft();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Failed to save poll');
+      const message = cause instanceof Error ? cause.message : 'Failed to save poll';
+      setError(message);
+      console.error('[polls] save failed', cause);
     } finally {
       setBusy(false);
     }
@@ -448,6 +463,10 @@ export function PollsPage() {
             Variables: {'{title}'}, {'{winner}'}, {'{winner_votes}'}, {'{winner_percent}'}, {'{total_votes}'}, {'{results}'}
           </span>
         </label>
+
+        {error ? (
+          <div className="rounded border border-rose-800 bg-rose-950/40 text-rose-200 px-3 py-2 text-sm">{error}</div>
+        ) : null}
 
         <div className="flex justify-end gap-2 pt-2">
           {editingExistingDraft ? (
