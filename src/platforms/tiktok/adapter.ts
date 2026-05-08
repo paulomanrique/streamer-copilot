@@ -108,6 +108,17 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
       this.connected = false;
       this.options.onError?.(cause);
       this.options.onStatusChange?.('error');
+      // The lib often throws Errors with empty messages when fetchRoomId
+      // fails (typo, banned account, or — most commonly — the user is not
+      // currently live). Surface a clearer hint instead of bubbling up a
+      // bare "Error".
+      const stack = cause instanceof Error ? cause.stack ?? '' : '';
+      const message = cause instanceof Error ? cause.message?.trim() ?? '' : '';
+      if (!message && stack.includes('fetchRoomId')) {
+        throw new Error(
+          `TikTok room not found for "${this.options.username}". Make sure the user is currently live and the handle is correct (no @, no URL).`,
+        );
+      }
       throw cause;
     }
   }
