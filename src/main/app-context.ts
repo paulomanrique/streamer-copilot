@@ -1817,11 +1817,19 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const settings = kickSettingsSchema.parse(raw);
     await store.save(settings);
   });
-  ipcMain.handle(IPC_CHANNELS.kickStartOAuth, async () => {
+  ipcMain.handle(IPC_CHANNELS.kickStartOAuth, async (_, raw) => {
     const credentials = await resolveKickApiCredentials();
     const store = await getKickSettingsStore();
     const settings = store ? await store.load() : defaultKickSettings();
-    const fallbackChannelSlug = normalizeKickChannelInput(settings.channelInput);
+    // The Kick OAuth response sometimes omits the authorized channel (older
+    // tokens scoped to chat:write only). Accept an explicit slug from the
+    // caller so the wizard / Login flow can pass the slug typed in the form
+    // or the slug stored on the existing account, falling back to the legacy
+    // settings field for backwards compatibility.
+    const explicitSlug = raw && typeof raw === 'object' && 'channelSlug' in raw && typeof (raw as { channelSlug?: unknown }).channelSlug === 'string'
+      ? normalizeKickChannelInput((raw as { channelSlug: string }).channelSlug)
+      : null;
+    const fallbackChannelSlug = explicitSlug || normalizeKickChannelInput(settings.channelInput);
     const session = await startKickOAuth(credentials.clientId, credentials.clientSecret, fallbackChannelSlug);
     const tokenStore = await getKickTokenStore();
     await tokenStore?.save(session);
