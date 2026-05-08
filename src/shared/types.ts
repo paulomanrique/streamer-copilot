@@ -38,7 +38,14 @@ export interface LanguageOption {
   nativeLabel: string;
 }
 
-export type PlatformId = 'twitch' | 'youtube' | 'youtube-v' | 'kick' | 'tiktok';
+/**
+ * Open enum: TS still autocompletes known platforms in IDEs, switch statements
+ * over the known set keep working, but the type accepts any string so adapter
+ * modules (including third-party plugins) can declare their own platformId
+ * without editing the core type. Validation at the IPC boundary is shape-only
+ * (`z.string()` + slug regex), not membership in this list.
+ */
+export type PlatformId = 'twitch' | 'youtube' | 'youtube-v' | 'kick' | 'tiktok' | (string & {});
 
 export type ChatBadge = 'moderator' | 'subscriber' | 'member' | 'vip' | 'broadcaster' | (string & {});
 export type ChatMessageContentPart =
