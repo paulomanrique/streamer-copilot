@@ -77,4 +77,8 @@ registerPlatformProvider({
     return null;
   },
   defaultLabel(channel) { return channel; },
+  async login(_account) {
+    const result = await window.copilot.kickStartOAuth();
+    return { message: `Logado com sucesso (${result.channelSlug})` };
+  },
 });

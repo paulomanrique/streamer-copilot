@@ -62,4 +62,21 @@ registerPlatformProvider({
     return null;
   },
   defaultLabel(channel) { return channel; },
+  async login(account) {
+    const result = await window.copilot.twitchStartOAuth();
+    await window.copilot.accountsUpdate({
+      id: account.id,
+      providerId: account.providerId,
+      label: account.label,
+      channel: account.channel,
+      enabled: account.enabled,
+      autoConnect: account.autoConnect,
+      providerData: {
+        ...account.providerData,
+        username: result.username,
+        oauthToken: `oauth:${result.accessToken}`,
+      },
+    });
+    return { message: `Logado com sucesso como @${result.username}` };
+  },
 });

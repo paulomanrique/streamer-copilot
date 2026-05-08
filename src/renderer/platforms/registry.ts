@@ -33,6 +33,14 @@ export interface PlatformProvider {
   validate(channel: string, providerData: Record<string, unknown>): string | null;
   /** Default label suggestion when user hasn't typed one. */
   defaultLabel(channel: string): string;
+  /**
+   * Optional re-login flow for an existing account. Re-runs OAuth or opens the
+   * login popup, and (if the provider stores credentials in providerData)
+   * patches the account so subsequent connect calls use the fresh token.
+   * Resolves when the login window closes / OAuth completes. The optional
+   * `message` is shown to the user instead of the generic success label.
+   */
+  login?(account: PlatformAccount): Promise<{ message?: string } | void>;
 }
 
 const providers = new Map<string, PlatformProvider>();

@@ -1741,12 +1741,23 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       }
     });
 
+    // Resolve only when the popup is fully closed so the renderer can give
+    // the user feedback ("Logado com sucesso") at the right moment.
+    const closed = new Promise<void>((resolve) => {
+      win.once('closed', () => resolve());
+    });
+
     try {
       await win.loadURL('https://accounts.google.com/ServiceLogin?service=youtube&continue=https://www.youtube.com/signin?action_handle_signin=true');
     } catch (cause) {
       const code = cause && typeof cause === 'object' && 'code' in cause ? String(cause.code) : '';
-      if (code !== 'ERR_ABORTED' && code !== 'ERR_FAILED') throw cause;
+      if (code !== 'ERR_ABORTED' && code !== 'ERR_FAILED') {
+        if (!win.isDestroyed()) win.close();
+        throw cause;
+      }
     }
+
+    await closed;
   });
   ipcMain.handle(IPC_CHANNELS.youtubeCheckLive, async (_, handle: unknown) => {
     const streams = await checkYouTubeLive(String(handle ?? ''));
