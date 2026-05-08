@@ -322,7 +322,7 @@ export interface CopilotApi {
   twitchGetUserAvatars: (logins: string[]) => Promise<Record<string, string>>;
   twitchGetBadgeUrls: (badgeIds: string[]) => Promise<Record<string, string>>;
   twitchStartOAuth: () => Promise<{ username: string; accessToken: string }>;
-  kickStartOAuth: () => Promise<{ channelSlug: string }>;
+  kickStartOAuth: (input?: { channelSlug?: string }) => Promise<{ channelSlug: string }>;
   youtubeConnect: (input: { videoId: string }) => Promise<void>;
   youtubeDisconnect: () => Promise<void>;
   youtubeGetStatus: () => Promise<import('./types.js').YouTubeStreamInfo[]>;

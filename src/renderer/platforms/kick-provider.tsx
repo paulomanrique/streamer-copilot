@@ -10,7 +10,7 @@ function KickAuthStep({ draft, updateDraft, channel, setChannel, setError }: Aut
   async function startOAuth() {
     setBusy(true); setError(null);
     try {
-      const result = await window.copilot.kickStartOAuth();
+      const result = await window.copilot.kickStartOAuth({ channelSlug: channel || undefined });
       if (!channel) setChannel(result.channelSlug);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -77,8 +77,8 @@ registerPlatformProvider({
     return null;
   },
   defaultLabel(channel) { return channel; },
-  async login(_account) {
-    const result = await window.copilot.kickStartOAuth();
+  async login(account) {
+    const result = await window.copilot.kickStartOAuth({ channelSlug: account.channel });
     return { message: `Logado com sucesso (${result.channelSlug})` };
   },
 });
