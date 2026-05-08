@@ -1,5 +1,4 @@
 import { ConnectedAccounts } from '../components/ConnectedAccounts.js';
-import { YouTubeApiSettingsPanel } from '../components/YouTubeApiSettingsPanel.js';
 
 /**
  * Connections page. The legacy per-platform connect panels were removed once
@@ -15,7 +14,6 @@ export function PlatformsSettingsPage() {
         <p className="text-sm text-gray-500">Connect your streaming accounts to enable chat integration. Add multiple accounts per platform.</p>
       </header>
       <ConnectedAccounts />
-      <YouTubeApiSettingsPanel />
     </div>
   );
 }
