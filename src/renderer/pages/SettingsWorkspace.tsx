@@ -8,6 +8,7 @@ import { SettingsProfilesPanel } from '../components/SettingsProfilesPanel.js';
 import { GeneralSettingsPage } from './GeneralSettings.js';
 import { ObsSettingsPage } from './ObsSettings.js';
 import { ChatLogsPage } from './ChatLogs.js';
+import { PollsPage } from './Polls.js';
 import { RafflesPage } from './Raffles.js';
 import { SoundCommandsPage } from './SoundCommands.js';
 import { SuggestionsPage } from './Suggestions.js';
@@ -18,7 +19,7 @@ import { WelcomeMessagePage } from './WelcomeMessage.js';
 import { MusicRequestPage } from './MusicRequest.js';
 import { OverlaysPage } from './Overlays.js';
 
-type SettingsView = 'general' | 'profiles' | 'platforms' | 'obs' | 'sound' | 'text' | 'voice' | 'welcome' | 'music' | 'raffles' | 'suggestions' | 'chat-logs' | 'event-log' | 'overlays';
+type SettingsView = 'general' | 'profiles' | 'platforms' | 'obs' | 'sound' | 'text' | 'voice' | 'welcome' | 'music' | 'polls' | 'raffles' | 'suggestions' | 'chat-logs' | 'event-log' | 'overlays';
 
 interface SettingsWorkspaceProps {
   activeProfileId: string;
@@ -121,6 +122,15 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
         ),
       },
       {
+        id: 'polls',
+        label: 'Polls',
+        icon: (
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V5m6 14V9m6 10H3" />
+          </svg>
+        ),
+      },
+      {
         id: 'raffles',
         label: 'Raffles',
         icon: (
@@ -211,8 +221,7 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
   const labelForGroup = (label: string) => ({
     App: messages.settings.app,
     Platforms: messages.settings.platforms,
-    Commands: messages.settings.commands,
-    Automations: messages.settings.automations,
+    Modules: messages.settings.modules,
     Integrations: messages.settings.integrations,
   }[label] ?? label);
 
@@ -227,6 +236,7 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
     text: messages.settings.textCommands,
     welcome: messages.settings.welcomeMessage,
     music: messages.settings.musicRequest,
+    polls: messages.settings.polls,
     raffles: messages.settings.raffles,
     suggestions: messages.settings.suggestions,
     moderation: 'Moderation',
@@ -242,26 +252,38 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
         </div>
 
         <nav className="flex-1 overflow-y-auto py-2">
-          {SETTINGS_GROUPS.map((group) => (
-            <div key={group.label} className="px-3 pb-1">
-              <p className="text-xs text-gray-600 uppercase tracking-wider px-2 py-1">{labelForGroup(group.label)}</p>
-              {group.items.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setCurrentView(item.id)}
-                  className={
-                    currentView === item.id
-                      ? 'w-full text-left flex items-center gap-2.5 px-3 py-2 rounded text-sm transition-colors bg-gray-800 text-white'
-                      : 'w-full text-left flex items-center gap-2.5 px-3 py-2 rounded text-sm transition-colors text-gray-400 hover:text-white'
-                  }
-                >
-                  {item.icon}
-                  {labelForItem(item.id, item.label)}
-                </button>
-              ))}
-            </div>
-          ))}
+          {SETTINGS_GROUPS.map((group) => {
+            // Sort each group by the *rendered* (i18n-resolved) label so the
+            // alphabetical order tracks the active locale instead of the
+            // English source labels in the SETTINGS_GROUPS array.
+            const sortedItems = [...group.items].sort((a, b) =>
+              labelForItem(a.id, a.label).localeCompare(
+                labelForItem(b.id, b.label),
+                undefined,
+                { sensitivity: 'base' },
+              ),
+            );
+            return (
+              <div key={group.label} className="px-3 pb-1">
+                <p className="text-xs text-gray-600 uppercase tracking-wider px-2 py-1">{labelForGroup(group.label)}</p>
+                {sortedItems.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setCurrentView(item.id)}
+                    className={
+                      currentView === item.id
+                        ? 'w-full text-left flex items-center gap-2.5 px-3 py-2 rounded text-sm transition-colors bg-gray-800 text-white'
+                        : 'w-full text-left flex items-center gap-2.5 px-3 py-2 rounded text-sm transition-colors text-gray-400 hover:text-white'
+                    }
+                  >
+                    {item.icon}
+                    {labelForItem(item.id, item.label)}
+                  </button>
+                ))}
+              </div>
+            );
+          })}
         </nav>
       </aside>
 
@@ -301,6 +323,7 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
         ) : null}
         {currentView === 'welcome' ? <WelcomeMessagePage /> : null}
         {currentView === 'music' ? <MusicRequestPage /> : null}
+        {currentView === 'polls' ? <PollsPage /> : null}
         {currentView === 'raffles' ? <RafflesPage /> : null}
         {currentView === 'suggestions' ? <SuggestionsPage /> : null}
         {currentView === 'overlays' ? <OverlaysPage /> : null}

@@ -60,6 +60,8 @@ export interface TranslationMessages {
     voiceTts: string;
     textCommands: string;
     automations: string;
+    modules: string;
+    polls: string;
     raffles: string;
     suggestions: string;
     integrations: string;

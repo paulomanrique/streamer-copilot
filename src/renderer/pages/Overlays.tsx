@@ -186,6 +186,12 @@ export function OverlaysPage() {
         description="Visual wheel + status of the active raffle."
         url={info?.urls.raffles ?? null}
       />
+
+      <OverlayLink
+        title="Polls"
+        description="Live poll bars + countdown for the currently active poll."
+        url={info?.urls.polls ?? null}
+      />
     </div>
   );
 }

@@ -4,12 +4,13 @@ import { createRequire } from 'node:module';
 import type { AddressInfo } from 'node:net';
 
 import type { RecentChatSnapshot } from '../shared/ipc.js';
-import type { ChatOverlayInfo, RaffleOverlayInfo, RaffleOverlayState } from '../shared/types.js';
+import type { ChatOverlayInfo, PollOverlayInfo, PollOverlayState, RaffleOverlayInfo, RaffleOverlayState } from '../shared/types.js';
 
 interface OverlayServerOptions {
   /** TCP port to listen on; comes from GeneralSettings.overlayServerPort. */
   port: number;
   getOverlayState: () => RaffleOverlayState | null;
+  getPollsOverlayState: () => PollOverlayState | null;
   getChatSnapshot: () => RecentChatSnapshot;
 }
 
@@ -166,6 +167,40 @@ export class OverlayServer {
         return;
       }
 
+      if (path === '/polls/overlay/state') {
+        const state = this.options.getPollsOverlayState();
+        if (!state) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'No active poll' }));
+          return;
+        }
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+          'Access-Control-Allow-Origin': '*',
+        });
+        res.end(JSON.stringify(state));
+        return;
+      }
+
+      if (path === '/polls/overlay/overlay.css') {
+        res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(pollsOverlayCss);
+        return;
+      }
+
+      if (path === '/polls/overlay/overlay.js') {
+        res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(pollsOverlayJs);
+        return;
+      }
+
+      if (path === '/polls/overlay' || path === '/polls/overlay/') {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(pollsOverlayHtml);
+        return;
+      }
+
       if (path === '/now-playing' || path === '/now-playing/') {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
         res.end(nowPlayingHtml);
@@ -286,6 +321,17 @@ export class OverlayServer {
     return {
       overlayUrl: `http://127.0.0.1:${this.port}/raffles/overlay`,
       stateUrl: `http://127.0.0.1:${this.port}/raffles/overlay/state`,
+    };
+  }
+
+  getPollsOverlayInfo(): PollOverlayInfo {
+    if (!this.server || this.port === 0) {
+      throw new Error('Polls overlay server is not running');
+    }
+
+    return {
+      overlayUrl: `http://127.0.0.1:${this.port}/polls/overlay`,
+      stateUrl: `http://127.0.0.1:${this.port}/polls/overlay/state`,
     };
   }
 
@@ -1495,6 +1541,205 @@ async function tick() {
 }
 
 tick();
+`;
+
+// ── Polls overlay ────────────────────────────────────────────────────────────
+
+const pollsOverlayHtml = `<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Enquete — Overlay</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/polls/overlay/overlay.css" />
+  </head>
+  <body>
+    <div id="root" class="poll-overlay idle">
+      <header class="poll-header">
+        <span class="poll-tag">ENQUETE</span>
+        <h1 id="poll-title" class="poll-title">Aguardando...</h1>
+        <div class="poll-meta">
+          <span id="poll-total">0 votos</span>
+          <span id="poll-timer" class="poll-timer">--</span>
+        </div>
+      </header>
+      <ul id="poll-options" class="poll-options"></ul>
+      <p id="poll-status" class="poll-status">Aguardando inicio</p>
+    </div>
+    <script src="/polls/overlay/overlay.js"></script>
+  </body>
+</html>`;
+
+const pollsOverlayCss = `
+:root {
+  color-scheme: dark;
+  --bg: #0b0e1c;
+  --surface: rgba(17, 21, 39, 0.92);
+  --border: rgba(255,255,255,0.08);
+  --text: #f1f5f9;
+  --text-dim: #94a3b8;
+  --accent: #7c5cff;
+  --accent-2: #22d3ee;
+  --winner: #f0c020;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: transparent; font-family: "DM Sans", sans-serif; color: var(--text); }
+.poll-overlay {
+  width: min(560px, 100%);
+  margin: 24px;
+  padding: 22px 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: 0 24px 70px rgba(0,0,0,0.5);
+  backdrop-filter: blur(8px);
+  transition: opacity 240ms ease;
+}
+.poll-overlay.idle { opacity: 0; pointer-events: none; }
+.poll-header { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.poll-tag {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--accent-2);
+}
+.poll-title {
+  font-family: "Bebas Neue", sans-serif;
+  font-size: clamp(26px, 3vw, 38px);
+  letter-spacing: 0.01em;
+  line-height: 1.05;
+}
+.poll-meta { display: flex; justify-content: space-between; color: var(--text-dim); font-size: 12px; font-weight: 600; }
+.poll-timer { color: var(--accent-2); font-variant-numeric: tabular-nums; }
+.poll-options { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.poll-option {
+  position: relative;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  overflow: hidden;
+}
+.poll-option .bar {
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, rgba(124,92,255,0.45), rgba(34,211,238,0.18));
+  width: 0%;
+  transition: width 480ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.poll-option.winner .bar { background: linear-gradient(90deg, rgba(240,192,32,0.5), rgba(240,192,32,0.18)); }
+.poll-option .label {
+  position: relative; z-index: 1;
+  display: flex; align-items: center; gap: 10px;
+  font-size: 14px; font-weight: 600;
+}
+.poll-option .index {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 26px; height: 26px; padding: 0 6px;
+  border-radius: 8px;
+  font-family: "Bebas Neue", sans-serif;
+  font-size: 16px;
+  background: rgba(124,92,255,0.18); color: #cdb8ff;
+}
+.poll-option.winner .index { background: rgba(240,192,32,0.2); color: var(--winner); }
+.poll-option .stats { position: relative; z-index: 1; font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.poll-option .stats strong { color: var(--text); margin-left: 6px; }
+.poll-status { margin-top: 12px; font-size: 12px; color: var(--text-dim); text-align: center; }
+`;
+
+const pollsOverlayJs = `
+'use strict';
+(function () {
+  var rootEl = document.getElementById('root');
+  var titleEl = document.getElementById('poll-title');
+  var optionsEl = document.getElementById('poll-options');
+  var totalEl = document.getElementById('poll-total');
+  var timerEl = document.getElementById('poll-timer');
+  var statusEl = document.getElementById('poll-status');
+  var current = null;
+
+  function statusLabel(status) {
+    switch (status) {
+      case 'active': return 'Votacao aberta';
+      case 'closed': return 'Encerrado';
+      case 'cancelled': return 'Cancelado';
+      default: return 'Aguardando';
+    }
+  }
+
+  function fmtCountdown(state) {
+    if (!state.closesAt) return '--';
+    var ms = new Date(state.closesAt).getTime() - Date.now();
+    if (ms <= 0) return '00:00';
+    var s = Math.floor(ms / 1000);
+    var m = Math.floor(s / 60);
+    var ss = s % 60;
+    return String(m).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
+  }
+
+  function renderTally(state) {
+    var winnerId = state.winner ? state.winner.optionId : null;
+    if (optionsEl.children.length !== state.tally.length) {
+      optionsEl.innerHTML = '';
+      state.tally.forEach(function (entry) {
+        var li = document.createElement('li');
+        li.className = 'poll-option';
+        li.dataset.id = entry.optionId;
+        li.innerHTML =
+          '<span class="bar"></span>' +
+          '<span class="label"><span class="index">' + entry.index + '</span><span class="text"></span></span>' +
+          '<span class="stats"></span>';
+        optionsEl.appendChild(li);
+      });
+    }
+    state.tally.forEach(function (entry) {
+      var li = optionsEl.querySelector('[data-id="' + entry.optionId + '"]');
+      if (!li) return;
+      li.classList.toggle('winner', winnerId === entry.optionId);
+      li.querySelector('.text').textContent = entry.label;
+      li.querySelector('.bar').style.width = (entry.percent || 0) + '%';
+      li.querySelector('.stats').innerHTML = entry.percent.toFixed(1) + '% <strong>' + entry.votes + '</strong>';
+    });
+  }
+
+  function applyState(state) {
+    current = state;
+    if (!state) {
+      rootEl.classList.add('idle');
+      return;
+    }
+    rootEl.classList.remove('idle');
+    titleEl.textContent = state.title;
+    totalEl.textContent = state.totalVotes + (state.totalVotes === 1 ? ' voto' : ' votos');
+    statusEl.textContent = statusLabel(state.status);
+    renderTally(state);
+  }
+
+  function tickTimer() {
+    if (!current) { timerEl.textContent = '--'; return; }
+    if (current.status !== 'active') {
+      timerEl.textContent = current.status === 'closed' ? 'Encerrado' : '--';
+      return;
+    }
+    timerEl.textContent = fmtCountdown(current);
+  }
+
+  async function fetchState() {
+    try {
+      var res = await fetch('/polls/overlay/state', { cache: 'no-store' });
+      if (res.status === 404) { applyState(null); return; }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      applyState(await res.json());
+    } catch (err) {
+      // keep last known state on failure
+    }
+  }
+
+  fetchState();
+  setInterval(fetchState, 1000);
+  setInterval(tickTimer, 250);
+})();
 `;
 
 // ── R3 / R4: now-playing browser source (visual minimal — to be styled by overlay-kit later) ─

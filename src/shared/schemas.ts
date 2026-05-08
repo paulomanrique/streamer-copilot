@@ -258,6 +258,35 @@ export const suggestionListDeleteInputSchema = z.object({
   id: z.string().min(1),
 });
 
+const pollControlActionSchema = z.enum(['start', 'cancel', 'force_close']);
+
+const pollOptionInputSchema = z.object({
+  id: z.string().min(1).optional(),
+  label: z.string().min(1).max(120),
+});
+
+export const pollUpsertInputSchema = z.object({
+  id: z.string().min(1).optional(),
+  title: z.string().min(1).max(160),
+  options: z.array(pollOptionInputSchema).min(2).max(10),
+  durationSeconds: z.number().int().min(10).max(3600),
+  acceptedPlatforms: z.array(platformIdSchema).min(1),
+  resultAnnouncementTemplate: z.string().max(800).default(''),
+});
+
+export const pollDeleteInputSchema = z.object({
+  id: z.string().min(1),
+});
+
+export const pollIdInputSchema = z.object({
+  id: z.string().min(1),
+});
+
+export const pollControlInputSchema = z.object({
+  pollId: z.string().min(1),
+  action: pollControlActionSchema,
+});
+
 export const soundPlayPayloadSchema = z.object({
   filePath: z.string().min(1),
 });
@@ -349,6 +378,10 @@ export type SoundCommandUpsertInputSchema = z.infer<typeof soundCommandUpsertInp
 export type SoundCommandDeleteInputSchema = z.infer<typeof soundCommandDeleteInputSchema>;
 export type SuggestionListUpsertInputSchema = z.infer<typeof suggestionListUpsertInputSchema>;
 export type SuggestionListDeleteInputSchema = z.infer<typeof suggestionListDeleteInputSchema>;
+export type PollUpsertInputSchema = z.infer<typeof pollUpsertInputSchema>;
+export type PollDeleteInputSchema = z.infer<typeof pollDeleteInputSchema>;
+export type PollIdInputSchema = z.infer<typeof pollIdInputSchema>;
+export type PollControlInputSchema = z.infer<typeof pollControlInputSchema>;
 export type SoundPlayPayloadSchema = z.infer<typeof soundPlayPayloadSchema>;
 export type ObsConnectionSettingsSchema = z.infer<typeof obsConnectionSettingsSchema>;
 export type EventLogFiltersSchema = z.infer<typeof eventLogFiltersSchema>;

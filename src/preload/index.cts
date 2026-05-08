@@ -16,6 +16,13 @@ import type {
   ObsConnectionSettings,
   ObsStatsSnapshot,
   ProfileSettings,
+  Poll,
+  PollControlInput,
+  PollDeleteInput,
+  PollOverlayInfo,
+  PollSnapshot,
+  PollUpsertInput,
+  PollVote,
   Raffle,
   RaffleControlActionInput,
   RaffleCreateInput,
@@ -95,6 +102,16 @@ const IPC_CHANNELS = {
   rafflesResult: 'raffles:result',
   rafflesSoundsList: 'raffles:sounds-list',
   rafflesSoundsPreview: 'raffles:sounds-preview',
+  pollsList: 'polls:list',
+  pollsUpsert: 'polls:upsert',
+  pollsDelete: 'polls:delete',
+  pollsGetActive: 'polls:get-active',
+  pollsGetSnapshot: 'polls:get-snapshot',
+  pollsControl: 'polls:control',
+  pollsOverlayInfo: 'polls:overlay-info',
+  pollsState: 'polls:state',
+  pollsVote: 'polls:vote',
+  pollsResult: 'polls:result',
   textList: 'text:list',
   textUpsert: 'text:upsert',
   textDelete: 'text:delete',
@@ -258,6 +275,28 @@ const copilotApi: CopilotApi = {
   },
   listRaffleSounds: () => ipcRenderer.invoke(IPC_CHANNELS.rafflesSoundsList) as Promise<Record<'spinning' | 'eliminated' | 'winner', string[]>>,
   previewRaffleSound: (event: 'spinning' | 'eliminated' | 'winner', filename: string) => ipcRenderer.invoke(IPC_CHANNELS.rafflesSoundsPreview, { event, filename }),
+  listPolls: () => ipcRenderer.invoke(IPC_CHANNELS.pollsList) as Promise<Poll[]>,
+  upsertPoll: (input: PollUpsertInput) => ipcRenderer.invoke(IPC_CHANNELS.pollsUpsert, input) as Promise<Poll[]>,
+  deletePoll: (input: PollDeleteInput) => ipcRenderer.invoke(IPC_CHANNELS.pollsDelete, input) as Promise<Poll[]>,
+  getActivePoll: () => ipcRenderer.invoke(IPC_CHANNELS.pollsGetActive) as Promise<Poll | null>,
+  getPollSnapshot: (pollId: string) => ipcRenderer.invoke(IPC_CHANNELS.pollsGetSnapshot, pollId) as Promise<PollSnapshot>,
+  controlPoll: (input: PollControlInput) => ipcRenderer.invoke(IPC_CHANNELS.pollsControl, input) as Promise<PollSnapshot>,
+  getPollOverlayInfo: () => ipcRenderer.invoke(IPC_CHANNELS.pollsOverlayInfo) as Promise<PollOverlayInfo>,
+  onPollState: (listener: (payload: PollSnapshot | null) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: PollSnapshot | null) => listener(payload);
+    ipcRenderer.on(IPC_CHANNELS.pollsState, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.pollsState, wrappedListener); };
+  },
+  onPollVote: (listener: (payload: PollVote) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: PollVote) => listener(payload);
+    ipcRenderer.on(IPC_CHANNELS.pollsVote, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.pollsVote, wrappedListener); };
+  },
+  onPollResult: (listener: (payload: PollSnapshot) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: PollSnapshot) => listener(payload);
+    ipcRenderer.on(IPC_CHANNELS.pollsResult, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.pollsResult, wrappedListener); };
+  },
   listTextCommands: () => ipcRenderer.invoke(IPC_CHANNELS.textList) as Promise<TextCommand[]>,
   upsertTextCommand: (input: TextCommandUpsertInput) => ipcRenderer.invoke(IPC_CHANNELS.textUpsert, input),
   deleteTextCommand: (input: TextCommandDeleteInput) => ipcRenderer.invoke(IPC_CHANNELS.textDelete, input),

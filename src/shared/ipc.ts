@@ -16,6 +16,13 @@ import type {
   PlatformId,
   ProfileSettings,
   ProfilesSnapshot,
+  Poll,
+  PollControlInput,
+  PollDeleteInput,
+  PollOverlayInfo,
+  PollSnapshot,
+  PollUpsertInput,
+  PollVote,
   Raffle,
   RaffleControlActionInput,
   RaffleDeleteInput,
@@ -97,6 +104,16 @@ export const IPC_CHANNELS = {
   rafflesResult: 'raffles:result',
   rafflesSoundsList: 'raffles:sounds-list',
   rafflesSoundsPreview: 'raffles:sounds-preview',
+  pollsList: 'polls:list',
+  pollsUpsert: 'polls:upsert',
+  pollsDelete: 'polls:delete',
+  pollsGetActive: 'polls:get-active',
+  pollsGetSnapshot: 'polls:get-snapshot',
+  pollsControl: 'polls:control',
+  pollsOverlayInfo: 'polls:overlay-info',
+  pollsState: 'polls:state',
+  pollsVote: 'polls:vote',
+  pollsResult: 'polls:result',
   textList: 'text:list',
   textUpsert: 'text:upsert',
   textDelete: 'text:delete',
@@ -249,6 +266,16 @@ export interface CopilotApi {
   onRaffleResult: (listener: (payload: RaffleRoundResult) => void) => () => void;
   listRaffleSounds: () => Promise<Record<'spinning' | 'eliminated' | 'winner', string[]>>;
   previewRaffleSound: (event: 'spinning' | 'eliminated' | 'winner', filename: string) => Promise<void>;
+  listPolls: () => Promise<Poll[]>;
+  upsertPoll: (input: PollUpsertInput) => Promise<Poll[]>;
+  deletePoll: (input: PollDeleteInput) => Promise<Poll[]>;
+  getActivePoll: () => Promise<Poll | null>;
+  getPollSnapshot: (pollId: string) => Promise<PollSnapshot>;
+  controlPoll: (input: PollControlInput) => Promise<PollSnapshot>;
+  getPollOverlayInfo: () => Promise<PollOverlayInfo>;
+  onPollState: (listener: (payload: PollSnapshot | null) => void) => () => void;
+  onPollVote: (listener: (payload: PollVote) => void) => () => void;
+  onPollResult: (listener: (payload: PollSnapshot) => void) => () => void;
   listTextCommands: () => Promise<TextCommand[]>;
   upsertTextCommand: (input: TextCommandUpsertInput) => Promise<TextCommand[]>;
   deleteTextCommand: (input: TextCommandDeleteInput) => Promise<TextCommand[]>;
@@ -372,6 +399,7 @@ export interface OverlayServerInfo {
   urls: {
     chat: string | null;
     raffles: string | null;
+    polls: string | null;
     nowPlaying: string | null;
   };
 }

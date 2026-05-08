@@ -1,0 +1,24 @@
+interface PollDeadlineRunnerOptions {
+  onTick: () => void;
+  intervalMs?: number;
+}
+
+export class PollDeadlineRunner {
+  private timer: ReturnType<typeof setInterval> | null = null;
+
+  constructor(private readonly options: PollDeadlineRunnerOptions) {}
+
+  start(): void {
+    if (this.timer) return;
+    this.options.onTick();
+    this.timer = setInterval(() => {
+      this.options.onTick();
+    }, this.options.intervalMs ?? 1_000);
+  }
+
+  stop(): void {
+    if (!this.timer) return;
+    clearInterval(this.timer);
+    this.timer = null;
+  }
+}
