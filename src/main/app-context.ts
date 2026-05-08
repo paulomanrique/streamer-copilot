@@ -933,15 +933,46 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   };
 
   const fetchYtLiveViewerCount = async (videoId: string): Promise<number | null> => {
+    const id = encodeURIComponent(videoId);
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      'Accept-Language': 'en-US,en;q=0.9',
+    };
+
+    // Primary: /live_stats — cheap, plain-text counter that lights up while
+    // the stream is live. YouTube has tightened this endpoint's filtering
+    // and intermittently 404s it, so we fall back to scraping the watch page
+    // for `concurrentViewers` when the primary returns nothing usable.
     try {
-      const resp = await net.fetch(`https://www.youtube.com/live_stats?v=${videoId}`);
+      const resp = await net.fetch(`https://www.youtube.com/live_stats?v=${id}`, { headers });
+      if (resp.ok) {
+        const text = (await resp.text()).trim();
+        const count = parseInt(text, 10);
+        if (Number.isFinite(count) && count >= 0) return count;
+      }
+    } catch { /* fall through */ }
+
+    // Fallback: parse concurrentViewers from the watch page's embedded JSON.
+    // Reliable as long as the stream is live and the page renders normally.
+    try {
+      const resp = await net.fetch(`https://www.youtube.com/watch?v=${id}`, { headers });
       if (!resp.ok) return null;
-      const text = (await resp.text()).trim();
-      const count = parseInt(text, 10);
-      return Number.isFinite(count) && count >= 0 ? count : null;
-    } catch {
-      return null;
-    }
+      const html = await resp.text();
+      const match = html.match(/"concurrentViewers"\s*:\s*"(\d+)"/);
+      if (match) {
+        const count = parseInt(match[1], 10);
+        if (Number.isFinite(count) && count >= 0) return count;
+      }
+      // Some live broadcasts expose viewCount instead — usually the watching
+      // count for ongoing live streams.
+      const viewCountMatch = html.match(/"videoDetails"\s*:\s*\{[^}]*?"viewCount"\s*:\s*"(\d+)"[^}]*?"isLiveContent"\s*:\s*true/);
+      if (viewCountMatch) {
+        const count = parseInt(viewCountMatch[1], 10);
+        if (Number.isFinite(count) && count >= 0) return count;
+      }
+    } catch { /* fall through */ }
+
+    return null;
   };
 
   /**
