@@ -2364,12 +2364,26 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       await provider.connect(account);
       pushAccountStatus({ accountId: account.id, status: 'connected' });
     } catch (cause) {
+      // Some platform libraries throw Errors with empty/undefined messages,
+      // which surface in the renderer as a useless "Error" string. Build a
+      // descriptive fallback that includes the provider, account, and the
+      // most informative field we can find on the cause.
+      const message = describeConnectFailure(cause, account.providerId, account.channel);
+      logService.error('accounts', 'connect failed', {
+        providerId: account.providerId,
+        accountId: account.id,
+        channel: account.channel,
+        errorName: cause instanceof Error ? cause.name : null,
+        errorMessage: cause instanceof Error ? cause.message : String(cause),
+        errorStack: cause instanceof Error ? cause.stack : null,
+        cause: cause && typeof cause === 'object' ? JSON.stringify(cause, Object.getOwnPropertyNames(cause as object)) : null,
+      });
       pushAccountStatus({
         accountId: account.id,
         status: 'error',
-        detail: cause instanceof Error ? cause.message : String(cause),
+        detail: message,
       });
-      throw cause;
+      throw new Error(message);
     }
   });
 
@@ -2622,6 +2636,25 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     if (twitchStatus === 'connected') connected.push('twitch');
     if (getConnectedYoutubePlatforms().length > 0) connected.push('youtube');
     return connected;
+  }
+
+  function describeConnectFailure(cause: unknown, providerId: string, channel: string): string {
+    const fallback = `${providerId}: connect failed for "${channel}"`;
+    if (!cause) return fallback;
+    if (cause instanceof Error) {
+      const msg = cause.message?.trim();
+      if (msg) return `${providerId}: ${msg}`;
+      return `${providerId}: ${cause.name || 'Error'} (no message; check Event Log for details)`;
+    }
+    if (typeof cause === 'string' && cause.trim()) return `${providerId}: ${cause}`;
+    if (typeof cause === 'object') {
+      const obj = cause as Record<string, unknown>;
+      const candidate = (typeof obj.message === 'string' && obj.message)
+        || (typeof obj.error === 'string' && obj.error)
+        || (typeof obj.reason === 'string' && obj.reason);
+      if (candidate) return `${providerId}: ${candidate}`;
+    }
+    return fallback;
   }
 
   function resolveAnnouncementTargets(requestedTargets: PlatformId[]): PlatformId[] {
