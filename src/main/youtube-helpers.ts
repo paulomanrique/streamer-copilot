@@ -154,8 +154,8 @@ export function extractYtLiveVideoIds(html: string): LiveStreamInfo[] {
   return findLiveVideoIds(data);
 }
 
-/** Parses ytInitialPlayerResponse and returns live stream info if the page is a live stream. */
-export function extractYtLiveFromPlayerResponse(html: string): LiveStreamInfo | null {
+/** Locates and JSON-parses the ytInitialPlayerResponse blob from a watch page. */
+function parseYtInitialPlayerResponse(html: string): Record<string, unknown> | null {
   const marker = 'var ytInitialPlayerResponse = ';
   const start = html.indexOf(marker);
   if (start === -1) return null;
@@ -166,11 +166,17 @@ export function extractYtLiveFromPlayerResponse(html: string): LiveStreamInfo | 
     if (html[i] === '{') depth++;
     else if (html[i] === '}') { depth--; if (depth === 0) { end = i + 1; break; } }
   }
-  let data: unknown;
-  try { data = JSON.parse(html.slice(jsonStart, end)); } catch { return null; }
-  if (!data || typeof data !== 'object') return null;
-  const d = data as Record<string, unknown>;
-  const videoDetails = d.videoDetails as Record<string, unknown> | undefined;
+  try {
+    const parsed = JSON.parse(html.slice(jsonStart, end));
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null;
+  } catch { return null; }
+}
+
+/** Parses ytInitialPlayerResponse and returns live stream info if the page is a live stream. */
+export function extractYtLiveFromPlayerResponse(html: string): LiveStreamInfo | null {
+  const data = parseYtInitialPlayerResponse(html);
+  if (!data) return null;
+  const videoDetails = data.videoDetails as Record<string, unknown> | undefined;
   if (!videoDetails) return null;
   const isLive = videoDetails.isLive === true || videoDetails.isLiveContent === true;
   if (!isLive) return null;
@@ -178,6 +184,38 @@ export function extractYtLiveFromPlayerResponse(html: string): LiveStreamInfo | 
   if (!videoId) return null;
   const title = typeof videoDetails.title === 'string' ? videoDetails.title : '';
   return { videoId, title, viewCount: null, subscriberCount: null, channelHandle: '' };
+}
+
+/**
+ * Extracts the current concurrent-viewer count from a YouTube watch page HTML.
+ * Used as a fallback when the lightweight /live_stats endpoint is unavailable.
+ *
+ * Tries (in order):
+ *   1. ytInitialPlayerResponse.videoDetails.viewCount when isLive/isLiveContent
+ *      is true — string of digits, the most reliable source while live.
+ *   2. ytInitialData "viewCountText" with phrasing like "X watching now" or
+ *      "X assistindo" — a UI string, parsed by stripping non-digits.
+ */
+export function extractYtConcurrentViewers(html: string): number | null {
+  const player = parseYtInitialPlayerResponse(html);
+  if (player) {
+    const videoDetails = player.videoDetails as Record<string, unknown> | undefined;
+    const isLive = videoDetails?.isLive === true || videoDetails?.isLiveContent === true;
+    if (isLive && typeof videoDetails?.viewCount === 'string') {
+      const count = parseInt(videoDetails.viewCount, 10);
+      if (Number.isFinite(count) && count >= 0) return count;
+    }
+  }
+
+  // ytInitialData has the live-only "X watching now" badge string. Match the
+  // phrasing variants (en/pt) and strip thousand separators / non-digits.
+  const watchingMatch = html.match(/"simpleText"\s*:\s*"([\d.,\s]+)\s*(?:watching now|watching|assistindo agora|assistindo)"/i);
+  if (watchingMatch) {
+    const count = parseInt(watchingMatch[1].replace(/[^0-9]/g, ''), 10);
+    if (Number.isFinite(count) && count >= 0) return count;
+  }
+
+  return null;
 }
 
 
