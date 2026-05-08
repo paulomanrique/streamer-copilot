@@ -54,6 +54,7 @@ import { TwitchModerationApi, TWITCH_MODERATION_CAPABILITIES } from '../platform
 import { YouTubeSettingsStore } from '../platforms/youtube/settings-store.js';
 import { YouTubeChatAdapter } from '../platforms/youtube/scraper-adapter.js';
 import { YTLiveClient } from './youtube-client.js';
+import { MainPlatformRegistry, type MainPlatformProvider } from './platforms/registry.js';
 import { getAllAudioBase64 } from '@sefinek/google-tts-api';
 import { APP_NAME } from '../shared/constants.js';
 import { IPC_CHANNELS } from '../shared/ipc.js';
@@ -116,7 +117,7 @@ import {
   youtubeConnectSchema,
   youtubeSettingsSchema,
 } from '../shared/schemas.js';
-import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, MusicRequestSettings, PlatformAccount, PlatformId, Raffle, SoundSettings, StreamEvent, StreamEventType, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
+import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, MusicRequestSettings, PlatformId, Raffle, SoundSettings, StreamEvent, StreamEventType, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
 
 const TWITCH_CLIENT_ID = 'vtwg8tzuv1nlip4qh9n6sxx2p76g0s';
 const TWITCH_REDIRECT_PORT = 32999;
@@ -187,6 +188,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const getActiveProfileDirectory = () => activeProfileDirectory;
 
   const accountRepository = new AccountRepository(getActiveProfileDirectory);
+  const mainPlatforms = new MainPlatformRegistry();
   const raffleRepository = new RaffleRepository(getActiveProfileDirectory);
   const soundRepository = new SoundCommandRepository(getActiveProfileDirectory);
   const textRepository = new TextCommandRepository(getActiveProfileDirectory);
@@ -696,6 +698,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     return session;
   };
 
+  const kickStatusListeners = new Set<() => void>();
   const setKickStatus = (status: KickConnectionStatus, slug?: string | null) => {
     kickStatus = status;
     if (slug !== undefined) kickSlug = slug;
@@ -703,6 +706,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     if (status !== 'connected') {
       options.stateHub.pushKickLiveStats(null);
     }
+    for (const listener of kickStatusListeners) listener();
   };
 
   const fetchKickClientAccessToken = async (credentials: { clientId: string; clientSecret: string }): Promise<string | null> => {
@@ -877,10 +881,12 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     options.stateHub.pushKickLiveStats(null);
   };
 
+  const tiktokStatusListeners = new Set<() => void>();
   const setTiktokStatus = (status: TikTokConnectionStatus, username?: string | null) => {
     tiktokStatus = status;
     if (username !== undefined) tiktokUsername = username;
     options.stateHub.pushTiktokStatus(status, tiktokUsername);
+    for (const listener of tiktokStatusListeners) listener();
   };
 
   const checkYouTubeLive = async (handle: string): Promise<LiveStreamInfo[] | null> => {
@@ -1026,6 +1032,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     return entries.map((e) => badgeCache.get(e)).filter((url): url is string => Boolean(url));
   };
 
+  const twitchStatusListeners = new Set<() => void>();
   const setTwitchStatus = (status: TwitchConnectionStatus, channel?: string | null) => {
     twitchStatus = status;
     if (channel !== undefined) twitchChannel = channel;
@@ -1041,6 +1048,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         }
       })();
     } else stopTwitchStatsPoll();
+    for (const listener of twitchStatusListeners) listener();
   };
 
   const overlayServer = new OverlayServer({
@@ -2004,6 +2012,190 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     win.webContents.send(IPC_CHANNELS.accountsStatus, status);
   }
 
+  /** Re-broadcast every account of `providerId` after an internal status change. */
+  function broadcastAccountsForProvider(providerId: string): void {
+    void (async () => {
+      const provider = mainPlatforms.get(providerId);
+      if (!provider) return;
+      const accounts = await accountRepository.list();
+      for (const account of accounts) {
+        if (account.providerId !== providerId) continue;
+        const status = await provider.getStatus(account);
+        pushAccountStatus({ accountId: account.id, status });
+      }
+    })().catch(() => undefined);
+  }
+
+  // ── Provider registry: each entry below knows how to bring its own
+  //    accounts up/down and report status. The accounts:* IPC handlers and
+  //    the on-status-change subscription below are platform-agnostic and
+  //    dispatch through this registry; adding a new provider means adding
+  //    one entry here and a corresponding renderer-side AuthStep.
+
+  const twitchProvider: MainPlatformProvider = {
+    providerId: 'twitch',
+    getStatus: () =>
+      twitchStatus === 'connected' ? 'connected'
+      : twitchStatus === 'connecting' ? 'connecting'
+      : twitchStatus === 'error' ? 'error'
+      : 'disconnected',
+    async connect(account) {
+      const creds = {
+        channel: account.channel,
+        username: String(account.providerData.username ?? ''),
+        oauthToken: String(account.providerData.oauthToken ?? ''),
+      };
+      if (!creds.username || !creds.oauthToken) {
+        throw new Error('Twitch account missing username or oauthToken in providerData');
+      }
+      const store = await getTwitchCredentialsStore();
+      if (store) await store.save(creds);
+      await loadTwitchBadges(creds.channel, creds.oauthToken.replace(/^oauth:/, ''));
+      chatLogService.openSession('twitch', creds.channel);
+      suggestionService.clearSessionEntries();
+      selfSenderName.twitch = creds.username.toLowerCase();
+      const adapter = createTwitchChatAdapter({
+        channels: [creds.channel],
+        username: creds.username,
+        password: creds.oauthToken,
+        onStatusChange: setTwitchStatus,
+        resolveBadgeUrls,
+      });
+      await chatService.replaceAdapter(adapter);
+      void wireTwitchModeration(adapter, creds.channel, creds.oauthToken);
+    },
+    async disconnect() {
+      delete selfSenderName.twitch;
+      chatLogService.closeSession('twitch');
+      await chatService.removeAdapter('twitch');
+      setTwitchStatus('disconnected', null);
+    },
+    async purgeStores() {
+      const store = await getTwitchCredentialsStore();
+      if (store) await store.clear();
+    },
+    onStatusChange(listener) {
+      twitchStatusListeners.add(listener);
+      return () => twitchStatusListeners.delete(listener);
+    },
+  };
+
+  const kickProvider: MainPlatformProvider = {
+    providerId: 'kick',
+    getStatus: () =>
+      kickStatus === 'connected' ? 'connected'
+      : kickStatus === 'connecting' ? 'connecting'
+      : kickStatus === 'error' ? 'error'
+      : 'disconnected',
+    async connect(account) {
+      const channelSlug = normalizeKickChannelInput(account.channel) ?? account.channel;
+      if (!channelSlug) throw new Error('Kick account is missing a channel slug');
+      const clientId = typeof account.providerData.clientId === 'string' ? account.providerData.clientId : undefined;
+      const clientSecret = typeof account.providerData.clientSecret === 'string' ? account.providerData.clientSecret : undefined;
+      await connectKickWithCredentials(channelSlug, { clientId, clientSecret });
+    },
+    async disconnect() {
+      chatLogService.closeSession('kick');
+      await chatService.removeAdapter('kick');
+      stopKickStatsPoll();
+      setKickStatus('disconnected', null);
+    },
+    async purgeStores() {
+      const settingsStore = await getKickSettingsStore();
+      if (settingsStore) await settingsStore.clear();
+      const tokenStore = await getKickTokenStore();
+      if (tokenStore) await tokenStore.clear();
+    },
+    onStatusChange(listener) {
+      kickStatusListeners.add(listener);
+      return () => kickStatusListeners.delete(listener);
+    },
+  };
+
+  const tiktokProvider: MainPlatformProvider = {
+    providerId: 'tiktok',
+    getStatus: () =>
+      tiktokStatus === 'connected' ? 'connected'
+      : tiktokStatus === 'connecting' ? 'connecting'
+      : tiktokStatus === 'captcha' ? 'captcha'
+      : tiktokStatus === 'error' ? 'error'
+      : 'disconnected',
+    async connect(account) {
+      setTiktokStatus('connecting', account.channel);
+      chatLogService.openSession('tiktok', account.channel);
+      suggestionService.clearSessionEntries();
+      selfSenderName.tiktok = account.channel.toLowerCase();
+      await chatService.replaceAdapter(createTikTokChatAdapter({
+        username: account.channel,
+        onError: (cause) => logTikTokConnectionError('Connection error', account.channel, cause),
+        onStatusChange: (status) => setTiktokStatus(status, account.channel),
+        onLiveStats: (stats) => options.stateHub.pushTiktokLiveStats(stats),
+        onCaptchaDetected: () => logService.warn('tiktok', 'CAPTCHA detected'),
+      }));
+      const store = await getTiktokSettingsStore();
+      if (store) await store.save({ username: account.channel, autoConnect: account.autoConnect });
+    },
+    async disconnect() {
+      chatLogService.closeSession('tiktok');
+      await chatService.removeAdapter('tiktok');
+    },
+    async purgeStores() {
+      const store = await getTiktokSettingsStore();
+      if (store) await store.clear();
+    },
+    onStatusChange(listener) {
+      tiktokStatusListeners.add(listener);
+      return () => tiktokStatusListeners.delete(listener);
+    },
+  };
+
+  const youtubeStatusListeners = new Set<() => void>();
+  const youtubeProvider: MainPlatformProvider = {
+    providerId: 'youtube',
+    async getStatus(account) {
+      // A YouTube account is "connected" while its handle is enabled in the
+      // shared YouTubeSettings.channels list — the adapter will pick it up
+      // and spawn scrapers when the channel goes live. Per-video scraper
+      // presence would be too noisy (offline streamers would flicker).
+      const settings = await loadYoutubeSettings();
+      const entry = settings.channels.find((c) => c.handle === account.channel);
+      return entry?.enabled ? 'connected' : 'disconnected';
+    },
+    async connect(account) {
+      const handle = account.channel;
+      if (!handle) throw new Error('YouTube account is missing a channel handle');
+      const settings = await loadYoutubeSettings();
+      const channels = [...settings.channels];
+      const idx = channels.findIndex((c) => c.handle === handle);
+      if (idx >= 0) channels[idx] = { ...channels[idx], enabled: true };
+      else channels.push({ id: randomUUID(), handle, name: account.label || handle, enabled: true });
+      await saveYoutubeSettings({ ...settings, channels });
+      youtubeStatusListeners.forEach((l) => l());
+    },
+    async disconnect(account) {
+      const handle = account.channel;
+      const settings = await loadYoutubeSettings();
+      const channels = settings.channels.map((c) => c.handle === handle ? { ...c, enabled: false } : c);
+      await saveYoutubeSettings({ ...settings, channels });
+      youtubeStatusListeners.forEach((l) => l());
+    },
+    async purgeStores(account) {
+      const settings = await loadYoutubeSettings();
+      const channels = settings.channels.filter((c) => c.handle !== account.channel);
+      await saveYoutubeSettings({ ...settings, channels });
+      youtubeStatusListeners.forEach((l) => l());
+    },
+    onStatusChange(listener) {
+      youtubeStatusListeners.add(listener);
+      return () => youtubeStatusListeners.delete(listener);
+    },
+  };
+
+  for (const provider of [twitchProvider, kickProvider, tiktokProvider, youtubeProvider]) {
+    mainPlatforms.register(provider);
+    provider.onStatusChange(() => broadcastAccountsForProvider(provider.providerId));
+  }
+
   ipcMain.handle(IPC_CHANNELS.accountsList, async () => {
     return accountRepository.list();
   });
@@ -2022,23 +2214,22 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const input = accountIdInputSchema.parse(raw);
     const account = await accountRepository.get(input.id);
     if (account) {
-      try {
-        await disconnectAccountInternal(account);
-      } catch (cause) {
-        logService.warn('accounts', 'Disconnect during delete failed; proceeding with delete', {
-          accountId: account.id,
-          providerId: account.providerId,
-          error: cause instanceof Error ? cause.message : String(cause),
-        });
-      }
-      try {
-        await purgeAccountStores(account);
-      } catch (cause) {
-        logService.warn('accounts', 'Purging legacy stores failed during delete', {
-          accountId: account.id,
-          providerId: account.providerId,
-          error: cause instanceof Error ? cause.message : String(cause),
-        });
+      const provider = mainPlatforms.get(account.providerId);
+      if (provider) {
+        try { await provider.disconnect(account); }
+        catch (cause) {
+          logService.warn('accounts', 'Disconnect during delete failed; proceeding with delete', {
+            accountId: account.id, providerId: account.providerId,
+            error: cause instanceof Error ? cause.message : String(cause),
+          });
+        }
+        try { await provider.purgeStores(account); }
+        catch (cause) {
+          logService.warn('accounts', 'Purging legacy stores failed during delete', {
+            accountId: account.id, providerId: account.providerId,
+            error: cause instanceof Error ? cause.message : String(cause),
+          });
+        }
       }
     }
     await accountRepository.delete(input.id);
@@ -2048,81 +2239,11 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const input = accountIdInputSchema.parse(raw);
     const account = await accountRepository.get(input.id);
     if (!account) throw new Error(`Account "${input.id}" not found`);
+    const provider = mainPlatforms.get(account.providerId);
+    if (!provider) throw new Error(`Unknown providerId: ${account.providerId}`);
     pushAccountStatus({ accountId: account.id, status: 'connecting' });
     try {
-      // Temporary delegation to legacy connect handlers per provider until R5/R6
-      // wiring is fully migrated. Each provider knows how to translate its own
-      // providerData shape; future iterations route via createAdapterFor(account).
-      switch (account.providerId) {
-        case 'twitch': {
-          const creds = {
-            channel: account.channel,
-            username: String(account.providerData.username ?? ''),
-            oauthToken: String(account.providerData.oauthToken ?? ''),
-          };
-          if (!creds.username || !creds.oauthToken) throw new Error('Twitch account missing username or oauthToken in providerData');
-          const store = await getTwitchCredentialsStore();
-          if (store) await store.save(creds);
-          await loadTwitchBadges(creds.channel, creds.oauthToken.replace(/^oauth:/, ''));
-          chatLogService.openSession('twitch', creds.channel);
-          suggestionService.clearSessionEntries();
-          selfSenderName.twitch = creds.username.toLowerCase();
-          const adapter = createTwitchChatAdapter({
-            channels: [creds.channel],
-            username: creds.username,
-            password: creds.oauthToken,
-            onStatusChange: setTwitchStatus,
-            resolveBadgeUrls,
-          });
-          await chatService.replaceAdapter(adapter);
-          void wireTwitchModeration(adapter, creds.channel, creds.oauthToken);
-          break;
-        }
-        case 'tiktok': {
-          setTiktokStatus('connecting', account.channel);
-          chatLogService.openSession('tiktok', account.channel);
-          suggestionService.clearSessionEntries();
-          selfSenderName.tiktok = account.channel.toLowerCase();
-          await chatService.replaceAdapter(createTikTokChatAdapter({
-            username: account.channel,
-            onError: (cause) => logTikTokConnectionError('Connection error', account.channel, cause),
-            onStatusChange: (status) => setTiktokStatus(status, account.channel),
-            onLiveStats: (stats) => options.stateHub.pushTiktokLiveStats(stats),
-            onCaptchaDetected: () => logService.warn('tiktok', 'CAPTCHA detected'),
-          }));
-          const store = await getTiktokSettingsStore();
-          if (store) await store.save({ username: account.channel, autoConnect: account.autoConnect });
-          break;
-        }
-        case 'kick': {
-          const channelSlug = normalizeKickChannelInput(account.channel) ?? account.channel;
-          if (!channelSlug) throw new Error('Kick account is missing a channel slug');
-          const clientId = typeof account.providerData.clientId === 'string' ? account.providerData.clientId : undefined;
-          const clientSecret = typeof account.providerData.clientSecret === 'string' ? account.providerData.clientSecret : undefined;
-          await connectKickWithCredentials(channelSlug, { clientId, clientSecret });
-          break;
-        }
-        case 'youtube': {
-          // Toggle this handle's `enabled` flag in the YouTube settings, then
-          // re-sync the adapter. The adapter monitors all enabled channels and
-          // spawns scrapers for whichever are live; account connect/disconnect
-          // is just a flip on that list.
-          const handle = account.channel;
-          if (!handle) throw new Error('YouTube account is missing a channel handle');
-          const settings = await loadYoutubeSettings();
-          const channels = [...settings.channels];
-          const idx = channels.findIndex((c) => c.handle === handle);
-          if (idx >= 0) {
-            channels[idx] = { ...channels[idx], enabled: true };
-          } else {
-            channels.push({ id: randomUUID(), handle, name: account.label || handle, enabled: true });
-          }
-          await saveYoutubeSettings({ ...settings, channels });
-          break;
-        }
-        default:
-          throw new Error(`Unknown providerId: ${account.providerId}`);
-      }
+      await provider.connect(account);
       pushAccountStatus({ accountId: account.id, status: 'connected' });
     } catch (cause) {
       pushAccountStatus({
@@ -2134,80 +2255,12 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }
   });
 
-  /**
-   * Tears down whatever runtime state a connected account has — adapter, chat
-   * log session, status timers, self-sender memo. Used by accounts:disconnect
-   * and as a step inside accounts:delete. Idempotent: safe to call on an
-   * account that's already disconnected.
-   */
-  async function disconnectAccountInternal(account: PlatformAccount): Promise<void> {
-    switch (account.providerId) {
-      case 'twitch':
-        delete selfSenderName.twitch;
-        chatLogService.closeSession('twitch');
-        await chatService.removeAdapter('twitch');
-        setTwitchStatus('disconnected', null);
-        break;
-      case 'kick':
-        chatLogService.closeSession('kick');
-        await chatService.removeAdapter('kick');
-        stopKickStatsPoll();
-        setKickStatus('disconnected', null);
-        break;
-      case 'tiktok':
-        chatLogService.closeSession('tiktok');
-        await chatService.removeAdapter('tiktok');
-        break;
-      case 'youtube': {
-        const handle = account.channel;
-        const settings = await loadYoutubeSettings();
-        const channels = settings.channels.map((c) =>
-          c.handle === handle ? { ...c, enabled: false } : c,
-        );
-        await saveYoutubeSettings({ ...settings, channels });
-        break;
-      }
-    }
-  }
-
-  /**
-   * Removes the per-provider legacy storage tied to an account: saved OAuth
-   * tokens, settings JSON. Without this, deleting an account would leave the
-   * backfill on the next launch recreating it from these stores.
-   */
-  async function purgeAccountStores(account: PlatformAccount): Promise<void> {
-    switch (account.providerId) {
-      case 'twitch': {
-        const store = await getTwitchCredentialsStore();
-        if (store) await store.clear();
-        break;
-      }
-      case 'kick': {
-        const settingsStore = await getKickSettingsStore();
-        if (settingsStore) await settingsStore.clear();
-        const tokenStore = await getKickTokenStore();
-        if (tokenStore) await tokenStore.clear();
-        break;
-      }
-      case 'tiktok': {
-        const store = await getTiktokSettingsStore();
-        if (store) await store.clear();
-        break;
-      }
-      case 'youtube': {
-        const settings = await loadYoutubeSettings();
-        const channels = settings.channels.filter((c) => c.handle !== account.channel);
-        await saveYoutubeSettings({ ...settings, channels });
-        break;
-      }
-    }
-  }
-
   ipcMain.handle(IPC_CHANNELS.accountsDisconnect, async (_, raw) => {
     const input = accountIdInputSchema.parse(raw);
     const account = await accountRepository.get(input.id);
     if (!account) throw new Error(`Account "${input.id}" not found`);
-    await disconnectAccountInternal(account);
+    const provider = mainPlatforms.get(account.providerId);
+    if (provider) await provider.disconnect(account);
     pushAccountStatus({ accountId: account.id, status: 'disconnected' });
   });
 
@@ -2215,18 +2268,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const input = accountIdInputSchema.parse(raw);
     const account = await accountRepository.get(input.id);
     if (!account) return null;
-    let status: import('../shared/types.js').PlatformAccountConnectionStatus = 'disconnected';
-    switch (account.providerId) {
-      case 'twitch':
-        status = twitchStatus === 'connected' ? 'connected' : twitchStatus === 'connecting' ? 'connecting' : twitchStatus === 'error' ? 'error' : 'disconnected';
-        break;
-      case 'kick':
-        status = kickStatus === 'connected' ? 'connected' : kickStatus === 'connecting' ? 'connecting' : kickStatus === 'error' ? 'error' : 'disconnected';
-        break;
-      case 'tiktok':
-        status = tiktokStatus === 'connected' ? 'connected' : tiktokStatus === 'connecting' ? 'connecting' : tiktokStatus === 'captcha' ? 'captcha' : tiktokStatus === 'error' ? 'error' : 'disconnected';
-        break;
-    }
+    const provider = mainPlatforms.get(account.providerId);
+    const status = provider ? await provider.getStatus(account) : 'disconnected';
     return { accountId: account.id, status };
   });
 
