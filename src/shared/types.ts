@@ -551,11 +551,18 @@ export interface TwitchCredentials {
   oauthToken: string;
 }
 
+export type YouTubeDriver = 'scrape' | 'api';
+
 export interface YouTubeChannelConfig {
   id: string; // Internal ID
   handle: string; // @handle or channel ID
   name?: string;
   enabled: boolean;
+  driver?: YouTubeDriver; // defaults to 'scrape'
+  apiAuth?: {
+    channelId: string; // Resolved YouTube channel ID for the OAuth grant
+    hasRefreshToken: boolean; // Renderer hint; the actual token is encrypted on disk
+  };
 }
 
 export interface YouTubeChatChannel {
@@ -565,11 +572,21 @@ export interface YouTubeChatChannel {
   isSelected: boolean;
 }
 
+export interface YouTubeApiCredentialsStatus {
+  hasClientId: boolean;
+  hasClientSecret: boolean;
+  clientId?: string; // Surfaced for the UI to display; secret never is
+}
+
 export interface YouTubeSettings {
   channels: YouTubeChannelConfig[];
   autoConnect: boolean;
   chatChannelPageId?: string;
   chatChannelName?: string;
+  apiCredentials?: {
+    clientId: string;
+    clientSecretEncrypted: string; // base64-encoded ciphertext from electron.safeStorage
+  };
 }
 
 export type TikTokConnectionStatus = 'disconnected' | 'connecting' | 'captcha' | 'connected' | 'error';
