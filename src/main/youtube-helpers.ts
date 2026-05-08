@@ -190,25 +190,45 @@ export function extractYtLiveFromPlayerResponse(html: string): LiveStreamInfo | 
  * Extracts the current concurrent-viewer count from a YouTube watch page HTML.
  * Used as a fallback when the lightweight /live_stats endpoint is unavailable.
  *
+ * IMPORTANT: ytInitialPlayerResponse.videoDetails.viewCount is the cumulative
+ * lifetime view count of the live broadcast, NOT concurrent viewers — a long
+ * live can rack up many more lifetime views than current watchers. Concurrent
+ * viewers live in the `videoPrimaryInfoRenderer` UI block, which is what the
+ * watch page renders as "X watching now".
+ *
  * Tries (in order):
- *   1. ytInitialPlayerResponse.videoDetails.viewCount when isLive/isLiveContent
- *      is true — string of digits, the most reliable source while live.
- *   2. ytInitialData "viewCountText" with phrasing like "X watching now" or
- *      "X assistindo" — a UI string, parsed by stripping non-digits.
+ *   1. ytInitialData → videoPrimaryInfoRenderer.viewCount.videoViewCountRenderer
+ *      with isLive: true, reading viewCount.runs/simpleText (the literal
+ *      number rendered next to "watching now"). Stops here if found.
+ *   2. Regex match for the localized "X watching now" / "X assistindo agora"
+ *      badge string on the raw HTML (covers en/pt). Strips non-digits.
  */
 export function extractYtConcurrentViewers(html: string): number | null {
-  const player = parseYtInitialPlayerResponse(html);
-  if (player) {
-    const videoDetails = player.videoDetails as Record<string, unknown> | undefined;
-    const isLive = videoDetails?.isLive === true || videoDetails?.isLiveContent === true;
-    if (isLive && typeof videoDetails?.viewCount === 'string') {
-      const count = parseInt(videoDetails.viewCount, 10);
-      if (Number.isFinite(count) && count >= 0) return count;
+  const initial = parseYtInitialData(html);
+  if (initial) {
+    const contents = (((initial.contents as Record<string, unknown> | undefined)
+      ?.twoColumnWatchNextResults as Record<string, unknown> | undefined)
+      ?.results as Record<string, unknown> | undefined)
+      ?.results as Record<string, unknown> | undefined;
+    const items = contents?.contents as unknown[] | undefined;
+    if (Array.isArray(items)) {
+      for (const item of items) {
+        if (!item || typeof item !== 'object') continue;
+        const primary = (item as Record<string, unknown>).videoPrimaryInfoRenderer as Record<string, unknown> | undefined;
+        if (!primary) continue;
+        const vcr = (primary.viewCount as Record<string, unknown> | undefined)?.videoViewCountRenderer as Record<string, unknown> | undefined;
+        if (!vcr || vcr.isLive !== true) continue;
+        const vcText = vcr.viewCount as Record<string, unknown> | undefined;
+        const literal = readYtText(vcText);
+        if (literal) {
+          const count = parseInt(literal.replace(/[^0-9]/g, ''), 10);
+          if (Number.isFinite(count) && count >= 0) return count;
+        }
+      }
     }
   }
 
-  // ytInitialData has the live-only "X watching now" badge string. Match the
-  // phrasing variants (en/pt) and strip thousand separators / non-digits.
+  // Fallback: localized badge string anywhere in the HTML.
   const watchingMatch = html.match(/"simpleText"\s*:\s*"([\d.,\s]+)\s*(?:watching now|watching|assistindo agora|assistindo)"/i);
   if (watchingMatch) {
     const count = parseInt(watchingMatch[1].replace(/[^0-9]/g, ''), 10);
@@ -216,6 +236,37 @@ export function extractYtConcurrentViewers(html: string): number | null {
   }
 
   return null;
+}
+
+/** Locates and JSON-parses the ytInitialData blob from a watch page. */
+function parseYtInitialData(html: string): Record<string, unknown> | null {
+  const marker = 'var ytInitialData = ';
+  const start = html.indexOf(marker);
+  if (start === -1) return null;
+  const jsonStart = start + marker.length;
+  let depth = 0;
+  let end = jsonStart;
+  for (let i = jsonStart; i < html.length; i++) {
+    if (html[i] === '{') depth++;
+    else if (html[i] === '}') { depth--; if (depth === 0) { end = i + 1; break; } }
+  }
+  try {
+    const parsed = JSON.parse(html.slice(jsonStart, end));
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null;
+  } catch { return null; }
+}
+
+/** Reads a YouTube text node (`{simpleText}` or `{runs:[{text}]}`) into a flat string. */
+function readYtText(node: Record<string, unknown> | undefined): string {
+  if (!node) return '';
+  if (typeof node.simpleText === 'string') return node.simpleText;
+  const runs = node.runs as unknown[] | undefined;
+  if (Array.isArray(runs)) {
+    return runs
+      .map((r) => (r && typeof r === 'object' ? String((r as Record<string, unknown>).text ?? '') : ''))
+      .join('');
+  }
+  return '';
 }
 
 
