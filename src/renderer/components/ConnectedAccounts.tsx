@@ -13,6 +13,7 @@ import '../platforms/tiktok-provider.js';
 const STATUS_STYLE: Record<PlatformAccountConnectionStatus, { dot: string; text: string; label: string }> = {
   connected: { dot: 'bg-emerald-400', text: 'text-emerald-300', label: 'Connected' },
   connecting: { dot: 'bg-amber-400 animate-pulse', text: 'text-amber-300', label: 'Connecting…' },
+  watching: { dot: 'bg-sky-400 animate-pulse', text: 'text-sky-300', label: 'Watching for live' },
   captcha: { dot: 'bg-amber-400 animate-pulse', text: 'text-amber-300', label: 'CAPTCHA needed' },
   disconnected: { dot: 'bg-gray-500', text: 'text-gray-400', label: 'Disconnected' },
   error: { dot: 'bg-rose-400', text: 'text-rose-300', label: 'Error' },
@@ -152,7 +153,7 @@ export function ConnectedAccounts() {
                         Login
                       </button>
                     ) : null}
-                    {status === 'connected' || status === 'connecting' ? (
+                    {status === 'connected' || status === 'connecting' || status === 'watching' ? (
                       <button
                         type="button"
                         disabled={busyId === account.id}

@@ -2240,6 +2240,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const TIKTOK_RETRY_MS = 60_000;
   let tiktokRetryTimer: ReturnType<typeof setTimeout> | null = null;
   let tiktokWatchedUsername: string | null = null;
+  let tiktokIsWatching = false;
 
   function clearTiktokRetry(): void {
     if (tiktokRetryTimer) {
@@ -2253,7 +2254,12 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       await chatService.replaceAdapter(createTikTokChatAdapter({
         username,
         onError: (cause) => logTikTokConnectionError('Connection error', username, cause),
-        onStatusChange: (status) => setTiktokStatus(status, username),
+        onStatusChange: (status) => {
+          // Once the adapter is actually online we exit "watching" mode.
+          if (status === 'connected') tiktokIsWatching = false;
+          setTiktokStatus(status, username);
+          broadcastAccountsForProvider('tiktok');
+        },
         onLiveStats: (stats) => options.stateHub.pushTiktokLiveStats(stats),
         onCaptchaDetected: () => logService.warn('tiktok', 'CAPTCHA detected'),
       }));
@@ -2283,14 +2289,17 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   const tiktokProvider: MainPlatformProvider = {
     providerId: 'tiktok',
-    getStatus: () =>
-      tiktokStatus === 'connected' ? 'connected'
-      : tiktokStatus === 'connecting' ? 'connecting'
-      : tiktokStatus === 'captcha' ? 'captcha'
-      : tiktokStatus === 'error' ? 'error'
-      : 'disconnected',
+    getStatus: () => {
+      if (tiktokStatus === 'connected') return 'connected';
+      if (tiktokIsWatching) return 'watching';
+      if (tiktokStatus === 'connecting') return 'connecting';
+      if (tiktokStatus === 'captcha') return 'captcha';
+      if (tiktokStatus === 'error') return 'error';
+      return 'disconnected';
+    },
     async connect(account) {
       tiktokWatchedUsername = account.channel;
+      tiktokIsWatching = false;
       clearTiktokRetry();
       setTiktokStatus('connecting', account.channel);
       chatLogService.openSession('tiktok', account.channel);
@@ -2301,9 +2310,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       if (result.ok) return;
 
       // First attempt failed — most commonly because the user isn't currently
-      // live. Keep status as "connecting" (we're watching), log the reason,
-      // and retry in the background.
-      setTiktokStatus('connecting', account.channel);
+      // live. Switch to "watching" so the UI can distinguish it from an
+      // active in-progress connect, log the reason, and retry in background.
+      tiktokIsWatching = true;
+      broadcastAccountsForProvider('tiktok');
       logService.info('tiktok', 'User appears offline — will retry until they go live', {
         username: account.channel,
         retryMs: TIKTOK_RETRY_MS,
@@ -2313,12 +2323,14 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     },
     async disconnect() {
       tiktokWatchedUsername = null;
+      tiktokIsWatching = false;
       clearTiktokRetry();
       chatLogService.closeSession('tiktok');
       await chatService.removeAdapter('tiktok');
     },
     async purgeStores() {
       tiktokWatchedUsername = null;
+      tiktokIsWatching = false;
       clearTiktokRetry();
       const store = await getTiktokSettingsStore();
       if (store) await store.clear();
