@@ -998,8 +998,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const refreshYoutubeAdapter = async (): Promise<void> => {
     if (!youtubeAdapter) return;
     const settings = await loadYoutubeSettings();
-    const handles = settings.channels.filter((c) => c.enabled).map((c) => c.handle);
-    youtubeAdapter.setMonitoredChannels(handles, { autoMonitor: settings.autoConnect });
+    const channels = settings.channels.filter((c) => c.enabled);
+    youtubeAdapter.setMonitoredChannels(channels, { autoMonitor: settings.autoConnect });
   };
 
   const pollTwitchStats = async (channel: string, accessToken: string): Promise<void> => {
@@ -1925,7 +1925,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       selfSenderName['youtube-v'] = settings.chatChannelName.toLowerCase();
     }
     youtubeAdapter.setMonitoredChannels(
-      settings.channels.filter((c) => c.enabled).map((c) => c.handle),
+      settings.channels.filter((c) => c.enabled),
       { autoMonitor: settings.autoConnect },
     );
     await chatService.replaceAdapter(youtubeAdapter);
