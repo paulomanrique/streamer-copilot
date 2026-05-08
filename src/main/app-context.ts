@@ -116,7 +116,7 @@ import {
   youtubeConnectSchema,
   youtubeSettingsSchema,
 } from '../shared/schemas.js';
-import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, MusicRequestSettings, PlatformId, Raffle, SoundSettings, StreamEvent, StreamEventType, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
+import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, MusicRequestSettings, PlatformAccount, PlatformId, Raffle, SoundSettings, StreamEvent, StreamEventType, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
 
 const TWITCH_CLIENT_ID = 'vtwg8tzuv1nlip4qh9n6sxx2p76g0s';
 const TWITCH_REDIRECT_PORT = 32999;
@@ -2020,6 +2020,27 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   ipcMain.handle(IPC_CHANNELS.accountsDelete, async (_, raw) => {
     const input = accountIdInputSchema.parse(raw);
+    const account = await accountRepository.get(input.id);
+    if (account) {
+      try {
+        await disconnectAccountInternal(account);
+      } catch (cause) {
+        logService.warn('accounts', 'Disconnect during delete failed; proceeding with delete', {
+          accountId: account.id,
+          providerId: account.providerId,
+          error: cause instanceof Error ? cause.message : String(cause),
+        });
+      }
+      try {
+        await purgeAccountStores(account);
+      } catch (cause) {
+        logService.warn('accounts', 'Purging legacy stores failed during delete', {
+          accountId: account.id,
+          providerId: account.providerId,
+          error: cause instanceof Error ? cause.message : String(cause),
+        });
+      }
+    }
     await accountRepository.delete(input.id);
   });
 
@@ -2113,10 +2134,13 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }
   });
 
-  ipcMain.handle(IPC_CHANNELS.accountsDisconnect, async (_, raw) => {
-    const input = accountIdInputSchema.parse(raw);
-    const account = await accountRepository.get(input.id);
-    if (!account) throw new Error(`Account "${input.id}" not found`);
+  /**
+   * Tears down whatever runtime state a connected account has — adapter, chat
+   * log session, status timers, self-sender memo. Used by accounts:disconnect
+   * and as a step inside accounts:delete. Idempotent: safe to call on an
+   * account that's already disconnected.
+   */
+  async function disconnectAccountInternal(account: PlatformAccount): Promise<void> {
     switch (account.providerId) {
       case 'twitch':
         delete selfSenderName.twitch;
@@ -2144,6 +2168,46 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         break;
       }
     }
+  }
+
+  /**
+   * Removes the per-provider legacy storage tied to an account: saved OAuth
+   * tokens, settings JSON. Without this, deleting an account would leave the
+   * backfill on the next launch recreating it from these stores.
+   */
+  async function purgeAccountStores(account: PlatformAccount): Promise<void> {
+    switch (account.providerId) {
+      case 'twitch': {
+        const store = await getTwitchCredentialsStore();
+        if (store) await store.clear();
+        break;
+      }
+      case 'kick': {
+        const settingsStore = await getKickSettingsStore();
+        if (settingsStore) await settingsStore.clear();
+        const tokenStore = await getKickTokenStore();
+        if (tokenStore) await tokenStore.clear();
+        break;
+      }
+      case 'tiktok': {
+        const store = await getTiktokSettingsStore();
+        if (store) await store.clear();
+        break;
+      }
+      case 'youtube': {
+        const settings = await loadYoutubeSettings();
+        const channels = settings.channels.filter((c) => c.handle !== account.channel);
+        await saveYoutubeSettings({ ...settings, channels });
+        break;
+      }
+    }
+  }
+
+  ipcMain.handle(IPC_CHANNELS.accountsDisconnect, async (_, raw) => {
+    const input = accountIdInputSchema.parse(raw);
+    const account = await accountRepository.get(input.id);
+    if (!account) throw new Error(`Account "${input.id}" not found`);
+    await disconnectAccountInternal(account);
     pushAccountStatus({ accountId: account.id, status: 'disconnected' });
   });
 

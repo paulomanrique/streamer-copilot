@@ -68,7 +68,8 @@ export function ConnectedAccounts() {
     if (!window.confirm('Remove this account? You can re-add it later.')) return;
     setBusyId(id); setError(null);
     try {
-      await window.copilot.accountsDisconnect({ id }).catch(() => undefined);
+      // Server-side accountsDelete handles disconnect + legacy-store cleanup
+      // atomically; no need to chain a separate disconnect call here.
       await window.copilot.accountsDelete({ id });
       await refresh();
     } catch (cause) {
