@@ -317,6 +317,13 @@ export const youtubeChannelConfigSchema = z.object({
   handle: z.string().min(1),
   name: z.string().optional(),
   enabled: z.boolean(),
+  driver: z.enum(['scrape', 'api']).optional(),
+  apiAuth: z
+    .object({
+      channelId: z.string().min(1),
+      hasRefreshToken: z.boolean(),
+    })
+    .optional(),
 });
 
 export const youtubeSettingsSchema = z.object({
@@ -324,6 +331,12 @@ export const youtubeSettingsSchema = z.object({
   autoConnect: z.boolean(),
   chatChannelPageId: z.string().optional(),
   chatChannelName: z.string().optional(),
+  apiCredentials: z
+    .object({
+      clientId: z.string().min(1),
+      clientSecretEncrypted: z.string().min(1),
+    })
+    .optional(),
 });
 
 export const tiktokConnectSchema = z.object({
