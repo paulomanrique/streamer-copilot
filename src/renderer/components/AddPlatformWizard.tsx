@@ -119,6 +119,7 @@ export function AddPlatformWizard({ open, onClose, onCreated }: AddPlatformWizar
               updateDraft={(patch) => setDraft((prev) => ({ ...prev, ...patch }))}
               channel={channel}
               setChannel={setChannel}
+              setLabel={setLabel}
               setError={setError}
             />
           )}

@@ -11,6 +11,11 @@ export interface AuthStepProps {
   setChannel: (channel: string) => void;
   /** Current channel value. */
   channel: string;
+  /** Optional override for the account label. The wizard's `defaultLabel`
+   *  fallback runs only when the AuthStep doesn't provide one, so OAuth flows
+   *  that already know the channel title (e.g. YouTube API) can pass it
+   *  through here instead of synthesizing one from the channel id. */
+  setLabel?: (label: string) => void;
   /** Surfaces an error to the wizard footer. */
   setError: (message: string | null) => void;
 }
