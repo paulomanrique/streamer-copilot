@@ -20,6 +20,7 @@ export function AddPlatformWizard({ open, onClose, onCreated }: AddPlatformWizar
   const [label, setLabel] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [pickerSelectedId, setPickerSelectedId] = useState<string>(providers[0]?.id ?? '');
 
   if (!open) return null;
 
@@ -31,6 +32,7 @@ export function AddPlatformWizard({ open, onClose, onCreated }: AddPlatformWizar
     setLabel('');
     setError(null);
     setBusy(false);
+    setPickerSelectedId(providers[0]?.id ?? '');
   }
 
   function close() {
@@ -78,6 +80,8 @@ export function AddPlatformWizard({ open, onClose, onCreated }: AddPlatformWizar
     }
   }
 
+  const pickerSelected = providers.find((p) => p.id === pickerSelectedId);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={close}>
       <div
@@ -98,18 +102,22 @@ export function AddPlatformWizard({ open, onClose, onCreated }: AddPlatformWizar
 
         <div className="px-5 py-4">
           {step === 'pick-provider' && (
-            <div className="grid grid-cols-2 gap-3">
-              {providers.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => pickProvider(p)}
-                  className={['p-4 rounded-lg border-2 text-left bg-gray-800/50 hover:bg-gray-800 border-l-4', p.accentClass].join(' ')}
-                >
-                  <span className="block text-sm font-semibold text-gray-100">{p.displayName}</span>
-                  <span className="block text-xs text-gray-500 mt-1">{p.supportsMultipleAccounts ? 'Multiple accounts supported' : 'Single account'}</span>
-                </button>
-              ))}
+            <div className="space-y-3">
+              <label className="block text-xs uppercase text-gray-500">Network</label>
+              <select
+                value={pickerSelectedId}
+                onChange={(e) => setPickerSelectedId(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-100"
+              >
+                {providers.map((p) => (
+                  <option key={p.id} value={p.id}>{p.displayName}</option>
+                ))}
+              </select>
+              {pickerSelected ? (
+                <p className="text-xs text-gray-500">
+                  {pickerSelected.supportsMultipleAccounts ? 'Multiple accounts supported' : 'Single account'}
+                </p>
+              ) : null}
             </div>
           )}
 
@@ -161,6 +169,16 @@ export function AddPlatformWizard({ open, onClose, onCreated }: AddPlatformWizar
             {step === 'pick-provider' ? 'Cancel' : 'Back'}
           </button>
           <div className="flex gap-2">
+            {step === 'pick-provider' && (
+              <button
+                type="button"
+                disabled={!pickerSelected}
+                onClick={() => pickerSelected && pickProvider(pickerSelected)}
+                className="px-4 py-2 rounded bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-sm text-white"
+              >
+                Continue
+              </button>
+            )}
             {step === 'auth' && (
               <button type="button" onClick={next} className="px-4 py-2 rounded bg-violet-600 hover:bg-violet-500 text-sm text-white">Next</button>
             )}
