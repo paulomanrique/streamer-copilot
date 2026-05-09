@@ -56,6 +56,8 @@ import { createTwitchChatAdapter, type TwitchChatAdapter } from '../platforms/tw
 import { TwitchModerationApi, TWITCH_MODERATION_CAPABILITIES } from '../platforms/twitch/moderation.js';
 import { YouTubeSettingsStore } from '../platforms/youtube/settings-store.js';
 import { YouTubeChatAdapter } from '../platforms/youtube/scraper-adapter.js';
+import { YouTubeApiChatAdapter, type YouTubeApiAccount } from '../platforms/youtube/api-adapter.js';
+import { buildYouTubeOAuth2Client, decryptSecret, encryptSecret, startYouTubeOAuthFlow } from '../platforms/youtube/api-auth.js';
 import { YTLiveClient } from './youtube-client.js';
 import { MainPlatformRegistry, type MainPlatformProvider } from './platforms/registry.js';
 import { getAllAudioBase64 } from '@sefinek/google-tts-api';
@@ -123,6 +125,7 @@ import {
   welcomeSettingsSchema,
   youtubeConnectSchema,
   youtubeSettingsSchema,
+  youtubeApiStartOAuthSchema,
 } from '../shared/schemas.js';
 import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, MusicRequestSettings, PlatformId, Raffle, SoundSettings, StreamEvent, StreamEventType, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
 
@@ -1330,6 +1333,58 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     getChatChannelPageId: async () => (await loadYoutubeSettings()).chatChannelPageId,
   });
 
+  /**
+   * Per-account YouTube API accounts, hot-cached and refreshed when accounts
+   * change. Each entry owns its own OAuth2Client built from the credentials
+   * stored on the PlatformAccount.providerData (encrypted via safeStorage).
+   */
+  let cachedYoutubeApiAccounts: YouTubeApiAccount[] = [];
+  const refreshYoutubeApiAccounts = async (): Promise<void> => {
+    const accounts = await accountRepository.list();
+    const next: YouTubeApiAccount[] = [];
+    for (const account of accounts) {
+      if (account.providerId !== 'youtube-api') continue;
+      if (!account.enabled) continue;
+      const data = account.providerData as Record<string, unknown> | undefined;
+      const clientId = typeof data?.clientId === 'string' ? data.clientId : '';
+      const clientSecretEnc = typeof data?.clientSecretEncrypted === 'string' ? data.clientSecretEncrypted : '';
+      const refreshTokenEnc = typeof data?.refreshTokenEncrypted === 'string' ? data.refreshTokenEncrypted : '';
+      if (!clientId || !clientSecretEnc || !refreshTokenEnc) {
+        logService.warn('youtube-api', `Account ${account.id} (${account.label}) missing credentials — skipping`);
+        continue;
+      }
+      let oauth;
+      try {
+        const clientSecret = decryptSecret(clientSecretEnc);
+        const refreshToken = decryptSecret(refreshTokenEnc);
+        if (!clientSecret || !refreshToken) throw new Error('decrypt produced empty value');
+        oauth = buildYouTubeOAuth2Client({ clientId, clientSecret, refreshToken });
+      } catch (cause) {
+        logService.warn('youtube-api', `Failed to decrypt credentials for ${account.label}: ${cause instanceof Error ? cause.message : String(cause)}`);
+        continue;
+      }
+      next.push({
+        accountId: account.id,
+        channelId: account.channel,
+        label: account.label,
+        oauth,
+      });
+    }
+    cachedYoutubeApiAccounts = next;
+    youtubeApiAdapter.refresh();
+  };
+
+  const youtubeApiAdapter = new YouTubeApiChatAdapter({
+    getActiveAccounts: () => cachedYoutubeApiAccounts,
+    openChatLogSession: (platform, videoId) => chatLogService.openSession(platform, videoId),
+    closeChatLogSession: (platform) => chatLogService.closeSession(platform),
+    onClientStart: () => suggestionService.clearSessionEntries(),
+    log: {
+      info: (msg) => logService.info('youtube-api', msg),
+      warn: (msg) => logService.warn('youtube-api', msg),
+    },
+  });
+
   const obsService = new ObsService({
     settingsStore: obsSettingsStore,
     onConnected: () => {
@@ -1713,6 +1768,24 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.youtubeGetSettings, async () => loadYoutubeSettings());
   ipcMain.handle(IPC_CHANNELS.youtubeSaveSettings, async (_, raw) => saveYoutubeSettings(raw));
 
+  ipcMain.handle(IPC_CHANNELS.youtubeApiStartOAuth, async (_, raw) => {
+    const input = youtubeApiStartOAuthSchema.parse(raw);
+    const result = await startYouTubeOAuthFlow(
+      { clientId: input.clientId, clientSecret: input.clientSecret },
+      { log: (msg) => logService.info('youtube-api', msg) },
+    );
+    return {
+      channelId: result.channelId,
+      channelTitle: result.channelTitle ?? '',
+      providerData: {
+        clientId: input.clientId,
+        clientSecretEncrypted: encryptSecret(input.clientSecret),
+        refreshTokenEncrypted: encryptSecret(result.refreshToken),
+        channelTitle: result.channelTitle,
+      },
+    };
+  });
+
   ipcMain.handle(IPC_CHANNELS.youtubeConnect, async (_, raw) => {
     const i = youtubeConnectSchema.parse(raw);
     if (!youtubeAdapter) throw new Error('YouTube adapter not yet ready');
@@ -1930,6 +2003,13 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       { autoMonitor: settings.autoConnect },
     );
     await chatService.replaceAdapter(youtubeAdapter);
+  })();
+
+  // Auto-attach the YouTube API adapter on startup. The adapter idles when
+  // there are no enabled youtube-api accounts.
+  void (async () => {
+    await refreshYoutubeApiAccounts();
+    await chatService.replaceAdapter(youtubeApiAdapter);
   })();
 
   // Auto-reconnect TikTok from saved settings on startup (R5)
@@ -2384,7 +2464,45 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     },
   };
 
-  for (const provider of [twitchProvider, kickProvider, tiktokProvider, youtubeProvider]) {
+  const youtubeApiStatusListeners = new Set<() => void>();
+  const youtubeApiProvider: MainPlatformProvider = {
+    providerId: 'youtube-api',
+    async getStatus(account) {
+      // Mirrors the YouTube scraper provider: the account is "connected" while
+      // it's enabled in the AccountRepository. Live monitoring takes over from
+      // there — going live spawns a YTApiClient automatically.
+      const stored = await accountRepository.get(account.id);
+      return stored?.enabled ? 'connected' : 'disconnected';
+    },
+    async connect(account) {
+      const stored = await accountRepository.get(account.id);
+      if (!stored) throw new Error(`Account ${account.id} not found`);
+      if (!stored.enabled) {
+        await accountRepository.upsert({ ...stored, enabled: true });
+      }
+      await refreshYoutubeApiAccounts();
+      youtubeApiStatusListeners.forEach((l) => l());
+    },
+    async disconnect(account) {
+      const stored = await accountRepository.get(account.id);
+      if (stored?.enabled) {
+        await accountRepository.upsert({ ...stored, enabled: false });
+      }
+      await refreshYoutubeApiAccounts();
+      youtubeApiStatusListeners.forEach((l) => l());
+    },
+    async purgeStores() {
+      // Account JSON is removed by the host before this runs — just refresh.
+      await refreshYoutubeApiAccounts();
+      youtubeApiStatusListeners.forEach((l) => l());
+    },
+    onStatusChange(listener) {
+      youtubeApiStatusListeners.add(listener);
+      return () => youtubeApiStatusListeners.delete(listener);
+    },
+  };
+
+  for (const provider of [twitchProvider, kickProvider, tiktokProvider, youtubeProvider, youtubeApiProvider]) {
     mainPlatforms.register(provider);
     provider.onStatusChange(() => broadcastAccountsForProvider(provider.providerId));
   }
@@ -2395,12 +2513,16 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   ipcMain.handle(IPC_CHANNELS.accountsCreate, async (_, raw) => {
     const input = accountCreateInputSchema.parse(raw);
-    return accountRepository.upsert(input);
+    const created = await accountRepository.upsert(input);
+    if (created.providerId === 'youtube-api') await refreshYoutubeApiAccounts();
+    return created;
   });
 
   ipcMain.handle(IPC_CHANNELS.accountsUpdate, async (_, raw) => {
     const input = accountUpdateInputSchema.parse(raw);
-    return accountRepository.upsert(input);
+    const updated = await accountRepository.upsert(input);
+    if (updated.providerId === 'youtube-api') await refreshYoutubeApiAccounts();
+    return updated;
   });
 
   ipcMain.handle(IPC_CHANNELS.accountsDelete, async (_, raw) => {
@@ -2426,6 +2548,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       }
     }
     await accountRepository.delete(input.id);
+    if (account?.providerId === 'youtube-api') await refreshYoutubeApiAccounts();
   });
 
   ipcMain.handle(IPC_CHANNELS.accountsConnect, async (_, raw) => {
@@ -2710,6 +2833,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const connected: PlatformId[] = [];
     if (twitchStatus === 'connected') connected.push('twitch');
     if (getConnectedYoutubePlatforms().length > 0) connected.push('youtube');
+    if (youtubeApiAdapter.hasActiveStreams()) connected.push('youtube-api');
     return connected;
   }
 
@@ -2763,9 +2887,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         continue;
       }
       if (target === 'youtube-api') {
-        // Wired up once the youtube-api adapter is registered — see step G.
-        // For now no-op so scheduled messages don't blow up before the
-        // adapter exists.
+        if (youtubeApiAdapter.hasActiveStreams()) resolved.add('youtube-api');
         continue;
       }
     }
