@@ -326,6 +326,11 @@ export const youtubeSettingsSchema = z.object({
   chatChannelName: z.string().optional(),
 });
 
+export const youtubeApiStartOAuthSchema = z.object({
+  clientId: z.string().min(1).max(200),
+  clientSecret: z.string().min(1).max(200),
+});
+
 export const tiktokConnectSchema = z.object({
   username: z.string().min(1).max(80),
 });

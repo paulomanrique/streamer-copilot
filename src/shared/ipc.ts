@@ -167,6 +167,7 @@ export const IPC_CHANNELS = {
   youtubeSaveSettings: 'youtube:save-settings',
   youtubeCheckLive: 'youtube:check-live',
   youtubeGetChatChannels: 'youtube:get-chat-channels',
+  youtubeApiStartOAuth: 'youtube-api:start-oauth',
   tiktokConnect: 'tiktok:connect',
   tiktokDisconnect: 'tiktok:disconnect',
   tiktokGetStatus: 'tiktok:get-status',
@@ -331,6 +332,23 @@ export interface CopilotApi {
   youtubeSaveSettings: (settings: import('./types.js').YouTubeSettings) => Promise<import('./types.js').YouTubeSettings>;
   youtubeCheckLive: (handle: string) => Promise<{ videoIds: string[] }>;
   youtubeGetChatChannels: () => Promise<import('./types.js').YouTubeChatChannel[]>;
+  /**
+   * Runs the loopback OAuth flow with the given Google Cloud OAuth client
+   * credentials. Returns the encrypted artifacts the renderer should hand to
+   * `accountsCreate` as providerData, plus the channel resolved by
+   * `channels.list?mine=true`. The plaintext clientSecret is consumed only
+   * for the flow — it's encrypted on the way out.
+   */
+  youtubeApiStartOAuth: (input: { clientId: string; clientSecret: string }) => Promise<{
+    channelId: string;
+    channelTitle: string;
+    providerData: {
+      clientId: string;
+      clientSecretEncrypted: string;
+      refreshTokenEncrypted: string;
+      channelTitle?: string;
+    };
+  }>;
   tiktokConnect: (input: { username: string }) => Promise<void>;
   tiktokDisconnect: () => Promise<void>;
   tiktokGetStatus: () => Promise<import('./types.js').TikTokConnectionStatus>;
