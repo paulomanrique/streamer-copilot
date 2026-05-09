@@ -53,7 +53,7 @@ function YouTubeAuthStep({ channel, setChannel, setError }: AuthStepProps) {
 
 registerPlatformProvider({
   id: 'youtube',
-  displayName: 'YouTube',
+  displayName: 'YouTube (Scraped)',
   accentClass: 'border-l-red-500',
   supportsMultipleAccounts: true,
   AuthStep: YouTubeAuthStep,
