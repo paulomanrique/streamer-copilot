@@ -6,40 +6,13 @@ import type {
   PollSnapshot,
   PollUpsertInput,
 } from '../../shared/types.js';
+import { PollEditorModal } from '../components/PollEditorModal.js';
 
 interface PlatformOption {
   id: PlatformId;
   label: string;
   hint: string;
 }
-
-interface OptionDraft {
-  id?: string;
-  label: string;
-}
-
-interface PollDraft {
-  id?: string;
-  title: string;
-  options: OptionDraft[];
-  durationSeconds: number;
-  acceptedPlatforms: PlatformId[];
-  resultAnnouncementTemplate: string;
-}
-
-const DEFAULT_TEMPLATE =
-  'Resultado da enquete "{title}": {winner} venceu com {winner_votes} votos ({winner_percent}%). Total: {total_votes} votos.';
-
-const DEFAULT_DRAFT: PollDraft = {
-  title: '',
-  options: [
-    { label: '' },
-    { label: '' },
-  ],
-  durationSeconds: 60,
-  acceptedPlatforms: [],
-  resultAnnouncementTemplate: DEFAULT_TEMPLATE,
-};
 
 const PROVIDER_LABELS: Record<string, string> = {
   twitch: 'Twitch',
@@ -83,42 +56,18 @@ function statusClass(status: Poll['status']): string {
   }
 }
 
-function fromPoll(poll: Poll): PollDraft {
-  return {
-    id: poll.id,
-    title: poll.title,
-    options: poll.options.map((opt) => ({ id: opt.id, label: opt.label })),
-    durationSeconds: poll.durationSeconds,
-    acceptedPlatforms: [...poll.acceptedPlatforms],
-    resultAnnouncementTemplate: poll.resultAnnouncementTemplate,
-  };
-}
-
-function toUpsert(draft: PollDraft): PollUpsertInput {
-  return {
-    id: draft.id,
-    title: draft.title.trim(),
-    options: draft.options
-      .map((opt) => ({ id: opt.id, label: opt.label.trim() }))
-      .filter((opt) => opt.label.length > 0),
-    durationSeconds: draft.durationSeconds,
-    acceptedPlatforms: draft.acceptedPlatforms,
-    resultAnnouncementTemplate: draft.resultAnnouncementTemplate.trim(),
-  };
-}
-
 export function PollsPage() {
   const [polls, setPolls] = useState<Poll[]>([]);
   const [snapshot, setSnapshot] = useState<PollSnapshot | null>(null);
   const [platformOptions, setPlatformOptions] = useState<PlatformOption[]>([]);
-  const [draft, setDraft] = useState<PollDraft>(DEFAULT_DRAFT);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [savedNote, setSavedNote] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingPoll, setEditingPoll] = useState<Poll | null>(null);
 
   const activePoll = useMemo(() => polls.find((p) => p.status === 'active') ?? null, [polls]);
-  const editingExistingDraft = draft.id !== undefined;
 
   useEffect(() => {
     void load();
@@ -159,97 +108,41 @@ export function PollsPage() {
       } else {
         setSnapshot(null);
       }
-      setDraft((current) =>
-        current.acceptedPlatforms.length === 0 && opts.length > 0
-          ? { ...current, acceptedPlatforms: opts.map((o) => o.id) }
-          : current,
-      );
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Failed to load polls');
     }
   }
 
-  function newDraft(): void {
-    setDraft({ ...DEFAULT_DRAFT, acceptedPlatforms: platformOptions.map((o) => o.id) });
+  function openCreate(): void {
+    setEditingPoll(null);
+    setModalOpen(true);
     setError(null);
   }
 
-  function editPoll(poll: Poll): void {
-    setDraft(fromPoll(poll));
+  function openEdit(poll: Poll): void {
+    setEditingPoll(poll);
+    setModalOpen(true);
     setError(null);
   }
 
-  function setOption(index: number, label: string): void {
-    setDraft((current) => {
-      const next = [...current.options];
-      next[index] = { ...next[index], label };
-      return { ...current, options: next };
-    });
-  }
-
-  function addOption(): void {
-    setDraft((current) =>
-      current.options.length >= 10
-        ? current
-        : { ...current, options: [...current.options, { label: '' }] },
-    );
-  }
-
-  function removeOption(index: number): void {
-    setDraft((current) =>
-      current.options.length <= 2
-        ? current
-        : { ...current, options: current.options.filter((_, i) => i !== index) },
-    );
-  }
-
-  function togglePlatform(id: PlatformId): void {
-    setDraft((current) => ({
-      ...current,
-      acceptedPlatforms: current.acceptedPlatforms.includes(id)
-        ? current.acceptedPlatforms.filter((p) => p !== id)
-        : [...current.acceptedPlatforms, id],
-    }));
-  }
-
-  async function savePoll(options: { startAfter: boolean }): Promise<void> {
-    setError(null);
+  async function handleSubmit(payload: PollUpsertInput, options: { startAfter: boolean }): Promise<void> {
     setSavedNote(null);
-    setBusy(true);
-    try {
-      const payload = toUpsert(draft);
-      if (!payload.title) throw new Error('Title is required');
-      if (payload.options.length < 2) throw new Error('At least 2 options with a label are required');
-      if (payload.acceptedPlatforms.length === 0) {
-        throw new Error(
-          platformOptions.length === 0
-            ? 'Configure at least one platform account in Connections before creating a poll.'
-            : 'Pick at least one platform that will accept votes.',
-        );
-      }
-      const updated = await window.copilot.upsertPoll(payload);
-      setPolls(updated);
-      const saved = updated.find((p) => p.title === payload.title) ?? updated[updated.length - 1];
+    const updated = await window.copilot.upsertPoll(payload);
+    setPolls(updated);
+    const saved = updated.find((p) => p.id === payload.id)
+      ?? updated.find((p) => p.title === payload.title)
+      ?? updated[updated.length - 1];
 
-      if (options.startAfter && saved) {
-        if (activePoll && activePoll.id !== saved.id) {
-          throw new Error('Another poll is already running. Close it before starting a new one.');
-        }
-        const next = await window.copilot.controlPoll({ pollId: saved.id, action: 'start' });
-        setSnapshot(next);
-        setPolls(await window.copilot.listPolls());
-        setSavedNote('Poll started — viewers can vote now.');
-        newDraft();
-      } else {
-        setDraft(fromPoll(saved!));
-        setSavedNote('Saved as draft.');
+    if (options.startAfter && saved) {
+      if (activePoll && activePoll.id !== saved.id) {
+        throw new Error('Another poll is already running. Close it before starting a new one.');
       }
-    } catch (cause) {
-      const message = cause instanceof Error ? cause.message : 'Failed to save poll';
-      setError(message);
-      console.error('[polls] save failed', cause);
-    } finally {
-      setBusy(false);
+      const next = await window.copilot.controlPoll({ pollId: saved.id, action: 'start' });
+      setSnapshot(next);
+      setPolls(await window.copilot.listPolls());
+      setSavedNote('Poll started — viewers can vote now.');
+    } else {
+      setSavedNote('Saved as draft.');
     }
   }
 
@@ -258,7 +151,6 @@ export function PollsPage() {
     try {
       const updated = await window.copilot.deletePoll({ id });
       setPolls(updated);
-      if (draft.id === id) newDraft();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Failed to delete poll');
     } finally {
@@ -302,7 +194,7 @@ export function PollsPage() {
 
   return (
     <section className="p-6 max-w-5xl mx-auto space-y-6">
-      <header className="flex items-end justify-between">
+      <header className="flex items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-white">Polls</h1>
           <p className="text-sm text-gray-400 mt-1">
@@ -310,10 +202,20 @@ export function PollsPage() {
             One vote per user.
           </p>
         </div>
+        <button
+          type="button"
+          onClick={openCreate}
+          className="px-4 py-2 rounded bg-purple-700 text-white text-sm hover:bg-purple-600 shrink-0"
+        >
+          New poll
+        </button>
       </header>
 
       {error ? (
         <div className="rounded border border-rose-800 bg-rose-950/40 text-rose-200 px-4 py-2 text-sm">{error}</div>
+      ) : null}
+      {savedNote ? (
+        <div className="rounded border border-emerald-800 bg-emerald-950/40 text-emerald-200 px-4 py-2 text-sm">{savedNote}</div>
       ) : null}
 
       {snapshot && snapshot.poll.status === 'active' ? (
@@ -370,153 +272,6 @@ export function PollsPage() {
         </article>
       ) : null}
 
-      <section className="rounded-lg border border-gray-800 bg-gray-900/40 p-5 space-y-4">
-        <h2 className="text-lg font-semibold text-white">{editingExistingDraft ? 'Edit poll' : 'New poll'}</h2>
-
-        <label className="block">
-          <span className="block text-xs uppercase tracking-wider text-gray-400">Title</span>
-          <input
-            type="text"
-            value={draft.title}
-            onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
-            className="mt-1 w-full rounded border border-gray-800 bg-gray-950 px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-700"
-            placeholder="What do you want to ask?"
-          />
-        </label>
-
-        <div>
-          <span className="block text-xs uppercase tracking-wider text-gray-400">Options</span>
-          <ul className="mt-2 space-y-2">
-            {draft.options.map((option, index) => (
-              <li key={index} className="flex items-center gap-2">
-                <span className="inline-flex items-center justify-center min-w-[28px] h-8 px-2 rounded bg-gray-800 text-gray-300 font-mono text-sm">
-                  {index + 1}
-                </span>
-                <input
-                  type="text"
-                  value={option.label}
-                  onChange={(event) => setOption(index, event.target.value)}
-                  className="flex-1 rounded border border-gray-800 bg-gray-950 px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-700"
-                  placeholder={`Option ${index + 1}`}
-                />
-                <button
-                  type="button"
-                  onClick={() => removeOption(index)}
-                  disabled={draft.options.length <= 2}
-                  className="px-2 py-1.5 rounded text-sm text-gray-400 hover:text-rose-300 disabled:opacity-30"
-                >
-                  Remove
-                </button>
-              </li>
-            ))}
-          </ul>
-          <button
-            type="button"
-            onClick={addOption}
-            disabled={draft.options.length >= 10}
-            className="mt-2 px-3 py-1.5 rounded border border-gray-800 text-gray-200 text-sm hover:bg-gray-800 disabled:opacity-50"
-          >
-            Add option
-          </button>
-        </div>
-
-        <label className="block">
-          <span className="block text-xs uppercase tracking-wider text-gray-400">
-            Duration (seconds) — {draft.durationSeconds}s
-          </span>
-          <input
-            type="range"
-            min={10}
-            max={3600}
-            step={10}
-            value={draft.durationSeconds}
-            onChange={(event) =>
-              setDraft((current) => ({ ...current, durationSeconds: Number(event.target.value) }))
-            }
-            className="mt-2 w-full"
-          />
-        </label>
-
-        <div>
-          <span className="block text-xs uppercase tracking-wider text-gray-400">Accept votes from</span>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {platformOptions.length === 0 ? (
-              <p className="text-sm text-gray-500">No platforms configured. Set them up in Connections.</p>
-            ) : (
-              platformOptions.map((option) => {
-                const active = draft.acceptedPlatforms.includes(option.id);
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    onClick={() => togglePlatform(option.id)}
-                    className={`px-3 py-1.5 rounded border text-sm transition ${
-                      active
-                        ? 'border-purple-600 bg-purple-700/30 text-white'
-                        : 'border-gray-800 text-gray-300 hover:bg-gray-800'
-                    }`}
-                  >
-                    {option.label}
-                    <span className="ml-2 text-xs text-gray-400">{option.hint}</span>
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        <label className="block">
-          <span className="block text-xs uppercase tracking-wider text-gray-400">Result announcement</span>
-          <textarea
-            value={draft.resultAnnouncementTemplate}
-            onChange={(event) =>
-              setDraft((current) => ({ ...current, resultAnnouncementTemplate: event.target.value }))
-            }
-            rows={2}
-            className="mt-1 w-full rounded border border-gray-800 bg-gray-950 px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-700"
-          />
-          <span className="mt-1 block text-xs text-gray-500">
-            Variables: {'{title}'}, {'{winner}'}, {'{winner_votes}'}, {'{winner_percent}'}, {'{total_votes}'}, {'{results}'}
-          </span>
-        </label>
-
-        {error ? (
-          <div className="rounded border border-rose-800 bg-rose-950/40 text-rose-200 px-3 py-2 text-sm">{error}</div>
-        ) : null}
-        {savedNote ? (
-          <div className="rounded border border-emerald-800 bg-emerald-950/40 text-emerald-200 px-3 py-2 text-sm">{savedNote}</div>
-        ) : null}
-
-        <div className="flex flex-wrap justify-end gap-2 pt-2">
-          {editingExistingDraft ? (
-            <button
-              type="button"
-              onClick={newDraft}
-              className="px-3 py-1.5 rounded text-sm text-gray-300 hover:bg-gray-800"
-            >
-              New
-            </button>
-          ) : null}
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void savePoll({ startAfter: false })}
-            className="px-3 py-1.5 rounded border border-gray-700 text-gray-200 text-sm hover:bg-gray-800 disabled:opacity-50"
-          >
-            Save draft
-          </button>
-          <button
-            type="button"
-            disabled={busy || activePoll !== null}
-            onClick={() => void savePoll({ startAfter: true })}
-            className="px-4 py-1.5 rounded bg-purple-700 text-white text-sm hover:bg-purple-600 disabled:opacity-50"
-            title={activePoll ? 'Close the active poll first' : ''}
-          >
-            {editingExistingDraft ? 'Save & start' : 'Create & start'}
-          </button>
-        </div>
-      </section>
-
       <section className="rounded-lg border border-gray-800 bg-gray-900/40 p-5 space-y-3">
         <h2 className="text-lg font-semibold text-white">Saved polls</h2>
         {polls.length === 0 ? (
@@ -549,7 +304,7 @@ export function PollsPage() {
                   ) : null}
                   <button
                     type="button"
-                    onClick={() => editPoll(poll)}
+                    onClick={() => openEdit(poll)}
                     className="px-2 py-1 text-xs rounded text-gray-300 hover:bg-gray-800"
                   >
                     Edit
@@ -568,6 +323,15 @@ export function PollsPage() {
           </ul>
         )}
       </section>
+
+      <PollEditorModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        initialPoll={editingPoll}
+        platformOptions={platformOptions}
+        activePollId={activePoll?.id ?? null}
+        onSubmit={handleSubmit}
+      />
     </section>
   );
 }
