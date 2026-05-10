@@ -1,7 +1,13 @@
 import { session } from 'electron';
-import { Innertube } from 'youtubei.js';
+import { Innertube, Log } from 'youtubei.js';
 import type { ChatMessage, ChatBadge, StreamEvent } from '../shared/types.js';
 import type { YouTubeLiveClient, YouTubeLiveClientOptions } from '../platforms/youtube/live-client.js';
+
+// Silence youtubei.js's INFO/WARN console output (extractor warnings, deprecation
+// notes, polling traces). It defaults to passing WARNING through `console.warn`,
+// which clutters the dev console while we're tailing real app logs. ERRORs still
+// surface so we don't miss actual scraper failures.
+Log.setLevel(Log.Level.ERROR);
 
 export type YTLiveClientOptions = YouTubeLiveClientOptions;
 
