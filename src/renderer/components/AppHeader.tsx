@@ -85,12 +85,13 @@ export function AppHeader({
       btnBg: 'bg-purple-600/30 hover:bg-purple-600/50 text-purple-300',
     })),
     ...youtubeStreams.map((stream) => {
-      const streamLabel = stream.label === 'YouTube' ? 'YouTube' : `YouTube ${stream.label}`;
+      // stream.label already carries the "YouTube" prefix when needed
+      // (e.g. "YouTube Horizontal", "YouTube @user", "YouTube-1") and is
+      // just "YouTube" for the single-stream case — see
+      // computeYouTubeStreamLabels in the main process.
       return ({
       id: `yt-${stream.videoId}`,
-      label: stream.channelHandle
-        ? `${streamLabel} ${stream.channelHandle}`
-        : streamLabel,
+      label: stream.label || 'YouTube',
       url: stream.liveUrl.replace(/^https?:\/\//, ''),
       full: stream.liveUrl,
       icon: YOUTUBE_ICON,

@@ -67,10 +67,11 @@ export function ObsStatsPanel({ stats, twitchLiveStatsByChannel, twitchConnected
     return () => clearInterval(timer);
   }, [hype]);
 
-  const resolveYouTubeCardLabel = (stream: YouTubeStreamInfo): string => {
-    if (youtubeStreams.length <= 1) return 'YouTube';
-    return stream.platform === 'youtube-v' ? 'YouTube Vertical' : 'YouTube Horizontal';
-  };
+  // Stream labels are computed in the main process by computeYouTubeStreamLabels —
+  // the card just renders what's resolved (channel handle, Horizontal/Vertical,
+  // or the YouTube-N fallback). Avoids re-deriving from platform here, which
+  // can't tell channels apart.
+  const resolveYouTubeCardLabel = (stream: YouTubeStreamInfo): string => stream.label || 'YouTube';
 
   return (
     <div className="border-b border-gray-800 p-4 shrink-0">

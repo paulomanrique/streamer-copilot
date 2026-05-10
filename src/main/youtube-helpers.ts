@@ -11,11 +11,74 @@ export interface LiveStreamInfo {
   channelHandle: string;
 }
 
-export function getLabelFromTitle(title: string, idx: number): string {
-  const lower = title.toLowerCase();
-  if (lower.includes('horizontal')) return 'H';
-  if (lower.includes('vertical') || lower.includes('shorts')) return 'V';
-  return String(idx + 1);
+/**
+ * Computes the per-stream display labels for a set of concurrent YouTube
+ * livestreams. The label is what shows on chat badges, viewer cards, and
+ * live-link entries — see ObsStatsPanel / AppHeader / ChatFeed.
+ *
+ * Rules (in order):
+ *   1. One stream → "YouTube".
+ *   2. All streams from distinct channels → "YouTube @channel" so the user
+ *      can tell which channel the chat / card is for.
+ *   3. Multiple streams from the same channel:
+ *      - If any title contains an orientation keyword
+ *        (horizontal / desktop / vertical / mobile / celular / shorts),
+ *        label that stream Horizontal or Vertical and assign the opposite
+ *        canonical label to the partner. Synonyms are normalized to the
+ *        canonical pair to keep the vocabulary stable.
+ *      - Otherwise fall back to numeric: "YouTube-1", "YouTube-2", …
+ *   4. Three or more streams from the same channel skip the H/V heuristic
+ *      (the opposite-pair model only makes sense for two) and go numeric.
+ */
+export function computeYouTubeStreamLabels(
+  streams: ReadonlyArray<{ videoId: string; title: string; channelHandle: string | null }>,
+): Map<string, string> {
+  const labels = new Map<string, string>();
+  if (streams.length === 0) return labels;
+  if (streams.length === 1) {
+    labels.set(streams[0].videoId, 'YouTube');
+    return labels;
+  }
+
+  const handles = streams.map((s) => normalizeHandle(s.channelHandle));
+  const distinctHandles = new Set(handles.filter((h) => h.length > 0));
+  if (distinctHandles.size === streams.length) {
+    streams.forEach((s, i) => {
+      const h = handles[i] || '';
+      labels.set(s.videoId, h ? `YouTube @${h}` : `YouTube-${i + 1}`);
+    });
+    return labels;
+  }
+
+  if (streams.length === 2) {
+    const orientations = streams.map((s) => detectOrientation(s.title));
+    const hasH = orientations.includes('horizontal');
+    const hasV = orientations.includes('vertical');
+    if (hasH || hasV) {
+      streams.forEach((s, i) => {
+        const o = orientations[i];
+        if (o === 'horizontal') labels.set(s.videoId, 'YouTube Horizontal');
+        else if (o === 'vertical') labels.set(s.videoId, 'YouTube Vertical');
+        else labels.set(s.videoId, hasH ? 'YouTube Vertical' : 'YouTube Horizontal');
+      });
+      return labels;
+    }
+  }
+
+  streams.forEach((s, i) => labels.set(s.videoId, `YouTube-${i + 1}`));
+  return labels;
+}
+
+function normalizeHandle(handle: string | null): string {
+  if (!handle) return '';
+  return handle.trim().replace(/^@+/, '').toLowerCase();
+}
+
+function detectOrientation(title: string): 'horizontal' | 'vertical' | null {
+  const t = title.toLowerCase();
+  if (/\b(horizontal|desktop)\b/.test(t)) return 'horizontal';
+  if (/\b(vertical|mobile|celular|shorts)\b/.test(t)) return 'vertical';
+  return null;
 }
 
 function getYtText(obj: unknown): string {
