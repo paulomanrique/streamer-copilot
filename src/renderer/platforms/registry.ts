@@ -55,7 +55,11 @@ export function registerPlatformProvider(provider: PlatformProvider): void {
 }
 
 export function listPlatformProviders(): PlatformProvider[] {
-  return [...providers.values()];
+  // Sort alphabetically by displayName so the wizard dropdown is predictable
+  // regardless of registration order.
+  return [...providers.values()].sort((a, b) =>
+    a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' }),
+  );
 }
 
 export function getPlatformProvider(providerId: string): PlatformProvider | null {
