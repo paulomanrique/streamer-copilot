@@ -167,13 +167,6 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
       <StatusBar
         activeProfileName={activeProfileName}
         obsConnected={obsStats.connected}
-        twitchStatus={twitchStatus}
-        twitchChannel={twitchChannel}
-        youtubeStreams={youtubeStreams}
-        tiktokStatus={tiktokStatus}
-        tiktokUsername={tiktokUsername}
-        kickStatus={kickStatus}
-        kickSlug={kickSlug}
       />
     </section>
   );

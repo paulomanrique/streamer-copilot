@@ -1,76 +1,108 @@
-import type { KickConnectionStatus, TikTokConnectionStatus, TwitchConnectionStatus, YouTubeStreamInfo } from '../../shared/types.js';
+import { useEffect, useState } from 'react';
+
+import type { PlatformAccount, PlatformAccountConnectionStatus } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
 
 interface StatusBarProps {
   activeProfileName: string;
   obsConnected: boolean;
-  twitchStatus: TwitchConnectionStatus;
-  twitchChannel: string | null;
-  youtubeStreams: YouTubeStreamInfo[];
-  tiktokStatus: TikTokConnectionStatus;
-  tiktokUsername: string | null;
-  kickStatus: KickConnectionStatus;
-  kickSlug: string | null;
 }
 
-const TWITCH_DOT: Record<TwitchConnectionStatus, string> = {
-  disconnected: 'bg-gray-600',
-  connecting: 'bg-yellow-400 animate-pulse',
-  connected: 'bg-purple-500 pulse-dot',
-  error: 'bg-red-500',
+const PROVIDER_LABELS: Record<string, string> = {
+  twitch: 'Twitch',
+  youtube: 'YouTube',
+  'youtube-api': 'YouTube (API)',
+  kick: 'Kick',
+  tiktok: 'TikTok',
 };
 
-export function StatusBar({ activeProfileName, obsConnected, twitchStatus, twitchChannel, youtubeStreams, tiktokStatus, tiktokUsername, kickStatus, kickSlug }: StatusBarProps) {
+const PROVIDER_DOT: Record<string, string> = {
+  twitch: 'bg-purple-500 pulse-dot',
+  youtube: 'bg-red-500 pulse-dot',
+  'youtube-api': 'bg-red-500 pulse-dot',
+  kick: 'bg-green-500 pulse-dot',
+  tiktok: 'bg-pink-500 pulse-dot',
+};
+
+function dotClass(providerId: string, status: PlatformAccountConnectionStatus): string {
+  if (status === 'connected') return PROVIDER_DOT[providerId] ?? 'bg-emerald-500 pulse-dot';
+  if (status === 'connecting' || status === 'watching' || status === 'captcha') return 'bg-yellow-400 animate-pulse';
+  if (status === 'error') return 'bg-red-500';
+  return 'bg-gray-600';
+}
+
+export function StatusBar({ activeProfileName, obsConnected }: StatusBarProps) {
   const { messages, t } = useI18n();
-  const statusLabel = (status: TwitchConnectionStatus | TikTokConnectionStatus | KickConnectionStatus) => {
+  const [accounts, setAccounts] = useState<PlatformAccount[]>([]);
+  const [statuses, setStatuses] = useState<Record<string, PlatformAccountConnectionStatus>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const refresh = async () => {
+      try {
+        const list = await window.copilot.accountsList();
+        if (cancelled) return;
+        const visible = list.filter((a) => a.enabled);
+        setAccounts(visible);
+        const entries = await Promise.all(
+          visible.map(async (a) => {
+            const s = await window.copilot.accountsGetStatus({ id: a.id });
+            return [a.id, s?.status ?? 'disconnected'] as const;
+          }),
+        );
+        if (cancelled) return;
+        setStatuses(Object.fromEntries(entries));
+      } catch {
+        // silently ignore — chips will simply stay empty
+      }
+    };
+
+    void refresh();
+    const unsub = window.copilot.onAccountStatus((status) => {
+      setStatuses((prev) => ({ ...prev, [status.accountId]: status.status }));
+      // An account toggle (enable/disable) doesn't fire onAccountStatus, but
+      // status pings are common enough that we re-list cheaply on each one.
+      void refresh();
+    });
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  }, []);
+
+  const statusLabel = (status: PlatformAccountConnectionStatus): string => {
     if (status === 'connecting') return t('Connecting...');
-    return messages.common.status[status] ?? status;
+    if (status === 'watching') return t('Watching for live');
+    return messages.common.status[status as keyof typeof messages.common.status] ?? status;
   };
-  const twitchLabel = twitchStatus === 'connected' && twitchChannel
-    ? `#${twitchChannel}`
-    : statusLabel(twitchStatus);
-  const liveYoutubeChannels = Array.from(
-    new Set(
-      youtubeStreams
-        .map((stream) => stream.channelHandle)
-        .filter((channel): channel is string => Boolean(channel)),
-    ),
-  );
-  const youtubeLabel = liveYoutubeChannels.length > 0
-    ? liveYoutubeChannels.join(', ')
-    : messages.common.status.offline;
 
   return (
-    <footer className="h-8 bg-gray-900 border-t border-gray-800 flex items-center px-4 gap-4 shrink-0 text-xs text-gray-500">
-      <div className="flex items-center gap-1.5">
-        <span className={`w-2 h-2 rounded-full ${TWITCH_DOT[twitchStatus]}`} />
-        <span>
-          Twitch: <span className="text-gray-300">{twitchLabel}</span>
-        </span>
-      </div>
+    <footer className="h-8 bg-gray-900 border-t border-gray-800 flex items-center px-4 gap-4 shrink-0 text-xs text-gray-500 overflow-x-auto whitespace-nowrap">
+      {accounts.map((account) => {
+        const status = statuses[account.id] ?? 'disconnected';
+        const providerLabel = PROVIDER_LABELS[account.providerId] ?? account.providerId;
+        const display = status === 'connected'
+          ? (account.label || account.channel || statusLabel(status))
+          : statusLabel(status);
+        return (
+          <div key={account.id} className="flex items-center gap-1.5">
+            <span className={`w-2 h-2 rounded-full ${dotClass(account.providerId, status)}`} />
+            <span>
+              {providerLabel}: <span className="text-gray-300">{display}</span>
+            </span>
+          </div>
+        );
+      })}
 
-      <div className="flex items-center gap-1.5 ml-2">
+      <div className="flex items-center gap-1.5">
         <span className={`w-2 h-2 rounded-full ${obsConnected ? 'bg-cyan-500' : 'bg-gray-600'}`} />
         <span>
           OBS: <span className="text-gray-300">{obsConnected ? messages.common.status.connected : messages.common.status.offline}</span>
         </span>
       </div>
 
-      <div className="flex items-center gap-1.5 ml-2">
-        <span className={`w-2 h-2 rounded-full ${liveYoutubeChannels.length > 0 ? 'bg-red-500 pulse-dot' : 'bg-gray-600'}`} />
-        <span>
-          YouTube: <span className="text-gray-300">{youtubeLabel}</span>
-        </span>
-      </div>
-
-      <div className="flex items-center gap-1.5 ml-2">
-        <span className={`w-2 h-2 rounded-full ${kickStatus === 'connected' ? 'bg-green-500 pulse-dot' : kickStatus === 'connecting' ? 'bg-yellow-400 animate-pulse' : kickStatus === 'error' ? 'bg-red-500' : 'bg-gray-600'}`} />
-        <span>
-          Kick: <span className="text-gray-300">{kickStatus === 'connected' ? (kickSlug ?? messages.common.status.connected) : statusLabel(kickStatus)}</span>
-        </span>
-      </div>
-
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5 ml-auto">
         <span className="w-2 h-2 rounded-full bg-violet-500" />
         <span>
           {t('Profile')}: <span className="text-gray-300">{activeProfileName}</span>
