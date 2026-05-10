@@ -392,7 +392,6 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   let twitchChannel: string | null = null;
   // Maps platform → display name of the account that sends messages (used to skip self-welcomes)
   const selfSenderName: Partial<Record<string, string>> = {};
-  let twitchStatsTimer: ReturnType<typeof setInterval> | null = null;
   let kickStatsTimer: ReturnType<typeof setInterval> | null = null;
   const userAvatarCache = new Map<string, string>();
   const badgeCache = new Map<string, string>();
@@ -1038,19 +1037,40 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         }
       }
 
-      options.stateHub.pushTwitchLiveStats({ viewerCount: stream?.viewer_count ?? 0, followerCount: followersData.total ?? 0, isLive: !!stream, hypeTrain });
+      options.stateHub.pushTwitchLiveStats(channel, {
+        viewerCount: stream?.viewer_count ?? 0,
+        followerCount: followersData.total ?? 0,
+        isLive: !!stream,
+        hypeTrain,
+      });
     } catch (err) {
-      logService.warn('twitch', 'Failed to poll Twitch stats', { error: err instanceof Error ? err.message : String(err) });
+      logService.warn('twitch', 'Failed to poll Twitch stats', { error: err instanceof Error ? err.message : String(err), channel });
     }
   };
 
+  /** Per-channel stats poll timers — keyed by channel so multiple Twitch
+   *  accounts each get their own viewer/follower/hype-train feed. */
+  const twitchStatsTimers = new Map<string, ReturnType<typeof setInterval>>();
+
   const startTwitchStatsPoll = (channel: string, accessToken: string) => {
-    if (twitchStatsTimer) clearInterval(twitchStatsTimer);
+    const existing = twitchStatsTimers.get(channel);
+    if (existing) clearInterval(existing);
     void pollTwitchStats(channel, accessToken);
-    twitchStatsTimer = setInterval(() => void pollTwitchStats(channel, accessToken), 10_000);
+    const timer = setInterval(() => void pollTwitchStats(channel, accessToken), 10_000);
+    twitchStatsTimers.set(channel, timer);
   };
 
-  const stopTwitchStatsPoll = () => { if (twitchStatsTimer) { clearInterval(twitchStatsTimer); twitchStatsTimer = null; } };
+  const stopTwitchStatsPollFor = (channel: string) => {
+    const t = twitchStatsTimers.get(channel);
+    if (t) clearInterval(t);
+    twitchStatsTimers.delete(channel);
+    options.stateHub.pushTwitchLiveStats(channel, null);
+  };
+
+  const stopTwitchStatsPoll = () => {
+    for (const [, timer] of twitchStatsTimers) clearInterval(timer);
+    twitchStatsTimers.clear();
+  };
 
   const loadTwitchBadges = async (channel: string, token: string): Promise<void> => {
     try {
@@ -1084,21 +1104,14 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   };
 
   const twitchStatusListeners = new Set<() => void>();
+  /** Aggregate Twitch status flag for legacy consumers (live banner, scheduled
+   *  targets, etc.). Stats polling is now per-channel — see
+   *  `connectTwitchAccount` / `disconnectTwitchAccount`. */
   const setTwitchStatus = (status: TwitchConnectionStatus, channel?: string | null) => {
     twitchStatus = status;
     if (channel !== undefined) twitchChannel = channel;
     options.stateHub.pushTwitchStatus(status, twitchChannel);
-    if (status === 'connected') {
-      void (async () => {
-        const store = await getTwitchCredentialsStore();
-        const creds = store ? await store.load() : null;
-        if (creds) {
-          const token = creds.oauthToken.replace(/^oauth:/, '');
-          startTwitchStatsPoll(creds.channel, token);
-          void loadTwitchBadges(creds.channel, token);
-        }
-      })();
-    } else stopTwitchStatsPoll();
+    if (status !== 'connected') stopTwitchStatsPoll();
     for (const listener of twitchStatusListeners) listener();
   };
 
@@ -1124,9 +1137,14 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
    * the legacy global status (used by stats polling, scheduled-target
    * resolution, etc.) keeps a sensible value.
    */
+  /** Tracks the channel each account is bound to so disconnect can stop the
+   *  matching stats poll. */
+  const twitchAccountChannel = new Map<string, string>();
+
   const connectTwitchAccount = async (account: { accountId: string; channel: string; username: string; oauthToken: string }): Promise<void> => {
     await ensureTwitchMultiRegistered();
     twitchAccountStatus.set(account.accountId, 'connecting');
+    twitchAccountChannel.set(account.accountId, account.channel);
     twitchStatusListeners.forEach((l) => l());
     if (twitchMultiAdapter.hasConnectedChild() === false) {
       setTwitchStatus('connecting', account.channel);
@@ -1141,11 +1159,12 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         twitchAccountStatus.set(account.accountId, status);
         twitchStatusListeners.forEach((l) => l());
         // Aggregate to the legacy global: connected if anyone connected,
-        // otherwise mirror this child's state. Stats polling latches onto
-        // the first channel that connects.
+        // otherwise mirror this child's state.
         const anyConnected = Array.from(twitchAccountStatus.values()).some((s) => s === 'connected');
         if (status === 'connected') {
           setTwitchStatus('connected', account.channel);
+          // Per-channel stats poll (viewer count, follower count, hype train).
+          startTwitchStatsPoll(account.channel, account.oauthToken.replace(/^oauth:/, ''));
         } else if (!anyConnected) {
           setTwitchStatus(status, account.channel);
         }
@@ -1156,8 +1175,11 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   };
 
   const disconnectTwitchAccount = async (accountId: string): Promise<void> => {
+    const channel = twitchAccountChannel.get(accountId);
     await twitchMultiAdapter.removeAccount(accountId);
     twitchAccountStatus.delete(accountId);
+    twitchAccountChannel.delete(accountId);
+    if (channel) stopTwitchStatsPollFor(channel);
     twitchStatusListeners.forEach((l) => l());
     if (!twitchMultiAdapter.hasConnectedChild()) {
       setTwitchStatus('disconnected', null);

@@ -10,8 +10,7 @@ interface AppHeaderProps {
   currentSection: AppSection;
   onChangeSection: (section: AppSection) => void;
   onOpenProfileSelector?: () => void;
-  twitchChannel: string | null;
-  twitchLiveStats: TwitchLiveStats | null;
+  twitchLiveStatsByChannel: Record<string, TwitchLiveStats>;
   youtubeStreams: YouTubeStreamInfo[];
   tiktokStatus: TikTokConnectionStatus;
   tiktokUsername: string | null;
@@ -30,8 +29,7 @@ export function AppHeader({
   currentSection,
   onChangeSection,
   onOpenProfileSelector,
-  twitchChannel,
-  twitchLiveStats,
+  twitchLiveStatsByChannel,
   youtubeStreams,
   tiktokStatus,
   tiktokUsername,
@@ -44,20 +42,21 @@ export function AppHeader({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const appName = appInfo?.appName ?? 'Streamer Copilot';
   const isKickLive = kickStatus === 'connected' && Boolean(kickSlug) && kickLiveStats?.isLive !== false;
-  const isAnyLive = Boolean(twitchLiveStats?.isLive) || youtubeStreams.length > 0 || isKickLive;
+  const liveTwitchChannels = Object.entries(twitchLiveStatsByChannel)
+    .filter(([, stats]) => stats.isLive)
+    .map(([channel]) => channel);
+  const isAnyLive = liveTwitchChannels.length > 0 || youtubeStreams.length > 0 || isKickLive;
   const liveLinks = [
-    ...(twitchLiveStats?.isLive && twitchChannel
-      ? [{
-          id: 'twitch',
-          label: `Twitch #${twitchChannel}`,
-          url: `twitch.tv/${twitchChannel}`,
-          full: `https://twitch.tv/${twitchChannel}`,
-          icon: TWITCH_ICON,
-          color: 'text-purple-400',
-          border: 'border-purple-500/30',
-          btnBg: 'bg-purple-600/30 hover:bg-purple-600/50 text-purple-300',
-        }]
-      : []),
+    ...liveTwitchChannels.map((channel) => ({
+      id: `twitch-${channel}`,
+      label: `Twitch #${channel}`,
+      url: `twitch.tv/${channel}`,
+      full: `https://twitch.tv/${channel}`,
+      icon: TWITCH_ICON,
+      color: 'text-purple-400',
+      border: 'border-purple-500/30',
+      btnBg: 'bg-purple-600/30 hover:bg-purple-600/50 text-purple-300',
+    })),
     ...youtubeStreams.map((stream) => {
       const streamLabel = stream.label === 'YouTube' ? 'YouTube' : `YouTube ${stream.label}`;
       return ({

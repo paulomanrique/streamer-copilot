@@ -473,8 +473,8 @@ const copilotApi: CopilotApi = {
     ipcRenderer.on(IPC_CHANNELS.twitchStatus, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.twitchStatus, wrappedListener); };
   },
-  onTwitchLiveStats: (listener: (stats: TwitchLiveStats) => void) => {
-    const wrappedListener = (_event: Electron.IpcRendererEvent, stats: TwitchLiveStats) => listener(stats);
+  onTwitchLiveStats: (listener: (payload: { channel: string; stats: TwitchLiveStats | null }) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: { channel: string; stats: TwitchLiveStats | null }) => listener(payload);
     ipcRenderer.on(IPC_CHANNELS.twitchLiveStats, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.twitchLiveStats, wrappedListener); };
   },

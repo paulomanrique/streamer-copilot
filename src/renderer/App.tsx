@@ -45,7 +45,7 @@ export default function App() {
     kickLiveStats,
     setProfiles,
     setChatSnapshot,
-    twitchLiveStats,
+    twitchLiveStatsByChannel,
     youtubeStreams,
     setTwitchStatus,
     setTwitchChannel,
@@ -360,8 +360,7 @@ export default function App() {
             appInfo={appInfo}
             currentSection={currentSection}
             onChangeSection={setCurrentSection}
-            twitchChannel={twitchChannel}
-            twitchLiveStats={twitchLiveStats}
+            twitchLiveStatsByChannel={twitchLiveStatsByChannel}
             youtubeStreams={youtubeStreams}
             tiktokStatus={tiktokStatus}
             tiktokUsername={tiktokUsername}
@@ -380,7 +379,7 @@ export default function App() {
             obsStats={obsStats}
             twitchStatus={twitchStatus}
             twitchChannel={twitchChannel}
-            twitchLiveStats={twitchLiveStats}
+            twitchLiveStatsByChannel={twitchLiveStatsByChannel}
             youtubeStreams={youtubeStreams}
             tiktokStatus={tiktokStatus}
             tiktokUsername={tiktokUsername}

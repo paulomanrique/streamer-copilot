@@ -118,8 +118,8 @@ export class StateHub {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.twitchStatus, status, channel ?? null);
   }
 
-  pushTwitchLiveStats(stats: TwitchLiveStats): void {
-    this.rendererWindow?.webContents.send(IPC_CHANNELS.twitchLiveStats, stats);
+  pushTwitchLiveStats(channel: string, stats: TwitchLiveStats | null): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.twitchLiveStats, { channel, stats });
   }
 
   pushYoutubeStatus(streams: YouTubeStreamInfo[]): void {

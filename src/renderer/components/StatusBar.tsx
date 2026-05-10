@@ -59,11 +59,11 @@ export function StatusBar({ activeProfileName, obsConnected }: StatusBarProps) {
     };
 
     void refresh();
+    // Apply incremental updates from the push channel only — re-listing
+    // accounts on every status ping flooded the IPC bus and raced with
+    // dev-mode main-process restarts.
     const unsub = window.copilot.onAccountStatus((status) => {
       setStatuses((prev) => ({ ...prev, [status.accountId]: status.status }));
-      // An account toggle (enable/disable) doesn't fire onAccountStatus, but
-      // status pings are common enough that we re-list cheaply on each one.
-      void refresh();
     });
     return () => {
       cancelled = true;
