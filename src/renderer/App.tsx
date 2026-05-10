@@ -154,6 +154,18 @@ export default function App() {
     }
   };
 
+  /** Used from the settings list, where the user is already running a
+   *  profile. Persists the new active profile and asks the main process to
+   *  relaunch — the renderer is about to be replaced, so we don't bother
+   *  syncing local state. */
+  const onSwitchProfile = async (profileId: string) => {
+    try {
+      await window.copilot.switchProfileAndRelaunch({ profileId });
+    } catch (cause) {
+      pushError(cause instanceof Error ? cause.message : messages[appLanguage].errors.failedToSelectProfile);
+    }
+  };
+
   const applyProfilesSnapshot = (snapshot: ProfilesSnapshot) => {
     setProfiles(snapshot);
     setSelectorProfileId(snapshot.activeProfileId);
@@ -365,7 +377,7 @@ export default function App() {
             onRenameProfile={openRenameProfileModal}
             onCloneProfile={openCloneProfileModal}
             onDeleteProfile={() => void deleteActiveProfile()}
-            onSelectProfile={(profileId) => void onSelectProfile(profileId)}
+            onSelectProfile={(profileId) => void onSwitchProfile(profileId)}
             generalSettings={generalSettings}
             onSaveGeneralSettings={saveGeneralSettings}
             appLanguage={appLanguage}

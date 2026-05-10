@@ -77,6 +77,7 @@ export const IPC_CHANNELS = {
   appOpenExternalUrl: 'app:open-external-url',
   profilesList: 'profiles:list',
   profilesSelect: 'profiles:select',
+  profilesSwitchAndRelaunch: 'profiles:switch-and-relaunch',
   profilesCreate: 'profiles:create',
   profilesRename: 'profiles:rename',
   profilesClone: 'profiles:clone',
@@ -240,6 +241,11 @@ export interface CopilotApi {
   openExternalUrl: (url: string) => Promise<void>;
   listProfiles: () => Promise<ProfilesSnapshot>;
   selectProfile: (input: SelectProfileInput) => Promise<ProfilesSnapshot>;
+  /** Hard switch — persists the new active profile and relaunches the app
+   *  so every long-lived service (adapters, OAuth, schedulers) starts from a
+   *  clean slate. The promise resolves with the persisted snapshot before the
+   *  process exits. */
+  switchProfileAndRelaunch: (input: SelectProfileInput) => Promise<ProfilesSnapshot>;
   createProfile: (input: CreateProfileInput) => Promise<ProfilesSnapshot>;
   renameProfile: (input: RenameProfileInput) => Promise<ProfilesSnapshot>;
   cloneProfile: (input: CloneProfileInput) => Promise<ProfilesSnapshot>;
