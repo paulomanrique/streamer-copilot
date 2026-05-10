@@ -6,7 +6,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
-import { BrowserWindow, Notification, dialog, ipcMain, net, shell } from 'electron';
+import { BrowserWindow, Notification, app, dialog, ipcMain, net, shell } from 'electron';
 import { parseFile as parseAudioFile } from 'music-metadata';
 
 import type { DatabaseHandle } from '../db/database.js';
@@ -1418,17 +1418,15 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   ipcMain.handle(IPC_CHANNELS.profilesList, async () => profileStore.list());
   ipcMain.handle(IPC_CHANNELS.profilesSelect, async (_, raw) => {
+    // Switching profiles touches every long-lived service (adapters, OAuth
+    // tokens, account caches, settings, scheduler timers). Trying to tear that
+    // down inline left adapters mid-state — easier and more reliable to just
+    // relaunch the app so the new profile boots from a clean slate.
     const snapshot = await profileStore.select(selectProfileInputSchema.parse(raw).profileId);
-    const active = snapshot.profiles.find((p) => p.id === snapshot.activeProfileId);
-    if (active) activeProfileDirectory = active.directory;
-    chatService.clearRecent();
-    suggestionService.clearSessionEntries();
-    welcomeService.reset();
-    musicService.reset();
-    await reloadSoundSettingsCache();
-    await reloadTextSettingsCache();
-    await reloadWelcomeSettingsCache();
-    await reloadMusicSettingsCache();
+    setImmediate(() => {
+      app.relaunch();
+      app.quit();
+    });
     return snapshot;
   });
   ipcMain.handle(IPC_CHANNELS.profilesCreate, async (_, raw) => { const i = createProfileInputSchema.parse(raw); return profileStore.create(i.name, i.directory, i.appLanguage); });
