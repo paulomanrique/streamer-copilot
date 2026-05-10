@@ -1481,24 +1481,40 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   ipcMain.handle(IPC_CHANNELS.profilesList, async () => profileStore.list());
   ipcMain.handle(IPC_CHANNELS.profilesSelect, async (_, raw) => {
-    // Switching profiles touches every long-lived service (adapters, OAuth
-    // tokens, account caches, settings, scheduler timers). Trying to tear that
-    // down inline left adapters mid-state — easier and more reliable to just
-    // relaunch the app so the new profile boots from a clean slate.
+    // Used by the boot-time profile picker (no app state yet) and any caller
+    // that wants a soft selection without restarting. Long-lived services
+    // (adapters, OAuth, schedulers, settings caches) keep their state — for a
+    // hard reset use `profilesSwitchAndRelaunch` instead.
+    const snapshot = await profileStore.select(selectProfileInputSchema.parse(raw).profileId);
+    const active = snapshot.profiles.find((p) => p.id === snapshot.activeProfileId);
+    if (active) activeProfileDirectory = active.directory;
+    chatService.clearRecent();
+    suggestionService.clearSessionEntries();
+    welcomeService.reset();
+    musicService.reset();
+    await reloadSoundSettingsCache();
+    await reloadTextSettingsCache();
+    await reloadWelcomeSettingsCache();
+    await reloadMusicSettingsCache();
+    return snapshot;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.profilesSwitchAndRelaunch, async (_, raw) => {
+    // Used from the settings list, where the user is already running a
+    // profile. Switching mid-session touches every long-lived service — we
+    // relaunch instead of trying to reset them in place.
     const snapshot = await profileStore.select(selectProfileInputSchema.parse(raw).profileId);
     setImmediate(() => {
       if (app.isPackaged) {
-        // Production binary: standard relaunch + clean quit. The detached
-        // child started by `relaunch` becomes the next instance.
+        // Production binary: standard relaunch + clean quit.
         app.relaunch();
         app.quit();
       } else {
-        // Dev (under nodemon): app.relaunch() would spawn a second detached
-        // Electron orphaned to launchd while nodemon also respawns its own —
-        // doubling instances. And nodemon by default *waits* on a clean exit
-        // (code 0) instead of restarting. Force a non-zero exit AFTER
-        // graceful before-quit cleanup so nodemon treats it as a crash and
-        // brings up exactly one fresh instance.
+        // Dev (under nodemon): app.relaunch() would spawn a detached Electron
+        // orphaned to launchd while nodemon respawns its own — doubling
+        // instances. And nodemon waits on clean exits. Force a non-zero exit
+        // AFTER graceful before-quit cleanup so nodemon treats it as a crash
+        // and brings up one fresh instance.
         app.once('will-quit', () => process.exit(42));
         app.quit();
       }
