@@ -2,10 +2,8 @@ import { useState } from 'react';
 
 import { registerPlatformProvider, type AuthStepProps } from './registry.js';
 
-function KickAuthStep({ draft, updateDraft, channel, setChannel, setError }: AuthStepProps) {
+function KickAuthStep({ channel, setChannel, setError }: AuthStepProps) {
   const [busy, setBusy] = useState(false);
-  const clientId = String(draft.clientId ?? '');
-  const clientSecret = String(draft.clientSecret ?? '');
 
   async function startOAuth() {
     setBusy(true); setError(null);
@@ -19,6 +17,9 @@ function KickAuthStep({ draft, updateDraft, channel, setChannel, setError }: Aut
     }
   }
 
+  // Client ID / Secret fields are intentionally hidden — the bundled OAuth app
+  // covers the common case. We'll re-expose them as an "Advanced" toggle if we
+  // start hitting rate limits or need users to bring their own Kick app.
   return (
     <div className="space-y-4">
       <div>
@@ -30,26 +31,6 @@ function KickAuthStep({ draft, updateDraft, channel, setChannel, setError }: Aut
           onChange={(e) => setChannel(e.target.value.trim().toLowerCase())}
           className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-100"
         />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs uppercase text-gray-500 mb-1">Client ID (optional)</label>
-          <input
-            type="text"
-            value={clientId}
-            onChange={(e) => updateDraft({ clientId: e.target.value.trim() })}
-            className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-100"
-          />
-        </div>
-        <div>
-          <label className="block text-xs uppercase text-gray-500 mb-1">Client Secret (optional)</label>
-          <input
-            type="password"
-            value={clientSecret}
-            onChange={(e) => updateDraft({ clientSecret: e.target.value })}
-            className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-100"
-          />
-        </div>
       </div>
       <button
         type="button"
