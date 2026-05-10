@@ -260,6 +260,19 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
     visible: false, x: 0, y: 0, platform: '', author: '',
   });
   const hasMultipleYouTubeStreams = connectedPlatforms.includes('youtube') && connectedPlatforms.includes('youtube-v');
+  // Detect multi-channel Twitch from observed messages — when 2+ distinct
+  // streamLabels appear, the row badge shows the channel name instead of a
+  // generic "Twitch" tag.
+  const hasMultipleTwitchChannels = useMemo(() => {
+    const seen = new Set<string>();
+    for (const m of messages) {
+      if (m.platform === 'twitch' && m.streamLabel) {
+        seen.add(m.streamLabel);
+        if (seen.size > 1) return true;
+      }
+    }
+    return false;
+  }, [messages]);
 
   const [suggestionLists,   setSuggestionLists]   = useState<SuggestionList[]>([]);
   const [suggestionEntries, setSuggestionEntries] = useState<Record<string, SuggestionEntry[]>>({});
@@ -467,11 +480,12 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
           avatarUrl={avatarCache.get(item.message.author.toLowerCase()) || undefined}
           highlighted={highlighted === item.message.author}
           hasMultipleYouTubeStreams={hasMultipleYouTubeStreams}
+          hasMultipleTwitchChannels={hasMultipleTwitchChannels}
           onReplyTo={replyTo}
           onContextMenuRequest={handleContextMenu}
         />
       ),
-    [avatarCache, handleContextMenu, hasMultipleYouTubeStreams, highlighted, replyTo],
+    [avatarCache, handleContextMenu, hasMultipleYouTubeStreams, hasMultipleTwitchChannels, highlighted, replyTo],
   );
 
   const selectSuggestionList = async (listId: string) => {
@@ -788,17 +802,20 @@ interface ChatMessageRowProps {
   avatarUrl?: string;
   highlighted: boolean;
   hasMultipleYouTubeStreams: boolean;
+  hasMultipleTwitchChannels: boolean;
   onReplyTo: (platform: string, author: string) => void;
   onContextMenuRequest: (event: React.MouseEvent, platform: string, author: string, userId?: string, messageId?: string) => void;
 }
 
-const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highlighted, hasMultipleYouTubeStreams, onReplyTo, onContextMenuRequest }: ChatMessageRowProps) {
+const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highlighted, hasMultipleYouTubeStreams, hasMultipleTwitchChannels, onReplyTo, onContextMenuRequest }: ChatMessageRowProps) {
   const pKey = platformKey(message.platform);
   const meta = PLATFORM_META[pKey];
   const badgeMeta = PLATFORM_BADGE_META[pKey] ?? PLATFORM_BADGE_META.twitch;
   const badgeLabel = (pKey === 'youtube' || pKey === 'youtube-v' || pKey === 'youtube-api')
     ? getYtBadgeLabel(message.platform, hasMultipleYouTubeStreams)
-    : badgeMeta.label;
+    : (pKey === 'twitch' && hasMultipleTwitchChannels && message.streamLabel)
+      ? message.streamLabel
+      : badgeMeta.label;
   const isCommand = message.content.startsWith('!');
 
   // STAR LOGIC: 

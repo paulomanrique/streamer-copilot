@@ -180,6 +180,9 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
         badgeUrls: this.options.resolveBadgeUrls ? this.options.resolveBadgeUrls((tags.badges as string | Record<string, string>) ?? '') : undefined,
         role,
         unifiedLevel: resolveFromRole(role),
+        // Per-channel hint so the chat feed can label multi-channel Twitch
+        // setups with the source channel instead of a generic "Twitch" badge.
+        streamLabel: this.normalizeChannelName(channel) ?? undefined,
       }, tags);
     });
 
