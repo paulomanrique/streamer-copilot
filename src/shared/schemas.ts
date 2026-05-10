@@ -18,6 +18,10 @@ export const selectProfileInputSchema = z.object({
   profileId: z.string().min(1),
 });
 
+export const setAutoSelectActiveProfileSchema = z.object({
+  autoSelect: z.boolean(),
+});
+
 export const createProfileInputSchema = z.object({
   name: z.string().min(1).max(80),
   directory: z.string().min(1),

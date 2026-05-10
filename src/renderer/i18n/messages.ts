@@ -70,6 +70,7 @@ const en: TranslationMessages = {
     selectProfile: 'Select Profile',
     chooseProfileDescription: 'Choose a profile to continue.',
     deleteConfirm: (name) => `Delete profile "${name}"?`,
+    dontAskAgain: "Don't ask me again — open this profile automatically next time",
   },
   settings: {
     title: 'Settings',
@@ -668,6 +669,7 @@ const pt: TranslationMessages = {
     selectProfile: 'Selecionar Perfil',
     chooseProfileDescription: 'Escolha um perfil para continuar.',
     deleteConfirm: (name) => `Excluir perfil "${name}"?`,
+    dontAskAgain: 'Não me pergunte de novo — abrir este perfil automaticamente da próxima vez',
   },
   settings: {
     title: 'Configurações',

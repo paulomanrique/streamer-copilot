@@ -636,6 +636,10 @@ export interface ProfileSummary {
 export interface ProfilesSnapshot {
   activeProfileId: string;
   profiles: ProfileSummary[];
+  /** When true, the boot picker auto-selects `activeProfileId` instead of
+   *  prompting. The flag is set by the picker's "don't ask again" checkbox
+   *  and reset whenever the user switches profiles from settings. */
+  autoSelectActiveProfile: boolean;
 }
 
 export interface SelectProfileInput {
