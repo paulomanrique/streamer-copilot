@@ -1340,6 +1340,13 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
    */
   let cachedYoutubeApiAccounts: YouTubeApiAccount[] = [];
   const refreshYoutubeApiAccounts = async (): Promise<void> => {
+    if (!getActiveProfileDirectory()) {
+      // Called before the profile is ready (cold start) or during a profile
+      // switch — drop to an empty cache so the adapter quiesces, retry later.
+      cachedYoutubeApiAccounts = [];
+      youtubeApiAdapter.refresh();
+      return;
+    }
     const accounts = await accountRepository.list();
     const next: YouTubeApiAccount[] = [];
     for (const account of accounts) {
@@ -2008,7 +2015,14 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   // Auto-attach the YouTube API adapter on startup. The adapter idles when
   // there are no enabled youtube-api accounts.
   void (async () => {
-    await refreshYoutubeApiAccounts();
+    // Wait for the profile directory to resolve — accountRepository.list()
+    // throws otherwise during cold start.
+    await activeProfileDirectoryReady;
+    try {
+      await refreshYoutubeApiAccounts();
+    } catch (cause) {
+      logService.warn('youtube-api', `Initial account scan failed: ${cause instanceof Error ? cause.message : String(cause)}`);
+    }
     await chatService.replaceAdapter(youtubeApiAdapter);
   })();
 
