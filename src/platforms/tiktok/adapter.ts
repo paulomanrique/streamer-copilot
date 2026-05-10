@@ -160,6 +160,11 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
   private attachListeners(connection: TikTokConnectionLike, events: Record<string, string>): void {
     const ev = (key: string, fallback: string) => events[key] ?? fallback;
 
+    // Per-stream label so the chat feed and activity log can disambiguate
+    // multi-account TikTok setups. There's only one host per adapter, so
+    // every emit gets the same label.
+    const streamLabel = this.options.username || undefined;
+
     connection.on(ev('CHAT', 'chat'), (...args: unknown[]) => {
       const payload = args[0] as TikTokChatPayload | undefined;
       if (!payload?.comment) return;
@@ -176,6 +181,7 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
         avatarUrl: avatarUrlFor(payload.user),
         role,
         unifiedLevel: resolveFromRole(role),
+        streamLabel,
         ...(payload.user?.uniqueId ? { userId: payload.user.uniqueId } : {}),
       });
     });
@@ -197,6 +203,7 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
           ? `${payload.giftDetails.giftName} x${payload.repeatCount ?? 1}`
           : undefined,
         timestampLabel: ts(),
+        streamLabel,
       });
     });
 
@@ -209,6 +216,7 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
         type: 'follow',
         author,
         timestampLabel: ts(),
+        streamLabel,
       });
     });
 
@@ -222,6 +230,7 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
         author,
         message: 'shared the live',
         timestampLabel: ts(),
+        streamLabel,
       });
     });
 

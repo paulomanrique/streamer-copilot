@@ -260,18 +260,24 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
     visible: false, x: 0, y: 0, platform: '', author: '',
   });
   const hasMultipleYouTubeStreams = connectedPlatforms.includes('youtube') && connectedPlatforms.includes('youtube-v');
-  // Detect multi-channel Twitch from observed messages — when 2+ distinct
-  // streamLabels appear, the row badge shows the channel name instead of a
-  // generic "Twitch" tag.
-  const hasMultipleTwitchChannels = useMemo(() => {
-    const seen = new Set<string>();
+  // Detect platforms with more than one distinct stream/channel from observed
+  // messages. When a platform has 2+ distinct `streamLabel`s, each row's badge
+  // shows the channel name instead of the generic platform name. Generic over
+  // all platforms — same treatment that started on Twitch now also applies to
+  // TikTok, Kick, and youtube-api.
+  const multiStreamPlatforms = useMemo(() => {
+    const labelsByPlatform = new Map<string, Set<string>>();
     for (const m of messages) {
-      if (m.platform === 'twitch' && m.streamLabel) {
-        seen.add(m.streamLabel);
-        if (seen.size > 1) return true;
-      }
+      if (!m.streamLabel) continue;
+      const set = labelsByPlatform.get(m.platform) ?? new Set<string>();
+      set.add(m.streamLabel);
+      labelsByPlatform.set(m.platform, set);
     }
-    return false;
+    const result = new Set<string>();
+    for (const [platform, labels] of labelsByPlatform) {
+      if (labels.size > 1) result.add(platform);
+    }
+    return result;
   }, [messages]);
 
   const [suggestionLists,   setSuggestionLists]   = useState<SuggestionList[]>([]);
@@ -480,12 +486,12 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
           avatarUrl={avatarCache.get(item.message.author.toLowerCase()) || undefined}
           highlighted={highlighted === item.message.author}
           hasMultipleYouTubeStreams={hasMultipleYouTubeStreams}
-          hasMultipleTwitchChannels={hasMultipleTwitchChannels}
+          showStreamLabel={multiStreamPlatforms.has(item.message.platform)}
           onReplyTo={replyTo}
           onContextMenuRequest={handleContextMenu}
         />
       ),
-    [avatarCache, handleContextMenu, hasMultipleYouTubeStreams, hasMultipleTwitchChannels, highlighted, replyTo],
+    [avatarCache, handleContextMenu, hasMultipleYouTubeStreams, multiStreamPlatforms, highlighted, replyTo],
   );
 
   const selectSuggestionList = async (listId: string) => {
@@ -802,18 +808,22 @@ interface ChatMessageRowProps {
   avatarUrl?: string;
   highlighted: boolean;
   hasMultipleYouTubeStreams: boolean;
-  hasMultipleTwitchChannels: boolean;
+  /** True when this message's platform has more than one distinct
+   *  streamLabel in flight — the row swaps its badge text for the channel
+   *  label so multi-account setups stay distinguishable. */
+  showStreamLabel: boolean;
   onReplyTo: (platform: string, author: string) => void;
   onContextMenuRequest: (event: React.MouseEvent, platform: string, author: string, userId?: string, messageId?: string) => void;
 }
 
-const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highlighted, hasMultipleYouTubeStreams, hasMultipleTwitchChannels, onReplyTo, onContextMenuRequest }: ChatMessageRowProps) {
+const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highlighted, hasMultipleYouTubeStreams, showStreamLabel, onReplyTo, onContextMenuRequest }: ChatMessageRowProps) {
   const pKey = platformKey(message.platform);
   const meta = PLATFORM_META[pKey];
   const badgeMeta = PLATFORM_BADGE_META[pKey] ?? PLATFORM_BADGE_META.twitch;
-  const badgeLabel = (pKey === 'youtube' || pKey === 'youtube-v' || pKey === 'youtube-api')
+  const isYouTube = pKey === 'youtube' || pKey === 'youtube-v' || pKey === 'youtube-api';
+  const badgeLabel = isYouTube
     ? getYtBadgeLabel(message.platform, hasMultipleYouTubeStreams)
-    : (pKey === 'twitch' && hasMultipleTwitchChannels && message.streamLabel)
+    : (showStreamLabel && message.streamLabel)
       ? message.streamLabel
       : badgeMeta.label;
   const isCommand = message.content.startsWith('!');

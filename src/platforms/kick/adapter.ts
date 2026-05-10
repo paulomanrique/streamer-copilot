@@ -764,14 +764,20 @@ export class KickChatAdapter implements PlatformChatAdapter {
   }
 
   private emitMessage(message: ChatMessage): void {
+    const enriched = message.streamLabel
+      ? message
+      : { ...message, streamLabel: this.options.channelSlug || undefined };
     for (const handler of this.messageHandlers) {
-      handler(message);
+      handler(enriched);
     }
   }
 
   private emitEvent(event: StreamEvent): void {
+    const enriched = event.streamLabel
+      ? event
+      : { ...event, streamLabel: this.options.channelSlug || undefined };
     for (const handler of this.eventHandlers) {
-      handler(event);
+      handler(enriched);
     }
   }
 
