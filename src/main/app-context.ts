@@ -2829,6 +2829,31 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const input = accountCreateInputSchema.parse(raw);
     const created = await accountRepository.upsert(input);
     if (created.providerId === 'youtube-api') await refreshYoutubeApiAccounts();
+    // Auto-connect right after creation when the account opted in. The wizard
+    // saves with autoConnect+enabled by default, so the user expects the new
+    // network to come up without an extra "Connect" click. Fire-and-forget —
+    // failures surface through the normal account status push.
+    if (created.enabled && created.autoConnect) {
+      const provider = mainPlatforms.get(created.providerId);
+      if (provider) {
+        pushAccountStatus({ accountId: created.id, status: 'connecting' });
+        void (async () => {
+          try {
+            await provider.connect(created);
+            pushAccountStatus({ accountId: created.id, status: 'connected' });
+          } catch (cause) {
+            const message = describeConnectFailure(cause, created.providerId, created.channel);
+            logService.warn('accounts', 'Post-create auto-connect failed', {
+              providerId: created.providerId,
+              accountId: created.id,
+              channel: created.channel,
+              error: cause instanceof Error ? cause.message : String(cause),
+            });
+            pushAccountStatus({ accountId: created.id, status: 'error', detail: message });
+          }
+        })();
+      }
+    }
     return created;
   });
 
