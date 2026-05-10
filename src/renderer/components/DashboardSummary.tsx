@@ -14,7 +14,7 @@ interface DashboardSummaryProps {
   obsStats: ObsStatsSnapshot;
   twitchStatus: TwitchConnectionStatus;
   twitchChannel: string | null;
-  twitchLiveStats: TwitchLiveStats | null;
+  twitchLiveStatsByChannel: Record<string, TwitchLiveStats>;
   youtubeStreams: YouTubeStreamInfo[];
   tiktokStatus: TikTokConnectionStatus;
   tiktokUsername: string | null;
@@ -25,7 +25,7 @@ interface DashboardSummaryProps {
   recommendationTemplate: string;
 }
 
-export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, obsStats, twitchStatus, twitchChannel, twitchLiveStats, youtubeStreams, tiktokStatus, tiktokUsername, tiktokLiveStats, kickStatus, kickSlug, kickLiveStats, recommendationTemplate }: DashboardSummaryProps) {
+export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, obsStats, twitchStatus, twitchChannel, twitchLiveStatsByChannel, youtubeStreams, tiktokStatus, tiktokUsername, tiktokLiveStats, kickStatus, kickSlug, kickLiveStats, recommendationTemplate }: DashboardSummaryProps) {
   const { messages, t } = useI18n();
   const visibleMessages = chatMessages;
   const visibleEvents = chatEvents;
@@ -87,7 +87,8 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
         <div className="flex flex-col w-[40%] overflow-hidden">
           <ObsStatsPanel
             stats={obsStats}
-            twitchLiveStats={twitchLiveStats}
+            twitchLiveStatsByChannel={twitchLiveStatsByChannel}
+            twitchConnectedChannels={Object.keys(twitchLiveStatsByChannel)}
             twitchConnected={twitchStatus === 'connected'}
             youtubeStreams={youtubeStreams}
             tiktokStatus={tiktokStatus}

@@ -4,7 +4,11 @@ import { useI18n } from '../i18n/I18nProvider.js';
 
 interface ObsStatsPanelProps {
   stats: ObsStatsSnapshot;
-  twitchLiveStats: TwitchLiveStats | null;
+  twitchLiveStatsByChannel: Record<string, TwitchLiveStats>;
+  /** Distinct channels currently connected via the Twitch multi-adapter,
+   *  in stable order (insertion). Drives one ViewerCard per channel even
+   *  before the first stats poll lands. */
+  twitchConnectedChannels: string[];
   twitchConnected: boolean;
   youtubeStreams: YouTubeStreamInfo[];
   tiktokStatus: TikTokConnectionStatus;
@@ -28,10 +32,15 @@ function fmtNum(n: number): string {
   return String(n);
 }
 
-export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtubeStreams, tiktokStatus, tiktokUsername, tiktokLiveStats, kickStatus, kickSlug, kickLiveStats }: ObsStatsPanelProps) {
+export function ObsStatsPanel({ stats, twitchLiveStatsByChannel, twitchConnectedChannels, twitchConnected, youtubeStreams, tiktokStatus, tiktokUsername, tiktokLiveStats, kickStatus, kickSlug, kickLiveStats }: ObsStatsPanelProps) {
   const { t } = useI18n();
 
-  const hype = twitchLiveStats?.hypeTrain;
+  // Hype train is per-channel — pick whichever channel currently has one.
+  // Multi-channel hype is rare enough that one indicator is fine.
+  const hype = twitchConnectedChannels
+    .map((c) => twitchLiveStatsByChannel[c]?.hypeTrain)
+    .find((h): h is NonNullable<typeof h> => Boolean(h)) ?? null;
+  const hasMultipleTwitch = twitchConnectedChannels.length > 1;
   const [timeLeft, setTimeLeft] = useState('');
 
   useEffect(() => {
@@ -95,18 +104,22 @@ export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtube
 
         {(twitchConnected || youtubeStreams.length > 0 || kickStatus === 'connected') && (
           <div className="col-span-4 grid grid-cols-2 gap-2">
-            {twitchConnected && (
-              <ViewerCard
-                label="Twitch"
-                icon={ICONS.twitch}
-                classes="bg-purple-500/10 border-purple-500/20 text-purple-300"
-                metaClass="text-purple-400"
-                value={twitchLiveStats ? fmtNum(twitchLiveStats.viewerCount) : '0'}
-                isLive={!!twitchLiveStats?.isLive}
-                secondaryValue={twitchLiveStats ? fmtNum(twitchLiveStats.followerCount) : undefined}
-                secondaryLabel={t('followers')}
-              />
-            )}
+            {twitchConnectedChannels.map((channel) => {
+              const channelStats = twitchLiveStatsByChannel[channel] ?? null;
+              return (
+                <ViewerCard
+                  key={`twitch-${channel}`}
+                  label={hasMultipleTwitch ? `Twitch · ${channel}` : 'Twitch'}
+                  icon={ICONS.twitch}
+                  classes="bg-purple-500/10 border-purple-500/20 text-purple-300"
+                  metaClass="text-purple-400"
+                  value={channelStats ? fmtNum(channelStats.viewerCount) : '0'}
+                  isLive={!!channelStats?.isLive}
+                  secondaryValue={channelStats ? fmtNum(channelStats.followerCount) : undefined}
+                  secondaryLabel={t('followers')}
+                />
+              );
+            })}
             {youtubeStreams.map((stream) => (
               <ViewerCard
                 key={stream.videoId}

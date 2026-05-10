@@ -23,7 +23,10 @@ interface AppStore extends ProfilesSnapshot {
   obsStats: ObsStatsSnapshot;
   twitchStatus: TwitchConnectionStatus;
   twitchChannel: string | null;
-  twitchLiveStats: TwitchLiveStats | null;
+  /** Per-channel Twitch stats — one entry per connected account. The legacy
+   *  `twitchLiveStats` getter exposes the latest entry for back-compat with
+   *  callers that haven't been refactored yet. */
+  twitchLiveStatsByChannel: Record<string, TwitchLiveStats>;
   youtubeStreams: YouTubeStreamInfo[];
   tiktokStatus: TikTokConnectionStatus;
   tiktokUsername: string | null;
@@ -40,7 +43,7 @@ interface AppStore extends ProfilesSnapshot {
   appendChatEvents: (events: StreamEvent[]) => void;
   setTwitchStatus: (status: TwitchConnectionStatus) => void;
   setTwitchChannel: (channel: string | null) => void;
-  setTwitchLiveStats: (stats: TwitchLiveStats) => void;
+  setTwitchLiveStatsForChannel: (channel: string, stats: TwitchLiveStats | null) => void;
   setYoutubeStreams: (streams: YouTubeStreamInfo[]) => void;
   setTiktokStatus: (status: TikTokConnectionStatus) => void;
   setTiktokUsername: (username: string | null) => void;
@@ -60,7 +63,7 @@ export const useAppStore = create<AppStore>((set) => ({
   obsStats: DEFAULT_OBS_STATS,
   twitchStatus: 'disconnected',
   twitchChannel: null,
-  twitchLiveStats: null,
+  twitchLiveStatsByChannel: {},
   youtubeStreams: [],
   tiktokStatus: 'disconnected',
   tiktokUsername: null,
@@ -99,7 +102,13 @@ export const useAppStore = create<AppStore>((set) => ({
     set((state) => appendChatEventsToState(state, events)),
   setTwitchStatus: (status) => set({ twitchStatus: status }),
   setTwitchChannel: (channel) => set({ twitchChannel: channel }),
-  setTwitchLiveStats: (stats) => set({ twitchLiveStats: stats }),
+  setTwitchLiveStatsForChannel: (channel, stats) =>
+    set((state) => {
+      const next = { ...state.twitchLiveStatsByChannel };
+      if (stats === null) delete next[channel];
+      else next[channel] = stats;
+      return { twitchLiveStatsByChannel: next };
+    }),
   setYoutubeStreams: (streams) => set({ youtubeStreams: streams }),
   setTiktokStatus: (status) => set({ tiktokStatus: status }),
   setTiktokUsername: (username) => set({ tiktokUsername: username }),

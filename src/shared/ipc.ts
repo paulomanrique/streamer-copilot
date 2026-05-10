@@ -325,7 +325,7 @@ export interface CopilotApi {
   twitchDisconnect: () => Promise<void>;
   twitchGetStatus: () => Promise<TwitchConnectionStatus>;
   onTwitchStatus: (listener: (status: TwitchConnectionStatus, channel: string | null) => void) => () => void;
-  onTwitchLiveStats: (listener: (stats: TwitchLiveStats) => void) => () => void;
+  onTwitchLiveStats: (listener: (payload: { channel: string; stats: import('./types.js').TwitchLiveStats | null }) => void) => () => void;
   onKickLiveStats: (listener: (stats: KickLiveStats | null) => void) => () => void;
   onYoutubeStatus: (listener: (streams: import('./types.js').YouTubeStreamInfo[]) => void) => () => void;
   twitchGetUserAvatars: (logins: string[]) => Promise<Record<string, string>>;
