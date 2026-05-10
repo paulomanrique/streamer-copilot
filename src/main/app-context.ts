@@ -52,7 +52,8 @@ import { KickTokenStore, type KickAuthSession, type KickAuthToken } from '../pla
 import { TikTokSettingsStore } from '../platforms/tiktok/settings-store.js';
 import { createTikTokChatAdapter } from '../platforms/tiktok/adapter.js';
 import { TwitchCredentialsStore } from '../platforms/twitch/credentials-store.js';
-import { createTwitchChatAdapter, type TwitchChatAdapter } from '../platforms/twitch/adapter.js';
+import { type TwitchChatAdapter } from '../platforms/twitch/adapter.js';
+import { TwitchMultiChatAdapter } from '../platforms/twitch/multi-adapter.js';
 import { TwitchModerationApi, TWITCH_MODERATION_CAPABILITIES } from '../platforms/twitch/moderation.js';
 import { YouTubeSettingsStore } from '../platforms/youtube/settings-store.js';
 import { YouTubeChatAdapter } from '../platforms/youtube/scraper-adapter.js';
@@ -1100,6 +1101,68 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     for (const listener of twitchStatusListeners) listener();
   };
 
+  /** Singleton wrapper that holds one TwitchChatAdapter child per connected
+   *  Twitch account. Registered with chatService once, on demand, the first
+   *  time an account connects. Subsequent connects/disconnects just add or
+   *  remove children — the wrapper stays in place. */
+  const twitchMultiAdapter = new TwitchMultiChatAdapter();
+  let twitchMultiRegistered = false;
+  /** Per-account Twitch status, separate from the legacy global `twitchStatus`. */
+  const twitchAccountStatus = new Map<string, TwitchConnectionStatus>();
+
+  const ensureTwitchMultiRegistered = async (): Promise<void> => {
+    if (twitchMultiRegistered) return;
+    twitchMultiRegistered = true;
+    await chatService.replaceAdapter(twitchMultiAdapter);
+  };
+
+  /**
+   * Spawns a Twitch child for one account and wires moderation. Re-entrant —
+   * calling it again with the same `accountId` replaces the existing child.
+   * `setTwitchStatus` is still called for the *first* connected account so
+   * the legacy global status (used by stats polling, scheduled-target
+   * resolution, etc.) keeps a sensible value.
+   */
+  const connectTwitchAccount = async (account: { accountId: string; channel: string; username: string; oauthToken: string }): Promise<void> => {
+    await ensureTwitchMultiRegistered();
+    twitchAccountStatus.set(account.accountId, 'connecting');
+    twitchStatusListeners.forEach((l) => l());
+    if (twitchMultiAdapter.hasConnectedChild() === false) {
+      setTwitchStatus('connecting', account.channel);
+    }
+    await twitchMultiAdapter.addAccount({
+      accountId: account.accountId,
+      channels: [account.channel],
+      username: account.username,
+      password: account.oauthToken,
+      resolveBadgeUrls,
+      onStatusChange: (status) => {
+        twitchAccountStatus.set(account.accountId, status);
+        twitchStatusListeners.forEach((l) => l());
+        // Aggregate to the legacy global: connected if anyone connected,
+        // otherwise mirror this child's state. Stats polling latches onto
+        // the first channel that connects.
+        const anyConnected = Array.from(twitchAccountStatus.values()).some((s) => s === 'connected');
+        if (status === 'connected') {
+          setTwitchStatus('connected', account.channel);
+        } else if (!anyConnected) {
+          setTwitchStatus(status, account.channel);
+        }
+      },
+    });
+    const child = twitchMultiAdapter.getAccount(account.accountId);
+    if (child) void wireTwitchModeration(child, account.channel, account.oauthToken);
+  };
+
+  const disconnectTwitchAccount = async (accountId: string): Promise<void> => {
+    await twitchMultiAdapter.removeAccount(accountId);
+    twitchAccountStatus.delete(accountId);
+    twitchStatusListeners.forEach((l) => l());
+    if (!twitchMultiAdapter.hasConnectedChild()) {
+      setTwitchStatus('disconnected', null);
+    }
+  };
+
   const overlayServer = new OverlayServer({
     port: generalSettingsStore.load().overlayServerPort,
     getOverlayState: () => {
@@ -1659,20 +1722,25 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.twitchConnect, async (_, raw) => {
     const c = twitchCredentialsSchema.parse(raw);
     const s = await getTwitchCredentialsStore(); if (!s) throw new Error('No profile');
-    await s.save(c); setTwitchStatus('connecting', c.channel);
+    await s.save(c);
     // Pre-load badges so first messages have badge images
     await loadTwitchBadges(c.channel, c.oauthToken.replace(/^oauth:/, ''));
     chatLogService.openSession('twitch', c.channel);
     suggestionService.clearSessionEntries();
     selfSenderName.twitch = c.username.toLowerCase();
-    const twitchAdapter = createTwitchChatAdapter({ channels: [c.channel], username: c.username, password: c.oauthToken, onStatusChange: setTwitchStatus, resolveBadgeUrls });
-    await chatService.replaceAdapter(twitchAdapter);
-    void wireTwitchModeration(twitchAdapter, c.channel, c.oauthToken);
+    // Legacy IPC has no account id; use the channel as a stable key so
+    // re-issuing this IPC for the same channel replaces the child cleanly.
+    await connectTwitchAccount({ accountId: `legacy:${c.channel}`, channel: c.channel, username: c.username, oauthToken: c.oauthToken });
   });
   ipcMain.handle(IPC_CHANNELS.twitchDisconnect, async () => {
     delete selfSenderName.twitch;
     chatLogService.closeSession('twitch');
-    await chatService.removeAdapter('twitch'); setTwitchStatus('disconnected', null); const s = await getTwitchCredentialsStore(); if (s) await s.clear();
+    // Tear down every child the legacy IPC may have spawned. Account-model
+    // disconnects flow through `twitchProvider.disconnect` instead.
+    for (const accountId of Array.from(twitchAccountStatus.keys())) {
+      if (accountId.startsWith('legacy:')) await disconnectTwitchAccount(accountId);
+    }
+    const s = await getTwitchCredentialsStore(); if (s) await s.clear();
   });
   ipcMain.handle(IPC_CHANNELS.twitchGetStatus, async () => twitchStatus);
   ipcMain.handle(IPC_CHANNELS.twitchGetUserAvatars, async (_, logins) => {
@@ -1980,15 +2048,12 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       suggestionService.clearSessionEntries();
       twitchChannel = creds.channel;
       selfSenderName.twitch = creds.username.toLowerCase();
-      const twitchAdapter = createTwitchChatAdapter({
-        channels: [creds.channel],
+      await connectTwitchAccount({
+        accountId: `legacy:${creds.channel}`,
+        channel: creds.channel,
         username: creds.username,
-        password: creds.oauthToken,
-        onStatusChange: setTwitchStatus,
-        resolveBadgeUrls,
+        oauthToken: creds.oauthToken,
       });
-      await chatService.replaceAdapter(twitchAdapter);
-      void wireTwitchModeration(twitchAdapter, creds.channel, creds.oauthToken);
       logService.info('twitch', 'Auto-reconnected from saved credentials', { channel: creds.channel });
     } catch (cause) {
       logService.warn('twitch', 'Auto-reconnect failed', { error: cause instanceof Error ? cause.message : String(cause) });
@@ -2245,11 +2310,13 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   const twitchProvider: MainPlatformProvider = {
     providerId: 'twitch',
-    getStatus: () =>
-      twitchStatus === 'connected' ? 'connected'
-      : twitchStatus === 'connecting' ? 'connecting'
-      : twitchStatus === 'error' ? 'error'
-      : 'disconnected',
+    getStatus: (account) => {
+      const status = twitchAccountStatus.get(account.id);
+      if (status === 'connected') return 'connected';
+      if (status === 'connecting') return 'connecting';
+      if (status === 'error') return 'error';
+      return 'disconnected';
+    },
     async connect(account) {
       const creds = {
         channel: account.channel,
@@ -2265,21 +2332,14 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       chatLogService.openSession('twitch', creds.channel);
       suggestionService.clearSessionEntries();
       selfSenderName.twitch = creds.username.toLowerCase();
-      const adapter = createTwitchChatAdapter({
-        channels: [creds.channel],
-        username: creds.username,
-        password: creds.oauthToken,
-        onStatusChange: setTwitchStatus,
-        resolveBadgeUrls,
-      });
-      await chatService.replaceAdapter(adapter);
-      void wireTwitchModeration(adapter, creds.channel, creds.oauthToken);
+      await connectTwitchAccount({ accountId: account.id, ...creds });
     },
-    async disconnect() {
-      delete selfSenderName.twitch;
-      chatLogService.closeSession('twitch');
-      await chatService.removeAdapter('twitch');
-      setTwitchStatus('disconnected', null);
+    async disconnect(account) {
+      await disconnectTwitchAccount(account.id);
+      if (!twitchMultiAdapter.hasConnectedChild()) {
+        delete selfSenderName.twitch;
+        chatLogService.closeSession('twitch');
+      }
     },
     async purgeStores() {
       const store = await getTwitchCredentialsStore();
