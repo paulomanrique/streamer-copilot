@@ -15,6 +15,11 @@ interface ProfileRecord {
 interface ProfileState {
   activeProfileId: string;
   profiles: ProfileRecord[];
+  /** When true, the boot picker auto-selects `activeProfileId` instead of
+   *  prompting. Reset to false when the user switches profiles mid-session
+   *  (so the next boot asks again). Set to true when the user opts in via the
+   *  picker's "don't ask again" checkbox. */
+  autoSelectActiveProfile?: boolean;
 }
 
 const DEFAULT_PROFILE_SETTINGS: ProfileSettings = {
@@ -50,6 +55,13 @@ export class ProfileStore {
 
     await this.writeState(state);
 
+    return await this.toSnapshot(state);
+  }
+
+  async setAutoSelectActiveProfile(autoSelect: boolean): Promise<ProfilesSnapshot> {
+    const state = await this.readState();
+    state.autoSelectActiveProfile = autoSelect;
+    await this.writeState(state);
     return await this.toSnapshot(state);
   }
 
@@ -187,6 +199,7 @@ export class ProfileStore {
     return {
       activeProfileId: '',
       profiles: [],
+      autoSelectActiveProfile: false,
     };
   }
 
@@ -196,7 +209,11 @@ export class ProfileStore {
       ? state.activeProfileId
       : (profiles[0]?.id ?? '');
 
-    return { activeProfileId, profiles };
+    return {
+      activeProfileId,
+      profiles,
+      autoSelectActiveProfile: state.autoSelectActiveProfile === true,
+    };
   }
 
   private async ensureProfileFiles(
@@ -255,6 +272,7 @@ export class ProfileStore {
     return {
       activeProfileId: state.activeProfileId,
       profiles,
+      autoSelectActiveProfile: state.autoSelectActiveProfile === true,
     };
   }
 

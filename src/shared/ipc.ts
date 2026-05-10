@@ -78,6 +78,7 @@ export const IPC_CHANNELS = {
   profilesList: 'profiles:list',
   profilesSelect: 'profiles:select',
   profilesSwitchAndRelaunch: 'profiles:switch-and-relaunch',
+  profilesSetAutoSelect: 'profiles:set-auto-select',
   profilesCreate: 'profiles:create',
   profilesRename: 'profiles:rename',
   profilesClone: 'profiles:clone',
@@ -246,6 +247,7 @@ export interface CopilotApi {
    *  clean slate. The promise resolves with the persisted snapshot before the
    *  process exits. */
   switchProfileAndRelaunch: (input: SelectProfileInput) => Promise<ProfilesSnapshot>;
+  setAutoSelectActiveProfile: (input: { autoSelect: boolean }) => Promise<ProfilesSnapshot>;
   createProfile: (input: CreateProfileInput) => Promise<ProfilesSnapshot>;
   renameProfile: (input: RenameProfileInput) => Promise<ProfilesSnapshot>;
   cloneProfile: (input: CloneProfileInput) => Promise<ProfilesSnapshot>;

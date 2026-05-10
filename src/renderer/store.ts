@@ -52,6 +52,7 @@ interface AppStore extends ProfilesSnapshot {
 
 export const useAppStore = create<AppStore>((set) => ({
   activeProfileId: '',
+  autoSelectActiveProfile: false,
   chatMessages: [],
   chatEvents: [],
   chatSequence: 0,
@@ -71,6 +72,7 @@ export const useAppStore = create<AppStore>((set) => ({
     set({
       activeProfileId: snapshot.activeProfileId,
       profiles: snapshot.profiles,
+      autoSelectActiveProfile: snapshot.autoSelectActiveProfile,
     }),
   setObsStats: (next) =>
     set((state) => ({

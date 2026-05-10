@@ -64,6 +64,7 @@ export default function App() {
   const [profileFormDirectory, setProfileFormDirectory] = useState('');
   const [profileFormLanguage, setProfileFormLanguage] = useState<AppLanguage>(DEFAULT_APP_LANGUAGE);
   const [selectorProfileId, setSelectorProfileId] = useState('');
+  const [rememberProfileSelection, setRememberProfileSelection] = useState(false);
   const [currentSection, setCurrentSection] = useState<AppSection>('dashboard');
   const [generalSettings, setGeneralSettings] = useState<GeneralSettings>(DEFAULT_GENERAL_SETTINGS);
   const [appLanguage, setAppLanguage] = useState<AppLanguage>(DEFAULT_APP_LANGUAGE);
@@ -121,7 +122,21 @@ export default function App() {
         setKickStatus(kickInitialStatus);
         if (kickInitialStatus !== 'connected') setKickLiveStats(null);
         setSelectorProfileId(snapshot.activeProfileId);
-        setIsProfileSelectorOpen(true);
+        setRememberProfileSelection(snapshot.autoSelectActiveProfile);
+        // Smart skip: don't bother prompting when there's only one profile,
+        // or when the user already opted in to auto-select via the picker's
+        // "don't ask again" checkbox. Falls through to the picker otherwise.
+        const onlyOne = snapshot.profiles.length === 1;
+        const autoSelectId = onlyOne
+          ? snapshot.profiles[0].id
+          : (snapshot.autoSelectActiveProfile && snapshot.activeProfileId)
+            ? snapshot.activeProfileId
+            : null;
+        if (autoSelectId) {
+          await onSelectProfile(autoSelectId);
+        } else {
+          setIsProfileSelectorOpen(true);
+        }
       } catch (cause) {
         pushError(cause instanceof Error ? cause.message : messages[appLanguage].errors.failedToLoadInitialData);
       } finally {
@@ -169,6 +184,7 @@ export default function App() {
   const applyProfilesSnapshot = (snapshot: ProfilesSnapshot) => {
     setProfiles(snapshot);
     setSelectorProfileId(snapshot.activeProfileId);
+    setRememberProfileSelection(snapshot.autoSelectActiveProfile);
     applyAppLanguageFromSnapshot(snapshot);
   };
 
@@ -290,6 +306,15 @@ export default function App() {
     const selected = await onSelectProfile(targetProfileId);
     if (!selected) return;
 
+    // Persist (or clear) the "don't ask again" preference. The user might have
+    // unchecked it after a previous run had it on — both directions matter.
+    try {
+      const updated = await window.copilot.setAutoSelectActiveProfile({ autoSelect: rememberProfileSelection });
+      applyProfilesSnapshot(updated);
+    } catch (cause) {
+      pushError(cause instanceof Error ? cause.message : messages[appLanguage].errors.failedToSelectProfile);
+    }
+
     setIsProfileSelectorOpen(false);
   };
 
@@ -313,6 +338,7 @@ export default function App() {
       setAppLanguage(saved.appLanguage);
       setProfiles({
         activeProfileId,
+        autoSelectActiveProfile: rememberProfileSelection,
         profiles: profiles.map((profile) =>
           profile.id === activeProfileId ? { ...profile, appLanguage: saved.appLanguage } : profile,
         ),
@@ -400,7 +426,9 @@ export default function App() {
         open={isProfileSelectorOpen || (!isLoading && !hasActiveProfile)}
         profiles={profiles}
         selectorProfileId={selectorProfileId}
+        rememberSelection={rememberProfileSelection}
         onChangeProfileId={setSelectorProfileId}
+        onChangeRememberSelection={setRememberProfileSelection}
         onCreateProfile={openCreateProfileModal}
         onConfirm={() => void confirmProfileSelector()}
       />

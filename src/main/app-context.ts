@@ -112,6 +112,7 @@ import {
   accountUpdateInputSchema,
   accountIdInputSchema,
   selectProfileInputSchema,
+  setAutoSelectActiveProfileSchema,
   textCommandDeleteInputSchema,
   textCommandUpsertInputSchema,
   textSettingsSchema,
@@ -1504,6 +1505,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     // profile. Switching mid-session touches every long-lived service — we
     // relaunch instead of trying to reset them in place.
     const snapshot = await profileStore.select(selectProfileInputSchema.parse(raw).profileId);
+    // Reset the boot auto-select flag — if the user is consciously switching
+    // profiles, the next launch should ask again.
+    await profileStore.setAutoSelectActiveProfile(false);
     setImmediate(() => {
       if (app.isPackaged) {
         // Production binary: standard relaunch + clean quit.
@@ -1520,6 +1524,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       }
     });
     return snapshot;
+  });
+  ipcMain.handle(IPC_CHANNELS.profilesSetAutoSelect, async (_, raw) => {
+    const i = setAutoSelectActiveProfileSchema.parse(raw);
+    return profileStore.setAutoSelectActiveProfile(i.autoSelect);
   });
   ipcMain.handle(IPC_CHANNELS.profilesCreate, async (_, raw) => { const i = createProfileInputSchema.parse(raw); return profileStore.create(i.name, i.directory, i.appLanguage); });
   ipcMain.handle(IPC_CHANNELS.profilesRename, async (_, raw) => { const i = renameProfileInputSchema.parse(raw); return profileStore.rename(i.profileId, i.name); });
