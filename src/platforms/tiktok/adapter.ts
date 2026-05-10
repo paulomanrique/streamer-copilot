@@ -98,7 +98,11 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
       const requireFn = createRequire(import.meta.url);
       const lib = requireFn('tiktok-live-connector') as TikTokModule;
       this.connection = new lib.TikTokLiveConnection(this.options.username, {
-        enableExtendedGiftInfo: true,
+        // `enableExtendedGiftInfo` makes the lib hit TikTok's gift-catalog
+        // endpoint during connect; that endpoint returns 403 in many regions
+        // and on rate-limit, blocking the entire connect. Gift events still
+        // include the inline `giftDetails` payload, which is what we display.
+        enableExtendedGiftInfo: false,
       });
       this.attachListeners(this.connection, lib.WebcastEvent ?? DEFAULT_EVENT_NAMES);
       await this.connection.connect();
