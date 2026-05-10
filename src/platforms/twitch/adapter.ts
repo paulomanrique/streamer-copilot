@@ -186,6 +186,12 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
       }, tags);
     });
 
+    // Per-channel hint used by the chat feed and activity log to disambiguate
+    // multi-channel Twitch setups. Each event handler receives the channel as
+    // its first argument (with a leading '#'); we strip the '#' and forward.
+    const labelOf = (channel: string | null | undefined): string | undefined =>
+      this.normalizeChannelName(channel) ?? undefined;
+
     client.on('cheer', (...args: unknown[]) => {
       const [channel, tags, message] = args as [string, TmiTags, string];
       this.emitEvent({
@@ -194,6 +200,7 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
         author: this.resolveAuthor(tags, channel),
         amount: this.firstNumber(tags.bits) ?? 0,
         message: message || undefined,
+        streamLabel: labelOf(channel),
       });
     });
 
@@ -206,6 +213,7 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
         author: String(username ?? this.resolveAuthor(tags ?? {}, channel)),
         amount: 1,
         message: message || undefined,
+        streamLabel: labelOf(channel),
       });
     });
 
@@ -218,6 +226,7 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
         author: String(username ?? this.resolveAuthor(tags ?? {}, channel)),
         amount: this.firstNumber(months) ?? 1,
         message: message || undefined,
+        streamLabel: labelOf(channel),
       });
     });
 
@@ -230,18 +239,20 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
         author: String(gifter ?? this.resolveAuthor(tags ?? {}, channel)),
         amount: 1,
         message: `to @${String(recipient ?? '')}`,
+        streamLabel: labelOf(channel),
       });
     });
 
     // Anonymous gift sub
     client.on('anonsubgift', (...args: unknown[]) => {
-      const [, , recipient] = args as [string, unknown, string];
+      const [channel, , recipient] = args as [string, unknown, string];
       this.emitEvent({
         platform: 'twitch',
         type: 'gift',
         author: 'Anonymous',
         amount: 1,
         message: `to @${String(recipient ?? '')}`,
+        streamLabel: labelOf(channel),
       });
     });
 
@@ -254,18 +265,20 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
         author: String(gifter ?? this.resolveAuthor(tags ?? {}, channel)),
         amount: this.firstNumber(count) ?? 1,
         message: undefined,
+        streamLabel: labelOf(channel),
       });
     });
 
     // Anonymous mass gift
     client.on('anonsubmysterygift', (...args: unknown[]) => {
-      const [, count] = args as [string, number];
+      const [channel, count] = args as [string, number];
       this.emitEvent({
         platform: 'twitch',
         type: 'gift',
         author: 'Anonymous',
         amount: this.firstNumber(count) ?? 1,
         message: undefined,
+        streamLabel: labelOf(channel),
       });
     });
 
@@ -278,6 +291,7 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
         author: String(username ?? this.resolveAuthor(tags ?? {}, channel)),
         amount: 1,
         message: undefined,
+        streamLabel: labelOf(channel),
       });
     });
 
@@ -289,6 +303,7 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
         author: String(username ?? this.resolveAuthor(tags ?? {}, channel)),
         amount: 1,
         message: undefined,
+        streamLabel: labelOf(channel),
       });
     });
 
@@ -301,6 +316,7 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
         author: this.resolveEventAuthor(user, tags, channel),
         amount: this.firstNumber(viewers) ?? 0,
         message: undefined,
+        streamLabel: labelOf(channel),
       });
     });
 

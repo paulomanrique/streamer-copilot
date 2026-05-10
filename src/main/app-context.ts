@@ -1003,7 +1003,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     if (!youtubeAdapter) return;
     const settings = await loadYoutubeSettings();
     const handles = settings.channels.filter((c) => c.enabled).map((c) => c.handle);
-    youtubeAdapter.setMonitoredChannels(handles, { autoMonitor: settings.autoConnect });
+    // Auto-monitor is always on — every network auto-reconnects implicitly.
+    youtubeAdapter.setMonitoredChannels(handles, { autoMonitor: true });
   };
 
   const pollTwitchStats = async (channel: string, accessToken: string): Promise<void> => {
@@ -2116,16 +2117,16 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.kickGetAuthStatus, async () => getKickAuthStatus());
 
   // Auto-reconnect Twitch on startup. The account model is the source of
-  // truth — for each enabled+autoConnect Twitch account, spin up a child in
-  // the multi-adapter. Only fall back to the legacy single-credentials store
-  // when no Twitch accounts exist (back-compat for installs that haven't
-  // migrated).
+  // truth — for each enabled Twitch account, spin up a child in the
+  // multi-adapter. AutoConnect is implicit: every enabled account reconnects
+  // on boot. Only fall back to the legacy single-credentials store when no
+  // Twitch accounts exist (back-compat for installs that haven't migrated).
   void (async () => {
     await activeProfileDirectoryReady;
     try {
       const accounts = await accountRepository.list();
       const twitchAccounts = accounts.filter(
-        (a) => a.providerId === 'twitch' && a.enabled && a.autoConnect,
+        (a) => a.providerId === 'twitch' && a.enabled,
       );
       if (twitchAccounts.length > 0) {
         for (const account of twitchAccounts) {
@@ -2178,7 +2179,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }
     youtubeAdapter.setMonitoredChannels(
       settings.channels.filter((c) => c.enabled).map((c) => c.handle),
-      { autoMonitor: settings.autoConnect },
+      { autoMonitor: true },
     );
     await chatService.replaceAdapter(youtubeAdapter);
   })();
@@ -2202,7 +2203,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const store = await getTiktokSettingsStore();
     if (!store) return;
     const settings = await store.load();
-    if (!settings.autoConnect || !settings.username) return;
+    if (!settings.username) return;
     try {
       setTiktokStatus('connecting', settings.username);
       chatLogService.openSession('tiktok', settings.username);
@@ -2228,7 +2229,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     if (!store) return;
     const settings = await store.load();
     const slug = normalizeKickChannelInput(settings.channelInput);
-    if (!settings.autoConnect || !slug) return;
+    if (!slug) return;
     try {
       const tokenStore = await getKickTokenStore();
       const authSession = tokenStore ? await tokenStore.load() : null;
