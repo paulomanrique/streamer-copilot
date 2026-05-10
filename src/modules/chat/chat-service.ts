@@ -1,21 +1,15 @@
 import type { RecentChatSnapshot } from '../../shared/ipc.js';
 import type { ChatMessage, PlatformId, StreamEvent } from '../../shared/types.js';
 import type { PlatformChatAdapter } from '../../platforms/base.js';
-import { CommandDispatcher } from '../commands/command-dispatcher.js';
-import { RaffleService } from '../raffles/raffle-service.js';
-import { SoundService } from '../sounds/sound-service.js';
-import { SuggestionService } from '../suggestions/suggestion-service.js';
-import { TextService } from '../text/text-service.js';
-import { VoiceService } from '../voice/voice-service.js';
-import { MusicRequestService } from '../music/music-request-service.js';
+import { CommandDispatcher, type CommandModule } from '../commands/command-dispatcher.js';
 
 interface ChatServiceOptions {
-  raffleService: RaffleService;
-  soundService: SoundService;
-  suggestionService: SuggestionService;
-  textService: TextService;
-  voiceService: VoiceService;
-  musicService: MusicRequestService;
+  /**
+   * Modules that participate in chat command dispatch. Each module decides on its
+   * own whether a message matches. Order in the array is the order in which
+   * `handle()` is called for each message.
+   */
+  commandModules: CommandModule[];
   onMessage: (message: ChatMessage) => void;
   onEvent: (event: StreamEvent) => void;
   maxHistory?: number;
@@ -30,12 +24,7 @@ export class ChatService {
 
   constructor(private readonly options: ChatServiceOptions) {
     this.dispatcher = new CommandDispatcher();
-    this.dispatcher.register(options.soundService);
-    this.dispatcher.register(options.textService);
-    this.dispatcher.register(options.voiceService);
-    this.dispatcher.register(options.raffleService);
-    this.dispatcher.register(options.suggestionService);
-    this.dispatcher.register(options.musicService);
+    for (const mod of options.commandModules) this.dispatcher.register(mod);
   }
 
   registerAdapter(adapter: PlatformChatAdapter): void {
@@ -89,6 +78,11 @@ export class ChatService {
     }
 
     await adapter.sendMessage(content);
+  }
+
+  /** Returns the registered adapter for a platform, or null. Used by moderation IPC handlers. */
+  getAdapter(platform: PlatformId): PlatformChatAdapter | null {
+    return this.adapters.get(platform) ?? null;
   }
 
   getRecent(): RecentChatSnapshot {

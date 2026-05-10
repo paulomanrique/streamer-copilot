@@ -5,7 +5,10 @@ interface ProfileSelectorModalProps {
   open: boolean;
   profiles: ProfileSummary[];
   selectorProfileId: string;
+  /** Whether the "don't ask me again" checkbox is currently checked. */
+  rememberSelection: boolean;
   onChangeProfileId: (profileId: string) => void;
+  onChangeRememberSelection: (value: boolean) => void;
   onCreateProfile: () => void;
   onConfirm: () => void;
 }
@@ -14,7 +17,9 @@ export function ProfileSelectorModal({
   open,
   profiles,
   selectorProfileId,
+  rememberSelection,
   onChangeProfileId,
+  onChangeRememberSelection,
   onCreateProfile,
   onConfirm,
 }: ProfileSelectorModalProps) {
@@ -32,20 +37,32 @@ export function ProfileSelectorModal({
         </div>
         <div className="p-5 space-y-4">
           {hasProfiles ? (
-            <div>
-              <label className="block text-sm text-gray-400 mb-1.5">{messages.profile.profiles}</label>
-              <select
-                value={selectorProfileId}
-                onChange={(event) => onChangeProfileId(event.target.value)}
-                className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
-              >
-                {profiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>
-                    {profile.name} · {messages.common.appLanguageName[profile.appLanguage]}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1.5">{messages.profile.profiles}</label>
+                <select
+                  value={selectorProfileId}
+                  onChange={(event) => onChangeProfileId(event.target.value)}
+                  className="w-full bg-gray-800 border border-gray-600 rounded text-sm text-gray-300 px-3 py-2 focus:outline-none focus:border-violet-500"
+                >
+                  {profiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.name} · {messages.common.appLanguageName[profile.appLanguage]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <label className="flex items-start gap-2 text-sm text-gray-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={rememberSelection}
+                  onChange={(event) => onChangeRememberSelection(event.target.checked)}
+                  className="mt-0.5 accent-violet-600"
+                />
+                <span>{messages.profile.dontAskAgain}</span>
+              </label>
+            </>
           ) : (
             <p className="text-sm text-gray-400">{messages.profile.noProfiles}</p>
           )}

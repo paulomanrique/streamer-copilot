@@ -16,13 +16,15 @@ import { isPermissionAllowed } from '../commands/permission-utils.js';
 interface MusicRequestServiceOptions {
   getSettings: () => MusicRequestSettings;
   searchYouTube: (query: string) => Promise<{ videoId: string; title: string; durationSeconds: number; thumbnailUrl: string | null } | null>;
-  onPlay: (cmd: MusicPlayCommand) => void;
+  onPlay: (cmd: MusicPlayCommand & { thumbnailUrl: string | null; requestedBy: string; durationSeconds: number }) => void;
   onStop: () => void;
   onStateUpdate: (state: MusicPlayerState) => void;
   onVolumeChange: (volume: number) => void;
   sendMessage: (platform: PlatformId, content: string) => Promise<void>;
   logInfo: (message: string, metadata?: unknown) => void;
   logError: (message: string, metadata?: unknown) => void;
+  /** R4: surfaces whether the /now-playing OBS browser source is connected. */
+  isBrowserSourceConnected?: () => boolean;
   now?: () => number;
 }
 
@@ -216,6 +218,9 @@ export class MusicRequestService implements CommandModule {
       videoId: item.videoId,
       title: item.title,
       volume: settings.volume,
+      thumbnailUrl: item.thumbnailUrl,
+      requestedBy: item.requestedBy,
+      durationSeconds: item.durationSeconds,
     });
 
     this.options.logInfo('Music playing', { title: item.title, requestedBy: item.requestedBy });
@@ -246,10 +251,14 @@ export class MusicRequestService implements CommandModule {
   }
 
   getState(): MusicPlayerState {
+    const settings = this.options.getSettings();
     return {
       currentItem: this.currentItem,
       queue: [...this.queue],
       isPlaying: this.isPlaying,
+      streamUrl: null, // populated separately by MusicPlayer when publishing now-playing
+      volume: settings.volume,
+      browserSourceConnected: this.options.isBrowserSourceConnected?.() ?? false,
     };
   }
 

@@ -35,7 +35,14 @@ export function MusicRequestPage() {
   const [error, setError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
-  const [playerState, setPlayerState] = useState<MusicPlayerState>({ currentItem: null, queue: [], isPlaying: false });
+  const [playerState, setPlayerState] = useState<MusicPlayerState>({
+    currentItem: null,
+    queue: [],
+    isPlaying: false,
+    streamUrl: null,
+    volume: 0.8,
+    browserSourceConnected: false,
+  });
 
   useEffect(() => {
     copilot.getMusicSettings().then((settings) => {
@@ -251,6 +258,14 @@ export function MusicRequestPage() {
 
         {/* ── Right column: Live Queue ──────────────────────────────── */}
         <div className="flex-1 min-w-0">
+          {!playerState.browserSourceConnected && (
+            <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
+              <p className="font-medium mb-1">No browser source connected</p>
+              <p>
+                Music plays exclusively through the OBS browser source so it can be routed to a track that&apos;s excluded from your live broadcast (avoids copyright strikes). Open <strong>Settings → Overlays</strong>, copy the <code className="font-mono">/now-playing</code> URL, and add it as a Browser Source in OBS with audio monitoring set to <em>Monitor and Output</em>.
+              </p>
+            </div>
+          )}
           {/* Now Playing */}
           <div className="bg-gray-800/40 rounded-xl border border-gray-700 p-5 mb-4">
             <h3 className="text-sm font-medium mb-3">{t('Now Playing')}</h3>

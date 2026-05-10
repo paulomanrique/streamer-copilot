@@ -1,24 +1,101 @@
 import http from 'node:http';
+import { createRequire } from 'node:module';
 
 import type { AddressInfo } from 'node:net';
 
-import type { RecentChatSnapshot } from '../../shared/ipc.js';
-import type { ChatOverlayInfo, RaffleOverlayInfo, RaffleOverlayState } from '../../shared/types.js';
+import type { RecentChatSnapshot } from '../shared/ipc.js';
+import type { ChatOverlayInfo, PollOverlayInfo, PollOverlayState, RaffleOverlayInfo, RaffleOverlayState } from '../shared/types.js';
 
-interface RaffleOverlayServerOptions {
+interface OverlayServerOptions {
+  /** TCP port to listen on; comes from GeneralSettings.overlayServerPort. */
+  port: number;
   getOverlayState: () => RaffleOverlayState | null;
+  getPollsOverlayState: () => PollOverlayState | null;
   getChatSnapshot: () => RecentChatSnapshot;
 }
 
-const OVERLAY_PORT = 7842;
 const CHAT_OVERLAY_VERSION = 'chat-feed-v3';
 
-export class RaffleOverlayServer {
+interface WsLikeServer {
+  handleUpgrade(request: unknown, socket: unknown, head: Buffer, callback: (ws: WsLikeClient) => void): void;
+  emit(event: string, ws: WsLikeClient, request: unknown): void;
+  on(event: string, handler: (ws: WsLikeClient) => void): void;
+}
+interface WsLikeClient {
+  send(data: string): void;
+  close(): void;
+  on(event: 'close' | 'message' | 'error', handler: (...args: unknown[]) => void): void;
+}
+
+export type OverlayServerStatus = 'running' | 'failed' | 'stopped';
+
+/**
+ * R3: HTTP + WebSocket server for OBS browser sources.
+ *
+ * Routes preserved from the previous RaffleOverlayServer:
+ *   GET  /chat/overlay              chat overlay HTML
+ *   GET  /chat/overlay/state        polling JSON of recent chat
+ *   GET  /chat/overlay/overlay.css|js
+ *   GET  /raffles/overlay           raffle overlay HTML
+ *   GET  /raffles/overlay/state     polling JSON of raffle state
+ *   GET  /raffles/overlay/overlay.css|js
+ *
+ * R3 additions:
+ *   GET  /now-playing               music player browser source (R4)
+ *   WS   /ws                        topic-multiplexed event stream
+ *
+ * The port is configurable via GeneralSettings.overlayServerPort. If the
+ * port is in use the server enters 'failed' status and the UI surfaces it.
+ */
+export class OverlayServer {
   private server: http.Server | null = null;
+  private wss: WsLikeServer | null = null;
+  /** Map of topic → connected clients subscribed to that topic. */
+  private readonly subscribers = new Map<string, Set<WsLikeClient>>();
+  private readonly clientsChangeHandlers = new Map<string, Set<() => void>>();
   private port = 0;
   private startPromise: Promise<void> | null = null;
+  private lastStatus: OverlayServerStatus = 'stopped';
+  private lastError: string | null = null;
 
-  constructor(private readonly options: RaffleOverlayServerOptions) {}
+  constructor(private readonly options: OverlayServerOptions) {}
+
+  getStatus(): { status: OverlayServerStatus; port: number; error: string | null } {
+    return { status: this.lastStatus, port: this.port, error: this.lastError };
+  }
+
+  /** Push payload to every client subscribed to `topic`. */
+  publish(topic: string, payload: unknown): void {
+    const clients = this.subscribers.get(topic);
+    if (!clients || clients.size === 0) return;
+    const message = JSON.stringify({ topic, payload });
+    for (const client of clients) {
+      try { client.send(message); } catch { /* ignore broken socket */ }
+    }
+  }
+
+  hasClients(topic: string): boolean {
+    const set = this.subscribers.get(topic);
+    return !!set && set.size > 0;
+  }
+
+  onClientsChange(topic: string, handler: () => void): () => void {
+    let set = this.clientsChangeHandlers.get(topic);
+    if (!set) {
+      set = new Set();
+      this.clientsChangeHandlers.set(topic, set);
+    }
+    set.add(handler);
+    return () => { set?.delete(handler); };
+  }
+
+  private notifyClientsChange(topic: string): void {
+    const handlers = this.clientsChangeHandlers.get(topic);
+    if (!handlers) return;
+    for (const handler of handlers) {
+      try { handler(); } catch { /* ignore */ }
+    }
+  }
 
   async start(): Promise<void> {
     if (this.server) return;
@@ -90,32 +167,150 @@ export class RaffleOverlayServer {
         return;
       }
 
+      if (path === '/polls/overlay/state') {
+        const state = this.options.getPollsOverlayState();
+        if (!state) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'No active poll' }));
+          return;
+        }
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+          'Access-Control-Allow-Origin': '*',
+        });
+        res.end(JSON.stringify(state));
+        return;
+      }
+
+      if (path === '/polls/overlay/overlay.css') {
+        res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(pollsOverlayCss);
+        return;
+      }
+
+      if (path === '/polls/overlay/overlay.js') {
+        res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(pollsOverlayJs);
+        return;
+      }
+
+      if (path === '/polls/overlay' || path === '/polls/overlay/') {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(pollsOverlayHtml);
+        return;
+      }
+
+      if (path === '/now-playing' || path === '/now-playing/') {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(nowPlayingHtml);
+        return;
+      }
+
+      if (path === '/now-playing/now-playing.js') {
+        res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(nowPlayingJs);
+        return;
+      }
+
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('Not found');
     });
 
+    // Mount the WebSocket server on `/ws`. We attach manually via 'upgrade'
+    // so we keep a single HTTP server (simpler firewall story for OBS).
+    try {
+      const requireFn = createRequire(import.meta.url);
+      const wsModule = requireFn('ws') as { WebSocketServer: new (opts: { noServer: true }) => WsLikeServer };
+      const wss = new wsModule.WebSocketServer({ noServer: true });
+      this.wss = wss;
+      server.on('upgrade', (request, socket, head) => {
+        const reqUrl = new URL((request as { url?: string }).url ?? '/', 'http://127.0.0.1');
+        if (reqUrl.pathname !== '/ws') {
+          (socket as { destroy(): void }).destroy();
+          return;
+        }
+        wss.handleUpgrade(request, socket, head, (ws) => {
+          this.attachClient(ws);
+        });
+      });
+    } catch (cause) {
+      this.lastError = `WS init failed: ${cause instanceof Error ? cause.message : String(cause)}`;
+    }
+
     this.startPromise = new Promise<void>((resolve, reject) => {
       server.once('error', reject);
-      server.listen(OVERLAY_PORT, '127.0.0.1', () => resolve());
+      server.listen(this.options.port, '127.0.0.1', () => resolve());
     });
 
     try {
       await this.startPromise;
       this.server = server;
       this.port = (server.address() as AddressInfo).port;
+      this.lastStatus = 'running';
+      this.lastError = null;
+    } catch (cause) {
+      this.lastStatus = 'failed';
+      this.lastError = cause instanceof Error ? cause.message : String(cause);
+      throw cause;
     } finally {
       this.startPromise = null;
     }
+  }
+
+  private attachClient(ws: WsLikeClient): void {
+    const ownedTopics = new Set<string>();
+    ws.on('message', (raw) => {
+      try {
+        const text = typeof raw === 'string' ? raw : (raw as Buffer).toString('utf-8');
+        const msg = JSON.parse(text) as { type?: string; topic?: string };
+        if (!msg?.topic) return;
+        if (msg.type === 'subscribe') {
+          let set = this.subscribers.get(msg.topic);
+          if (!set) {
+            set = new Set();
+            this.subscribers.set(msg.topic, set);
+          }
+          set.add(ws);
+          ownedTopics.add(msg.topic);
+          this.notifyClientsChange(msg.topic);
+        } else if (msg.type === 'unsubscribe') {
+          this.subscribers.get(msg.topic)?.delete(ws);
+          ownedTopics.delete(msg.topic);
+          this.notifyClientsChange(msg.topic);
+        }
+      } catch { /* malformed client message */ }
+    });
+    ws.on('close', () => {
+      for (const topic of ownedTopics) {
+        this.subscribers.get(topic)?.delete(ws);
+        this.notifyClientsChange(topic);
+      }
+    });
+    ws.on('error', () => { /* swallow; close handler runs */ });
   }
 
   async stop(): Promise<void> {
     if (!this.server) return;
     const server = this.server;
     this.server = null;
+    // Close all WS clients before closing the HTTP server so close() returns.
+    for (const set of this.subscribers.values()) {
+      for (const client of set) {
+        try { client.close(); } catch { /* ignore */ }
+      }
+    }
+    this.subscribers.clear();
     this.port = 0;
+    this.lastStatus = 'stopped';
     await new Promise<void>((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));
     });
+  }
+
+  getNowPlayingInfo(): { overlayUrl: string } | null {
+    if (!this.server || this.port === 0) return null;
+    return { overlayUrl: `http://127.0.0.1:${this.port}/now-playing` };
   }
 
   getOverlayInfo(): RaffleOverlayInfo {
@@ -126,6 +321,17 @@ export class RaffleOverlayServer {
     return {
       overlayUrl: `http://127.0.0.1:${this.port}/raffles/overlay`,
       stateUrl: `http://127.0.0.1:${this.port}/raffles/overlay/state`,
+    };
+  }
+
+  getPollsOverlayInfo(): PollOverlayInfo {
+    if (!this.server || this.port === 0) {
+      throw new Error('Polls overlay server is not running');
+    }
+
+    return {
+      overlayUrl: `http://127.0.0.1:${this.port}/polls/overlay`,
+      stateUrl: `http://127.0.0.1:${this.port}/polls/overlay/state`,
     };
   }
 
@@ -449,19 +655,23 @@ const chatOverlayJs = `
 
   function platformClass(platform) {
     var value = String(platform || 'twitch').replace(/[^a-z0-9-]/gi, '').toLowerCase();
-    return value === 'youtube-v' ? value : (icons[value] ? value : 'twitch');
+    if (value === 'youtube-v') return value;
+    if (value === 'youtube-api') return 'youtube';
+    return icons[value] ? value : 'twitch';
   }
 
   function platformLabel(platform) {
     if (platform === 'youtube-v') return 'YouTube Vertical';
     if (platform === 'youtube') return 'YouTube';
+    if (platform === 'youtube-api') return 'YouTube';
     if (platform === 'kick') return 'Kick';
     if (platform === 'tiktok') return 'TikTok';
     return 'Twitch';
   }
 
   function iconFor(platform) {
-    return platform === 'youtube-v' ? icons.youtube : (icons[platform] || icons.twitch);
+    if (platform === 'youtube-v' || platform === 'youtube-api') return icons.youtube;
+    return icons[platform] || icons.twitch;
   }
 
   function resolveAuthorColor(message) {
@@ -481,7 +691,7 @@ const chatOverlayJs = `
   }
 
   function isSubscriber(message) {
-    if (message.platform === 'youtube' || message.platform === 'youtube-v') return hasBadge(message, 'member');
+    if (message.platform === 'youtube' || message.platform === 'youtube-v' || message.platform === 'youtube-api') return hasBadge(message, 'member');
     return hasBadge(message, 'subscriber', 'subscriber/') || hasBadge(message, 'member');
   }
 
@@ -648,7 +858,7 @@ const chatOverlayJs = `
 
       var author = document.createElement('span');
       author.className = 'author';
-      author.textContent = platform === 'youtube' || platform === 'youtube-v' ? '@' + (message.author || 'chat') : (message.author || 'chat');
+      author.textContent = platform === 'youtube' || platform === 'youtube-v' || platform === 'youtube-api' ? '@' + (message.author || 'chat') : (message.author || 'chat');
       author.style.color = authorColor;
       meta.appendChild(author);
 
@@ -1336,3 +1546,333 @@ async function tick() {
 
 tick();
 `;
+
+// ── Polls overlay ────────────────────────────────────────────────────────────
+
+const pollsOverlayHtml = `<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Enquete — Overlay</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/polls/overlay/overlay.css" />
+  </head>
+  <body>
+    <div id="root" class="poll-overlay idle">
+      <header class="poll-header">
+        <span class="poll-tag">ENQUETE</span>
+        <h1 id="poll-title" class="poll-title">Aguardando...</h1>
+        <div class="poll-meta">
+          <span id="poll-total">0 votos</span>
+          <span id="poll-timer" class="poll-timer">--</span>
+        </div>
+      </header>
+      <ul id="poll-options" class="poll-options"></ul>
+      <p id="poll-status" class="poll-status">Aguardando inicio</p>
+    </div>
+    <script src="/polls/overlay/overlay.js"></script>
+  </body>
+</html>`;
+
+const pollsOverlayCss = `
+:root {
+  color-scheme: dark;
+  --bg: #0b0e1c;
+  --surface: rgba(17, 21, 39, 0.92);
+  --border: rgba(255,255,255,0.08);
+  --text: #f1f5f9;
+  --text-dim: #94a3b8;
+  --accent: #7c5cff;
+  --accent-2: #22d3ee;
+  --winner: #f0c020;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: transparent; font-family: "DM Sans", sans-serif; color: var(--text); }
+.poll-overlay {
+  width: min(560px, 100%);
+  margin: 24px;
+  padding: 22px 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: 0 24px 70px rgba(0,0,0,0.5);
+  backdrop-filter: blur(8px);
+  transition: opacity 240ms ease;
+}
+.poll-overlay.idle { opacity: 0; pointer-events: none; }
+.poll-header { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.poll-tag {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--accent-2);
+}
+.poll-title {
+  font-family: "Bebas Neue", sans-serif;
+  font-size: clamp(26px, 3vw, 38px);
+  letter-spacing: 0.01em;
+  line-height: 1.05;
+}
+.poll-meta { display: flex; justify-content: space-between; color: var(--text-dim); font-size: 12px; font-weight: 600; }
+.poll-timer { color: var(--accent-2); font-variant-numeric: tabular-nums; }
+.poll-options { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.poll-option {
+  position: relative;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  overflow: hidden;
+}
+.poll-option .bar {
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, rgba(124,92,255,0.45), rgba(34,211,238,0.18));
+  width: 0%;
+  transition: width 480ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.poll-option.winner .bar { background: linear-gradient(90deg, rgba(240,192,32,0.5), rgba(240,192,32,0.18)); }
+.poll-option .label {
+  position: relative; z-index: 1;
+  display: flex; align-items: center; gap: 10px;
+  font-size: 14px; font-weight: 600;
+}
+.poll-option .index {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 26px; height: 26px; padding: 0 6px;
+  border-radius: 8px;
+  font-family: "Bebas Neue", sans-serif;
+  font-size: 16px;
+  background: rgba(124,92,255,0.18); color: #cdb8ff;
+}
+.poll-option.winner .index { background: rgba(240,192,32,0.2); color: var(--winner); }
+.poll-option .stats { position: relative; z-index: 1; font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.poll-option .stats strong { color: var(--text); margin-left: 6px; }
+.poll-status { margin-top: 12px; font-size: 12px; color: var(--text-dim); text-align: center; }
+`;
+
+const pollsOverlayJs = `
+'use strict';
+(function () {
+  var rootEl = document.getElementById('root');
+  var titleEl = document.getElementById('poll-title');
+  var optionsEl = document.getElementById('poll-options');
+  var totalEl = document.getElementById('poll-total');
+  var timerEl = document.getElementById('poll-timer');
+  var statusEl = document.getElementById('poll-status');
+  var current = null;
+
+  function statusLabel(status) {
+    switch (status) {
+      case 'active': return 'Votacao aberta';
+      case 'closed': return 'Encerrado';
+      case 'cancelled': return 'Cancelado';
+      default: return 'Aguardando';
+    }
+  }
+
+  function fmtCountdown(state) {
+    if (!state.closesAt) return '--';
+    var ms = new Date(state.closesAt).getTime() - Date.now();
+    if (ms <= 0) return '00:00';
+    var s = Math.floor(ms / 1000);
+    var m = Math.floor(s / 60);
+    var ss = s % 60;
+    return String(m).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
+  }
+
+  function renderTally(state) {
+    var winnerId = state.winner ? state.winner.optionId : null;
+    if (optionsEl.children.length !== state.tally.length) {
+      optionsEl.innerHTML = '';
+      state.tally.forEach(function (entry) {
+        var li = document.createElement('li');
+        li.className = 'poll-option';
+        li.dataset.id = entry.optionId;
+        li.innerHTML =
+          '<span class="bar"></span>' +
+          '<span class="label"><span class="index">' + entry.index + '</span><span class="text"></span></span>' +
+          '<span class="stats"></span>';
+        optionsEl.appendChild(li);
+      });
+    }
+    state.tally.forEach(function (entry) {
+      var li = optionsEl.querySelector('[data-id="' + entry.optionId + '"]');
+      if (!li) return;
+      li.classList.toggle('winner', winnerId === entry.optionId);
+      li.querySelector('.text').textContent = entry.label;
+      li.querySelector('.bar').style.width = (entry.percent || 0) + '%';
+      li.querySelector('.stats').innerHTML = entry.percent.toFixed(1) + '% <strong>' + entry.votes + '</strong>';
+    });
+  }
+
+  function applyState(state) {
+    current = state;
+    if (!state) {
+      rootEl.classList.add('idle');
+      return;
+    }
+    rootEl.classList.remove('idle');
+    titleEl.textContent = state.title;
+    totalEl.textContent = state.totalVotes + (state.totalVotes === 1 ? ' voto' : ' votos');
+    statusEl.textContent = statusLabel(state.status);
+    renderTally(state);
+  }
+
+  function tickTimer() {
+    if (!current) { timerEl.textContent = '--'; return; }
+    if (current.status !== 'active') {
+      timerEl.textContent = current.status === 'closed' ? 'Encerrado' : '--';
+      return;
+    }
+    timerEl.textContent = fmtCountdown(current);
+  }
+
+  async function fetchState() {
+    try {
+      var res = await fetch('/polls/overlay/state', { cache: 'no-store' });
+      if (res.status === 404) { applyState(null); return; }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      applyState(await res.json());
+    } catch (err) {
+      // keep last known state on failure
+    }
+  }
+
+  fetchState();
+  setInterval(fetchState, 1000);
+  setInterval(tickTimer, 250);
+})();
+`;
+
+// ── R3 / R4: now-playing browser source (visual minimal — to be styled by overlay-kit later) ─
+
+const nowPlayingHtml = `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Now Playing</title>
+    <style>
+      :root { color-scheme: dark; }
+      html, body { margin: 0; padding: 0; height: 100%; background: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #f1f5f9; }
+      .root { display: flex; align-items: center; gap: 16px; padding: 16px; max-width: 540px; }
+      .root.idle { opacity: 0.0; }
+      .thumb { width: 96px; height: 96px; border-radius: 12px; object-fit: cover; background: #1f2937; box-shadow: 0 8px 24px rgba(0,0,0,0.45); flex-shrink: 0; }
+      .info { flex: 1; min-width: 0; }
+      .title { font-size: 18px; font-weight: 700; margin: 0 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .artist { font-size: 13px; color: #94a3b8; margin: 0 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      canvas { display: block; width: 100%; height: 28px; opacity: 0.75; }
+    </style>
+  </head>
+  <body>
+    <div id="root" class="root idle">
+      <img id="thumb" class="thumb" alt="" />
+      <div class="info">
+        <h1 id="title" class="title">—</h1>
+        <p id="artist" class="artist">Waiting for the player to start…</p>
+        <canvas id="spectrum" width="400" height="28"></canvas>
+      </div>
+      <audio id="audio" crossorigin="anonymous"></audio>
+    </div>
+    <script src="/now-playing/now-playing.js"></script>
+  </body>
+</html>`;
+
+const nowPlayingJs = `
+'use strict';
+
+(function () {
+  var rootEl = document.getElementById('root');
+  var thumbEl = document.getElementById('thumb');
+  var titleEl = document.getElementById('title');
+  var artistEl = document.getElementById('artist');
+  var canvasEl = document.getElementById('spectrum');
+  var audioEl = document.getElementById('audio');
+
+  var ctx = canvasEl.getContext('2d');
+  var audioCtx = null;
+  var analyser = null;
+  var sourceNode = null;
+  var lastSrc = '';
+
+  function ensureAudioGraph() {
+    if (audioCtx) return;
+    var Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    audioCtx = new Ctx();
+    sourceNode = audioCtx.createMediaElementSource(audioEl);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 512;
+    sourceNode.connect(analyser);
+    analyser.connect(audioCtx.destination);
+    requestAnimationFrame(drawFrame);
+  }
+
+  function drawFrame() {
+    if (!analyser) return;
+    var bufferLength = analyser.frequencyBinCount;
+    var data = new Uint8Array(bufferLength);
+    analyser.getByteFrequencyData(data);
+    ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+    var barWidth = canvasEl.width / bufferLength * 2.5;
+    var x = 0;
+    for (var i = 0; i < bufferLength; i++) {
+      var height = (data[i] / 255) * canvasEl.height;
+      ctx.fillStyle = 'rgba(124, 92, 255, ' + (0.4 + (data[i] / 255) * 0.5) + ')';
+      ctx.fillRect(x, canvasEl.height - height, barWidth, height);
+      x += barWidth + 1;
+    }
+    requestAnimationFrame(drawFrame);
+  }
+
+  function applyState(state) {
+    if (!state || !state.currentItem) {
+      rootEl.classList.add('idle');
+      audioEl.pause();
+      audioEl.removeAttribute('src');
+      lastSrc = '';
+      return;
+    }
+    rootEl.classList.remove('idle');
+    titleEl.textContent = state.currentItem.title || 'Untitled';
+    artistEl.textContent = state.currentItem.requestedBy ? 'Requested by ' + state.currentItem.requestedBy : '';
+    if (state.currentItem.thumbnailUrl) {
+      thumbEl.src = state.currentItem.thumbnailUrl;
+      thumbEl.style.display = 'block';
+    } else {
+      thumbEl.style.display = 'none';
+    }
+    if (state.streamUrl && state.streamUrl !== lastSrc) {
+      lastSrc = state.streamUrl;
+      audioEl.src = state.streamUrl;
+      ensureAudioGraph();
+      audioEl.play().catch(function (err) { console.warn('autoplay blocked', err); });
+    }
+    if (typeof state.volume === 'number') {
+      audioEl.volume = Math.max(0, Math.min(1, state.volume));
+    }
+    if (state.isPlaying === false) audioEl.pause();
+  }
+
+  function connect() {
+    var ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+    ws.addEventListener('open', function () {
+      ws.send(JSON.stringify({ type: 'subscribe', topic: 'now-playing' }));
+    });
+    ws.addEventListener('message', function (event) {
+      try {
+        var msg = JSON.parse(event.data);
+        if (msg.topic === 'now-playing') applyState(msg.payload);
+      } catch (e) { /* ignore */ }
+    });
+    ws.addEventListener('close', function () {
+      setTimeout(connect, 1500);
+    });
+  }
+
+  connect();
+})();
+`;
+

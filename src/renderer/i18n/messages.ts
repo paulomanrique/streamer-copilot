@@ -70,6 +70,7 @@ const en: TranslationMessages = {
     selectProfile: 'Select Profile',
     chooseProfileDescription: 'Choose a profile to continue.',
     deleteConfirm: (name) => `Delete profile "${name}"?`,
+    dontAskAgain: "Don't ask me again — open this profile automatically next time",
   },
   settings: {
     title: 'Settings',
@@ -83,6 +84,8 @@ const en: TranslationMessages = {
     voiceTts: 'Voice (TTS)',
     textCommands: 'Text Commands',
     automations: 'Automations',
+    modules: 'Modules',
+    polls: 'Polls',
     raffles: 'Raffles',
     suggestions: 'Suggestions',
     integrations: 'Integrations',
@@ -666,6 +669,7 @@ const pt: TranslationMessages = {
     selectProfile: 'Selecionar Perfil',
     chooseProfileDescription: 'Escolha um perfil para continuar.',
     deleteConfirm: (name) => `Excluir perfil "${name}"?`,
+    dontAskAgain: 'Não me pergunte de novo — abrir este perfil automaticamente da próxima vez',
   },
   settings: {
     title: 'Configurações',
@@ -679,6 +683,8 @@ const pt: TranslationMessages = {
     voiceTts: 'Voz (TTS)',
     textCommands: 'Comandos de Texto',
     automations: 'Automações',
+    modules: 'Módulos',
+    polls: 'Enquetes',
     raffles: 'Sorteios',
     suggestions: 'Sugestões',
     integrations: 'Integrações',

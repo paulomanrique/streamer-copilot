@@ -1,5 +1,8 @@
 import type { ChatMessage, ChatMessageContentPart, StreamEvent } from '../../shared/types.js';
-import type { PlatformChatAdapter } from '../base.js';
+import type { PlatformRole } from '../../shared/platform.js';
+import type { PlatformCapabilities } from '../../shared/moderation.js';
+import { resolveFromRole } from '../../modules/commands/permission-utils.js';
+import { READ_ONLY_CAPABILITIES, type PlatformChatAdapter } from '../base.js';
 
 type KickPayloadRecord = Record<string, unknown>;
 
@@ -19,8 +22,6 @@ export interface KickChatAdapterOptions {
   chatroomId?: number | string;
   broadcasterUserId?: number | null;
   apiBaseUrl?: string;
-  pusherAppKey?: string;
-  pusherCluster?: string;
   clientId?: string;
   clientSecret?: string;
   oauthToken?: KickOAuthToken;
@@ -45,10 +46,20 @@ export const KICK_BROWSER_USER_AGENT = DEFAULT_USER_AGENT;
 
 export class KickChatAdapter implements PlatformChatAdapter {
   readonly platform = 'kick' as const;
+  capabilities: PlatformCapabilities = READ_ONLY_CAPABILITIES;
+  moderation?: import('../../shared/moderation.js').ModerationApi;
+
+  setModeration(api: import('../../shared/moderation.js').ModerationApi, capabilities: PlatformCapabilities): void {
+    this.moderation = api;
+    this.capabilities = capabilities;
+  }
 
   private readonly messageHandlers = new Set<(message: ChatMessage) => void>();
   private readonly eventHandlers = new Set<(event: StreamEvent) => void>();
   private readonly seenMessageKeys = new Set<string>();
+  /** username (lowercased) -> numeric Kick user_id. Empty string means resolved-and-not-found. */
+  private readonly userIdByUsername = new Map<string, string>();
+  private readonly inflightUserIdLookups = new Set<string>();
   private window: BrowserWindowRuntime | null = null;
   private chatroomId: number | null = null;
   private connected = false;
@@ -232,6 +243,8 @@ export class KickChatAdapter implements PlatformChatAdapter {
           timestampLabel?: string;
           badges?: string[];
           isInitial?: boolean;
+          userId?: string;
+          usernameSlug?: string;
         };
         const author = typeof raw.author === 'string' && raw.author.trim() ? raw.author.trim() : 'Kick user';
         const content = typeof raw.content === 'string' ? raw.content.trim() : '';
@@ -245,14 +258,32 @@ export class KickChatAdapter implements PlatformChatAdapter {
 
         if (this.seenMessageKeys.has(id)) return;
         this.seenMessageKeys.add(id);
+        const badges = Array.isArray(raw.badges) ? raw.badges.filter((b): b is string => typeof b === 'string') : [];
+        const role = this.deriveRoleFromBadges(badges);
+
+        // Numeric user id straight from DOM is preferred. If missing, kick off
+        // a fire-and-forget username -> id resolution against the public API
+        // and cache it; once resolved, future messages from that user have
+        // the id available. This keeps the hot path non-blocking.
+        let userId = typeof raw.userId === 'string' && /^\d+$/.test(raw.userId) ? raw.userId : undefined;
+        const usernameKey = (raw.usernameSlug || author).toLowerCase();
+        if (!userId && usernameKey) {
+          const cached = this.userIdByUsername.get(usernameKey);
+          if (cached !== undefined) userId = cached || undefined;
+          else void this.resolveUsernameToId(usernameKey);
+        }
+
         this.emitMessage({
           id,
           platform: 'kick',
           author,
           content,
           contentParts: Array.isArray(raw.contentParts) ? raw.contentParts : undefined,
-          badges: Array.isArray(raw.badges) ? raw.badges.filter((b): b is string => typeof b === 'string') : [],
+          badges,
           timestampLabel,
+          role,
+          unifiedLevel: resolveFromRole(role),
+          ...(userId ? { userId } : {}),
           ...(raw.isInitial ? { isHistory: true } : {}),
         });
       } catch {
@@ -433,7 +464,42 @@ export class KickChatAdapter implements PlatformChatAdapter {
           if (!id || state.seen.has(id)) return;
           state.seen.add(id);
 
-          emitChat({ id, author, content, contentParts, timestampLabel, badges: extractBadges(wrapper), isInitial: !state.initialScanDone });
+          // Best-effort userId / username extraction. Kick's chat DOM has
+          // shifted between releases; we try several common attributes and
+          // fall back to a profile-link href so the adapter can resolve
+          // username -> numeric user_id via API.
+          const collectFrom = [wrapper, body, authorButton];
+          const idAttrKeys = ['chatter-id', 'chatterId', 'user-id', 'userId', 'sender-id', 'senderId', 'author-id', 'authorId'];
+          let userIdFromDom = '';
+          for (const node of collectFrom) {
+            if (!(node instanceof HTMLElement)) continue;
+            for (const key of idAttrKeys) {
+              const value = node.dataset?.[key] || node.getAttribute('data-' + key);
+              if (value && /^\\d+$/.test(value)) { userIdFromDom = value; break; }
+            }
+            if (userIdFromDom) break;
+          }
+          let usernameFromHref = '';
+          const profileAnchor = body.querySelector('a[href^="/"]');
+          if (profileAnchor instanceof HTMLAnchorElement) {
+            const href = profileAnchor.getAttribute('href') || '';
+            const match = href.match(/^\\/([^\\/?#]+)/);
+            if (match && match[1] && !/^(video|category|browse|search)$/i.test(match[1])) {
+              usernameFromHref = match[1];
+            }
+          }
+
+          emitChat({
+            id,
+            author,
+            content,
+            contentParts,
+            timestampLabel,
+            badges: extractBadges(wrapper),
+            isInitial: !state.initialScanDone,
+            userId: userIdFromDom || undefined,
+            usernameSlug: usernameFromHref || undefined,
+          });
         };
 
         const scan = () => {
@@ -643,16 +709,92 @@ export class KickChatAdapter implements PlatformChatAdapter {
     }
   }
 
+  /**
+   * Best-effort resolution of a Kick username (or chat author display name) to
+   * a numeric user_id. Backed by the public v2 channel endpoint, which returns
+   * the channel owner's user_id. Result is cached (empty string = not found)
+   * to avoid hammering the API. Failures are silent — moderation UI degrades
+   * gracefully when the id stays unknown.
+   */
+  private async resolveUsernameToId(usernameKey: string): Promise<void> {
+    if (!usernameKey) return;
+    if (this.userIdByUsername.has(usernameKey)) return;
+    if (this.inflightUserIdLookups.has(usernameKey)) return;
+    this.inflightUserIdLookups.add(usernameKey);
+    try {
+      const fetchFn = this.options.fetchFn ?? fetch;
+      const baseApi = this.options.apiBaseUrl ?? DEFAULT_API_BASE_URL;
+      const slug = encodeURIComponent(usernameKey);
+      const response = await fetchFn(`${baseApi}/channels/${slug}`, {
+        headers: { accept: 'application/json' },
+      });
+      if (!response.ok) {
+        this.userIdByUsername.set(usernameKey, '');
+        return;
+      }
+      const payload = (await response.json()) as KickPayloadRecord;
+      const data = payload.data && typeof payload.data === 'object'
+        ? (payload.data as KickPayloadRecord)
+        : undefined;
+      const user = payload.user && typeof payload.user === 'object'
+        ? (payload.user as KickPayloadRecord)
+        : data?.user && typeof data.user === 'object'
+          ? (data.user as KickPayloadRecord)
+          : undefined;
+      const candidates = [
+        payload.user_id,
+        data?.user_id,
+        user?.id,
+        payload.broadcaster_user_id,
+        data?.broadcaster_user_id,
+      ];
+      for (const candidate of candidates) {
+        const parsed = this.parseNumericId(candidate);
+        if (parsed !== null) {
+          this.userIdByUsername.set(usernameKey, String(parsed));
+          return;
+        }
+      }
+      this.userIdByUsername.set(usernameKey, '');
+    } catch {
+      this.userIdByUsername.set(usernameKey, '');
+    } finally {
+      this.inflightUserIdLookups.delete(usernameKey);
+    }
+  }
+
   private emitMessage(message: ChatMessage): void {
+    const enriched = message.streamLabel
+      ? message
+      : { ...message, streamLabel: this.options.channelSlug || undefined };
     for (const handler of this.messageHandlers) {
-      handler(message);
+      handler(enriched);
     }
   }
 
   private emitEvent(event: StreamEvent): void {
+    const enriched = event.streamLabel
+      ? event
+      : { ...event, streamLabel: this.options.channelSlug || undefined };
     for (const handler of this.eventHandlers) {
-      handler(event);
+      handler(enriched);
     }
+  }
+
+  private deriveRoleFromBadges(badges: string[]): PlatformRole {
+    const set = new Set(badges.map((b) => b.toLowerCase()));
+    const extras: Record<string, unknown> = {};
+    if (set.has('og')) extras.og = true;
+    if (set.has('founder')) extras.founder = true;
+    if (set.has('verified')) extras.verified = true;
+    return {
+      broadcaster: set.has('broadcaster'),
+      moderator: set.has('moderator'),
+      vip: set.has('vip'),
+      subscriber: set.has('subscriber'),
+      // Kick scraper today doesn't tag follower-only state.
+      extras: Object.keys(extras).length > 0 ? extras : undefined,
+    };
   }
 
   private parseNumericId(value: unknown): number | null {

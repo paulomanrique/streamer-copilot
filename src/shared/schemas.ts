@@ -1,7 +1,13 @@
 import { z } from 'zod';
 
-const platformIdSchema = z.enum(['twitch', 'youtube', 'youtube-v', 'kick', 'tiktok']);
-const scheduledTargetPlatformSchema = z.enum(['twitch', 'youtube']);
+/**
+ * Open shape validation: any non-empty slug-shaped string passes. Membership
+ * in the set of known platforms is no longer enforced here so third-party
+ * adapter modules can introduce new ids; the runtime check happens later
+ * (e.g. chatService rejects sends to a platform with no registered adapter).
+ */
+const platformIdSchema = z.string().min(1).max(64).regex(/^[a-z0-9-]+$/);
+const scheduledTargetPlatformSchema = z.enum(['twitch', 'youtube', 'youtube-api']);
 const permissionLevelSchema = z.enum(['everyone', 'follower', 'subscriber', 'moderator', 'broadcaster']);
 const eventLogLevelSchema = z.enum(['info', 'warn', 'error']);
 const raffleModeSchema = z.enum(['single-winner', 'survivor-final']);
@@ -10,6 +16,10 @@ export const appLanguageSchema = z.enum(['pt-BR', 'en-US']);
 
 export const selectProfileInputSchema = z.object({
   profileId: z.string().min(1),
+});
+
+export const setAutoSelectActiveProfileSchema = z.object({
+  autoSelect: z.boolean(),
 });
 
 export const createProfileInputSchema = z.object({
@@ -56,6 +66,7 @@ export const generalSettingsSchema = z.object({
   eventNotifications: z.boolean(),
   recommendationTemplate: z.string().max(500),
   diagnosticLogLevel: eventLogLevelSchema.default('info'),
+  overlayServerPort: z.number().int().min(1024).max(65535).default(7842),
 });
 
 export const scheduledMessageUpsertInputSchema = z.object({
@@ -251,6 +262,35 @@ export const suggestionListDeleteInputSchema = z.object({
   id: z.string().min(1),
 });
 
+const pollControlActionSchema = z.enum(['start', 'cancel', 'force_close']);
+
+const pollOptionInputSchema = z.object({
+  id: z.string().min(1).optional(),
+  label: z.string().min(1).max(120),
+});
+
+export const pollUpsertInputSchema = z.object({
+  id: z.string().min(1).optional(),
+  title: z.string().min(1).max(160),
+  options: z.array(pollOptionInputSchema).min(2).max(10),
+  durationSeconds: z.number().int().min(10).max(3600),
+  acceptedPlatforms: z.array(platformIdSchema).min(1),
+  resultAnnouncementTemplate: z.string().max(800).default(''),
+});
+
+export const pollDeleteInputSchema = z.object({
+  id: z.string().min(1),
+});
+
+export const pollIdInputSchema = z.object({
+  id: z.string().min(1),
+});
+
+export const pollControlInputSchema = z.object({
+  pollId: z.string().min(1),
+  action: pollControlActionSchema,
+});
+
 export const soundPlayPayloadSchema = z.object({
   filePath: z.string().min(1),
 });
@@ -288,6 +328,11 @@ export const youtubeSettingsSchema = z.object({
   autoConnect: z.boolean(),
   chatChannelPageId: z.string().optional(),
   chatChannelName: z.string().optional(),
+});
+
+export const youtubeApiStartOAuthSchema = z.object({
+  clientId: z.string().min(1).max(200),
+  clientSecret: z.string().min(1).max(200),
 });
 
 export const tiktokConnectSchema = z.object({
@@ -342,8 +387,82 @@ export type SoundCommandUpsertInputSchema = z.infer<typeof soundCommandUpsertInp
 export type SoundCommandDeleteInputSchema = z.infer<typeof soundCommandDeleteInputSchema>;
 export type SuggestionListUpsertInputSchema = z.infer<typeof suggestionListUpsertInputSchema>;
 export type SuggestionListDeleteInputSchema = z.infer<typeof suggestionListDeleteInputSchema>;
+export type PollUpsertInputSchema = z.infer<typeof pollUpsertInputSchema>;
+export type PollDeleteInputSchema = z.infer<typeof pollDeleteInputSchema>;
+export type PollIdInputSchema = z.infer<typeof pollIdInputSchema>;
+export type PollControlInputSchema = z.infer<typeof pollControlInputSchema>;
 export type SoundPlayPayloadSchema = z.infer<typeof soundPlayPayloadSchema>;
 export type ObsConnectionSettingsSchema = z.infer<typeof obsConnectionSettingsSchema>;
 export type EventLogFiltersSchema = z.infer<typeof eventLogFiltersSchema>;
 export type KickConnectSchema = z.infer<typeof kickConnectSchema>;
 export type KickSettingsSchema = z.infer<typeof kickSettingsSchema>;
+
+// ── Moderation (R2) ──────────────────────────────────────────────────────────
+
+export const moderationGetCapabilitiesSchema = platformIdSchema;
+
+export const moderationDeleteMessageSchema = z.object({
+  platform: platformIdSchema,
+  messageId: z.string().min(1).max(200),
+});
+
+export const moderationBanUserSchema = z.object({
+  platform: platformIdSchema,
+  userId: z.string().min(1).max(200),
+  reason: z.string().max(500).optional(),
+});
+
+export const moderationUnbanUserSchema = z.object({
+  platform: platformIdSchema,
+  userId: z.string().min(1).max(200),
+});
+
+export const moderationTimeoutUserSchema = z.object({
+  platform: platformIdSchema,
+  userId: z.string().min(1).max(200),
+  durationSeconds: z.number().int().min(1).max(1_209_600), // Twitch max: 14 days
+  reason: z.string().max(500).optional(),
+});
+
+export const moderationSetModeSchema = z.object({
+  platform: platformIdSchema,
+  mode: z.enum(['slow', 'subscribers', 'members', 'followers', 'emote', 'unique']),
+  enabled: z.boolean(),
+  value: z.number().int().min(0).max(86_400).optional(),
+});
+
+export const moderationManageRoleSchema = z.object({
+  platform: platformIdSchema,
+  role: z.enum(['mod', 'vip']),
+  action: z.enum(['add', 'remove']),
+  userId: z.string().min(1).max(200),
+});
+
+export const moderationRaidSchema = z.object({
+  platform: platformIdSchema,
+  targetChannel: z.string().min(1).max(200),
+});
+
+export const moderationShoutoutSchema = z.object({
+  platform: platformIdSchema,
+  userId: z.string().min(1).max(200),
+});
+
+// ── Accounts (R6) ─────────────────────────────────────────────────────────────
+
+export const accountCreateInputSchema = z.object({
+  providerId: z.string().min(1).max(60),
+  label: z.string().min(1).max(120),
+  channel: z.string().min(1).max(400),
+  enabled: z.boolean(),
+  autoConnect: z.boolean(),
+  providerData: z.record(z.string(), z.unknown()),
+});
+
+export const accountUpdateInputSchema = accountCreateInputSchema.extend({
+  id: z.string().min(1).max(120),
+});
+
+export const accountIdInputSchema = z.object({
+  id: z.string().min(1).max(120),
+});

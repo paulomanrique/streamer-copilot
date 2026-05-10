@@ -14,18 +14,18 @@ interface DashboardSummaryProps {
   obsStats: ObsStatsSnapshot;
   twitchStatus: TwitchConnectionStatus;
   twitchChannel: string | null;
-  twitchLiveStats: TwitchLiveStats | null;
+  twitchLiveStatsByChannel: Record<string, TwitchLiveStats>;
   youtubeStreams: YouTubeStreamInfo[];
   tiktokStatus: TikTokConnectionStatus;
   tiktokUsername: string | null;
-  tiktokLiveStats: TikTokLiveStats | null;
+  tiktokLiveStatsByUsername: Record<string, TikTokLiveStats>;
   kickStatus: KickConnectionStatus;
   kickSlug: string | null;
-  kickLiveStats: KickLiveStats | null;
+  kickLiveStatsByChannel: Record<string, KickLiveStats>;
   recommendationTemplate: string;
 }
 
-export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, obsStats, twitchStatus, twitchChannel, twitchLiveStats, youtubeStreams, tiktokStatus, tiktokUsername, tiktokLiveStats, kickStatus, kickSlug, kickLiveStats, recommendationTemplate }: DashboardSummaryProps) {
+export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, obsStats, twitchStatus, twitchChannel, twitchLiveStatsByChannel, youtubeStreams, tiktokStatus, tiktokUsername, tiktokLiveStatsByUsername, kickStatus, kickSlug, kickLiveStatsByChannel, recommendationTemplate }: DashboardSummaryProps) {
   const { messages, t } = useI18n();
   const visibleMessages = chatMessages;
   const visibleEvents = chatEvents;
@@ -87,15 +87,16 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
         <div className="flex flex-col w-[40%] overflow-hidden">
           <ObsStatsPanel
             stats={obsStats}
-            twitchLiveStats={twitchLiveStats}
+            twitchLiveStatsByChannel={twitchLiveStatsByChannel}
+            twitchConnectedChannels={Object.keys(twitchLiveStatsByChannel)}
             twitchConnected={twitchStatus === 'connected'}
             youtubeStreams={youtubeStreams}
             tiktokStatus={tiktokStatus}
             tiktokUsername={tiktokUsername}
-            tiktokLiveStats={tiktokLiveStats}
+            tiktokLiveStatsByUsername={tiktokLiveStatsByUsername}
             kickStatus={kickStatus}
             kickSlug={kickSlug}
-            kickLiveStats={kickLiveStats}
+            kickLiveStatsByChannel={kickLiveStatsByChannel}
           />
 
           <div className="flex flex-col flex-1 overflow-hidden p-4">
@@ -167,13 +168,6 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
       <StatusBar
         activeProfileName={activeProfileName}
         obsConnected={obsStats.connected}
-        twitchStatus={twitchStatus}
-        twitchChannel={twitchChannel}
-        youtubeStreams={youtubeStreams}
-        tiktokStatus={tiktokStatus}
-        tiktokUsername={tiktokUsername}
-        kickStatus={kickStatus}
-        kickSlug={kickSlug}
       />
     </section>
   );

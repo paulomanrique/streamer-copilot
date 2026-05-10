@@ -1,169 +1,134 @@
-import { WebContentsView } from 'electron';
-import type { BrowserWindow } from 'electron';
-
 import type { MusicPlayCommand, MusicPlayerEvent } from '../shared/types.js';
+import { MusicStreamResolver } from './music-stream-resolver.js';
+import type { OverlayServer } from './overlay-server.js';
 
-// Injected into the YouTube embed page to prevent it from pausing when hidden.
-// Mirrors the focus-spoof technique from lurk-buddy.
-const FOCUS_SPOOF = `
-(() => {
-  const redefine = (target, key, getter) => {
-    try { Object.defineProperty(target, key, { configurable: true, enumerable: false, get: getter }); } catch {}
-  };
-  redefine(Document.prototype, 'hidden', () => false);
-  redefine(document, 'hidden', () => false);
-  redefine(Document.prototype, 'visibilityState', () => 'visible');
-  redefine(document, 'visibilityState', () => 'visible');
-  document.hasFocus = () => true;
-  const blocked = new Set(['visibilitychange', 'webkitvisibilitychange', 'blur', 'focusout', 'pagehide']);
-  const patch = (t) => {
-    const orig = t.addEventListener.bind(t);
-    t.addEventListener = (type, listener, opts) => { if (blocked.has(type)) return; return orig(type, listener, opts); };
-  };
-  patch(document); patch(window);
-  const pulse = () => {
-    window.dispatchEvent(new Event('focus'));
-    window.dispatchEvent(new Event('pageshow'));
-    document.dispatchEvent(new Event('visibilitychange'));
-    document.dispatchEvent(new Event('focusin'));
-  };
-  pulse();
-  setInterval(pulse, 1500);
-})();
-`;
+interface NowPlayingPayload {
+  itemId: string;
+  videoId: string;
+  title: string;
+  thumbnailUrl: string | null;
+  requestedBy: string | null;
+  durationSeconds: number;
+  state: 'playing' | 'paused' | 'idle';
+  streamUrl: string | null;
+  volume: number;
+}
 
+/**
+ * R4: state-machine music player. Replaces the old WebContentsView + iframe
+ * approach. The player itself does NOT produce audio — the canonical audio
+ * source is the /now-playing browser source in OBS, driven over WebSocket
+ * via OverlayServer. This isolates music in a separate OBS source so the
+ * streamer can route it to a track that's excluded from the live broadcast
+ * (avoids copyright strikes).
+ */
 export class MusicPlayer {
-  private view: WebContentsView | null = null;
-  private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private currentItemId: string | null = null;
+  private currentVolume = 0.8;
+  private currentVideoId: string | null = null;
+  private currentTitle: string | null = null;
+  private currentThumbnail: string | null = null;
+  private currentRequestedBy: string | null = null;
+  private currentDurationSeconds = 0;
+  private endedTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
-    private readonly getWindow: () => BrowserWindow | null,
+    private readonly overlayServer: OverlayServer,
+    private readonly resolver: MusicStreamResolver,
     private readonly onEvent: (event: MusicPlayerEvent) => void,
-  ) {}
-
-  play(cmd: MusicPlayCommand): void {
-    this.stop();
-
-    const win = this.getWindow();
-    if (!win || win.isDestroyed()) return;
-
-    const view = new WebContentsView({
-      webPreferences: {
-        autoplayPolicy: 'no-user-gesture-required',
-        contextIsolation: true,
-        nodeIntegration: false,
-      },
+  ) {
+    // When a /now-playing browser source connects, re-publish the current
+    // state so it picks up the active track immediately.
+    this.overlayServer.onClientsChange('now-playing', () => {
+      if (this.currentItemId) void this.publishState('playing');
     });
+  }
 
-    this.view = view;
-    win.contentView.addChildView(view);
-    // Off-screen so the view renders but is never visible
-    view.setBounds({ x: -2000, y: -2000, width: 1280, height: 720 });
+  hasBrowserSource(): boolean {
+    return this.overlayServer.hasClients('now-playing');
+  }
 
-    const { itemId, videoId, volume } = cmd;
+  async play(cmd: MusicPlayCommand & { thumbnailUrl?: string | null; requestedBy?: string | null; durationSeconds?: number }): Promise<void> {
+    this.clearEndedTimer();
+    this.currentItemId = cmd.itemId;
+    this.currentVideoId = cmd.videoId;
+    this.currentTitle = cmd.title;
+    this.currentVolume = cmd.volume;
+    this.currentThumbnail = cmd.thumbnailUrl ?? null;
+    this.currentRequestedBy = cmd.requestedBy ?? null;
+    this.currentDurationSeconds = cmd.durationSeconds ?? 0;
 
-    // Ensure the WebContents is never muted at the Electron level
-    view.webContents.setAudioMuted(false);
+    let streamUrl: string | null = null;
+    try {
+      streamUrl = await this.resolver.resolveAudioUrl(cmd.videoId);
+    } catch (cause) {
+      console.warn('[music-player] Failed to resolve stream URL', cause);
+      this.onEvent({ type: 'error', itemId: cmd.itemId, errorCode: -1 });
+      return;
+    }
 
-    view.webContents.on('dom-ready', () => {
-      if (view.webContents.isDestroyed()) return;
-      void view.webContents.executeJavaScript(FOCUS_SPOOF);
-      // Set yt-player-volume in localStorage BEFORE YouTube's player reads it,
-      // so the initial volume is correct. Then keep retrying setVolume() via the
-      // player API until it becomes available (2-5 s after dom-ready).
-      void view.webContents.executeJavaScript(`
-        (() => {
-          const volPct = ${Math.round(volume * 100)};
-          try {
-            const stored = JSON.parse(localStorage.getItem('yt-player-volume') || '{}');
-            stored.data = String(volPct);
-            localStorage.setItem('yt-player-volume', JSON.stringify(stored));
-          } catch {}
+    void this.publishState('playing', streamUrl);
 
-          let attempts = 0;
-          const apply = () => {
-            const p = document.getElementById('movie_player');
-            if (p && typeof p.setVolume === 'function') {
-              p.setVolume(volPct);
-              if (typeof p.unMute === 'function') p.unMute();
-            } else {
-              const v = document.querySelector('video');
-              if (v) { v.volume = ${volume}; v.muted = false; }
-            }
-            if (++attempts < 20) setTimeout(apply, 500);
-          };
-          apply();
-        })();
-      `);
-    });
-
-    view.webContents.on('did-fail-load', (_e, code, desc) => {
-      if (code === 0) return; // 0 = ERR_ABORTED, not a real error
-      this.clearPoll();
-      this.onEvent({ type: 'error', itemId, errorCode: code });
-    });
-
-    this.pollTimer = setInterval(() => void this.checkPlayback(view, itemId), 2000);
-
-    // Load the full watch page (same as lurk-buddy) for reliable audio playback
-    void view.webContents.loadURL(
-      `https://www.youtube.com/watch?v=${videoId}&autoplay=1`,
-    );
+    // Without a real player we can't observe the actual end, so we schedule a
+    // soft-ended timer based on the track duration. The renderer state becomes
+    // accurate as soon as the OBS source plays through; we just need a
+    // fallback for when there is no listener.
+    if (this.currentDurationSeconds > 0) {
+      this.endedTimer = setTimeout(() => {
+        if (this.currentItemId === cmd.itemId) this.onEvent({ type: 'ended', itemId: cmd.itemId });
+      }, (this.currentDurationSeconds + 2) * 1000);
+    }
   }
 
   setVolume(volume: number): void {
-    if (!this.view?.webContents || this.view.webContents.isDestroyed()) return;
-    void this.view.webContents.executeJavaScript(`
-      (() => {
-        const vol = ${Math.round(volume * 100)};
-        const p = document.getElementById('movie_player');
-        if (p && typeof p.setVolume === 'function') { p.setVolume(vol); return; }
-        const v = document.querySelector('video');
-        if (v) v.volume = ${volume};
-      })();
-    `);
+    this.currentVolume = Math.max(0, Math.min(1, volume));
+    if (this.currentItemId) void this.publishState('playing');
   }
 
   stop(): void {
-    this.clearPoll();
-    if (this.view) {
-      const view = this.view;
-      this.view = null;
-      const win = this.getWindow();
-      try {
-        if (win && !win.isDestroyed()) win.contentView.removeChildView(view);
-        if (!view.webContents.isDestroyed()) view.webContents.close();
-      } catch { /* ignore */ }
-    }
+    this.clearEndedTimer();
+    this.currentItemId = null;
+    this.currentVideoId = null;
+    this.currentTitle = null;
+    this.currentThumbnail = null;
+    this.currentRequestedBy = null;
+    this.currentDurationSeconds = 0;
+    void this.publishState('idle', null);
   }
 
-  private async checkPlayback(view: WebContentsView, itemId: string): Promise<void> {
-    if (view.webContents.isDestroyed()) {
-      this.clearPoll();
+  private async publishState(state: NowPlayingPayload['state'], streamUrl?: string | null): Promise<void> {
+    if (!this.currentItemId || state === 'idle') {
+      this.overlayServer.publish('now-playing', {
+        currentItem: null,
+        streamUrl: null,
+        volume: this.currentVolume,
+        isPlaying: false,
+      });
       return;
     }
-    try {
-      const state = await view.webContents.executeJavaScript(`
-        (() => {
-          const v = document.querySelector('video');
-          return { ended: v ? v.ended : false, hasError: v ? Boolean(v.error) : false };
-        })()
-      `) as { ended: boolean; hasError: boolean };
 
-      if (state.ended) {
-        this.clearPoll();
-        this.onEvent({ type: 'ended', itemId });
-      } else if (state.hasError) {
-        this.clearPoll();
-        this.onEvent({ type: 'error', itemId, errorCode: -1 });
-      }
-    } catch { /* view destroyed during JS execution */ }
+    let url = streamUrl;
+    if (url === undefined && this.currentVideoId) {
+      try { url = await this.resolver.resolveAudioUrl(this.currentVideoId); }
+      catch { url = null; }
+    }
+
+    this.overlayServer.publish('now-playing', {
+      currentItem: {
+        id: this.currentItemId,
+        videoId: this.currentVideoId,
+        title: this.currentTitle ?? 'Untitled',
+        thumbnailUrl: this.currentThumbnail,
+        requestedBy: this.currentRequestedBy,
+        durationSeconds: this.currentDurationSeconds,
+      },
+      streamUrl: url ?? null,
+      volume: this.currentVolume,
+      isPlaying: state === 'playing',
+    });
   }
 
-  private clearPoll(): void {
-    if (this.pollTimer !== null) {
-      clearInterval(this.pollTimer);
-      this.pollTimer = null;
-    }
+  private clearEndedTimer(): void {
+    if (this.endedTimer) { clearTimeout(this.endedTimer); this.endedTimer = null; }
   }
 }

@@ -1,4 +1,5 @@
 import type { ChatMessage, PermissionLevel } from '../../shared/types.js';
+import type { PlatformRole } from '../../shared/platform.js';
 
 export const PERMISSION_RANK: Record<PermissionLevel, number> = {
   everyone: 0,
@@ -10,6 +11,9 @@ export const PERMISSION_RANK: Record<PermissionLevel, number> = {
 };
 
 export function resolvePermissionLevel(message: ChatMessage): PermissionLevel {
+  if (message.unifiedLevel) return message.unifiedLevel;
+  if (message.role) return resolveFromRole(message.role);
+
   const badges = message.badges ?? [];
   let best: PermissionLevel = 'everyone';
   for (const badge of badges) {
@@ -23,6 +27,20 @@ export function resolvePermissionLevel(message: ChatMessage): PermissionLevel {
     if (level && PERMISSION_RANK[level] > PERMISSION_RANK[best]) best = level;
   }
   return best;
+}
+
+/**
+ * Resolução padrão a partir da forma comum do papel. Adapters podem
+ * usar como default ou aplicar regras próprias antes de chamar.
+ * Maior precedência primeiro: broadcaster > moderator > vip > subscriber > follower.
+ */
+export function resolveFromRole(role: PlatformRole): PermissionLevel {
+  if (role.broadcaster) return 'broadcaster';
+  if (role.moderator) return 'moderator';
+  if (role.vip) return 'vip';
+  if (role.subscriber) return 'subscriber';
+  if (role.follower) return 'follower';
+  return 'everyone';
 }
 
 export function isPermissionAllowed(

@@ -1,20 +1,26 @@
 import { session } from 'electron';
-import { Innertube } from 'youtubei.js';
+import { Innertube, Log } from 'youtubei.js';
 import type { ChatMessage, ChatBadge, StreamEvent } from '../shared/types.js';
+import type { YouTubeLiveClient, YouTubeLiveClientOptions } from '../platforms/youtube/live-client.js';
 
-export interface YTLiveClientOptions {
-  videoId: string;
-  onMessage: (message: Omit<ChatMessage, 'id' | 'timestampLabel'>) => void;
-  onEvent?: (event: Omit<StreamEvent, 'id' | 'timestampLabel'>) => void;
-  onLog?: (message: string) => void;
-}
+// Silence youtubei.js's INFO/WARN console output (extractor warnings, deprecation
+// notes, polling traces). It defaults to passing WARNING through `console.warn`,
+// which clutters the dev console while we're tailing real app logs. ERRORs still
+// surface so we don't miss actual scraper failures.
+Log.setLevel(Log.Level.ERROR);
 
-export class YTLiveClient {
+export type YTLiveClientOptions = YouTubeLiveClientOptions;
+
+export class YTLiveClient implements YouTubeLiveClient {
   private livechat: any = null;
   private stopped = false;
   private startedAt = 0;
 
   constructor(private readonly options: YTLiveClientOptions) {}
+
+  get videoId(): string {
+    return this.options.videoId;
+  }
 
   async start(): Promise<void> {
     this.stopped = false;
@@ -46,6 +52,20 @@ export class YTLiveClient {
 
     livechat.on('end', () => {
       this.options.onLog?.('[YT] live chat ended');
+    });
+
+    livechat.on('metadata-update', (metadata: any) => {
+      if (this.stopped || !this.options.onViewerCount) return;
+      const node = metadata?.views?.view_count_node;
+      if (!node || node.is_live !== true) return;
+      // VideoViewCount.original_view_count is the raw concurrent count
+      // ("24"), already a number after youtubei.js parses it. Fall back to
+      // unlabeled_view_count_value text for safety.
+      const fromOriginal = typeof node.original_view_count === 'number' ? node.original_view_count : null;
+      const fallbackText: string = node.unlabeled_view_count_value?.toString?.() ?? node.view_count?.toString?.() ?? '';
+      const fromText = fallbackText ? parseInt(fallbackText.replace(/[^0-9]/g, ''), 10) : NaN;
+      const count = fromOriginal ?? (Number.isFinite(fromText) ? fromText : null);
+      if (count !== null && count >= 0) this.options.onViewerCount(count);
     });
 
     livechat.start();
@@ -144,6 +164,7 @@ export class YTLiveClient {
 
     const badges = this.parseBadges(item.author);
     const avatarUrl: string | undefined = item.author?.thumbnails?.[0]?.url ?? undefined;
+    const userId: string | undefined = typeof item.author?.id === 'string' && item.author.id ? item.author.id : undefined;
     // item.timestamp is in milliseconds (timestampUsec / 1000)
     const isHistory = (item.timestamp ?? 0) < this.startedAt;
 
@@ -153,6 +174,7 @@ export class YTLiveClient {
       content,
       badges,
       avatarUrl,
+      ...(userId ? { userId } : {}),
       ...(isHistory ? { isHistory: true } : {}),
     });
   }

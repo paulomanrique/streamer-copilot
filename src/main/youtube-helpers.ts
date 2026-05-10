@@ -11,11 +11,74 @@ export interface LiveStreamInfo {
   channelHandle: string;
 }
 
-export function getLabelFromTitle(title: string, idx: number): string {
-  const lower = title.toLowerCase();
-  if (lower.includes('horizontal')) return 'H';
-  if (lower.includes('vertical') || lower.includes('shorts')) return 'V';
-  return String(idx + 1);
+/**
+ * Computes the per-stream display labels for a set of concurrent YouTube
+ * livestreams. The label is what shows on chat badges, viewer cards, and
+ * live-link entries — see ObsStatsPanel / AppHeader / ChatFeed.
+ *
+ * Rules (in order):
+ *   1. One stream → "YouTube".
+ *   2. All streams from distinct channels → "YouTube @channel" so the user
+ *      can tell which channel the chat / card is for.
+ *   3. Multiple streams from the same channel:
+ *      - If any title contains an orientation keyword
+ *        (horizontal / desktop / vertical / mobile / celular / shorts),
+ *        label that stream Horizontal or Vertical and assign the opposite
+ *        canonical label to the partner. Synonyms are normalized to the
+ *        canonical pair to keep the vocabulary stable.
+ *      - Otherwise fall back to numeric: "YouTube-1", "YouTube-2", …
+ *   4. Three or more streams from the same channel skip the H/V heuristic
+ *      (the opposite-pair model only makes sense for two) and go numeric.
+ */
+export function computeYouTubeStreamLabels(
+  streams: ReadonlyArray<{ videoId: string; title: string; channelHandle: string | null }>,
+): Map<string, string> {
+  const labels = new Map<string, string>();
+  if (streams.length === 0) return labels;
+  if (streams.length === 1) {
+    labels.set(streams[0].videoId, 'YouTube');
+    return labels;
+  }
+
+  const handles = streams.map((s) => normalizeHandle(s.channelHandle));
+  const distinctHandles = new Set(handles.filter((h) => h.length > 0));
+  if (distinctHandles.size === streams.length) {
+    streams.forEach((s, i) => {
+      const h = handles[i] || '';
+      labels.set(s.videoId, h ? `YouTube @${h}` : `YouTube-${i + 1}`);
+    });
+    return labels;
+  }
+
+  if (streams.length === 2) {
+    const orientations = streams.map((s) => detectOrientation(s.title));
+    const hasH = orientations.includes('horizontal');
+    const hasV = orientations.includes('vertical');
+    if (hasH || hasV) {
+      streams.forEach((s, i) => {
+        const o = orientations[i];
+        if (o === 'horizontal') labels.set(s.videoId, 'YouTube Horizontal');
+        else if (o === 'vertical') labels.set(s.videoId, 'YouTube Vertical');
+        else labels.set(s.videoId, hasH ? 'YouTube Vertical' : 'YouTube Horizontal');
+      });
+      return labels;
+    }
+  }
+
+  streams.forEach((s, i) => labels.set(s.videoId, `YouTube-${i + 1}`));
+  return labels;
+}
+
+function normalizeHandle(handle: string | null): string {
+  if (!handle) return '';
+  return handle.trim().replace(/^@+/, '').toLowerCase();
+}
+
+function detectOrientation(title: string): 'horizontal' | 'vertical' | null {
+  const t = title.toLowerCase();
+  if (/\b(horizontal|desktop)\b/.test(t)) return 'horizontal';
+  if (/\b(vertical|mobile|celular|shorts)\b/.test(t)) return 'vertical';
+  return null;
 }
 
 function getYtText(obj: unknown): string {
@@ -154,8 +217,8 @@ export function extractYtLiveVideoIds(html: string): LiveStreamInfo[] {
   return findLiveVideoIds(data);
 }
 
-/** Parses ytInitialPlayerResponse and returns live stream info if the page is a live stream. */
-export function extractYtLiveFromPlayerResponse(html: string): LiveStreamInfo | null {
+/** Locates and JSON-parses the ytInitialPlayerResponse blob from a watch page. */
+function parseYtInitialPlayerResponse(html: string): Record<string, unknown> | null {
   const marker = 'var ytInitialPlayerResponse = ';
   const start = html.indexOf(marker);
   if (start === -1) return null;
@@ -166,11 +229,17 @@ export function extractYtLiveFromPlayerResponse(html: string): LiveStreamInfo | 
     if (html[i] === '{') depth++;
     else if (html[i] === '}') { depth--; if (depth === 0) { end = i + 1; break; } }
   }
-  let data: unknown;
-  try { data = JSON.parse(html.slice(jsonStart, end)); } catch { return null; }
-  if (!data || typeof data !== 'object') return null;
-  const d = data as Record<string, unknown>;
-  const videoDetails = d.videoDetails as Record<string, unknown> | undefined;
+  try {
+    const parsed = JSON.parse(html.slice(jsonStart, end));
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null;
+  } catch { return null; }
+}
+
+/** Parses ytInitialPlayerResponse and returns live stream info if the page is a live stream. */
+export function extractYtLiveFromPlayerResponse(html: string): LiveStreamInfo | null {
+  const data = parseYtInitialPlayerResponse(html);
+  if (!data) return null;
+  const videoDetails = data.videoDetails as Record<string, unknown> | undefined;
   if (!videoDetails) return null;
   const isLive = videoDetails.isLive === true || videoDetails.isLiveContent === true;
   if (!isLive) return null;
@@ -178,6 +247,81 @@ export function extractYtLiveFromPlayerResponse(html: string): LiveStreamInfo | 
   if (!videoId) return null;
   const title = typeof videoDetails.title === 'string' ? videoDetails.title : '';
   return { videoId, title, viewCount: null, subscriberCount: null, channelHandle: '' };
+}
+
+/**
+ * Extracts the current concurrent-viewer count from a YouTube watch page HTML.
+ * Used as a fallback when the lightweight /live_stats endpoint is unavailable.
+ *
+ * IMPORTANT: `videoDetails.viewCount` (and the duplicated `microformat.viewCount`,
+ * and the `videoPrimaryInfoRenderer.viewCount.simpleText` "X visualizações"
+ * line) are all the cumulative lifetime view count of the broadcast — even
+ * for an active live stream — not concurrent viewers.
+ *
+ * Concurrent viewers only live in `videoViewCountRenderer.viewCount` when
+ * `videoViewCountRenderer.isLive === true`. We do NOT fall back to scanning
+ * the raw HTML for a localized "watching now" / "assistindo agora" badge:
+ * the watch page sidebar can include unrelated recommended live streams,
+ * and a regex match would silently grab one of those instead of the main
+ * video's count. Returning null is correct when the page's videoPrimaryInfoRenderer
+ * isn't a live broadcast (VOD, ended live, etc.).
+ */
+export function extractYtConcurrentViewers(html: string): number | null {
+  const initial = parseYtInitialData(html);
+  if (!initial) return null;
+  const contents = (((initial.contents as Record<string, unknown> | undefined)
+    ?.twoColumnWatchNextResults as Record<string, unknown> | undefined)
+    ?.results as Record<string, unknown> | undefined)
+    ?.results as Record<string, unknown> | undefined;
+  const items = contents?.contents as unknown[] | undefined;
+  if (!Array.isArray(items)) return null;
+
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue;
+    const primary = (item as Record<string, unknown>).videoPrimaryInfoRenderer as Record<string, unknown> | undefined;
+    if (!primary) continue;
+    const vcr = (primary.viewCount as Record<string, unknown> | undefined)?.videoViewCountRenderer as Record<string, unknown> | undefined;
+    if (!vcr || vcr.isLive !== true) continue;
+    const vcText = vcr.viewCount as Record<string, unknown> | undefined;
+    const literal = readYtText(vcText);
+    if (literal) {
+      const count = parseInt(literal.replace(/[^0-9]/g, ''), 10);
+      if (Number.isFinite(count) && count >= 0) return count;
+    }
+  }
+
+  return null;
+}
+
+/** Locates and JSON-parses the ytInitialData blob from a watch page. */
+function parseYtInitialData(html: string): Record<string, unknown> | null {
+  const marker = 'var ytInitialData = ';
+  const start = html.indexOf(marker);
+  if (start === -1) return null;
+  const jsonStart = start + marker.length;
+  let depth = 0;
+  let end = jsonStart;
+  for (let i = jsonStart; i < html.length; i++) {
+    if (html[i] === '{') depth++;
+    else if (html[i] === '}') { depth--; if (depth === 0) { end = i + 1; break; } }
+  }
+  try {
+    const parsed = JSON.parse(html.slice(jsonStart, end));
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null;
+  } catch { return null; }
+}
+
+/** Reads a YouTube text node (`{simpleText}` or `{runs:[{text}]}`) into a flat string. */
+function readYtText(node: Record<string, unknown> | undefined): string {
+  if (!node) return '';
+  if (typeof node.simpleText === 'string') return node.simpleText;
+  const runs = node.runs as unknown[] | undefined;
+  if (Array.isArray(runs)) {
+    return runs
+      .map((r) => (r && typeof r === 'object' ? String((r as Record<string, unknown>).text ?? '') : ''))
+      .join('');
+  }
+  return '';
 }
 
 
