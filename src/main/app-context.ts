@@ -1487,12 +1487,21 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     // relaunch the app so the new profile boots from a clean slate.
     const snapshot = await profileStore.select(selectProfileInputSchema.parse(raw).profileId);
     setImmediate(() => {
-      // Only call relaunch in production. In dev, nodemon already respawns
-      // Electron when it exits — calling app.relaunch() here would spawn a
-      // *second* detached instance reparented to launchd, leaving orphans
-      // behind every time the user switches profiles.
-      if (app.isPackaged) app.relaunch();
-      app.quit();
+      if (app.isPackaged) {
+        // Production binary: standard relaunch + clean quit. The detached
+        // child started by `relaunch` becomes the next instance.
+        app.relaunch();
+        app.quit();
+      } else {
+        // Dev (under nodemon): app.relaunch() would spawn a second detached
+        // Electron orphaned to launchd while nodemon also respawns its own —
+        // doubling instances. And nodemon by default *waits* on a clean exit
+        // (code 0) instead of restarting. Force a non-zero exit AFTER
+        // graceful before-quit cleanup so nodemon treats it as a crash and
+        // brings up exactly one fresh instance.
+        app.once('will-quit', () => process.exit(42));
+        app.quit();
+      }
     });
     return snapshot;
   });
