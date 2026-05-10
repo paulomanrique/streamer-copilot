@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import logoUrl from '../assets/logo.svg';
-import type { AppInfo, KickConnectionStatus, KickLiveStats, TikTokConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
+import type { AppInfo, KickConnectionStatus, KickLiveStats, TikTokConnectionStatus, TikTokLiveStats, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
 import type { AppSection } from './SectionTabs.js';
 
@@ -14,9 +14,12 @@ interface AppHeaderProps {
   youtubeStreams: YouTubeStreamInfo[];
   tiktokStatus: TikTokConnectionStatus;
   tiktokUsername: string | null;
+  /** Per-username TikTok stats — one entry per connected host. */
+  tiktokLiveStatsByUsername: Record<string, TikTokLiveStats>;
   kickStatus: KickConnectionStatus;
   kickSlug: string | null;
-  kickLiveStats: KickLiveStats | null;
+  /** Per-channel Kick stats — one entry per connected channel. */
+  kickLiveStatsByChannel: Record<string, KickLiveStats>;
 }
 
 const TWITCH_ICON = 'M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z';
@@ -33,19 +36,43 @@ export function AppHeader({
   youtubeStreams,
   tiktokStatus,
   tiktokUsername,
+  tiktokLiveStatsByUsername,
   kickStatus,
   kickSlug,
-  kickLiveStats,
+  kickLiveStatsByChannel,
 }: AppHeaderProps) {
   const { messages, t } = useI18n();
   const [liveOpen, setLiveOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const appName = appInfo?.appName ?? 'Streamer Copilot';
-  const isKickLive = kickStatus === 'connected' && Boolean(kickSlug) && kickLiveStats?.isLive !== false;
+
   const liveTwitchChannels = Object.entries(twitchLiveStatsByChannel)
     .filter(([, stats]) => stats.isLive)
     .map(([channel]) => channel);
-  const isAnyLive = liveTwitchChannels.length > 0 || youtubeStreams.length > 0 || isKickLive;
+
+  // Kick: prefer per-channel stats; fall back to the legacy single-status flag
+  // when no stats have arrived yet so a freshly-connected channel still surfaces.
+  const liveKickChannels = (() => {
+    const fromStats = Object.entries(kickLiveStatsByChannel)
+      .filter(([, stats]) => stats.isLive !== false)
+      .map(([channel]) => channel);
+    if (fromStats.length > 0) return fromStats;
+    return kickStatus === 'connected' && kickSlug ? [kickSlug] : [];
+  })();
+
+  // TikTok: connected username keys carry "is live now". Stats arrive only
+  // when the host is actually live, so any entry here qualifies.
+  const liveTiktokUsernames = (() => {
+    const fromStats = Object.keys(tiktokLiveStatsByUsername);
+    if (fromStats.length > 0) return fromStats;
+    return tiktokStatus === 'connected' && tiktokUsername ? [tiktokUsername] : [];
+  })();
+
+  const isAnyLive = liveTwitchChannels.length > 0
+    || youtubeStreams.length > 0
+    || liveKickChannels.length > 0
+    || liveTiktokUsernames.length > 0;
+
   const liveLinks = [
     ...liveTwitchChannels.map((channel) => ({
       id: `twitch-${channel}`,
@@ -74,18 +101,26 @@ export function AppHeader({
         : 'bg-red-600/30 hover:bg-red-600/50 text-red-300',
     });
     }),
-    ...(isKickLive && kickSlug
-      ? [{
-          id: 'kick',
-          label: `Kick ${kickSlug}`,
-          url: `kick.com/${kickSlug}`,
-          full: `https://kick.com/${kickSlug}`,
-          icon: KICK_ICON,
-          color: 'text-green-400',
-          border: 'border-green-500/30',
-          btnBg: 'bg-green-600/30 hover:bg-green-600/50 text-green-300',
-        }]
-      : []),
+    ...liveKickChannels.map((channel) => ({
+      id: `kick-${channel}`,
+      label: `Kick ${channel}`,
+      url: `kick.com/${channel}`,
+      full: `https://kick.com/${channel}`,
+      icon: KICK_ICON,
+      color: 'text-green-400',
+      border: 'border-green-500/30',
+      btnBg: 'bg-green-600/30 hover:bg-green-600/50 text-green-300',
+    })),
+    ...liveTiktokUsernames.map((username) => ({
+      id: `tiktok-${username}`,
+      label: `TikTok @${username}`,
+      url: `tiktok.com/@${username}/live`,
+      full: `https://www.tiktok.com/@${username}/live`,
+      icon: TIKTOK_ICON,
+      color: 'text-pink-400',
+      border: 'border-pink-500/30',
+      btnBg: 'bg-pink-600/30 hover:bg-pink-600/50 text-pink-300',
+    })),
   ];
 
   const copyLink = (id: string, url: string) => {

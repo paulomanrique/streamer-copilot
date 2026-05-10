@@ -326,7 +326,7 @@ export interface CopilotApi {
   twitchGetStatus: () => Promise<TwitchConnectionStatus>;
   onTwitchStatus: (listener: (status: TwitchConnectionStatus, channel: string | null) => void) => () => void;
   onTwitchLiveStats: (listener: (payload: { channel: string; stats: import('./types.js').TwitchLiveStats | null }) => void) => () => void;
-  onKickLiveStats: (listener: (stats: KickLiveStats | null) => void) => () => void;
+  onKickLiveStats: (listener: (payload: { channel: string; stats: KickLiveStats | null }) => void) => () => void;
   onYoutubeStatus: (listener: (streams: import('./types.js').YouTubeStreamInfo[]) => void) => () => void;
   twitchGetUserAvatars: (logins: string[]) => Promise<Record<string, string>>;
   twitchGetBadgeUrls: (badgeIds: string[]) => Promise<Record<string, string>>;
@@ -363,7 +363,7 @@ export interface CopilotApi {
   tiktokGetSettings: () => Promise<import('./types.js').TikTokSettings>;
   tiktokSaveSettings: (settings: import('./types.js').TikTokSettings) => Promise<void>;
   onTiktokStatus: (listener: (status: import('./types.js').TikTokConnectionStatus, username: string | null) => void) => () => void;
-  onTiktokLiveStats: (listener: (stats: import('./types.js').TikTokLiveStats | null) => void) => () => void;
+  onTiktokLiveStats: (listener: (payload: { username: string; stats: import('./types.js').TikTokLiveStats | null }) => void) => () => void;
   tiktokCheckLive: (username: string) => Promise<{ isLive: boolean }>;
   kickConnect: (input: { channelInput: string; clientId: string; clientSecret: string }) => Promise<void>;
   kickDisconnect: () => Promise<void>;
