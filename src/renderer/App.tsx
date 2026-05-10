@@ -25,6 +25,7 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   eventNotifications: true,
   recommendationTemplate: 'Pessoal, visitem o {username}',
   diagnosticLogLevel: 'info',
+  overlayServerPort: 7842,
 };
 
 type ProfileFormMode = 'create' | 'rename' | 'clone';
@@ -38,20 +39,19 @@ export default function App() {
     twitchChannel,
     tiktokStatus,
     tiktokUsername,
-    tiktokLiveStats,
+    tiktokLiveStatsByUsername,
     kickStatus,
     kickSlug,
-    kickLiveStats,
+    kickLiveStatsByChannel,
     setProfiles,
     setChatSnapshot,
-    twitchLiveStats,
+    twitchLiveStatsByChannel,
     youtubeStreams,
     setTwitchStatus,
     setTwitchChannel,
     setYoutubeStreams,
     setTiktokStatus,
     setKickStatus,
-    setKickLiveStats,
   } = useAppStore();
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -63,6 +63,7 @@ export default function App() {
   const [profileFormDirectory, setProfileFormDirectory] = useState('');
   const [profileFormLanguage, setProfileFormLanguage] = useState<AppLanguage>(DEFAULT_APP_LANGUAGE);
   const [selectorProfileId, setSelectorProfileId] = useState('');
+  const [rememberProfileSelection, setRememberProfileSelection] = useState(false);
   const [currentSection, setCurrentSection] = useState<AppSection>('dashboard');
   const [generalSettings, setGeneralSettings] = useState<GeneralSettings>(DEFAULT_GENERAL_SETTINGS);
   const [appLanguage, setAppLanguage] = useState<AppLanguage>(DEFAULT_APP_LANGUAGE);
@@ -118,9 +119,22 @@ export default function App() {
         setYoutubeStreams(ytInitialStatus);
         setTiktokStatus(tiktokInitialStatus);
         setKickStatus(kickInitialStatus);
-        if (kickInitialStatus !== 'connected') setKickLiveStats(null);
         setSelectorProfileId(snapshot.activeProfileId);
-        setIsProfileSelectorOpen(true);
+        setRememberProfileSelection(snapshot.autoSelectActiveProfile);
+        // Smart skip: don't bother prompting when there's only one profile,
+        // or when the user already opted in to auto-select via the picker's
+        // "don't ask again" checkbox. Falls through to the picker otherwise.
+        const onlyOne = snapshot.profiles.length === 1;
+        const autoSelectId = onlyOne
+          ? snapshot.profiles[0].id
+          : (snapshot.autoSelectActiveProfile && snapshot.activeProfileId)
+            ? snapshot.activeProfileId
+            : null;
+        if (autoSelectId) {
+          await onSelectProfile(autoSelectId);
+        } else {
+          setIsProfileSelectorOpen(true);
+        }
       } catch (cause) {
         pushError(cause instanceof Error ? cause.message : messages[appLanguage].errors.failedToLoadInitialData);
       } finally {
@@ -129,7 +143,7 @@ export default function App() {
     };
 
     void load();
-  }, [setChatSnapshot, setProfiles, setTwitchStatus, setTwitchChannel, setKickStatus, setKickLiveStats]);
+  }, [setChatSnapshot, setProfiles, setTwitchStatus, setTwitchChannel, setKickStatus]);
 
   useEffect(() => {
     if (!isLoading && !activeProfileId) {
@@ -153,9 +167,22 @@ export default function App() {
     }
   };
 
+  /** Used from the settings list, where the user is already running a
+   *  profile. Persists the new active profile and asks the main process to
+   *  relaunch — the renderer is about to be replaced, so we don't bother
+   *  syncing local state. */
+  const onSwitchProfile = async (profileId: string) => {
+    try {
+      await window.copilot.switchProfileAndRelaunch({ profileId });
+    } catch (cause) {
+      pushError(cause instanceof Error ? cause.message : messages[appLanguage].errors.failedToSelectProfile);
+    }
+  };
+
   const applyProfilesSnapshot = (snapshot: ProfilesSnapshot) => {
     setProfiles(snapshot);
     setSelectorProfileId(snapshot.activeProfileId);
+    setRememberProfileSelection(snapshot.autoSelectActiveProfile);
     applyAppLanguageFromSnapshot(snapshot);
   };
 
@@ -277,6 +304,15 @@ export default function App() {
     const selected = await onSelectProfile(targetProfileId);
     if (!selected) return;
 
+    // Persist (or clear) the "don't ask again" preference. The user might have
+    // unchecked it after a previous run had it on — both directions matter.
+    try {
+      const updated = await window.copilot.setAutoSelectActiveProfile({ autoSelect: rememberProfileSelection });
+      applyProfilesSnapshot(updated);
+    } catch (cause) {
+      pushError(cause instanceof Error ? cause.message : messages[appLanguage].errors.failedToSelectProfile);
+    }
+
     setIsProfileSelectorOpen(false);
   };
 
@@ -300,6 +336,7 @@ export default function App() {
       setAppLanguage(saved.appLanguage);
       setProfiles({
         activeProfileId,
+        autoSelectActiveProfile: rememberProfileSelection,
         profiles: profiles.map((profile) =>
           profile.id === activeProfileId ? { ...profile, appLanguage: saved.appLanguage } : profile,
         ),
@@ -321,14 +358,14 @@ export default function App() {
             appInfo={appInfo}
             currentSection={currentSection}
             onChangeSection={setCurrentSection}
-            twitchChannel={twitchChannel}
-            twitchLiveStats={twitchLiveStats}
+            twitchLiveStatsByChannel={twitchLiveStatsByChannel}
             youtubeStreams={youtubeStreams}
             tiktokStatus={tiktokStatus}
             tiktokUsername={tiktokUsername}
+            tiktokLiveStatsByUsername={tiktokLiveStatsByUsername}
             kickStatus={kickStatus}
             kickSlug={kickSlug}
-            kickLiveStats={kickLiveStats}
+            kickLiveStatsByChannel={kickLiveStatsByChannel}
           />
         ) : null}
 
@@ -341,14 +378,14 @@ export default function App() {
             obsStats={obsStats}
             twitchStatus={twitchStatus}
             twitchChannel={twitchChannel}
-            twitchLiveStats={twitchLiveStats}
+            twitchLiveStatsByChannel={twitchLiveStatsByChannel}
             youtubeStreams={youtubeStreams}
             tiktokStatus={tiktokStatus}
             tiktokUsername={tiktokUsername}
-            tiktokLiveStats={tiktokLiveStats}
+            tiktokLiveStatsByUsername={tiktokLiveStatsByUsername}
             kickStatus={kickStatus}
             kickSlug={kickSlug}
-            kickLiveStats={kickLiveStats}
+            kickLiveStatsByChannel={kickLiveStatsByChannel}
             recommendationTemplate={generalSettings.recommendationTemplate}
           />
           </SectionErrorBoundary>
@@ -364,7 +401,7 @@ export default function App() {
             onRenameProfile={openRenameProfileModal}
             onCloneProfile={openCloneProfileModal}
             onDeleteProfile={() => void deleteActiveProfile()}
-            onSelectProfile={(profileId) => void onSelectProfile(profileId)}
+            onSelectProfile={(profileId) => void onSwitchProfile(profileId)}
             generalSettings={generalSettings}
             onSaveGeneralSettings={saveGeneralSettings}
             appLanguage={appLanguage}
@@ -387,7 +424,9 @@ export default function App() {
         open={isProfileSelectorOpen || (!isLoading && !hasActiveProfile)}
         profiles={profiles}
         selectorProfileId={selectorProfileId}
+        rememberSelection={rememberProfileSelection}
         onChangeProfileId={setSelectorProfileId}
+        onChangeRememberSelection={setRememberProfileSelection}
         onCreateProfile={openCreateProfileModal}
         onConfirm={() => void confirmProfileSelector()}
       />

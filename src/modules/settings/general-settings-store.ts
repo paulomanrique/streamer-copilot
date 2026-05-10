@@ -16,6 +16,7 @@ const DEFAULT_SETTINGS: GeneralSettings = {
   eventNotifications: true,
   recommendationTemplate: DEFAULT_RECOMMENDATION_TEMPLATE,
   diagnosticLogLevel: 'info',
+  overlayServerPort: 7842,
 };
 
 export class GeneralSettingsStore {
@@ -35,6 +36,7 @@ export class GeneralSettingsStore {
         diagnosticLogLevel: VALID_LOG_LEVELS.includes(parsed.diagnosticLogLevel as EventLogLevel)
           ? (parsed.diagnosticLogLevel as EventLogLevel)
           : DEFAULT_SETTINGS.diagnosticLogLevel,
+        overlayServerPort: normalizePort(parsed.overlayServerPort),
       };
     } catch {
       return { ...DEFAULT_SETTINGS };
@@ -48,6 +50,7 @@ export class GeneralSettingsStore {
       eventNotifications: Boolean(input.eventNotifications),
       recommendationTemplate: normalizeRecommendationTemplate(input.recommendationTemplate),
       diagnosticLogLevel: VALID_LOG_LEVELS.includes(input.diagnosticLogLevel) ? input.diagnosticLogLevel : 'info',
+      overlayServerPort: normalizePort(input.overlayServerPort),
     };
     this.repository.set(GENERAL_SETTINGS_KEY, JSON.stringify(nextSettings));
     return nextSettings;
@@ -83,4 +86,10 @@ function normalizeRecommendationTemplate(input: unknown): string {
   if (typeof input !== 'string') return DEFAULT_RECOMMENDATION_TEMPLATE;
   const value = input.trim();
   return value || DEFAULT_RECOMMENDATION_TEMPLATE;
+}
+
+function normalizePort(input: unknown): number {
+  const n = typeof input === 'number' ? input : Number(input);
+  if (!Number.isFinite(n) || n < 1024 || n > 65535) return DEFAULT_SETTINGS.overlayServerPort;
+  return Math.floor(n);
 }

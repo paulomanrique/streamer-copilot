@@ -132,11 +132,38 @@ export function ChatLogsPage() {
 
   const filteredSessions = platformFilter ? sessions.filter((s) => s.platform === platformFilter) : sessions;
 
+  const handleClearAll = async () => {
+    if (sessions.length === 0) return;
+    const total = sessions.reduce((acc, s) => acc + s.messageCount, 0);
+    const confirmed = window.confirm(
+      `${t('Delete every chat log?')}\n\n${sessions.length} ${t('sessions')} · ${total.toLocaleString()} ${t('messages')}\n\n${t('This cannot be undone.')}`,
+    );
+    if (!confirmed) return;
+    try {
+      await window.copilot.chatLogClearAll();
+      setSessions([]);
+      setSelectedSession(null);
+      setMessages([]);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t('Delete failed'));
+    }
+  };
+
   return (
     <div className="h-full flex flex-col">
-      <div className="px-6 py-4 border-b border-gray-800 shrink-0">
-        <h2 className="text-lg font-semibold mb-0.5">Chat Logs</h2>
-        <p className="text-sm text-gray-400">Browse and export chat history per live session.</p>
+      <div className="px-6 py-4 border-b border-gray-800 shrink-0 flex items-baseline justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold mb-0.5">Chat Logs</h2>
+          <p className="text-sm text-gray-400">Browse and export chat history per live session.</p>
+        </div>
+        <button
+          type="button"
+          disabled={sessions.length === 0}
+          onClick={() => void handleClearAll()}
+          className="px-3 py-1.5 rounded bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 text-rose-200 text-xs font-medium transition-colors disabled:opacity-40 disabled:hover:bg-rose-600/20"
+        >
+          {t('Clear all')}
+        </button>
       </div>
 
       <div className="flex flex-1 min-h-0">

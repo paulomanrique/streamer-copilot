@@ -1,6 +1,9 @@
 import { createRequire } from 'node:module';
 import type { ChatMessage, PlatformId, StreamEvent, TwitchConnectionStatus } from '../../shared/types.js';
-import type { PlatformChatAdapter } from '../base.js';
+import type { PlatformRole } from '../../shared/platform.js';
+import type { PlatformCapabilities } from '../../shared/moderation.js';
+import { resolveFromRole } from '../../modules/commands/permission-utils.js';
+import { READ_ONLY_CAPABILITIES, type PlatformChatAdapter } from '../base.js';
 
 /**
  * Subset of tmi.js IRC tags. Covers fields used by this adapter.
@@ -34,6 +37,16 @@ const DEFAULT_MOCK_AUTHOR = 'Streamer';
 
 export class TwitchChatAdapter implements PlatformChatAdapter {
   readonly platform: PlatformId = 'twitch';
+
+  // Capabilities upgrade from READ_ONLY to TWITCH_MODERATION_CAPABILITIES once
+  // setModeration() is wired in by app-context (after broadcaster id is known).
+  capabilities: PlatformCapabilities = READ_ONLY_CAPABILITIES;
+  moderation?: import('../../shared/moderation.js').ModerationApi;
+
+  setModeration(api: import('../../shared/moderation.js').ModerationApi, capabilities: PlatformCapabilities): void {
+    this.moderation = api;
+    this.capabilities = capabilities;
+  }
 
   private readonly messageHandlers = new Set<(message: ChatMessage) => void>();
   private readonly eventHandlers = new Set<(event: StreamEvent) => void>();
@@ -157,6 +170,7 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
     client.on('message', (...args: unknown[]) => {
       const [channel, tags, message, self] = args as [string, TmiTags, string, boolean];
       if (self) return;
+      const role = this.resolveRole(tags, channel);
       this.emitMessage({
         platform: 'twitch',
         author: this.resolveAuthor(tags, channel),
@@ -164,8 +178,19 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
         badges: this.resolveBadges(tags),
         color: typeof tags.color === 'string' && tags.color ? tags.color : undefined,
         badgeUrls: this.options.resolveBadgeUrls ? this.options.resolveBadgeUrls((tags.badges as string | Record<string, string>) ?? '') : undefined,
+        role,
+        unifiedLevel: resolveFromRole(role),
+        // Per-channel hint so the chat feed can label multi-channel Twitch
+        // setups with the source channel instead of a generic "Twitch" badge.
+        streamLabel: this.normalizeChannelName(channel) ?? undefined,
       }, tags);
     });
+
+    // Per-channel hint used by the chat feed and activity log to disambiguate
+    // multi-channel Twitch setups. Each event handler receives the channel as
+    // its first argument (with a leading '#'); we strip the '#' and forward.
+    const labelOf = (channel: string | null | undefined): string | undefined =>
+      this.normalizeChannelName(channel) ?? undefined;
 
     client.on('cheer', (...args: unknown[]) => {
       const [channel, tags, message] = args as [string, TmiTags, string];
@@ -175,6 +200,7 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
         author: this.resolveAuthor(tags, channel),
         amount: this.firstNumber(tags.bits) ?? 0,
         message: message || undefined,
+        streamLabel: labelOf(channel),
       });
     });
 
@@ -187,6 +213,7 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
         author: String(username ?? this.resolveAuthor(tags ?? {}, channel)),
         amount: 1,
         message: message || undefined,
+        streamLabel: labelOf(channel),
       });
     });
 
@@ -199,6 +226,7 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
         author: String(username ?? this.resolveAuthor(tags ?? {}, channel)),
         amount: this.firstNumber(months) ?? 1,
         message: message || undefined,
+        streamLabel: labelOf(channel),
       });
     });
 
@@ -211,18 +239,20 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
         author: String(gifter ?? this.resolveAuthor(tags ?? {}, channel)),
         amount: 1,
         message: `to @${String(recipient ?? '')}`,
+        streamLabel: labelOf(channel),
       });
     });
 
     // Anonymous gift sub
     client.on('anonsubgift', (...args: unknown[]) => {
-      const [, , recipient] = args as [string, unknown, string];
+      const [channel, , recipient] = args as [string, unknown, string];
       this.emitEvent({
         platform: 'twitch',
         type: 'gift',
         author: 'Anonymous',
         amount: 1,
         message: `to @${String(recipient ?? '')}`,
+        streamLabel: labelOf(channel),
       });
     });
 
@@ -235,18 +265,20 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
         author: String(gifter ?? this.resolveAuthor(tags ?? {}, channel)),
         amount: this.firstNumber(count) ?? 1,
         message: undefined,
+        streamLabel: labelOf(channel),
       });
     });
 
     // Anonymous mass gift
     client.on('anonsubmysterygift', (...args: unknown[]) => {
-      const [, count] = args as [string, number];
+      const [channel, count] = args as [string, number];
       this.emitEvent({
         platform: 'twitch',
         type: 'gift',
         author: 'Anonymous',
         amount: this.firstNumber(count) ?? 1,
         message: undefined,
+        streamLabel: labelOf(channel),
       });
     });
 
@@ -259,6 +291,7 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
         author: String(username ?? this.resolveAuthor(tags ?? {}, channel)),
         amount: 1,
         message: undefined,
+        streamLabel: labelOf(channel),
       });
     });
 
@@ -270,6 +303,7 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
         author: String(username ?? this.resolveAuthor(tags ?? {}, channel)),
         amount: 1,
         message: undefined,
+        streamLabel: labelOf(channel),
       });
     });
 
@@ -282,6 +316,7 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
         author: this.resolveEventAuthor(user, tags, channel),
         amount: this.firstNumber(viewers) ?? 0,
         message: undefined,
+        streamLabel: labelOf(channel),
       });
     });
 
@@ -298,10 +333,12 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
   }
 
   private emitMessage(message: Omit<ChatMessage, 'id' | 'timestampLabel'> & { color?: string }, tags?: TmiTags): void {
+    const userId = tags?.['user-id'];
     const payload: ChatMessage = {
       id: tags?.['id']?.toString?.() ?? this.buildId(),
       timestampLabel: this.formatTimestamp(tags?.['tmi-sent-ts']),
       ...message,
+      userId: typeof userId === 'string' && userId ? userId : (typeof userId === 'number' ? String(userId) : message.userId),
     };
 
     for (const handler of this.messageHandlers) {
@@ -348,6 +385,47 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
 
   private resolveAuthor(tags: TmiTags, channel: string | null | undefined): string {
     return String(tags['display-name'] ?? tags.username ?? this.normalizeChannelName(channel) ?? this.options.mockAuthor ?? DEFAULT_MOCK_AUTHOR);
+  }
+
+  private resolveRole(tags: TmiTags, channel: string | null | undefined): PlatformRole {
+    const rawBadges = tags.badges;
+    const badgeMap: Record<string, string> = (rawBadges && typeof rawBadges === 'object')
+      ? (rawBadges as Record<string, string>)
+      : {};
+    const badgeInfo = (tags['badge-info'] && typeof tags['badge-info'] === 'object')
+      ? (tags['badge-info'] as Record<string, string>)
+      : {};
+    const username = typeof tags.username === 'string' ? tags.username.toLowerCase() : '';
+    const channelLower = this.normalizeChannelName(channel);
+
+    const broadcaster = Boolean(badgeMap.broadcaster) || (Boolean(username) && Boolean(channelLower) && username === channelLower);
+    const moderator = this.isTruthy(tags.mod) || Boolean(badgeMap.moderator);
+    const vip = Boolean(badgeMap.vip);
+    const subscriberTierRaw = badgeMap.subscriber;
+    const subscriber = this.isTruthy(tags.subscriber) || Boolean(subscriberTierRaw);
+    const subTier: 1 | 2 | 3 | undefined = subscriberTierRaw
+      ? (Number(subscriberTierRaw) >= 3000 ? 3 : Number(subscriberTierRaw) >= 2000 ? 2 : 1)
+      : undefined;
+    const subMonths = badgeInfo.subscriber ? Number(badgeInfo.subscriber) : undefined;
+    const isFounder = Boolean(badgeMap.founder);
+    const isArtist = Boolean(badgeMap['artist-badge']);
+    const verified = Boolean(badgeMap.verified) || Boolean(badgeMap.partner);
+
+    const extras: Record<string, unknown> = {};
+    if (subTier !== undefined) extras.subTier = subTier;
+    if (subMonths !== undefined && Number.isFinite(subMonths)) extras.subMonths = subMonths;
+    if (isFounder) extras.isFounder = true;
+    if (isArtist) extras.isArtist = true;
+    if (verified) extras.verified = true;
+
+    return {
+      broadcaster,
+      moderator,
+      vip,
+      subscriber,
+      // Twitch follower status requires a Helix call; left for app-context to hydrate.
+      extras: Object.keys(extras).length > 0 ? extras : undefined,
+    };
   }
 
   private resolveBadges(tags: TmiTags): ChatMessage['badges'] {

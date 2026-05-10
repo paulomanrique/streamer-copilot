@@ -16,6 +16,13 @@ import type {
   PlatformId,
   ProfileSettings,
   ProfilesSnapshot,
+  Poll,
+  PollControlInput,
+  PollDeleteInput,
+  PollOverlayInfo,
+  PollSnapshot,
+  PollUpsertInput,
+  PollVote,
   Raffle,
   RaffleControlActionInput,
   RaffleDeleteInput,
@@ -70,6 +77,8 @@ export const IPC_CHANNELS = {
   appOpenExternalUrl: 'app:open-external-url',
   profilesList: 'profiles:list',
   profilesSelect: 'profiles:select',
+  profilesSwitchAndRelaunch: 'profiles:switch-and-relaunch',
+  profilesSetAutoSelect: 'profiles:set-auto-select',
   profilesCreate: 'profiles:create',
   profilesRename: 'profiles:rename',
   profilesClone: 'profiles:clone',
@@ -97,6 +106,16 @@ export const IPC_CHANNELS = {
   rafflesResult: 'raffles:result',
   rafflesSoundsList: 'raffles:sounds-list',
   rafflesSoundsPreview: 'raffles:sounds-preview',
+  pollsList: 'polls:list',
+  pollsUpsert: 'polls:upsert',
+  pollsDelete: 'polls:delete',
+  pollsGetActive: 'polls:get-active',
+  pollsGetSnapshot: 'polls:get-snapshot',
+  pollsControl: 'polls:control',
+  pollsOverlayInfo: 'polls:overlay-info',
+  pollsState: 'polls:state',
+  pollsVote: 'polls:vote',
+  pollsResult: 'polls:result',
   textList: 'text:list',
   textUpsert: 'text:upsert',
   textDelete: 'text:delete',
@@ -150,6 +169,7 @@ export const IPC_CHANNELS = {
   youtubeSaveSettings: 'youtube:save-settings',
   youtubeCheckLive: 'youtube:check-live',
   youtubeGetChatChannels: 'youtube:get-chat-channels',
+  youtubeApiStartOAuth: 'youtube-api:start-oauth',
   tiktokConnect: 'tiktok:connect',
   tiktokDisconnect: 'tiktok:disconnect',
   tiktokGetStatus: 'tiktok:get-status',
@@ -169,6 +189,8 @@ export const IPC_CHANNELS = {
   chatLogGetMessages: 'chatLog:get-messages',
   chatLogExportSession: 'chatLog:export-session',
   chatLogDeleteSession: 'chatLog:delete-session',
+  chatLogClearAll: 'chatLog:clear-all',
+  eventLogClearAll: 'eventLog:clear-all',
   suggestionsList: 'suggestions:list',
   suggestionsUpsert: 'suggestions:upsert',
   suggestionsDelete: 'suggestions:delete',
@@ -190,6 +212,24 @@ export const IPC_CHANNELS = {
   musicPlay: 'music:play',
   musicStop: 'music:stop',
   musicVolume: 'music:volume',
+  moderationGetCapabilities: 'moderation:get-capabilities',
+  moderationDeleteMessage: 'moderation:delete-message',
+  moderationBanUser: 'moderation:ban-user',
+  moderationUnbanUser: 'moderation:unban-user',
+  moderationTimeoutUser: 'moderation:timeout-user',
+  moderationSetMode: 'moderation:set-mode',
+  moderationManageRole: 'moderation:manage-role',
+  moderationRaid: 'moderation:raid',
+  moderationShoutout: 'moderation:shoutout',
+  accountsList: 'accounts:list',
+  accountsCreate: 'accounts:create',
+  accountsUpdate: 'accounts:update',
+  accountsDelete: 'accounts:delete',
+  accountsConnect: 'accounts:connect',
+  accountsDisconnect: 'accounts:disconnect',
+  accountsGetStatus: 'accounts:get-status',
+  accountsStatus: 'accounts:status',
+  overlayServerInfo: 'overlay:server-info',
 } as const;
 
 export interface RecentChatSnapshot {
@@ -202,6 +242,12 @@ export interface CopilotApi {
   openExternalUrl: (url: string) => Promise<void>;
   listProfiles: () => Promise<ProfilesSnapshot>;
   selectProfile: (input: SelectProfileInput) => Promise<ProfilesSnapshot>;
+  /** Hard switch — persists the new active profile and relaunches the app
+   *  so every long-lived service (adapters, OAuth, schedulers) starts from a
+   *  clean slate. The promise resolves with the persisted snapshot before the
+   *  process exits. */
+  switchProfileAndRelaunch: (input: SelectProfileInput) => Promise<ProfilesSnapshot>;
+  setAutoSelectActiveProfile: (input: { autoSelect: boolean }) => Promise<ProfilesSnapshot>;
   createProfile: (input: CreateProfileInput) => Promise<ProfilesSnapshot>;
   renameProfile: (input: RenameProfileInput) => Promise<ProfilesSnapshot>;
   cloneProfile: (input: CloneProfileInput) => Promise<ProfilesSnapshot>;
@@ -229,6 +275,16 @@ export interface CopilotApi {
   onRaffleResult: (listener: (payload: RaffleRoundResult) => void) => () => void;
   listRaffleSounds: () => Promise<Record<'spinning' | 'eliminated' | 'winner', string[]>>;
   previewRaffleSound: (event: 'spinning' | 'eliminated' | 'winner', filename: string) => Promise<void>;
+  listPolls: () => Promise<Poll[]>;
+  upsertPoll: (input: PollUpsertInput) => Promise<Poll[]>;
+  deletePoll: (input: PollDeleteInput) => Promise<Poll[]>;
+  getActivePoll: () => Promise<Poll | null>;
+  getPollSnapshot: (pollId: string) => Promise<PollSnapshot>;
+  controlPoll: (input: PollControlInput) => Promise<PollSnapshot>;
+  getPollOverlayInfo: () => Promise<PollOverlayInfo>;
+  onPollState: (listener: (payload: PollSnapshot | null) => void) => () => void;
+  onPollVote: (listener: (payload: PollVote) => void) => () => void;
+  onPollResult: (listener: (payload: PollSnapshot) => void) => () => void;
   listTextCommands: () => Promise<TextCommand[]>;
   upsertTextCommand: (input: TextCommandUpsertInput) => Promise<TextCommand[]>;
   deleteTextCommand: (input: TextCommandDeleteInput) => Promise<TextCommand[]>;
@@ -269,13 +325,13 @@ export interface CopilotApi {
   twitchDisconnect: () => Promise<void>;
   twitchGetStatus: () => Promise<TwitchConnectionStatus>;
   onTwitchStatus: (listener: (status: TwitchConnectionStatus, channel: string | null) => void) => () => void;
-  onTwitchLiveStats: (listener: (stats: TwitchLiveStats) => void) => () => void;
-  onKickLiveStats: (listener: (stats: KickLiveStats | null) => void) => () => void;
+  onTwitchLiveStats: (listener: (payload: { channel: string; stats: import('./types.js').TwitchLiveStats | null }) => void) => () => void;
+  onKickLiveStats: (listener: (payload: { channel: string; stats: KickLiveStats | null }) => void) => () => void;
   onYoutubeStatus: (listener: (streams: import('./types.js').YouTubeStreamInfo[]) => void) => () => void;
   twitchGetUserAvatars: (logins: string[]) => Promise<Record<string, string>>;
   twitchGetBadgeUrls: (badgeIds: string[]) => Promise<Record<string, string>>;
   twitchStartOAuth: () => Promise<{ username: string; accessToken: string }>;
-  kickStartOAuth: () => Promise<{ channelSlug: string }>;
+  kickStartOAuth: (input?: { channelSlug?: string }) => Promise<{ channelSlug: string }>;
   youtubeConnect: (input: { videoId: string }) => Promise<void>;
   youtubeDisconnect: () => Promise<void>;
   youtubeGetStatus: () => Promise<import('./types.js').YouTubeStreamInfo[]>;
@@ -284,13 +340,30 @@ export interface CopilotApi {
   youtubeSaveSettings: (settings: import('./types.js').YouTubeSettings) => Promise<import('./types.js').YouTubeSettings>;
   youtubeCheckLive: (handle: string) => Promise<{ videoIds: string[] }>;
   youtubeGetChatChannels: () => Promise<import('./types.js').YouTubeChatChannel[]>;
+  /**
+   * Runs the loopback OAuth flow with the given Google Cloud OAuth client
+   * credentials. Returns the encrypted artifacts the renderer should hand to
+   * `accountsCreate` as providerData, plus the channel resolved by
+   * `channels.list?mine=true`. The plaintext clientSecret is consumed only
+   * for the flow — it's encrypted on the way out.
+   */
+  youtubeApiStartOAuth: (input: { clientId: string; clientSecret: string }) => Promise<{
+    channelId: string;
+    channelTitle: string;
+    providerData: {
+      clientId: string;
+      clientSecretEncrypted: string;
+      refreshTokenEncrypted: string;
+      channelTitle?: string;
+    };
+  }>;
   tiktokConnect: (input: { username: string }) => Promise<void>;
   tiktokDisconnect: () => Promise<void>;
   tiktokGetStatus: () => Promise<import('./types.js').TikTokConnectionStatus>;
   tiktokGetSettings: () => Promise<import('./types.js').TikTokSettings>;
   tiktokSaveSettings: (settings: import('./types.js').TikTokSettings) => Promise<void>;
   onTiktokStatus: (listener: (status: import('./types.js').TikTokConnectionStatus, username: string | null) => void) => () => void;
-  onTiktokLiveStats: (listener: (stats: import('./types.js').TikTokLiveStats | null) => void) => () => void;
+  onTiktokLiveStats: (listener: (payload: { username: string; stats: import('./types.js').TikTokLiveStats | null }) => void) => () => void;
   tiktokCheckLive: (username: string) => Promise<{ isLive: boolean }>;
   kickConnect: (input: { channelInput: string; clientId: string; clientSecret: string }) => Promise<void>;
   kickDisconnect: () => Promise<void>;
@@ -303,6 +376,8 @@ export interface CopilotApi {
   chatLogGetMessages: (sessionId: string, opts?: { limit?: number; offset?: number }) => Promise<ChatLogMessage[]>;
   chatLogExportSession: (sessionId: string) => Promise<void>;
   chatLogDeleteSession: (sessionId: string) => Promise<void>;
+  chatLogClearAll: () => Promise<void>;
+  eventLogClearAll: () => Promise<void>;
   listSuggestionLists: () => Promise<SuggestionList[]>;
   upsertSuggestionList: (input: SuggestionListUpsertInput) => Promise<SuggestionList[]>;
   deleteSuggestionList: (input: SuggestionListDeleteInput) => Promise<SuggestionList[]>;
@@ -323,4 +398,58 @@ export interface CopilotApi {
   onMusicPlay: (listener: (cmd: MusicPlayCommand) => void) => () => void;
   onMusicStop: (listener: () => void) => () => void;
   onMusicVolume: (listener: (volume: number) => void) => () => void;
+  moderationGetCapabilities: (platform: PlatformId) => Promise<import('./moderation.js').PlatformCapabilities | null>;
+  moderationDeleteMessage: (input: { platform: PlatformId; messageId: string }) => Promise<void>;
+  moderationBanUser: (input: { platform: PlatformId; userId: string; reason?: string }) => Promise<void>;
+  moderationUnbanUser: (input: { platform: PlatformId; userId: string }) => Promise<void>;
+  moderationTimeoutUser: (input: { platform: PlatformId; userId: string; durationSeconds: number; reason?: string }) => Promise<void>;
+  moderationSetMode: (input: ModerationSetModeInput) => Promise<void>;
+  moderationManageRole: (input: { platform: PlatformId; role: 'mod' | 'vip'; action: 'add' | 'remove'; userId: string }) => Promise<void>;
+  moderationRaid: (input: { platform: PlatformId; targetChannel: string }) => Promise<void>;
+  moderationShoutout: (input: { platform: PlatformId; userId: string }) => Promise<void>;
+  accountsList: () => Promise<import('./types.js').PlatformAccount[]>;
+  accountsCreate: (input: AccountCreateInput) => Promise<import('./types.js').PlatformAccount>;
+  accountsUpdate: (input: AccountUpdateInput) => Promise<import('./types.js').PlatformAccount>;
+  accountsDelete: (input: { id: string }) => Promise<void>;
+  accountsConnect: (input: { id: string }) => Promise<void>;
+  accountsDisconnect: (input: { id: string }) => Promise<void>;
+  accountsGetStatus: (input: { id: string }) => Promise<import('./types.js').PlatformAccountStatus | null>;
+  onAccountStatus: (listener: (status: import('./types.js').PlatformAccountStatus) => void) => () => void;
+  getOverlayServerInfo: () => Promise<OverlayServerInfo>;
+}
+
+export interface OverlayServerInfo {
+  status: 'running' | 'failed' | 'stopped';
+  port: number;
+  error: string | null;
+  urls: {
+    chat: string | null;
+    raffles: string | null;
+    polls: string | null;
+    nowPlaying: string | null;
+  };
+}
+
+export interface AccountCreateInput {
+  providerId: string;
+  label: string;
+  channel: string;
+  enabled: boolean;
+  autoConnect: boolean;
+  providerData: Record<string, unknown>;
+}
+
+export interface AccountUpdateInput extends AccountCreateInput {
+  id: string;
+}
+
+export type ModerationModeKind =
+  | 'slow' | 'subscribers' | 'members' | 'followers' | 'emote' | 'unique';
+
+export interface ModerationSetModeInput {
+  platform: PlatformId;
+  mode: ModerationModeKind;
+  enabled: boolean;
+  /** seconds for `slow`, minimum follow duration in minutes for `followers`, member level for `members`. */
+  value?: number;
 }

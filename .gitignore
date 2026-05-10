@@ -34,3 +34,5 @@ Thumbs.db
 
 # Electron
 app-update.yml
+.DS_Store
+js.txt

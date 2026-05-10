@@ -37,4 +37,8 @@ export class KickSettingsStore {
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });
     await fs.writeFile(this.filePath, JSON.stringify(settings, null, 2), 'utf-8');
   }
+
+  async clear(): Promise<void> {
+    await fs.rm(this.filePath, { force: true });
+  }
 }

@@ -70,12 +70,14 @@ export const EventBanner = memo(function EventBanner({ event, variant = 'chat' }
         <span className="shrink-0 mt-0.5 w-4 text-center">{EVENT_ICONS[event.type]}</span>
         <span className="text-gray-600 shrink-0 font-mono whitespace-nowrap">{event.timestampLabel}</span>
 
-        {/* Platform badge */}
+        {/* Platform badge — shows the source channel label when present
+         *  (multi-channel Twitch / multi-stream YouTube) so events from
+         *  different channels are visually distinguishable. */}
         <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold shrink-0 ${platform.bg} ${platform.text}`}>
           <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor">
             <path d={platform.icon} />
           </svg>
-          {platform.label}
+          {event.streamLabel ?? platform.label}
         </span>
 
         <span className="leading-relaxed min-w-0">

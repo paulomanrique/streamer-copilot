@@ -23,14 +23,19 @@ interface AppStore extends ProfilesSnapshot {
   obsStats: ObsStatsSnapshot;
   twitchStatus: TwitchConnectionStatus;
   twitchChannel: string | null;
-  twitchLiveStats: TwitchLiveStats | null;
+  /** Per-channel Twitch stats — one entry per connected account. The legacy
+   *  `twitchLiveStats` getter exposes the latest entry for back-compat with
+   *  callers that haven't been refactored yet. */
+  twitchLiveStatsByChannel: Record<string, TwitchLiveStats>;
   youtubeStreams: YouTubeStreamInfo[];
   tiktokStatus: TikTokConnectionStatus;
   tiktokUsername: string | null;
-  tiktokLiveStats: TikTokLiveStats | null;
+  /** Per-username TikTok stats — one entry per connected account. */
+  tiktokLiveStatsByUsername: Record<string, TikTokLiveStats>;
   kickStatus: KickConnectionStatus;
   kickSlug: string | null;
-  kickLiveStats: KickLiveStats | null;
+  /** Per-channel Kick stats — one entry per connected account. */
+  kickLiveStatsByChannel: Record<string, KickLiveStats>;
   setProfiles: (snapshot: ProfilesSnapshot) => void;
   setObsStats: (stats: ObsStatsSnapshot | ((current: ObsStatsSnapshot) => ObsStatsSnapshot)) => void;
   setChatSnapshot: (snapshot: { messages: ChatMessage[]; events: StreamEvent[] }) => void;
@@ -40,18 +45,19 @@ interface AppStore extends ProfilesSnapshot {
   appendChatEvents: (events: StreamEvent[]) => void;
   setTwitchStatus: (status: TwitchConnectionStatus) => void;
   setTwitchChannel: (channel: string | null) => void;
-  setTwitchLiveStats: (stats: TwitchLiveStats) => void;
+  setTwitchLiveStatsForChannel: (channel: string, stats: TwitchLiveStats | null) => void;
   setYoutubeStreams: (streams: YouTubeStreamInfo[]) => void;
   setTiktokStatus: (status: TikTokConnectionStatus) => void;
   setTiktokUsername: (username: string | null) => void;
-  setTiktokLiveStats: (stats: TikTokLiveStats | null) => void;
+  setTiktokLiveStatsForUsername: (username: string, stats: TikTokLiveStats | null) => void;
   setKickStatus: (status: KickConnectionStatus) => void;
   setKickSlug: (slug: string | null) => void;
-  setKickLiveStats: (stats: KickLiveStats | null) => void;
+  setKickLiveStatsForChannel: (channel: string, stats: KickLiveStats | null) => void;
 }
 
 export const useAppStore = create<AppStore>((set) => ({
   activeProfileId: '',
+  autoSelectActiveProfile: false,
   chatMessages: [],
   chatEvents: [],
   chatSequence: 0,
@@ -59,18 +65,19 @@ export const useAppStore = create<AppStore>((set) => ({
   obsStats: DEFAULT_OBS_STATS,
   twitchStatus: 'disconnected',
   twitchChannel: null,
-  twitchLiveStats: null,
+  twitchLiveStatsByChannel: {},
   youtubeStreams: [],
   tiktokStatus: 'disconnected',
   tiktokUsername: null,
-  tiktokLiveStats: null,
+  tiktokLiveStatsByUsername: {},
   kickStatus: 'disconnected',
   kickSlug: null,
-  kickLiveStats: null,
+  kickLiveStatsByChannel: {},
   setProfiles: (snapshot) =>
     set({
       activeProfileId: snapshot.activeProfileId,
       profiles: snapshot.profiles,
+      autoSelectActiveProfile: snapshot.autoSelectActiveProfile,
     }),
   setObsStats: (next) =>
     set((state) => ({
@@ -97,14 +104,32 @@ export const useAppStore = create<AppStore>((set) => ({
     set((state) => appendChatEventsToState(state, events)),
   setTwitchStatus: (status) => set({ twitchStatus: status }),
   setTwitchChannel: (channel) => set({ twitchChannel: channel }),
-  setTwitchLiveStats: (stats) => set({ twitchLiveStats: stats }),
+  setTwitchLiveStatsForChannel: (channel, stats) =>
+    set((state) => {
+      const next = { ...state.twitchLiveStatsByChannel };
+      if (stats === null) delete next[channel];
+      else next[channel] = stats;
+      return { twitchLiveStatsByChannel: next };
+    }),
   setYoutubeStreams: (streams) => set({ youtubeStreams: streams }),
   setTiktokStatus: (status) => set({ tiktokStatus: status }),
   setTiktokUsername: (username) => set({ tiktokUsername: username }),
-  setTiktokLiveStats: (stats) => set({ tiktokLiveStats: stats }),
+  setTiktokLiveStatsForUsername: (username, stats) =>
+    set((state) => {
+      const next = { ...state.tiktokLiveStatsByUsername };
+      if (stats === null) delete next[username];
+      else next[username] = stats;
+      return { tiktokLiveStatsByUsername: next };
+    }),
   setKickStatus: (status) => set({ kickStatus: status }),
   setKickSlug: (slug) => set({ kickSlug: slug }),
-  setKickLiveStats: (stats) => set({ kickLiveStats: stats }),
+  setKickLiveStatsForChannel: (channel, stats) =>
+    set((state) => {
+      const next = { ...state.kickLiveStatsByChannel };
+      if (stats === null) delete next[channel];
+      else next[channel] = stats;
+      return { kickLiveStatsByChannel: next };
+    }),
 }));
 
 type ChatStateSlice = Pick<AppStore, 'chatMessages' | 'chatEvents' | 'chatSequence'>;

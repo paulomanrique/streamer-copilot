@@ -6,6 +6,8 @@ import type {
   MusicPlayCommand,
   MusicPlayerState,
   ObsStatsSnapshot,
+  PollSnapshot,
+  PollVote,
   RaffleEntry,
   RaffleRoundResult,
   RaffleSnapshot,
@@ -60,6 +62,18 @@ export class StateHub {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.rafflesResult, payload);
   }
 
+  pushPollState(payload: PollSnapshot | null): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.pollsState, payload);
+  }
+
+  pushPollVote(payload: PollVote): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.pollsVote, payload);
+  }
+
+  pushPollResult(payload: PollSnapshot): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.pollsResult, payload);
+  }
+
   pushVoiceSpeak(payload: VoiceSpeakPayload): void {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.voiceSpeak, payload);
   }
@@ -104,8 +118,8 @@ export class StateHub {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.twitchStatus, status, channel ?? null);
   }
 
-  pushTwitchLiveStats(stats: TwitchLiveStats): void {
-    this.rendererWindow?.webContents.send(IPC_CHANNELS.twitchLiveStats, stats);
+  pushTwitchLiveStats(channel: string, stats: TwitchLiveStats | null): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.twitchLiveStats, { channel, stats });
   }
 
   pushYoutubeStatus(streams: YouTubeStreamInfo[]): void {
@@ -116,16 +130,16 @@ export class StateHub {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.tiktokStatus, status, username ?? null);
   }
 
-  pushTiktokLiveStats(stats: TikTokLiveStats | null): void {
-    this.rendererWindow?.webContents.send(IPC_CHANNELS.tiktokLiveStats, stats);
+  pushTiktokLiveStats(username: string, stats: TikTokLiveStats | null): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.tiktokLiveStats, { username, stats });
   }
 
   pushKickStatus(status: KickConnectionStatus, slug?: string | null): void {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.kickStatus, status, slug ?? null);
   }
 
-  pushKickLiveStats(stats: KickLiveStats | null): void {
-    this.rendererWindow?.webContents.send(IPC_CHANNELS.kickLiveStats, stats);
+  pushKickLiveStats(channel: string, stats: KickLiveStats | null): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.kickLiveStats, { channel, stats });
   }
 
   pushMusicStateUpdate(state: MusicPlayerState): void {

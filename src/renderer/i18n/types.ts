@@ -47,6 +47,7 @@ export interface TranslationMessages {
     selectProfile: string;
     chooseProfileDescription: string;
     deleteConfirm: (name: string) => string;
+    dontAskAgain: string;
   };
   settings: {
     title: string;
@@ -60,6 +61,8 @@ export interface TranslationMessages {
     voiceTts: string;
     textCommands: string;
     automations: string;
+    modules: string;
+    polls: string;
     raffles: string;
     suggestions: string;
     integrations: string;

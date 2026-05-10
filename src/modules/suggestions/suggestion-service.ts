@@ -86,7 +86,11 @@ export class SuggestionService implements CommandModule {
 
         const entries = this.options.repository.listEntries(list.id);
         this.options.onState({ list, entries });
-        const feedback = this.formatFeedback(list.feedbackTemplate, message);
+        // 1-based position of the just-added entry; uses the entry id rather
+        // than the array length so dedup-replace (existing entry overwritten
+        // in place) reports the original slot, not the size of the list.
+        const position = Math.max(1, entries.findIndex((e) => e.id === entry.id) + 1);
+        const feedback = this.formatFeedback(list.feedbackTemplate, message, position);
         if (feedback) {
           const targets = list.feedbackTargetPlatforms.length > 0
             ? list.feedbackTargetPlatforms
@@ -123,10 +127,11 @@ export class SuggestionService implements CommandModule {
     return this.options.now ? this.options.now() : Date.now();
   }
 
-  private formatFeedback(template: string, message: ChatMessage): string {
+  private formatFeedback(template: string, message: ChatMessage, position: number): string {
     return template
       .replaceAll('{username}', message.author)
       .replaceAll('{suggestion}', message.content.slice(message.content.indexOf(' ') + 1).trim())
+      .replaceAll('{position}', String(position))
       .trim();
   }
 }

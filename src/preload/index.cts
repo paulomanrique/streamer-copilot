@@ -16,6 +16,13 @@ import type {
   ObsConnectionSettings,
   ObsStatsSnapshot,
   ProfileSettings,
+  Poll,
+  PollControlInput,
+  PollDeleteInput,
+  PollOverlayInfo,
+  PollSnapshot,
+  PollUpsertInput,
+  PollVote,
   Raffle,
   RaffleControlActionInput,
   RaffleCreateInput,
@@ -68,6 +75,8 @@ const IPC_CHANNELS = {
   appOpenExternalUrl: 'app:open-external-url',
   profilesList: 'profiles:list',
   profilesSelect: 'profiles:select',
+  profilesSwitchAndRelaunch: 'profiles:switch-and-relaunch',
+  profilesSetAutoSelect: 'profiles:set-auto-select',
   profilesCreate: 'profiles:create',
   profilesRename: 'profiles:rename',
   profilesClone: 'profiles:clone',
@@ -95,6 +104,16 @@ const IPC_CHANNELS = {
   rafflesResult: 'raffles:result',
   rafflesSoundsList: 'raffles:sounds-list',
   rafflesSoundsPreview: 'raffles:sounds-preview',
+  pollsList: 'polls:list',
+  pollsUpsert: 'polls:upsert',
+  pollsDelete: 'polls:delete',
+  pollsGetActive: 'polls:get-active',
+  pollsGetSnapshot: 'polls:get-snapshot',
+  pollsControl: 'polls:control',
+  pollsOverlayInfo: 'polls:overlay-info',
+  pollsState: 'polls:state',
+  pollsVote: 'polls:vote',
+  pollsResult: 'polls:result',
   textList: 'text:list',
   textUpsert: 'text:upsert',
   textDelete: 'text:delete',
@@ -148,6 +167,7 @@ const IPC_CHANNELS = {
   youtubeSaveSettings: 'youtube:save-settings',
   youtubeCheckLive: 'youtube:check-live',
   youtubeGetChatChannels: 'youtube:get-chat-channels',
+  youtubeApiStartOAuth: 'youtube-api:start-oauth',
   tiktokConnect: 'tiktok:connect',
   tiktokDisconnect: 'tiktok:disconnect',
   tiktokGetStatus: 'tiktok:get-status',
@@ -167,6 +187,8 @@ const IPC_CHANNELS = {
   chatLogGetMessages: 'chatLog:get-messages',
   chatLogExportSession: 'chatLog:export-session',
   chatLogDeleteSession: 'chatLog:delete-session',
+  chatLogClearAll: 'chatLog:clear-all',
+  eventLogClearAll: 'eventLog:clear-all',
   suggestionsList: 'suggestions:list',
   suggestionsUpsert: 'suggestions:upsert',
   suggestionsDelete: 'suggestions:delete',
@@ -188,6 +210,24 @@ const IPC_CHANNELS = {
   musicPlay: 'music:play',
   musicStop: 'music:stop',
   musicVolume: 'music:volume',
+  moderationGetCapabilities: 'moderation:get-capabilities',
+  moderationDeleteMessage: 'moderation:delete-message',
+  moderationBanUser: 'moderation:ban-user',
+  moderationUnbanUser: 'moderation:unban-user',
+  moderationTimeoutUser: 'moderation:timeout-user',
+  moderationSetMode: 'moderation:set-mode',
+  moderationManageRole: 'moderation:manage-role',
+  moderationRaid: 'moderation:raid',
+  moderationShoutout: 'moderation:shoutout',
+  accountsList: 'accounts:list',
+  accountsCreate: 'accounts:create',
+  accountsUpdate: 'accounts:update',
+  accountsDelete: 'accounts:delete',
+  accountsConnect: 'accounts:connect',
+  accountsDisconnect: 'accounts:disconnect',
+  accountsGetStatus: 'accounts:get-status',
+  accountsStatus: 'accounts:status',
+  overlayServerInfo: 'overlay:server-info',
 } as const;
 
 const copilotApi: CopilotApi = {
@@ -195,6 +235,8 @@ const copilotApi: CopilotApi = {
   openExternalUrl: (url: string) => ipcRenderer.invoke(IPC_CHANNELS.appOpenExternalUrl, url),
   listProfiles: () => ipcRenderer.invoke(IPC_CHANNELS.profilesList),
   selectProfile: (input: SelectProfileInput) => ipcRenderer.invoke(IPC_CHANNELS.profilesSelect, input),
+  switchProfileAndRelaunch: (input: SelectProfileInput) => ipcRenderer.invoke(IPC_CHANNELS.profilesSwitchAndRelaunch, input),
+  setAutoSelectActiveProfile: (input: { autoSelect: boolean }) => ipcRenderer.invoke(IPC_CHANNELS.profilesSetAutoSelect, input),
   createProfile: (input: CreateProfileInput) => ipcRenderer.invoke(IPC_CHANNELS.profilesCreate, input),
   renameProfile: (input: RenameProfileInput) => ipcRenderer.invoke(IPC_CHANNELS.profilesRename, input),
   cloneProfile: (input: CloneProfileInput) => ipcRenderer.invoke(IPC_CHANNELS.profilesClone, input),
@@ -238,6 +280,28 @@ const copilotApi: CopilotApi = {
   },
   listRaffleSounds: () => ipcRenderer.invoke(IPC_CHANNELS.rafflesSoundsList) as Promise<Record<'spinning' | 'eliminated' | 'winner', string[]>>,
   previewRaffleSound: (event: 'spinning' | 'eliminated' | 'winner', filename: string) => ipcRenderer.invoke(IPC_CHANNELS.rafflesSoundsPreview, { event, filename }),
+  listPolls: () => ipcRenderer.invoke(IPC_CHANNELS.pollsList) as Promise<Poll[]>,
+  upsertPoll: (input: PollUpsertInput) => ipcRenderer.invoke(IPC_CHANNELS.pollsUpsert, input) as Promise<Poll[]>,
+  deletePoll: (input: PollDeleteInput) => ipcRenderer.invoke(IPC_CHANNELS.pollsDelete, input) as Promise<Poll[]>,
+  getActivePoll: () => ipcRenderer.invoke(IPC_CHANNELS.pollsGetActive) as Promise<Poll | null>,
+  getPollSnapshot: (pollId: string) => ipcRenderer.invoke(IPC_CHANNELS.pollsGetSnapshot, pollId) as Promise<PollSnapshot>,
+  controlPoll: (input: PollControlInput) => ipcRenderer.invoke(IPC_CHANNELS.pollsControl, input) as Promise<PollSnapshot>,
+  getPollOverlayInfo: () => ipcRenderer.invoke(IPC_CHANNELS.pollsOverlayInfo) as Promise<PollOverlayInfo>,
+  onPollState: (listener: (payload: PollSnapshot | null) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: PollSnapshot | null) => listener(payload);
+    ipcRenderer.on(IPC_CHANNELS.pollsState, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.pollsState, wrappedListener); };
+  },
+  onPollVote: (listener: (payload: PollVote) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: PollVote) => listener(payload);
+    ipcRenderer.on(IPC_CHANNELS.pollsVote, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.pollsVote, wrappedListener); };
+  },
+  onPollResult: (listener: (payload: PollSnapshot) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: PollSnapshot) => listener(payload);
+    ipcRenderer.on(IPC_CHANNELS.pollsResult, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.pollsResult, wrappedListener); };
+  },
   listTextCommands: () => ipcRenderer.invoke(IPC_CHANNELS.textList) as Promise<TextCommand[]>,
   upsertTextCommand: (input: TextCommandUpsertInput) => ipcRenderer.invoke(IPC_CHANNELS.textUpsert, input),
   deleteTextCommand: (input: TextCommandDeleteInput) => ipcRenderer.invoke(IPC_CHANNELS.textDelete, input),
@@ -321,7 +385,7 @@ const copilotApi: CopilotApi = {
   twitchGetUserAvatars: (logins: string[]) => ipcRenderer.invoke(IPC_CHANNELS.twitchGetUserAvatars, logins) as Promise<Record<string, string>>,
   twitchGetBadgeUrls: (badgeIds: string[]) => ipcRenderer.invoke(IPC_CHANNELS.twitchGetBadgeUrls, badgeIds) as Promise<Record<string, string>>,
   twitchStartOAuth: () => ipcRenderer.invoke(IPC_CHANNELS.twitchStartOAuth) as Promise<{ username: string; accessToken: string }>,
-  kickStartOAuth: () => ipcRenderer.invoke(IPC_CHANNELS.kickStartOAuth) as Promise<{ channelSlug: string }>,
+  kickStartOAuth: (input) => ipcRenderer.invoke(IPC_CHANNELS.kickStartOAuth, input) as Promise<{ channelSlug: string }>,
   youtubeConnect: (input) => ipcRenderer.invoke(IPC_CHANNELS.youtubeConnect, input),
   youtubeDisconnect: () => ipcRenderer.invoke(IPC_CHANNELS.youtubeDisconnect),
   youtubeGetStatus: () => ipcRenderer.invoke(IPC_CHANNELS.youtubeGetStatus) as Promise<YouTubeStreamInfo[]>,
@@ -330,6 +394,7 @@ const copilotApi: CopilotApi = {
   youtubeSaveSettings: (settings) => ipcRenderer.invoke(IPC_CHANNELS.youtubeSaveSettings, settings),
   youtubeCheckLive: (handle) => ipcRenderer.invoke(IPC_CHANNELS.youtubeCheckLive, handle) as Promise<{ videoIds: string[] }>,
   youtubeGetChatChannels: () => ipcRenderer.invoke(IPC_CHANNELS.youtubeGetChatChannels) as Promise<any[]>,
+  youtubeApiStartOAuth: (input) => ipcRenderer.invoke(IPC_CHANNELS.youtubeApiStartOAuth, input) as Promise<any>,
   tiktokConnect: (input: { username: string }) => ipcRenderer.invoke(IPC_CHANNELS.tiktokConnect, input),
   tiktokDisconnect: () => ipcRenderer.invoke(IPC_CHANNELS.tiktokDisconnect) as Promise<void>,
   tiktokGetStatus: () => ipcRenderer.invoke(IPC_CHANNELS.tiktokGetStatus) as Promise<TikTokConnectionStatus>,
@@ -340,8 +405,8 @@ const copilotApi: CopilotApi = {
     ipcRenderer.on(IPC_CHANNELS.tiktokStatus, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.tiktokStatus, wrappedListener); };
   },
-  onTiktokLiveStats: (listener: (stats: { viewerCount: number } | null) => void) => {
-    const wrappedListener = (_event: Electron.IpcRendererEvent, stats: { viewerCount: number } | null) => listener(stats);
+  onTiktokLiveStats: (listener: (payload: { username: string; stats: { viewerCount: number } | null }) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: { username: string; stats: { viewerCount: number } | null }) => listener(payload);
     ipcRenderer.on(IPC_CHANNELS.tiktokLiveStats, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.tiktokLiveStats, wrappedListener); };
   },
@@ -361,6 +426,8 @@ const copilotApi: CopilotApi = {
   chatLogGetMessages: (sessionId, opts?) => ipcRenderer.invoke(IPC_CHANNELS.chatLogGetMessages, sessionId, opts) as Promise<ChatLogMessage[]>,
   chatLogExportSession: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.chatLogExportSession, sessionId),
   chatLogDeleteSession: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.chatLogDeleteSession, sessionId),
+  chatLogClearAll: () => ipcRenderer.invoke(IPC_CHANNELS.chatLogClearAll),
+  eventLogClearAll: () => ipcRenderer.invoke(IPC_CHANNELS.eventLogClearAll),
   listSuggestionLists: () => ipcRenderer.invoke(IPC_CHANNELS.suggestionsList) as Promise<SuggestionList[]>,
   upsertSuggestionList: (input: SuggestionListUpsertInput) => ipcRenderer.invoke(IPC_CHANNELS.suggestionsUpsert, input),
   deleteSuggestionList: (input: SuggestionListDeleteInput) => ipcRenderer.invoke(IPC_CHANNELS.suggestionsDelete, input),
@@ -406,13 +473,13 @@ const copilotApi: CopilotApi = {
     ipcRenderer.on(IPC_CHANNELS.twitchStatus, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.twitchStatus, wrappedListener); };
   },
-  onTwitchLiveStats: (listener: (stats: TwitchLiveStats) => void) => {
-    const wrappedListener = (_event: Electron.IpcRendererEvent, stats: TwitchLiveStats) => listener(stats);
+  onTwitchLiveStats: (listener: (payload: { channel: string; stats: TwitchLiveStats | null }) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: { channel: string; stats: TwitchLiveStats | null }) => listener(payload);
     ipcRenderer.on(IPC_CHANNELS.twitchLiveStats, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.twitchLiveStats, wrappedListener); };
   },
-  onKickLiveStats: (listener: (stats: KickLiveStats | null) => void) => {
-    const wrappedListener = (_event: Electron.IpcRendererEvent, stats: KickLiveStats | null) => listener(stats);
+  onKickLiveStats: (listener: (payload: { channel: string; stats: KickLiveStats | null }) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: { channel: string; stats: KickLiveStats | null }) => listener(payload);
     ipcRenderer.on(IPC_CHANNELS.kickLiveStats, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.kickLiveStats, wrappedListener); };
   },
@@ -421,6 +488,28 @@ const copilotApi: CopilotApi = {
     ipcRenderer.on(IPC_CHANNELS.youtubeGetStatus, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.youtubeGetStatus, wrappedListener); };
   },
+  moderationGetCapabilities: (platform) => ipcRenderer.invoke(IPC_CHANNELS.moderationGetCapabilities, platform),
+  moderationDeleteMessage: (input) => ipcRenderer.invoke(IPC_CHANNELS.moderationDeleteMessage, input) as Promise<void>,
+  moderationBanUser: (input) => ipcRenderer.invoke(IPC_CHANNELS.moderationBanUser, input) as Promise<void>,
+  moderationUnbanUser: (input) => ipcRenderer.invoke(IPC_CHANNELS.moderationUnbanUser, input) as Promise<void>,
+  moderationTimeoutUser: (input) => ipcRenderer.invoke(IPC_CHANNELS.moderationTimeoutUser, input) as Promise<void>,
+  moderationSetMode: (input) => ipcRenderer.invoke(IPC_CHANNELS.moderationSetMode, input) as Promise<void>,
+  moderationManageRole: (input) => ipcRenderer.invoke(IPC_CHANNELS.moderationManageRole, input) as Promise<void>,
+  moderationRaid: (input) => ipcRenderer.invoke(IPC_CHANNELS.moderationRaid, input) as Promise<void>,
+  moderationShoutout: (input) => ipcRenderer.invoke(IPC_CHANNELS.moderationShoutout, input) as Promise<void>,
+  accountsList: () => ipcRenderer.invoke(IPC_CHANNELS.accountsList),
+  accountsCreate: (input) => ipcRenderer.invoke(IPC_CHANNELS.accountsCreate, input),
+  accountsUpdate: (input) => ipcRenderer.invoke(IPC_CHANNELS.accountsUpdate, input),
+  accountsDelete: (input) => ipcRenderer.invoke(IPC_CHANNELS.accountsDelete, input) as Promise<void>,
+  accountsConnect: (input) => ipcRenderer.invoke(IPC_CHANNELS.accountsConnect, input) as Promise<void>,
+  accountsDisconnect: (input) => ipcRenderer.invoke(IPC_CHANNELS.accountsDisconnect, input) as Promise<void>,
+  accountsGetStatus: (input) => ipcRenderer.invoke(IPC_CHANNELS.accountsGetStatus, input),
+  onAccountStatus: (listener) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, status: import('../shared/types.js').PlatformAccountStatus) => listener(status);
+    ipcRenderer.on(IPC_CHANNELS.accountsStatus, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.accountsStatus, wrappedListener); };
+  },
+  getOverlayServerInfo: () => ipcRenderer.invoke(IPC_CHANNELS.overlayServerInfo),
 };
 
 contextBridge.exposeInMainWorld('copilot', copilotApi);

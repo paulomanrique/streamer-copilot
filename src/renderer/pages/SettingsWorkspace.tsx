@@ -8,6 +8,7 @@ import { SettingsProfilesPanel } from '../components/SettingsProfilesPanel.js';
 import { GeneralSettingsPage } from './GeneralSettings.js';
 import { ObsSettingsPage } from './ObsSettings.js';
 import { ChatLogsPage } from './ChatLogs.js';
+import { PollsPage } from './Polls.js';
 import { RafflesPage } from './Raffles.js';
 import { SoundCommandsPage } from './SoundCommands.js';
 import { SuggestionsPage } from './Suggestions.js';
@@ -16,8 +17,9 @@ import { EventLogPage } from './EventLog.js';
 import { VoiceCommandsPage } from './VoiceCommands.js';
 import { WelcomeMessagePage } from './WelcomeMessage.js';
 import { MusicRequestPage } from './MusicRequest.js';
+import { OverlaysPage } from './Overlays.js';
 
-type SettingsView = 'general' | 'profiles' | 'platforms' | 'obs' | 'sound' | 'text' | 'voice' | 'welcome' | 'music' | 'raffles' | 'suggestions' | 'chat-logs' | 'event-log';
+type SettingsView = 'general' | 'profiles' | 'platforms' | 'obs' | 'sound' | 'text' | 'voice' | 'welcome' | 'music' | 'polls' | 'raffles' | 'suggestions' | 'chat-logs' | 'event-log' | 'overlays';
 
 interface SettingsWorkspaceProps {
   activeProfileId: string;
@@ -106,39 +108,9 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
     ],
   },
   {
-    label: 'Commands',
-    items: [
-      {
-        id: 'sound',
-        label: 'Sound Commands',
-        icon: (
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.536 8.464a5 5 0 010 7.072M12 6v12m-3.536-9.536a5 5 0 000 7.072M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        ),
-      },
-      {
-        id: 'voice',
-        label: 'Voice (TTS)',
-        icon: (
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-          </svg>
-        ),
-      },
-      {
-        id: 'text',
-        label: 'Text Commands',
-        icon: (
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 8h10M7 12h8m-8 4h6M5 4h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z" />
-          </svg>
-        ),
-      },
-    ],
-  },
-  {
-    label: 'Automations',
+    label: 'Modules',
+    // Sorted alphabetically by label so the order is provider-agnostic and
+    // doesn't bake "commands vs automations" into the navigation taxonomy.
     items: [
       {
         id: 'music',
@@ -150,11 +122,11 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
         ),
       },
       {
-        id: 'welcome',
-        label: 'Welcome Message',
+        id: 'polls',
+        label: 'Polls',
         icon: (
           <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V5m6 14V9m6 10H3" />
           </svg>
         ),
       },
@@ -169,11 +141,47 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
         ),
       },
       {
+        id: 'sound',
+        label: 'Sound Commands',
+        icon: (
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.536 8.464a5 5 0 010 7.072M12 6v12m-3.536-9.536a5 5 0 000 7.072M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        ),
+      },
+      {
         id: 'suggestions',
         label: 'Suggestions',
         icon: (
           <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+          </svg>
+        ),
+      },
+      {
+        id: 'text',
+        label: 'Text Commands',
+        icon: (
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 8h10M7 12h8m-8 4h6M5 4h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z" />
+          </svg>
+        ),
+      },
+      {
+        id: 'voice',
+        label: 'Voice (TTS)',
+        icon: (
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+          </svg>
+        ),
+      },
+      {
+        id: 'welcome',
+        label: 'Welcome Message',
+        icon: (
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
           </svg>
         ),
       },
@@ -192,6 +200,16 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
           </svg>
         ),
       },
+      {
+        id: 'overlays',
+        label: 'Overlays',
+        icon: (
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <rect x="3" y="3" width="18" height="14" rx="2" strokeWidth="2" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 21h8M12 17v4" />
+          </svg>
+        ),
+      },
     ],
   },
 ];
@@ -203,8 +221,7 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
   const labelForGroup = (label: string) => ({
     App: messages.settings.app,
     Platforms: messages.settings.platforms,
-    Commands: messages.settings.commands,
-    Automations: messages.settings.automations,
+    Modules: messages.settings.modules,
     Integrations: messages.settings.integrations,
   }[label] ?? label);
 
@@ -219,9 +236,12 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
     text: messages.settings.textCommands,
     welcome: messages.settings.welcomeMessage,
     music: messages.settings.musicRequest,
+    polls: messages.settings.polls,
     raffles: messages.settings.raffles,
     suggestions: messages.settings.suggestions,
+    moderation: 'Moderation',
     obs: 'OBS Studio',
+    overlays: 'Overlays',
   }[id] ?? label);
 
   return (
@@ -232,26 +252,38 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
         </div>
 
         <nav className="flex-1 overflow-y-auto py-2">
-          {SETTINGS_GROUPS.map((group) => (
-            <div key={group.label} className="px-3 pb-1">
-              <p className="text-xs text-gray-600 uppercase tracking-wider px-2 py-1">{labelForGroup(group.label)}</p>
-              {group.items.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setCurrentView(item.id)}
-                  className={
-                    currentView === item.id
-                      ? 'w-full text-left flex items-center gap-2.5 px-3 py-2 rounded text-sm transition-colors bg-gray-800 text-white'
-                      : 'w-full text-left flex items-center gap-2.5 px-3 py-2 rounded text-sm transition-colors text-gray-400 hover:text-white'
-                  }
-                >
-                  {item.icon}
-                  {labelForItem(item.id, item.label)}
-                </button>
-              ))}
-            </div>
-          ))}
+          {SETTINGS_GROUPS.map((group) => {
+            // Sort each group by the *rendered* (i18n-resolved) label so the
+            // alphabetical order tracks the active locale instead of the
+            // English source labels in the SETTINGS_GROUPS array.
+            const sortedItems = [...group.items].sort((a, b) =>
+              labelForItem(a.id, a.label).localeCompare(
+                labelForItem(b.id, b.label),
+                undefined,
+                { sensitivity: 'base' },
+              ),
+            );
+            return (
+              <div key={group.label} className="px-3 pb-1">
+                <p className="text-xs text-gray-600 uppercase tracking-wider px-2 py-1">{labelForGroup(group.label)}</p>
+                {sortedItems.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setCurrentView(item.id)}
+                    className={
+                      currentView === item.id
+                        ? 'w-full text-left flex items-center gap-2.5 px-3 py-2 rounded text-sm transition-colors bg-gray-800 text-white'
+                        : 'w-full text-left flex items-center gap-2.5 px-3 py-2 rounded text-sm transition-colors text-gray-400 hover:text-white'
+                    }
+                  >
+                    {item.icon}
+                    {labelForItem(item.id, item.label)}
+                  </button>
+                ))}
+              </div>
+            );
+          })}
         </nav>
       </aside>
 
@@ -291,8 +323,10 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
         ) : null}
         {currentView === 'welcome' ? <WelcomeMessagePage /> : null}
         {currentView === 'music' ? <MusicRequestPage /> : null}
+        {currentView === 'polls' ? <PollsPage /> : null}
         {currentView === 'raffles' ? <RafflesPage /> : null}
         {currentView === 'suggestions' ? <SuggestionsPage /> : null}
+        {currentView === 'overlays' ? <OverlaysPage /> : null}
         {currentView === 'chat-logs' ? <ChatLogsPage /> : null}
         {currentView === 'event-log' ? <EventLogPage /> : null}
       </div>

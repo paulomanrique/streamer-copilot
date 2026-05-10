@@ -4,15 +4,21 @@ import { useI18n } from '../i18n/I18nProvider.js';
 
 interface ObsStatsPanelProps {
   stats: ObsStatsSnapshot;
-  twitchLiveStats: TwitchLiveStats | null;
+  twitchLiveStatsByChannel: Record<string, TwitchLiveStats>;
+  /** Distinct channels currently connected via the Twitch multi-adapter,
+   *  in stable order (insertion). Drives one ViewerCard per channel even
+   *  before the first stats poll lands. */
+  twitchConnectedChannels: string[];
   twitchConnected: boolean;
   youtubeStreams: YouTubeStreamInfo[];
   tiktokStatus: TikTokConnectionStatus;
   tiktokUsername: string | null;
-  tiktokLiveStats: TikTokLiveStats | null;
+  /** Per-username TikTok stats — drives one ViewerCard per connected host. */
+  tiktokLiveStatsByUsername: Record<string, TikTokLiveStats>;
   kickStatus: KickConnectionStatus;
   kickSlug: string | null;
-  kickLiveStats: KickLiveStats | null;
+  /** Per-channel Kick stats — drives one ViewerCard per connected channel. */
+  kickLiveStatsByChannel: Record<string, KickLiveStats>;
 }
 
 const ICONS = {
@@ -28,10 +34,15 @@ function fmtNum(n: number): string {
   return String(n);
 }
 
-export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtubeStreams, tiktokStatus, tiktokUsername, tiktokLiveStats, kickStatus, kickSlug, kickLiveStats }: ObsStatsPanelProps) {
+export function ObsStatsPanel({ stats, twitchLiveStatsByChannel, twitchConnectedChannels, twitchConnected, youtubeStreams, tiktokStatus, tiktokUsername, tiktokLiveStatsByUsername, kickStatus, kickSlug, kickLiveStatsByChannel }: ObsStatsPanelProps) {
   const { t } = useI18n();
 
-  const hype = twitchLiveStats?.hypeTrain;
+  // Hype train is per-channel — pick whichever channel currently has one.
+  // Multi-channel hype is rare enough that one indicator is fine.
+  const hype = twitchConnectedChannels
+    .map((c) => twitchLiveStatsByChannel[c]?.hypeTrain)
+    .find((h): h is NonNullable<typeof h> => Boolean(h)) ?? null;
+  const hasMultipleTwitch = twitchConnectedChannels.length > 1;
   const [timeLeft, setTimeLeft] = useState('');
 
   useEffect(() => {
@@ -56,10 +67,11 @@ export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtube
     return () => clearInterval(timer);
   }, [hype]);
 
-  const resolveYouTubeCardLabel = (stream: YouTubeStreamInfo): string => {
-    if (youtubeStreams.length <= 1) return 'YouTube';
-    return stream.platform === 'youtube-v' ? 'YouTube Vertical' : 'YouTube Horizontal';
-  };
+  // Stream labels are computed in the main process by computeYouTubeStreamLabels —
+  // the card just renders what's resolved (channel handle, Horizontal/Vertical,
+  // or the YouTube-N fallback). Avoids re-deriving from platform here, which
+  // can't tell channels apart.
+  const resolveYouTubeCardLabel = (stream: YouTubeStreamInfo): string => stream.label || 'YouTube';
 
   return (
     <div className="border-b border-gray-800 p-4 shrink-0">
@@ -93,56 +105,97 @@ export function ObsStatsPanel({ stats, twitchLiveStats, twitchConnected, youtube
           <div className="text-xs text-gray-500 mt-0.5 leading-tight">{t('Dropped Frames')}<br />({t('render')})</div>
         </div>
 
-        {(twitchConnected || youtubeStreams.length > 0 || kickStatus === 'connected') && (
-          <div className="col-span-4 grid grid-cols-2 gap-2">
-            {twitchConnected && (
-              <ViewerCard
-                label="Twitch"
-                icon={ICONS.twitch}
-                classes="bg-purple-500/10 border-purple-500/20 text-purple-300"
-                metaClass="text-purple-400"
-                value={twitchLiveStats ? fmtNum(twitchLiveStats.viewerCount) : '0'}
-                isLive={!!twitchLiveStats?.isLive}
-                secondaryValue={twitchLiveStats ? fmtNum(twitchLiveStats.followerCount) : undefined}
-                secondaryLabel={t('followers')}
-              />
-            )}
-            {youtubeStreams.map((stream) => (
-              <ViewerCard
-                key={stream.videoId}
-                label={resolveYouTubeCardLabel(stream)}
-                icon={ICONS.youtube}
-                classes={stream.platform === 'youtube-v'
-                  ? 'bg-rose-400/10 border-rose-400/20 text-rose-300'
-                  : 'bg-red-500/10 border-red-500/20 text-red-300'}
-                metaClass={stream.platform === 'youtube-v' ? 'text-rose-400' : 'text-red-400'}
-                value={stream.viewerCount !== null ? fmtNum(stream.viewerCount) : '—'}
-                isLive
-                secondaryValue={stream.subscriberCount !== null ? fmtNum(stream.subscriberCount) : '—'}
-                secondaryLabel={t('subscribers')}
-              />
-            ))}
-            {kickStatus === 'connected' && (
-              <ViewerCard
-                label={kickSlug ? `Kick · ${kickSlug}` : 'Kick'}
-                icon={ICONS.kick}
-                classes="bg-green-500/10 border-green-500/20 text-green-300"
-                metaClass="text-green-400"
-                value={kickLiveStats ? fmtNum(kickLiveStats.viewerCount) : '—'}
-                valueLabel={t('viewers')}
-                isLive={kickLiveStats?.isLive ?? true}
-                secondaryValue={kickLiveStats?.followerCount !== null && kickLiveStats?.followerCount !== undefined
-                  ? fmtNum(kickLiveStats.followerCount)
-                  : kickLiveStats?.subscriberCount !== null && kickLiveStats?.subscriberCount !== undefined
-                    ? fmtNum(kickLiveStats.subscriberCount)
-                  : '—'}
-                secondaryLabel={kickLiveStats?.followerCount !== null && kickLiveStats?.followerCount !== undefined
-                  ? t('followers')
-                  : t('subscribers')}
-              />
-            )}
-          </div>
-        )}
+        {(() => {
+          const tiktokUsernames = Object.keys(tiktokLiveStatsByUsername);
+          const tiktokFallback = tiktokStatus === 'connected' && tiktokUsernames.length === 0 && tiktokUsername ? [tiktokUsername] : [];
+          const tiktokConnectedUsernames = tiktokUsernames.length > 0 ? tiktokUsernames : tiktokFallback;
+          const hasMultipleTiktok = tiktokConnectedUsernames.length > 1;
+
+          const kickChannels = Object.keys(kickLiveStatsByChannel);
+          const kickFallback = kickStatus === 'connected' && kickChannels.length === 0 && kickSlug ? [kickSlug] : [];
+          const kickConnectedChannels = kickChannels.length > 0 ? kickChannels : kickFallback;
+          const hasMultipleKick = kickConnectedChannels.length > 1;
+
+          const anyConnected = twitchConnected
+            || youtubeStreams.length > 0
+            || tiktokConnectedUsernames.length > 0
+            || kickConnectedChannels.length > 0;
+          if (!anyConnected) return null;
+
+          return (
+            <div className="col-span-4 grid grid-cols-2 gap-2">
+              {twitchConnectedChannels.map((channel) => {
+                const channelStats = twitchLiveStatsByChannel[channel] ?? null;
+                return (
+                  <ViewerCard
+                    key={`twitch-${channel}`}
+                    label={hasMultipleTwitch ? `Twitch · ${channel}` : 'Twitch'}
+                    icon={ICONS.twitch}
+                    classes="bg-purple-500/10 border-purple-500/20 text-purple-300"
+                    metaClass="text-purple-400"
+                    value={channelStats ? fmtNum(channelStats.viewerCount) : '0'}
+                    isLive={!!channelStats?.isLive}
+                    secondaryValue={channelStats ? fmtNum(channelStats.followerCount) : undefined}
+                    secondaryLabel={t('followers')}
+                  />
+                );
+              })}
+              {youtubeStreams.map((stream) => (
+                <ViewerCard
+                  key={stream.videoId}
+                  label={resolveYouTubeCardLabel(stream)}
+                  icon={ICONS.youtube}
+                  classes={stream.platform === 'youtube-v'
+                    ? 'bg-rose-400/10 border-rose-400/20 text-rose-300'
+                    : 'bg-red-500/10 border-red-500/20 text-red-300'}
+                  metaClass={stream.platform === 'youtube-v' ? 'text-rose-400' : 'text-red-400'}
+                  value={stream.viewerCount !== null ? fmtNum(stream.viewerCount) : '—'}
+                  isLive
+                  secondaryValue={stream.subscriberCount !== null ? fmtNum(stream.subscriberCount) : '—'}
+                  secondaryLabel={t('subscribers')}
+                />
+              ))}
+              {tiktokConnectedUsernames.map((username) => {
+                const usernameStats = tiktokLiveStatsByUsername[username] ?? null;
+                return (
+                  <ViewerCard
+                    key={`tiktok-${username}`}
+                    label={hasMultipleTiktok ? `TikTok · @${username}` : 'TikTok'}
+                    icon={ICONS.tiktok}
+                    classes="bg-pink-500/10 border-pink-500/20 text-pink-300"
+                    metaClass="text-pink-400"
+                    value={usernameStats ? fmtNum(usernameStats.viewerCount) : '—'}
+                    valueLabel={t('viewers')}
+                    isLive
+                  />
+                );
+              })}
+              {kickConnectedChannels.map((channel) => {
+                const channelStats = kickLiveStatsByChannel[channel] ?? null;
+                return (
+                  <ViewerCard
+                    key={`kick-${channel}`}
+                    label={hasMultipleKick ? `Kick · ${channel}` : 'Kick'}
+                    icon={ICONS.kick}
+                    classes="bg-green-500/10 border-green-500/20 text-green-300"
+                    metaClass="text-green-400"
+                    value={channelStats ? fmtNum(channelStats.viewerCount) : '—'}
+                    valueLabel={t('viewers')}
+                    isLive={channelStats?.isLive ?? true}
+                    secondaryValue={channelStats?.followerCount !== null && channelStats?.followerCount !== undefined
+                      ? fmtNum(channelStats.followerCount)
+                      : channelStats?.subscriberCount !== null && channelStats?.subscriberCount !== undefined
+                        ? fmtNum(channelStats.subscriberCount)
+                      : '—'}
+                    secondaryLabel={channelStats?.followerCount !== null && channelStats?.followerCount !== undefined
+                      ? t('followers')
+                      : t('subscribers')}
+                  />
+                );
+              })}
+            </div>
+          );
+        })()}
 
         {/* Hype Train Indicator */}
         {hype && (

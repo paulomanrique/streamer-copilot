@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  getLabelFromTitle,
+  computeYouTubeStreamLabels,
   extractYtInitialData,
   findLiveVideoIds,
   parseCompactCount,
@@ -10,27 +10,70 @@ import {
   escapeHtml,
 } from '../../src/main/youtube-helpers.js';
 
-describe('getLabelFromTitle', () => {
-  it('returns "H" for titles containing "horizontal"', () => {
-    expect(getLabelFromTitle('My Horizontal Stream', 0)).toBe('H');
+describe('computeYouTubeStreamLabels', () => {
+  const mk = (videoId: string, title: string, channelHandle: string | null = '@user') =>
+    ({ videoId, title, channelHandle });
+
+  it('returns "YouTube" for a single stream', () => {
+    expect(computeYouTubeStreamLabels([mk('a', 'Just streaming')])).toEqual(
+      new Map([['a', 'YouTube']]),
+    );
   });
 
-  it('returns "V" for titles containing "vertical"', () => {
-    expect(getLabelFromTitle('Vertical Live', 0)).toBe('V');
+  it('uses channel handles when streams come from different channels', () => {
+    const result = computeYouTubeStreamLabels([
+      mk('a', 'Live', '@one'),
+      mk('b', 'Live', '@two'),
+    ]);
+    expect(result.get('a')).toBe('YouTube @one');
+    expect(result.get('b')).toBe('YouTube @two');
   });
 
-  it('returns "V" for titles containing "shorts"', () => {
-    expect(getLabelFromTitle('Shorts Stream', 0)).toBe('V');
+  it('detects horizontal/vertical keywords from same channel', () => {
+    const result = computeYouTubeStreamLabels([
+      mk('a', 'Horizontal stream', '@user'),
+      mk('b', 'Vertical stream', '@user'),
+    ]);
+    expect(result.get('a')).toBe('YouTube Horizontal');
+    expect(result.get('b')).toBe('YouTube Vertical');
   });
 
-  it('returns 1-based index as fallback', () => {
-    expect(getLabelFromTitle('Regular Stream', 0)).toBe('1');
-    expect(getLabelFromTitle('Regular Stream', 4)).toBe('5');
+  it('normalizes mobile/celular/desktop synonyms to Vertical/Horizontal', () => {
+    const result = computeYouTubeStreamLabels([
+      mk('a', 'Mobile gameplay', '@user'),
+      mk('b', 'Desktop gameplay', '@user'),
+    ]);
+    expect(result.get('a')).toBe('YouTube Vertical');
+    expect(result.get('b')).toBe('YouTube Horizontal');
   });
 
-  it('is case-insensitive', () => {
-    expect(getLabelFromTitle('HORIZONTAL LIVE', 0)).toBe('H');
-    expect(getLabelFromTitle('VERTICAL LIVE', 0)).toBe('V');
+  it('assigns the opposite to the partner when only one title carries a keyword', () => {
+    const result = computeYouTubeStreamLabels([
+      mk('a', 'Live com pessoal', '@user'),
+      mk('b', 'Stream celular', '@user'),
+    ]);
+    expect(result.get('a')).toBe('YouTube Horizontal');
+    expect(result.get('b')).toBe('YouTube Vertical');
+  });
+
+  it('falls back to numeric labels with hyphen when no keywords match', () => {
+    const result = computeYouTubeStreamLabels([
+      mk('a', 'Stream A', '@user'),
+      mk('b', 'Stream B', '@user'),
+    ]);
+    expect(result.get('a')).toBe('YouTube-1');
+    expect(result.get('b')).toBe('YouTube-2');
+  });
+
+  it('uses numeric labels for 3+ streams from the same channel', () => {
+    const result = computeYouTubeStreamLabels([
+      mk('a', 'Horizontal', '@user'),
+      mk('b', 'Vertical', '@user'),
+      mk('c', 'Mobile', '@user'),
+    ]);
+    expect(result.get('a')).toBe('YouTube-1');
+    expect(result.get('b')).toBe('YouTube-2');
+    expect(result.get('c')).toBe('YouTube-3');
   });
 });
 

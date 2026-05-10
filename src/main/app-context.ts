@@ -6,10 +6,11 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
-import { BrowserWindow, Notification, dialog, ipcMain, net, shell } from 'electron';
+import { BrowserWindow, Notification, app, dialog, ipcMain, net, shell } from 'electron';
 import { parseFile as parseAudioFile } from 'music-metadata';
 
 import type { DatabaseHandle } from '../db/database.js';
+import { AccountRepository } from '../modules/accounts/account-repository.js';
 import { ChatService } from '../modules/chat/chat-service.js';
 import { ChatLogRepository } from '../modules/chat-log/chat-log-repository.js';
 import { ChatLogService } from '../modules/chat-log/chat-log-service.js';
@@ -17,8 +18,11 @@ import { LogRepository } from '../modules/logs/log-repository.js';
 import { LogService } from '../modules/logs/log-service.js';
 import { ObsService } from '../modules/obs/obs-service.js';
 import { ObsSettingsStore } from '../modules/obs/obs-settings-store.js';
+import { PollDeadlineRunner } from '../modules/polls/poll-deadline-runner.js';
+import { PollRepository } from '../modules/polls/poll-repository.js';
+import { PollService, formatPollResult } from '../modules/polls/poll-service.js';
 import { RaffleDeadlineRunner } from '../modules/raffles/raffle-deadline-runner.js';
-import { RaffleOverlayServer } from '../modules/raffles/raffle-overlay-server.js';
+import { OverlayServer } from './overlay-server.js';
 import { RaffleRepository } from '../modules/raffles/raffle-repository.js';
 import { RaffleService } from '../modules/raffles/raffle-service.js';
 import { SchedulerService, type ScheduledRunState, type ScheduledTask } from '../modules/scheduled/scheduler-service.js';
@@ -38,26 +42,35 @@ import { MusicSettingsStore } from '../modules/music/music-settings-store.js';
 import { MusicRequestService } from '../modules/music/music-request-service.js';
 import { searchYouTube as scrapeYouTube } from '../modules/music/youtube-search.js';
 import { MusicPlayer } from './music-player.js';
+import { MusicStreamResolver } from './music-stream-resolver.js';
 import { VoiceCommandRepository } from '../modules/voice/voice-repository.js';
 import { VoiceService } from '../modules/voice/voice-service.js';
-import { createKickChatAdapter } from '../platforms/kick/adapter.js';
+import { type KickChatAdapter } from '../platforms/kick/adapter.js';
+import { KickMultiChatAdapter } from '../platforms/kick/multi-adapter.js';
+import { KickModerationApi, KICK_MODERATION_CAPABILITIES } from '../platforms/kick/moderation.js';
 import { KickSettingsStore } from '../platforms/kick/settings-store.js';
 import { KickTokenStore, type KickAuthSession, type KickAuthToken } from '../platforms/kick/token-store.js';
 import { TikTokSettingsStore } from '../platforms/tiktok/settings-store.js';
-// import { createTikTokChatAdapter } from '../platforms/tiktok/adapter.js'; // TIKTOK_DISABLED
+import { TikTokMultiChatAdapter } from '../platforms/tiktok/multi-adapter.js';
 import { TwitchCredentialsStore } from '../platforms/twitch/credentials-store.js';
-import { createTwitchChatAdapter } from '../platforms/twitch/adapter.js';
+import { type TwitchChatAdapter } from '../platforms/twitch/adapter.js';
+import { TwitchMultiChatAdapter } from '../platforms/twitch/multi-adapter.js';
+import { TwitchModerationApi, TWITCH_MODERATION_CAPABILITIES } from '../platforms/twitch/moderation.js';
 import { YouTubeSettingsStore } from '../platforms/youtube/settings-store.js';
+import { YouTubeChatAdapter } from '../platforms/youtube/scraper-adapter.js';
+import { YouTubeApiChatAdapter, type YouTubeApiAccount } from '../platforms/youtube/api-adapter.js';
+import { buildYouTubeOAuth2Client, decryptSecret, encryptSecret, startYouTubeOAuthFlow } from '../platforms/youtube/api-auth.js';
 import { YTLiveClient } from './youtube-client.js';
+import { MainPlatformRegistry, type MainPlatformProvider } from './platforms/registry.js';
 import { getAllAudioBase64 } from '@sefinek/google-tts-api';
 import { APP_NAME } from '../shared/constants.js';
 import { IPC_CHANNELS } from '../shared/ipc.js';
 import {
   type LiveStreamInfo,
-  getLabelFromTitle,
   extractYtLiveVideoIds,
   extractYtSubscriberCount,
   extractYtLiveFromPlayerResponse,
+  extractYtConcurrentViewers,
   normalizeKickChannelInput,
   escapeHtml,
 } from './youtube-helpers.js';
@@ -70,6 +83,9 @@ import {
   generalSettingsSchema,
   obsConnectionSettingsSchema,
   profileSettingsSchema,
+  pollControlInputSchema,
+  pollDeleteInputSchema,
+  pollUpsertInputSchema,
   raffleControlActionInputSchema,
   raffleCreateInputSchema,
   raffleDeleteInputSchema,
@@ -84,7 +100,20 @@ import {
   suggestionListUpsertInputSchema,
   kickConnectSchema,
   kickSettingsSchema,
+  moderationGetCapabilitiesSchema,
+  moderationDeleteMessageSchema,
+  moderationBanUserSchema,
+  moderationUnbanUserSchema,
+  moderationTimeoutUserSchema,
+  moderationSetModeSchema,
+  moderationManageRoleSchema,
+  moderationRaidSchema,
+  moderationShoutoutSchema,
+  accountCreateInputSchema,
+  accountUpdateInputSchema,
+  accountIdInputSchema,
   selectProfileInputSchema,
+  setAutoSelectActiveProfileSchema,
   textCommandDeleteInputSchema,
   textCommandUpsertInputSchema,
   textSettingsSchema,
@@ -99,8 +128,9 @@ import {
   welcomeSettingsSchema,
   youtubeConnectSchema,
   youtubeSettingsSchema,
+  youtubeApiStartOAuthSchema,
 } from '../shared/schemas.js';
-import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, MusicRequestSettings, PlatformId, Raffle, SoundSettings, StreamEvent, StreamEventType, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
+import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, MusicRequestSettings, PlatformAccount, PlatformId, Raffle, SoundSettings, StreamEvent, StreamEventType, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
 
 const TWITCH_CLIENT_ID = 'vtwg8tzuv1nlip4qh9n6sxx2p76g0s';
 const TWITCH_REDIRECT_PORT = 32999;
@@ -170,7 +200,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   let activeProfileDirectory = '';
   const getActiveProfileDirectory = () => activeProfileDirectory;
 
+  const accountRepository = new AccountRepository(getActiveProfileDirectory);
+  const mainPlatforms = new MainPlatformRegistry();
   const raffleRepository = new RaffleRepository(getActiveProfileDirectory);
+  const pollRepository = new PollRepository(getActiveProfileDirectory);
   const soundRepository = new SoundCommandRepository(getActiveProfileDirectory);
   const textRepository = new TextCommandRepository(getActiveProfileDirectory);
   const voiceRepository = new VoiceCommandRepository(getActiveProfileDirectory);
@@ -300,24 +333,22 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   }
 
   // musicPlayer and musicService are mutually dependent; use a shared ref to avoid forward-reference issues.
+  // R4: musicPlayer is now a state machine that publishes to /now-playing via OverlayServer;
+  // it is wired below after the overlay server is constructed.
   let musicPlayerRef: MusicPlayer | null = null;
 
   const musicService = new MusicRequestService({
     getSettings: () => musicSettingsCache,
     searchYouTube,
-    onPlay: (cmd) => musicPlayerRef?.play(cmd),
+    onPlay: (cmd) => void musicPlayerRef?.play(cmd),
     onStop: () => musicPlayerRef?.stop(),
     onStateUpdate: (state) => options.stateHub.pushMusicStateUpdate(state),
     onVolumeChange: (volume) => musicPlayerRef?.setVolume(volume),
     sendMessage: (platform, content) => sendPlatformMessage(platform, content),
     logInfo: (message, metadata) => logService.info('music', message, metadata),
     logError: (message, metadata) => logService.error('music', message, metadata),
+    isBrowserSourceConnected: () => musicPlayerRef?.hasBrowserSource() ?? false,
   });
-
-  musicPlayerRef = new MusicPlayer(
-    options.getWindow,
-    (event) => musicService.onPlayerEvent(event),
-  );
 
   let rendererSpeechSynthesisAvailable = process.platform !== 'linux';
   let isShuttingDown = false;
@@ -362,46 +393,33 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   let twitchChannel: string | null = null;
   // Maps platform → display name of the account that sends messages (used to skip self-welcomes)
   const selfSenderName: Partial<Record<string, string>> = {};
-  let twitchStatsTimer: ReturnType<typeof setInterval> | null = null;
-  let kickStatsTimer: ReturnType<typeof setInterval> | null = null;
+  /** Per-channel stats poll. Mirrors the Twitch pattern so multiple Kick
+   *  channels can have their own viewer/follower counts pumped in parallel. */
+  const kickStatsTimers = new Map<string, ReturnType<typeof setInterval>>();
   const userAvatarCache = new Map<string, string>();
   const badgeCache = new Map<string, string>();
-  const youtubeScrapers = new Map<string, YTLiveClient>();
-  const youtubeStreamData = new Map<string, {
-    label: string;
-    viewerCount: number | null;
-    subscriberCount: number | null;
-    platform: 'youtube' | 'youtube-v';
-    channelHandle: string | null;
-  }>();
-  let youtubeMonitorTimer: ReturnType<typeof setInterval> | null = null;
-  let youtubeStatsTimer: ReturnType<typeof setInterval> | null = null;
-  let _lastDetectedVideoIds: Set<string> = new Set();
+  // R6 (YouTube): scraper pool + monitor lives inside YouTubeChatAdapter now
+  // (constructed after chatService below). The variable is forward-declared
+  // here so helpers defined earlier can defer to the adapter once it exists.
+  let youtubeAdapter: YouTubeChatAdapter | null = null;
 
   // Ordered list of platform IDs for YouTube streams (first = horizontal, second = vertical)
   const YT_PLATFORMS: Array<'youtube' | 'youtube-v'> = ['youtube', 'youtube-v'];
-  const SCHEDULED_SUPPORTED_TARGETS: PlatformId[] = ['twitch', 'youtube'];
+  const SCHEDULED_SUPPORTED_TARGETS: PlatformId[] = ['twitch', 'youtube', 'youtube-api'];
   // eslint-disable-next-line prefer-const -- forward-declared; assigned after dependent services are created
   let raffleService: RaffleService;
+  // eslint-disable-next-line prefer-const -- forward-declared; assigned after dependent services are created
+  let pollService: PollService;
 
-  const getYoutubeStreams = (): YouTubeStreamInfo[] => {
-    const totalStreams = youtubeScrapers.size;
-    return Array.from(youtubeScrapers.keys()).map((videoId) => {
-      const data = youtubeStreamData.get(videoId);
-      const label = totalStreams > 1
-        ? (data?.platform === 'youtube-v' ? 'Vertical' : 'Horizontal')
-        : 'YouTube';
-      return {
-        videoId,
-        platform: data?.platform ?? 'youtube',
-        channelHandle: data?.channelHandle ?? null,
-        label,
-        viewerCount: data?.viewerCount ?? null,
-        subscriberCount: data?.subscriberCount ?? null,
-        liveUrl: `https://www.youtube.com/watch?v=${videoId}`,
-      };
-    });
-  };
+  const getYoutubeStreams = (): YouTubeStreamInfo[] => youtubeAdapter?.getCurrentStreams() ?? [];
+
+  /**
+   * Type guard for the two YouTube platform slots. Needed because PlatformId
+   * is an open enum (`'twitch' | ... | (string & {})`) and the literal
+   * narrowing `target === 'youtube'` doesn't survive the wider member.
+   */
+  const isYoutubePlatform = (p: PlatformId): p is 'youtube' | 'youtube-v' =>
+    p === 'youtube' || p === 'youtube-v';
 
   const getTwitchCredentialsStore = async (): Promise<TwitchCredentialsStore | null> => {
     const snapshot = await profileStore.list();
@@ -447,7 +465,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       delete selfSenderName.youtube;
       delete selfSenderName['youtube-v'];
     }
-    startYoutubeMonitor();
+    await refreshYoutubeAdapter();
     return settings;
   };
 
@@ -546,7 +564,11 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const kickClient = new KickClient({ clientId, clientSecret, redirectUri });
     const pkce = kickClient.generatePKCEParams();
     const expectedState = pkce.state ?? '';
-    const authUrl = kickClient.getAuthorizationUrl(pkce, ['public', 'channel:read', 'chat:write']);
+    // R2: extra scopes for Kick moderation API (ban/timeout/clear-chat/chat-settings/mods/vips).
+    const authUrl = kickClient.getAuthorizationUrl(pkce, [
+      'public', 'channel:read', 'chat:write',
+      'moderation:read', 'moderation:write',
+    ]);
 
     return new Promise((resolve, reject) => {
       let finished = false;
@@ -693,13 +715,38 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     return session;
   };
 
+  const kickStatusListeners = new Set<() => void>();
   const setKickStatus = (status: KickConnectionStatus, slug?: string | null) => {
     kickStatus = status;
     if (slug !== undefined) kickSlug = slug;
     options.stateHub.pushKickStatus(status, kickSlug);
-    if (status !== 'connected') {
-      options.stateHub.pushKickLiveStats(null);
-    }
+    // Per-channel stats are managed by start/stopKickStatsPollFor — no global
+    // null push here, otherwise multi-channel installs would clobber each
+    // other's cards on every status flip.
+    for (const listener of kickStatusListeners) listener();
+  };
+
+  /** Singleton wrapper holding one KickChatAdapter child per connected
+   *  Kick account. Mirrors Twitch — registered once on demand, then children
+   *  added/removed as accounts connect. */
+  const kickMultiAdapter = new KickMultiChatAdapter();
+  let kickMultiRegistered = false;
+  const kickAccountStatus = new Map<string, KickConnectionStatus>();
+  /** accountId -> channel slug, for stats poll teardown on disconnect. */
+  const kickAccountSlug = new Map<string, string>();
+
+  const ensureKickMultiRegistered = async (): Promise<void> => {
+    if (kickMultiRegistered) return;
+    kickMultiRegistered = true;
+    await chatService.replaceAdapter(kickMultiAdapter);
+  };
+
+  const aggregateKickStatus = (): KickConnectionStatus => {
+    const statuses = Array.from(kickAccountStatus.values());
+    if (statuses.some((s) => s === 'connected')) return 'connected';
+    if (statuses.some((s) => s === 'connecting')) return 'connecting';
+    if (statuses.some((s) => s === 'error')) return 'error';
+    return 'disconnected';
   };
 
   const fetchKickClientAccessToken = async (credentials: { clientId: string; clientSecret: string }): Promise<string | null> => {
@@ -772,7 +819,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       const token = await fetchKickClientAccessToken(credentials) ?? authSession?.token.accessToken;
       if (!token) {
         const fallback = await fetchKickLegacyStats(channelSlug);
-        if (fallback) options.stateHub.pushKickLiveStats(fallback);
+        if (fallback) options.stateHub.pushKickLiveStats(channelSlug, fallback);
         return;
       }
 
@@ -784,7 +831,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       });
       if (!response.ok) {
         const fallback = await fetchKickLegacyStats(channelSlug);
-        if (fallback) options.stateHub.pushKickLiveStats(fallback);
+        if (fallback) options.stateHub.pushKickLiveStats(channelSlug, fallback);
         return;
       }
 
@@ -804,7 +851,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       const channel = payload.data?.[0];
       if (!channel) {
         const fallback = await fetchKickLegacyStats(channelSlug);
-        if (fallback) options.stateHub.pushKickLiveStats(fallback);
+        if (fallback) options.stateHub.pushKickLiveStats(channelSlug, fallback);
         return;
       }
 
@@ -814,10 +861,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         subscriberCount: typeof channel.active_subscribers_count === 'number' ? channel.active_subscribers_count : null,
         isLive: channel.stream?.is_live ?? (channel.stream?.viewer_count ?? 0) > 0,
       };
-      options.stateHub.pushKickLiveStats(stats);
+      options.stateHub.pushKickLiveStats(channelSlug, stats);
     } catch {
       const fallback = await fetchKickLegacyStats(channelSlug);
-      if (fallback) options.stateHub.pushKickLiveStats(fallback);
+      if (fallback) options.stateHub.pushKickLiveStats(channelSlug, fallback);
     }
   };
 
@@ -861,23 +908,63 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     credentials: { clientId: string; clientSecret: string },
     authSession: KickAuthSession | null,
   ) => {
-    if (kickStatsTimer) clearInterval(kickStatsTimer);
+    stopKickStatsPollFor(channelSlug);
     void pollKickStats(channelSlug, credentials, authSession);
-    kickStatsTimer = setInterval(() => void pollKickStats(channelSlug, credentials, authSession), 15_000);
+    const timer = setInterval(() => void pollKickStats(channelSlug, credentials, authSession), 15_000);
+    kickStatsTimers.set(channelSlug, timer);
+  };
+
+  const stopKickStatsPollFor = (channelSlug: string) => {
+    const timer = kickStatsTimers.get(channelSlug);
+    if (timer) {
+      clearInterval(timer);
+      kickStatsTimers.delete(channelSlug);
+    }
+    options.stateHub.pushKickLiveStats(channelSlug, null);
   };
 
   const stopKickStatsPoll = () => {
-    if (kickStatsTimer) {
-      clearInterval(kickStatsTimer);
-      kickStatsTimer = null;
+    for (const channelSlug of Array.from(kickStatsTimers.keys())) {
+      stopKickStatsPollFor(channelSlug);
     }
-    options.stateHub.pushKickLiveStats(null);
   };
 
+  const tiktokStatusListeners = new Set<() => void>();
+  /** Aggregate TikTok status — derived from per-account map below. The legacy
+   *  global lives on for callers that still want a single status (live banner,
+   *  scheduled targets, etc.). */
   const setTiktokStatus = (status: TikTokConnectionStatus, username?: string | null) => {
     tiktokStatus = status;
     if (username !== undefined) tiktokUsername = username;
     options.stateHub.pushTiktokStatus(status, tiktokUsername);
+    for (const listener of tiktokStatusListeners) listener();
+  };
+
+  /** Singleton wrapper holding one TikTokChatAdapter child per connected
+   *  TikTok account. Registered with chatService once on demand. Subsequent
+   *  connects/disconnects just add/remove children. Mirrors Twitch. */
+  const tiktokMultiAdapter = new TikTokMultiChatAdapter();
+  let tiktokMultiRegistered = false;
+  const tiktokAccountStatus = new Map<string, TikTokConnectionStatus>();
+  const tiktokAccountUsername = new Map<string, string>();
+  /** Per-account "watching" flag: TikTok needs the user to be live to bind a
+   *  room id, so when first connect fails we keep retrying. */
+  const tiktokWatchingAccounts = new Set<string>();
+  const tiktokRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  const ensureTiktokMultiRegistered = async (): Promise<void> => {
+    if (tiktokMultiRegistered) return;
+    tiktokMultiRegistered = true;
+    await chatService.replaceAdapter(tiktokMultiAdapter);
+  };
+
+  const aggregateTiktokStatus = (): TikTokConnectionStatus => {
+    const statuses = Array.from(tiktokAccountStatus.values());
+    if (statuses.some((s) => s === 'connected')) return 'connected';
+    if (statuses.some((s) => s === 'connecting')) return 'connecting';
+    if (statuses.some((s) => s === 'captcha')) return 'captcha';
+    if (statuses.some((s) => s === 'error')) return 'error';
+    return 'disconnected';
   };
 
   const checkYouTubeLive = async (handle: string): Promise<LiveStreamInfo[] | null> => {
@@ -924,149 +1011,64 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   };
 
   const fetchYtLiveViewerCount = async (videoId: string): Promise<number | null> => {
+    const id = encodeURIComponent(videoId);
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      'Accept-Language': 'en-US,en;q=0.9',
+    };
+
+    // Primary: /live_stats — cheap, plain-text counter that lights up while
+    // the stream is live. YouTube has tightened this endpoint's filtering
+    // and intermittently 404s it, so we fall back to parsing the watch page
+    // for `videoDetails.viewCount` when the primary returns nothing usable.
+    let primaryDetail = '';
     try {
-      const resp = await net.fetch(`https://www.youtube.com/live_stats?v=${videoId}`);
-      if (!resp.ok) return null;
-      const text = (await resp.text()).trim();
-      const count = parseInt(text, 10);
-      return Number.isFinite(count) && count >= 0 ? count : null;
-    } catch {
+      const resp = await net.fetch(`https://www.youtube.com/live_stats?v=${id}`, { headers });
+      if (resp.ok) {
+        const text = (await resp.text()).trim();
+        const count = parseInt(text, 10);
+        if (Number.isFinite(count) && count >= 0) return count;
+        primaryDetail = `live_stats returned non-numeric (${text.slice(0, 30)})`;
+      } else {
+        primaryDetail = `live_stats ${resp.status}`;
+      }
+    } catch (cause) {
+      primaryDetail = `live_stats threw (${cause instanceof Error ? cause.message : String(cause)})`;
+    }
+
+    // Fallback: parse the watch page. extractYtConcurrentViewers reads the
+    // ytInitialPlayerResponse JSON's videoDetails.viewCount (which on live
+    // streams is the concurrent watcher count) and falls back to the
+    // "X watching now" badge string from ytInitialData.
+    try {
+      const resp = await net.fetch(`https://www.youtube.com/watch?v=${id}`, { headers });
+      if (!resp.ok) {
+        logService.warn('youtube', 'Viewer-count fallback failed', { videoId, primaryDetail, watchStatus: resp.status });
+        return null;
+      }
+      const html = await resp.text();
+      const count = extractYtConcurrentViewers(html);
+      if (count === null) {
+        logService.warn('youtube', 'Viewer-count fallback parsed no value', { videoId, primaryDetail, htmlLength: html.length });
+      }
+      return count;
+    } catch (cause) {
+      logService.warn('youtube', 'Viewer-count fallback threw', { videoId, primaryDetail, error: cause instanceof Error ? cause.message : String(cause) });
       return null;
     }
   };
 
-  const runYoutubeMonitor = async () => {
-    const store = await getYoutubeSettingsStore();
-    if (!store) return;
-    const settings = await store.load();
-    if (!settings.autoConnect || settings.channels.length === 0) return;
-
-    // Collect all live streams across all enabled channels
-    const allLiveStreams: LiveStreamInfo[] = [];
-    let anyCheckFailed = false;
-    for (const channel of settings.channels) {
-      if (!channel.enabled) continue;
-      const streams = await checkYouTubeLive(channel.handle);
-      if (streams === null) { anyCheckFailed = true; continue; }
-      for (const s of streams) if (!allLiveStreams.find((x) => x.videoId === s.videoId)) allLiveStreams.push(s);
-    }
-
-    // For streams where the HTML scraping didn't yield a viewer count, try the
-    // lightweight live_stats endpoint which returns just the concurrent viewer number.
-    for (let i = 0; i < allLiveStreams.length; i++) {
-      if (allLiveStreams[i].viewCount === null) {
-        const count = await fetchYtLiveViewerCount(allLiveStreams[i].videoId);
-        if (count !== null) allLiveStreams[i] = { ...allLiveStreams[i], viewCount: count };
-      }
-    }
-
-    // Update viewer counts for existing scrapers and stop those no longer live.
-    // If any channel check failed (network error etc.), keep all scrapers running —
-    // a failed check is not proof the stream ended.
-    for (const [videoId, scraper] of youtubeScrapers) {
-      const updated = allLiveStreams.find((s) => s.videoId === videoId);
-      if (!updated) {
-        if (anyCheckFailed) {
-          logService.info('youtube', `Keeping scraper for ${videoId} alive (channel check failed this cycle)`);
-          continue;
-        }
-        const staleData = youtubeStreamData.get(videoId);
-        if (staleData) chatLogService.closeSession(staleData.platform);
-        scraper.stop();
-        youtubeScrapers.delete(videoId);
-        youtubeStreamData.delete(videoId);
-        logService.info('youtube', `Stopped scraper for ${videoId} (no longer live)`);
-        if (youtubeScrapers.size === 0) stopYoutubeStatsPoll();
-      } else {
-        const data = youtubeStreamData.get(videoId);
-        if (data) {
-          youtubeStreamData.set(videoId, {
-            ...data,
-            viewerCount: updated.viewCount ?? data.viewerCount,
-            subscriberCount: updated.subscriberCount ?? data.subscriberCount,
-          });
-        }
-      }
-    }
-
-    // Start scrapers for newly detected streams (up to 2)
-    const fmt = new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' });
-    for (let i = 0; i < Math.min(allLiveStreams.length, YT_PLATFORMS.length); i++) {
-      const { videoId, title, viewCount, subscriberCount } = allLiveStreams[i];
-      if (youtubeScrapers.has(videoId)) continue;
-      const platform = YT_PLATFORMS[i];
-      const label = getLabelFromTitle(title, i);
-      youtubeStreamData.set(videoId, {
-        label,
-        viewerCount: viewCount,
-        subscriberCount,
-        platform,
-        channelHandle: allLiveStreams[i].channelHandle,
-      });
-      logService.info('youtube', `Auto-detected live (${platform}, label=${label}): ${videoId} — "${title}"`);
-      chatLogService.openSession(platform, videoId);
-      suggestionService.clearSessionEntries();
-      const scraper = new YTLiveClient({
-        videoId,
-        onMessage: (message) => {
-          chatService.injectMessage({
-            id: `yt-auto-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-            timestampLabel: fmt.format(new Date()),
-            ...message,
-            platform,
-            streamLabel: label,
-          });
-        },
-        onEvent: (event) => {
-          chatService.injectEvent({
-            id: `yt-auto-event-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-            timestampLabel: fmt.format(new Date()),
-            ...event,
-            platform,
-            streamLabel: label,
-          });
-        },
-        onLog: (msg) => logService.info('youtube', msg),
-      });
-      youtubeScrapers.set(videoId, scraper);
-      await scraper.start();
-      ensureYoutubeStatsPoll();
-    }
-
-    _lastDetectedVideoIds = new Set(allLiveStreams.map((s) => s.videoId));
-    options.stateHub.pushYoutubeStatus(getYoutubeStreams());
-  };
-
-  const startYoutubeMonitor = () => {
-    if (youtubeMonitorTimer) clearInterval(youtubeMonitorTimer);
-    void runYoutubeMonitor();
-    youtubeMonitorTimer = setInterval(runYoutubeMonitor, 120_000);
-  };
-
-  const pollYoutubeViewerCounts = async () => {
-    if (youtubeScrapers.size === 0) return;
-    let changed = false;
-    for (const [videoId] of youtubeScrapers) {
-      const count = await fetchYtLiveViewerCount(videoId);
-      if (count !== null) {
-        const data = youtubeStreamData.get(videoId);
-        if (data && data.viewerCount !== count) {
-          youtubeStreamData.set(videoId, { ...data, viewerCount: count });
-          changed = true;
-        }
-      }
-    }
-    if (changed) options.stateHub.pushYoutubeStatus(getYoutubeStreams());
-  };
-
-  const ensureYoutubeStatsPoll = () => {
-    if (youtubeStatsTimer) return;
-    void pollYoutubeViewerCounts();
-    youtubeStatsTimer = setInterval(pollYoutubeViewerCounts, 60_000);
-  };
-
-  const stopYoutubeStatsPoll = () => {
-    if (youtubeStatsTimer) { clearInterval(youtubeStatsTimer); youtubeStatsTimer = null; }
+  /**
+   * Re-syncs the YouTubeChatAdapter's monitored handles from the persisted
+   * YouTubeSettings. Called on save and on account connect/disconnect — the
+   * adapter applies the new list and triggers an immediate monitor pass.
+   */
+  const refreshYoutubeAdapter = async (): Promise<void> => {
+    if (!youtubeAdapter) return;
+    const settings = await loadYoutubeSettings();
+    const handles = settings.channels.filter((c) => c.enabled).map((c) => c.handle);
+    // Auto-monitor is always on — every network auto-reconnects implicitly.
+    youtubeAdapter.setMonitoredChannels(handles, { autoMonitor: true });
   };
 
   const pollTwitchStats = async (channel: string, accessToken: string): Promise<void> => {
@@ -1100,19 +1102,40 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         }
       }
 
-      options.stateHub.pushTwitchLiveStats({ viewerCount: stream?.viewer_count ?? 0, followerCount: followersData.total ?? 0, isLive: !!stream, hypeTrain });
+      options.stateHub.pushTwitchLiveStats(channel, {
+        viewerCount: stream?.viewer_count ?? 0,
+        followerCount: followersData.total ?? 0,
+        isLive: !!stream,
+        hypeTrain,
+      });
     } catch (err) {
-      logService.warn('twitch', 'Failed to poll Twitch stats', { error: err instanceof Error ? err.message : String(err) });
+      logService.warn('twitch', 'Failed to poll Twitch stats', { error: err instanceof Error ? err.message : String(err), channel });
     }
   };
 
+  /** Per-channel stats poll timers — keyed by channel so multiple Twitch
+   *  accounts each get their own viewer/follower/hype-train feed. */
+  const twitchStatsTimers = new Map<string, ReturnType<typeof setInterval>>();
+
   const startTwitchStatsPoll = (channel: string, accessToken: string) => {
-    if (twitchStatsTimer) clearInterval(twitchStatsTimer);
+    const existing = twitchStatsTimers.get(channel);
+    if (existing) clearInterval(existing);
     void pollTwitchStats(channel, accessToken);
-    twitchStatsTimer = setInterval(() => void pollTwitchStats(channel, accessToken), 10_000);
+    const timer = setInterval(() => void pollTwitchStats(channel, accessToken), 10_000);
+    twitchStatsTimers.set(channel, timer);
   };
 
-  const stopTwitchStatsPoll = () => { if (twitchStatsTimer) { clearInterval(twitchStatsTimer); twitchStatsTimer = null; } };
+  const stopTwitchStatsPollFor = (channel: string) => {
+    const t = twitchStatsTimers.get(channel);
+    if (t) clearInterval(t);
+    twitchStatsTimers.delete(channel);
+    options.stateHub.pushTwitchLiveStats(channel, null);
+  };
+
+  const stopTwitchStatsPoll = () => {
+    for (const [, timer] of twitchStatsTimers) clearInterval(timer);
+    twitchStatsTimers.clear();
+  };
 
   const loadTwitchBadges = async (channel: string, token: string): Promise<void> => {
     try {
@@ -1145,24 +1168,112 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     return entries.map((e) => badgeCache.get(e)).filter((url): url is string => Boolean(url));
   };
 
+  const twitchStatusListeners = new Set<() => void>();
+  /** Aggregate Twitch status flag for legacy consumers (live banner, scheduled
+   *  targets, etc.). Stats polling is now per-channel — see
+   *  `connectTwitchAccount` / `disconnectTwitchAccount`. */
   const setTwitchStatus = (status: TwitchConnectionStatus, channel?: string | null) => {
     twitchStatus = status;
     if (channel !== undefined) twitchChannel = channel;
     options.stateHub.pushTwitchStatus(status, twitchChannel);
-    if (status === 'connected') {
-      void (async () => {
-        const store = await getTwitchCredentialsStore();
-        const creds = store ? await store.load() : null;
-        if (creds) {
-          const token = creds.oauthToken.replace(/^oauth:/, '');
-          startTwitchStatsPoll(creds.channel, token);
-          void loadTwitchBadges(creds.channel, token);
-        }
-      })();
-    } else stopTwitchStatsPoll();
+    if (status !== 'connected') stopTwitchStatsPoll();
+    for (const listener of twitchStatusListeners) listener();
   };
 
-  const raffleOverlayServer = new RaffleOverlayServer({
+  /** Singleton wrapper that holds one TwitchChatAdapter child per connected
+   *  Twitch account. Registered with chatService once, on demand, the first
+   *  time an account connects. Subsequent connects/disconnects just add or
+   *  remove children — the wrapper stays in place. */
+  const twitchMultiAdapter = new TwitchMultiChatAdapter();
+  let twitchMultiRegistered = false;
+  /** Per-account Twitch status, separate from the legacy global `twitchStatus`. */
+  const twitchAccountStatus = new Map<string, TwitchConnectionStatus>();
+
+  const ensureTwitchMultiRegistered = async (): Promise<void> => {
+    if (twitchMultiRegistered) return;
+    twitchMultiRegistered = true;
+    await chatService.replaceAdapter(twitchMultiAdapter);
+  };
+
+  /**
+   * Spawns a Twitch child for one account and wires moderation. Re-entrant —
+   * calling it again with the same `accountId` replaces the existing child.
+   * `setTwitchStatus` is still called for the *first* connected account so
+   * the legacy global status (used by stats polling, scheduled-target
+   * resolution, etc.) keeps a sensible value.
+   */
+  /** Tracks the channel each account is bound to so disconnect can stop the
+   *  matching stats poll. */
+  const twitchAccountChannel = new Map<string, string>();
+
+  const connectTwitchAccount = async (account: { accountId: string; channel: string; username: string; oauthToken: string }): Promise<void> => {
+    await ensureTwitchMultiRegistered();
+    twitchAccountStatus.set(account.accountId, 'connecting');
+    twitchAccountChannel.set(account.accountId, account.channel);
+    twitchStatusListeners.forEach((l) => l());
+    if (twitchMultiAdapter.hasConnectedChild() === false) {
+      setTwitchStatus('connecting', account.channel);
+    }
+    await twitchMultiAdapter.addAccount({
+      accountId: account.accountId,
+      channels: [account.channel],
+      username: account.username,
+      password: account.oauthToken,
+      resolveBadgeUrls,
+      onStatusChange: (status) => {
+        twitchAccountStatus.set(account.accountId, status);
+        twitchStatusListeners.forEach((l) => l());
+        // Aggregate to the legacy global: connected if anyone connected,
+        // otherwise mirror this child's state.
+        const anyConnected = Array.from(twitchAccountStatus.values()).some((s) => s === 'connected');
+        if (status === 'connected') {
+          setTwitchStatus('connected', account.channel);
+          // Per-channel stats poll (viewer count, follower count, hype train).
+          startTwitchStatsPoll(account.channel, account.oauthToken.replace(/^oauth:/, ''));
+        } else if (!anyConnected) {
+          setTwitchStatus(status, account.channel);
+        }
+      },
+    });
+    const child = twitchMultiAdapter.getAccount(account.accountId);
+    if (child) void wireTwitchModeration(child, account.channel, account.oauthToken);
+  };
+
+  const disconnectTwitchAccount = async (accountId: string): Promise<void> => {
+    const channel = twitchAccountChannel.get(accountId);
+    await twitchMultiAdapter.removeAccount(accountId);
+    twitchAccountStatus.delete(accountId);
+    twitchAccountChannel.delete(accountId);
+    if (channel) stopTwitchStatsPollFor(channel);
+    twitchStatusListeners.forEach((l) => l());
+    if (!twitchMultiAdapter.hasConnectedChild()) {
+      setTwitchStatus('disconnected', null);
+    }
+  };
+
+  /** Shared connect path for the account model — used both by
+   *  `twitchProvider.connect` (UI button) and the boot-time auto-reconnect.
+   *  Validates providerData, primes per-channel side effects (badges, chat
+   *  log session, suggestion entries, self-sender filter), and spawns the
+   *  multi-adapter child. */
+  const connectTwitchAccountFromRecord = async (account: PlatformAccount): Promise<void> => {
+    const creds = {
+      channel: account.channel,
+      username: String((account.providerData as Record<string, unknown> | undefined)?.username ?? ''),
+      oauthToken: String((account.providerData as Record<string, unknown> | undefined)?.oauthToken ?? ''),
+    };
+    if (!creds.username || !creds.oauthToken) {
+      throw new Error('Twitch account missing username or oauthToken in providerData');
+    }
+    await loadTwitchBadges(creds.channel, creds.oauthToken.replace(/^oauth:/, ''));
+    chatLogService.openSession('twitch', creds.channel);
+    suggestionService.clearSessionEntries();
+    selfSenderName.twitch = creds.username.toLowerCase();
+    await connectTwitchAccount({ accountId: account.id, ...creds });
+  };
+
+  const overlayServer = new OverlayServer({
+    port: generalSettingsStore.load().overlayServerPort,
     getOverlayState: () => {
       try {
         const active = raffleService.getActive();
@@ -1171,12 +1282,32 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         return null;
       }
     },
+    getPollsOverlayState: () => {
+      try {
+        return pollService.buildOverlayState();
+      } catch {
+        return null;
+      }
+    },
     getChatSnapshot: () => chatService.getRecent(),
+  });
+
+  // R4: now that overlayServer exists, build the music player + stream resolver.
+  const musicStreamResolver = new MusicStreamResolver();
+  musicPlayerRef = new MusicPlayer(
+    overlayServer,
+    musicStreamResolver,
+    (event) => musicService.onPlayerEvent(event),
+  );
+  // When OBS browser source toggles connection, push the latest music state so the
+  // renderer warning banner updates in real time.
+  overlayServer.onClientsChange('now-playing', () => {
+    options.stateHub.pushMusicStateUpdate(musicService.getState());
   });
 
   raffleService = new RaffleService({
     repository: raffleRepository,
-    getOverlayInfo: () => raffleOverlayServer.getOverlayInfo(),
+    getOverlayInfo: () => overlayServer.getOverlayInfo(),
     onState: (payload) => options.stateHub.pushRaffleState(payload),
     onEntry: (payload) => options.stateHub.pushRaffleEntry(payload),
     onResult: (payload) => options.stateHub.pushRaffleResult(payload),
@@ -1184,9 +1315,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       const content = raffle.openAnnouncementTemplate
         .replaceAll('{title}', raffle.title)
         .replaceAll('{command}', raffle.entryCommand);
-      for (const target of resolveRaffleAnnouncementTargets(raffle.acceptedPlatforms)) {
+      for (const target of resolveAnnouncementTargets(raffle.acceptedPlatforms)) {
         try {
-          if (target === 'youtube' || target === 'youtube-v') {
+          if (isYoutubePlatform(target)) {
             await sendYoutubeMessage(target, content);
           } else {
             await chatService.sendMessage(target, content);
@@ -1205,9 +1336,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       const content = raffle.eliminationAnnouncementTemplate
         .replaceAll('{eliminated}', eliminated.displayName)
         .replaceAll('{title}', raffle.title);
-      for (const target of resolveRaffleAnnouncementTargets(raffle.acceptedPlatforms)) {
+      for (const target of resolveAnnouncementTargets(raffle.acceptedPlatforms)) {
         try {
-          if (target === 'youtube' || target === 'youtube-v') {
+          if (isYoutubePlatform(target)) {
             await sendYoutubeMessage(target, content);
           } else {
             await chatService.sendMessage(target, content);
@@ -1224,9 +1355,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     },
     onAnnounceWinner: async (raffle, winner) => {
       const content = formatWinnerAnnouncement(raffle, winner.displayName);
-      for (const target of resolveRaffleAnnouncementTargets(raffle.acceptedPlatforms)) {
+      for (const target of resolveAnnouncementTargets(raffle.acceptedPlatforms)) {
         try {
-          if (target === 'youtube' || target === 'youtube-v') {
+          if (isYoutubePlatform(target)) {
             await sendYoutubeMessage(target, content);
           } else {
             await chatService.sendMessage(target, content);
@@ -1273,6 +1404,45 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     onTick: () => raffleService.syncDeadlines(),
   });
 
+  pollService = new PollService({
+    repository: pollRepository,
+    getOverlayInfo: () => overlayServer.getPollsOverlayInfo(),
+    onState: (snapshot) => options.stateHub.pushPollState(snapshot),
+    onVote: (vote) => options.stateHub.pushPollVote(vote),
+    onAnnounceResult: async (poll, snapshot) => {
+      options.stateHub.pushPollResult(snapshot);
+      const template = poll.resultAnnouncementTemplate.trim();
+      if (!template) return;
+      const content = formatPollResult(template, poll, snapshot);
+      if (!content) return;
+      for (const target of resolveAnnouncementTargets(poll.acceptedPlatforms)) {
+        try {
+          if (isYoutubePlatform(target)) {
+            await sendYoutubeMessage(target, content);
+          } else {
+            await chatService.sendMessage(target, content);
+          }
+          await pushLocalOutboundMessage(target, content);
+        } catch (cause) {
+          logService.warn('polls', 'Failed to send poll result announcement', {
+            pollId: poll.id,
+            platform: target,
+            error: cause instanceof Error ? cause.message : String(cause),
+          });
+        }
+      }
+    },
+    onLog: (level, message, metadata) => {
+      if (level === 'error') logService.error('polls', message, metadata);
+      else if (level === 'warn') logService.warn('polls', message, metadata);
+      else logService.info('polls', message, metadata);
+    },
+  });
+
+  const pollDeadlineRunner = new PollDeadlineRunner({
+    onTick: () => pollService.syncDeadlines(),
+  });
+
   const EVENT_TYPE_LABEL: Record<StreamEventType, string> = {
     subscription: 'New Subscription',
     superchat: 'Super Chat',
@@ -1302,7 +1472,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   }
 
   const chatService = new ChatService({
-    raffleService, soundService, textService, voiceService, suggestionService, musicService,
+    commandModules: [soundService, textService, voiceService, raffleService, pollService, suggestionService, musicService],
     onMessage: (message) => {
       options.stateHub.pushChatMessage(message);
       if (!message.isHistory) {
@@ -1318,6 +1488,79 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       if (options.generalSettingsStore.load().eventNotifications) {
         showEventNotification(event);
       }
+    },
+  });
+
+  youtubeAdapter = new YouTubeChatAdapter({
+    checkYouTubeLive,
+    fetchYtLiveViewerCount,
+    openChatLogSession: (platform, videoId) => chatLogService.openSession(platform, videoId),
+    closeChatLogSession: (platform) => chatLogService.closeSession(platform),
+    onStreamsChanged: (streams) => options.stateHub.pushYoutubeStatus(streams),
+    onScraperStart: () => suggestionService.clearSessionEntries(),
+    log: {
+      info: (msg) => logService.info('youtube', msg),
+      warn: (msg) => logService.warn('youtube', msg),
+    },
+    getChatChannelPageId: async () => (await loadYoutubeSettings()).chatChannelPageId,
+  });
+
+  /**
+   * Per-account YouTube API accounts, hot-cached and refreshed when accounts
+   * change. Each entry owns its own OAuth2Client built from the credentials
+   * stored on the PlatformAccount.providerData (encrypted via safeStorage).
+   */
+  let cachedYoutubeApiAccounts: YouTubeApiAccount[] = [];
+  const refreshYoutubeApiAccounts = async (): Promise<void> => {
+    if (!getActiveProfileDirectory()) {
+      // Called before the profile is ready (cold start) or during a profile
+      // switch — drop to an empty cache so the adapter quiesces, retry later.
+      cachedYoutubeApiAccounts = [];
+      youtubeApiAdapter.refresh();
+      return;
+    }
+    const accounts = await accountRepository.list();
+    const next: YouTubeApiAccount[] = [];
+    for (const account of accounts) {
+      if (account.providerId !== 'youtube-api') continue;
+      if (!account.enabled) continue;
+      const data = account.providerData as Record<string, unknown> | undefined;
+      const clientId = typeof data?.clientId === 'string' ? data.clientId : '';
+      const clientSecretEnc = typeof data?.clientSecretEncrypted === 'string' ? data.clientSecretEncrypted : '';
+      const refreshTokenEnc = typeof data?.refreshTokenEncrypted === 'string' ? data.refreshTokenEncrypted : '';
+      if (!clientId || !clientSecretEnc || !refreshTokenEnc) {
+        logService.warn('youtube-api', `Account ${account.id} (${account.label}) missing credentials — skipping`);
+        continue;
+      }
+      let oauth;
+      try {
+        const clientSecret = decryptSecret(clientSecretEnc);
+        const refreshToken = decryptSecret(refreshTokenEnc);
+        if (!clientSecret || !refreshToken) throw new Error('decrypt produced empty value');
+        oauth = buildYouTubeOAuth2Client({ clientId, clientSecret, refreshToken });
+      } catch (cause) {
+        logService.warn('youtube-api', `Failed to decrypt credentials for ${account.label}: ${cause instanceof Error ? cause.message : String(cause)}`);
+        continue;
+      }
+      next.push({
+        accountId: account.id,
+        channelId: account.channel,
+        label: account.label,
+        oauth,
+      });
+    }
+    cachedYoutubeApiAccounts = next;
+    youtubeApiAdapter.refresh();
+  };
+
+  const youtubeApiAdapter = new YouTubeApiChatAdapter({
+    getActiveAccounts: () => cachedYoutubeApiAccounts,
+    openChatLogSession: (platform, videoId) => chatLogService.openSession(platform, videoId),
+    closeChatLogSession: (platform) => chatLogService.closeSession(platform),
+    onClientStart: () => suggestionService.clearSessionEntries(),
+    log: {
+      info: (msg) => logService.info('youtube-api', msg),
+      warn: (msg) => logService.warn('youtube-api', msg),
     },
   });
 
@@ -1347,6 +1590,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   ipcMain.handle(IPC_CHANNELS.profilesList, async () => profileStore.list());
   ipcMain.handle(IPC_CHANNELS.profilesSelect, async (_, raw) => {
+    // Used by the boot-time profile picker (no app state yet) and any caller
+    // that wants a soft selection without restarting. Long-lived services
+    // (adapters, OAuth, schedulers, settings caches) keep their state — for a
+    // hard reset use `profilesSwitchAndRelaunch` instead.
     const snapshot = await profileStore.select(selectProfileInputSchema.parse(raw).profileId);
     const active = snapshot.profiles.find((p) => p.id === snapshot.activeProfileId);
     if (active) activeProfileDirectory = active.directory;
@@ -1359,6 +1606,36 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     await reloadWelcomeSettingsCache();
     await reloadMusicSettingsCache();
     return snapshot;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.profilesSwitchAndRelaunch, async (_, raw) => {
+    // Used from the settings list, where the user is already running a
+    // profile. Switching mid-session touches every long-lived service — we
+    // relaunch instead of trying to reset them in place.
+    const snapshot = await profileStore.select(selectProfileInputSchema.parse(raw).profileId);
+    // Reset the boot auto-select flag — if the user is consciously switching
+    // profiles, the next launch should ask again.
+    await profileStore.setAutoSelectActiveProfile(false);
+    setImmediate(() => {
+      if (app.isPackaged) {
+        // Production binary: standard relaunch + clean quit.
+        app.relaunch();
+        app.quit();
+      } else {
+        // Dev (under nodemon): app.relaunch() would spawn a detached Electron
+        // orphaned to launchd while nodemon respawns its own — doubling
+        // instances. And nodemon waits on clean exits. Force a non-zero exit
+        // AFTER graceful before-quit cleanup so nodemon treats it as a crash
+        // and brings up one fresh instance.
+        app.once('will-quit', () => process.exit(42));
+        app.quit();
+      }
+    });
+    return snapshot;
+  });
+  ipcMain.handle(IPC_CHANNELS.profilesSetAutoSelect, async (_, raw) => {
+    const i = setAutoSelectActiveProfileSchema.parse(raw);
+    return profileStore.setAutoSelectActiveProfile(i.autoSelect);
   });
   ipcMain.handle(IPC_CHANNELS.profilesCreate, async (_, raw) => { const i = createProfileInputSchema.parse(raw); return profileStore.create(i.name, i.directory, i.appLanguage); });
   ipcMain.handle(IPC_CHANNELS.profilesRename, async (_, raw) => { const i = renameProfileInputSchema.parse(raw); return profileStore.rename(i.profileId, i.name); });
@@ -1391,6 +1668,13 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     };
   });
 
+  ipcMain.handle(IPC_CHANNELS.pollsList, async () => pollService.list());
+  ipcMain.handle(IPC_CHANNELS.pollsUpsert, async (_, raw) => pollService.upsert(pollUpsertInputSchema.parse(raw)));
+  ipcMain.handle(IPC_CHANNELS.pollsDelete, async (_, raw) => pollService.delete(pollDeleteInputSchema.parse(raw).id));
+  ipcMain.handle(IPC_CHANNELS.pollsGetActive, async () => pollService.getActive());
+  ipcMain.handle(IPC_CHANNELS.pollsGetSnapshot, async (_, raw) => pollService.getSnapshot(String(raw ?? '')));
+  ipcMain.handle(IPC_CHANNELS.pollsControl, async (_, raw) => pollService.control(pollControlInputSchema.parse(raw)));
+  ipcMain.handle(IPC_CHANNELS.pollsOverlayInfo, async () => pollService.getOverlayInfo());
   ipcMain.handle(IPC_CHANNELS.rafflesList, async () => raffleService.list());
   ipcMain.handle(IPC_CHANNELS.rafflesCreate, async (_, raw) => raffleService.create(raffleCreateInputSchema.parse(raw)));
   ipcMain.handle(IPC_CHANNELS.rafflesUpdate, async (_, raw) => raffleService.update(raffleUpdateInputSchema.parse(raw)));
@@ -1530,8 +1814,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   ipcMain.handle(IPC_CHANNELS.chatGetRecent, async () => chatService.getRecent());
   ipcMain.handle(IPC_CHANNELS.chatOverlayInfo, async () => {
-    await raffleOverlayServer.start();
-    return raffleOverlayServer.getChatOverlayInfo();
+    await overlayServer.start();
+    return overlayServer.getChatOverlayInfo();
   });
   ipcMain.handle(IPC_CHANNELS.chatSendMessage, async (_, raw) => {
     const i = chatSendMessageSchema.parse(raw);
@@ -1541,6 +1825,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }
   });
   ipcMain.handle(IPC_CHANNELS.logsList, async (_, raw) => logService.list(eventLogFiltersSchema.parse(raw)));
+  ipcMain.handle(IPC_CHANNELS.eventLogClearAll, async () => {
+    logService.deleteAll();
+  });
 
   // Chat Log Handlers
   ipcMain.handle(IPC_CHANNELS.chatLogListSessions, async (_, raw) => {
@@ -1564,6 +1851,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.chatLogDeleteSession, async (_, sessionId) => {
     chatLogService.deleteSession(String(sessionId ?? ''));
   });
+  ipcMain.handle(IPC_CHANNELS.chatLogClearAll, async () => {
+    chatLogService.deleteAllSessions();
+  });
 
   // Suggestions Handlers
   ipcMain.handle(IPC_CHANNELS.suggestionsList, async () => suggestionService.listLists());
@@ -1577,18 +1867,25 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.twitchConnect, async (_, raw) => {
     const c = twitchCredentialsSchema.parse(raw);
     const s = await getTwitchCredentialsStore(); if (!s) throw new Error('No profile');
-    await s.save(c); setTwitchStatus('connecting', c.channel);
+    await s.save(c);
     // Pre-load badges so first messages have badge images
     await loadTwitchBadges(c.channel, c.oauthToken.replace(/^oauth:/, ''));
     chatLogService.openSession('twitch', c.channel);
     suggestionService.clearSessionEntries();
     selfSenderName.twitch = c.username.toLowerCase();
-    await chatService.replaceAdapter(createTwitchChatAdapter({ channels: [c.channel], username: c.username, password: c.oauthToken, onStatusChange: setTwitchStatus, resolveBadgeUrls }));
+    // Legacy IPC has no account id; use the channel as a stable key so
+    // re-issuing this IPC for the same channel replaces the child cleanly.
+    await connectTwitchAccount({ accountId: `legacy:${c.channel}`, channel: c.channel, username: c.username, oauthToken: c.oauthToken });
   });
   ipcMain.handle(IPC_CHANNELS.twitchDisconnect, async () => {
     delete selfSenderName.twitch;
     chatLogService.closeSession('twitch');
-    await chatService.removeAdapter('twitch'); setTwitchStatus('disconnected', null); const s = await getTwitchCredentialsStore(); if (s) await s.clear();
+    // Tear down every child the legacy IPC may have spawned. Account-model
+    // disconnects flow through `twitchProvider.disconnect` instead.
+    for (const accountId of Array.from(twitchAccountStatus.keys())) {
+      if (accountId.startsWith('legacy:')) await disconnectTwitchAccount(accountId);
+    }
+    const s = await getTwitchCredentialsStore(); if (s) await s.clear();
   });
   ipcMain.handle(IPC_CHANNELS.twitchGetStatus, async () => twitchStatus);
   ipcMain.handle(IPC_CHANNELS.twitchGetUserAvatars, async (_, logins) => {
@@ -1670,45 +1967,50 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         }
       });
       server.on('error', (err) => { clearTimeout(timeout); reject(err); });
-      server.listen(TWITCH_REDIRECT_PORT, '127.0.0.1', () => shell.openExternal(`https://id.twitch.tv/oauth2/authorize?client_id=${TWITCH_CLIENT_ID}&redirect_uri=http://localhost:${TWITCH_REDIRECT_PORT}/callback&response_type=token&scope=chat:read+chat:edit`));
+      // R2: extra scopes for Twitch moderation API (ban/timeout/delete/chat-settings/raids/shoutouts/mods/vips).
+      const twitchScopes = [
+        'chat:read', 'chat:edit',
+        'moderator:manage:banned_users',
+        'moderator:manage:chat_messages',
+        'moderator:manage:chat_settings',
+        'moderator:manage:shoutouts',
+        'channel:manage:raids',
+        'channel:manage:moderators',
+        'channel:manage:vips',
+      ].join('+');
+      server.listen(TWITCH_REDIRECT_PORT, '127.0.0.1', () => shell.openExternal(`https://id.twitch.tv/oauth2/authorize?client_id=${TWITCH_CLIENT_ID}&redirect_uri=http://localhost:${TWITCH_REDIRECT_PORT}/callback&response_type=token&scope=${twitchScopes}`));
     });
   });
 
   // YouTube Handlers
   ipcMain.handle(IPC_CHANNELS.youtubeGetSettings, async () => loadYoutubeSettings());
   ipcMain.handle(IPC_CHANNELS.youtubeSaveSettings, async (_, raw) => saveYoutubeSettings(raw));
+
+  ipcMain.handle(IPC_CHANNELS.youtubeApiStartOAuth, async (_, raw) => {
+    const input = youtubeApiStartOAuthSchema.parse(raw);
+    const result = await startYouTubeOAuthFlow(
+      { clientId: input.clientId, clientSecret: input.clientSecret },
+      { log: (msg) => logService.info('youtube-api', msg) },
+    );
+    return {
+      channelId: result.channelId,
+      channelTitle: result.channelTitle ?? '',
+      providerData: {
+        clientId: input.clientId,
+        clientSecretEncrypted: encryptSecret(input.clientSecret),
+        refreshTokenEncrypted: encryptSecret(result.refreshToken),
+        channelTitle: result.channelTitle,
+      },
+    };
+  });
+
   ipcMain.handle(IPC_CHANNELS.youtubeConnect, async (_, raw) => {
     const i = youtubeConnectSchema.parse(raw);
-    const fmt = new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' });
-    if (!youtubeScrapers.has(i.videoId)) {
-      const idx = youtubeScrapers.size;
-      const platform = YT_PLATFORMS[idx] ?? 'youtube-v';
-      const label = String(idx + 1);
-      youtubeStreamData.set(i.videoId, { label, viewerCount: null, subscriberCount: null, platform, channelHandle: null });
-      chatLogService.openSession(platform, i.videoId);
-      suggestionService.clearSessionEntries();
-      const scraper = new YTLiveClient({
-        videoId: i.videoId,
-        onMessage: (m) => chatService.injectMessage({ id: `yt-${Date.now()}`, timestampLabel: fmt.format(new Date()), ...m, platform, streamLabel: label }),
-        onEvent: (e) => chatService.injectEvent({ id: `yt-event-${Date.now()}`, timestampLabel: fmt.format(new Date()), ...e, platform, streamLabel: label }),
-        onLog: (msg) => logService.info('youtube', msg),
-      });
-      youtubeScrapers.set(i.videoId, scraper);
-      await scraper.start();
-      ensureYoutubeStatsPoll();
-    }
-    options.stateHub.pushYoutubeStatus(getYoutubeStreams());
+    if (!youtubeAdapter) throw new Error('YouTube adapter not yet ready');
+    await youtubeAdapter.addManualVideo(i.videoId);
   });
   ipcMain.handle(IPC_CHANNELS.youtubeDisconnect, async () => {
-    for (const [videoId] of youtubeScrapers) {
-      const data = youtubeStreamData.get(videoId);
-      if (data) chatLogService.closeSession(data.platform);
-    }
-    for (const scraper of youtubeScrapers.values()) scraper.stop();
-    youtubeScrapers.clear();
-    youtubeStreamData.clear();
-    stopYoutubeStatsPoll();
-    options.stateHub.pushYoutubeStatus([]);
+    youtubeAdapter?.stopAllScrapers();
   });
   ipcMain.handle(IPC_CHANNELS.youtubeGetStatus, async () => getYoutubeStreams());
   ipcMain.handle(IPC_CHANNELS.youtubeOpenLogin, async (event) => {
@@ -1731,12 +2033,23 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       }
     });
 
+    // Resolve only when the popup is fully closed so the renderer can give
+    // the user feedback ("Logado com sucesso") at the right moment.
+    const closed = new Promise<void>((resolve) => {
+      win.once('closed', () => resolve());
+    });
+
     try {
       await win.loadURL('https://accounts.google.com/ServiceLogin?service=youtube&continue=https://www.youtube.com/signin?action_handle_signin=true');
     } catch (cause) {
       const code = cause && typeof cause === 'object' && 'code' in cause ? String(cause.code) : '';
-      if (code !== 'ERR_ABORTED' && code !== 'ERR_FAILED') throw cause;
+      if (code !== 'ERR_ABORTED' && code !== 'ERR_FAILED') {
+        if (!win.isDestroyed()) win.close();
+        throw cause;
+      }
     }
+
+    await closed;
   });
   ipcMain.handle(IPC_CHANNELS.youtubeCheckLive, async (_, handle: unknown) => {
     const streams = await checkYouTubeLive(String(handle ?? ''));
@@ -1749,20 +2062,39 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   // TikTok Handlers
   ipcMain.handle(IPC_CHANNELS.tiktokGetSettings, async () => { const s = await getTiktokSettingsStore(); return s ? s.load() : { username: '', autoConnect: false }; });
   ipcMain.handle(IPC_CHANNELS.tiktokSaveSettings, async (_, raw) => { const s = await getTiktokSettingsStore(); if (s) await s.save(tiktokSettingsSchema.parse(raw)); });
-  // TIKTOK_DISABLED
   ipcMain.handle(IPC_CHANNELS.tiktokConnect, async (_, raw) => {
+    // Legacy single-account IPC. Modern callers go through accounts:connect →
+    // tiktokProvider.connect; this path stays for back-compat with profiles
+    // that still hit the legacy settings store. Route through the multi
+    // adapter using a synthetic accountId so it coexists with new accounts.
     const c = tiktokConnectSchema.parse(raw);
-    void c;
-    throw new Error('TikTok temporariamente desativado.');
+    try {
+      await connectTiktokAccount(`legacy:${c.username}`, c.username);
+      const store = await getTiktokSettingsStore();
+      if (store) await store.save({ username: c.username, autoConnect: true });
+    } catch (cause) {
+      setTiktokStatus('error', c.username);
+      throw cause;
+    }
   });
   ipcMain.handle(IPC_CHANNELS.tiktokDisconnect, async () => {
-    chatLogService.closeSession('tiktok');
-    await chatService.removeAdapter('tiktok');
-    options.stateHub.pushTiktokLiveStats(null);
+    // Tear down every TikTok child — legacy callers don't carry an accountId.
+    for (const accountId of Array.from(tiktokAccountStatus.keys())) {
+      await disconnectTiktokAccount(accountId);
+    }
     setTiktokStatus('disconnected', null);
   });
-  ipcMain.handle(IPC_CHANNELS.tiktokGetStatus, async () => tiktokStatus);
-  ipcMain.handle(IPC_CHANNELS.tiktokCheckLive, async () => ({ isLive: false }));
+  ipcMain.handle(IPC_CHANNELS.tiktokGetStatus, async () => aggregateTiktokStatus());
+  ipcMain.handle(IPC_CHANNELS.tiktokCheckLive, async (_, raw: unknown) => {
+    const username = typeof raw === 'string' ? raw.trim() : '';
+    if (!username) return { isLive: false };
+    // Lightweight check — true if any connected child is currently bound to
+    // this username. The wizard's "Add" step doesn't strictly require it.
+    for (const [accountId, name] of tiktokAccountUsername) {
+      if (name === username && tiktokAccountStatus.get(accountId) === 'connected') return { isLive: true };
+    }
+    return { isLive: false };
+  });
 
   // Kick Handlers
   ipcMain.handle(IPC_CHANNELS.kickGetSettings, async () => {
@@ -1775,160 +2107,956 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const settings = kickSettingsSchema.parse(raw);
     await store.save(settings);
   });
-  ipcMain.handle(IPC_CHANNELS.kickStartOAuth, async () => {
+  ipcMain.handle(IPC_CHANNELS.kickStartOAuth, async (_, raw) => {
     const credentials = await resolveKickApiCredentials();
     const store = await getKickSettingsStore();
     const settings = store ? await store.load() : defaultKickSettings();
-    const fallbackChannelSlug = normalizeKickChannelInput(settings.channelInput);
+    // The Kick OAuth response sometimes omits the authorized channel (older
+    // tokens scoped to chat:write only). Accept an explicit slug from the
+    // caller so the wizard / Login flow can pass the slug typed in the form
+    // or the slug stored on the existing account, falling back to the legacy
+    // settings field for backwards compatibility.
+    const explicitSlug = raw && typeof raw === 'object' && 'channelSlug' in raw && typeof (raw as { channelSlug?: unknown }).channelSlug === 'string'
+      ? normalizeKickChannelInput((raw as { channelSlug: string }).channelSlug)
+      : null;
+    const fallbackChannelSlug = explicitSlug || normalizeKickChannelInput(settings.channelInput);
     const session = await startKickOAuth(credentials.clientId, credentials.clientSecret, fallbackChannelSlug);
     const tokenStore = await getKickTokenStore();
     await tokenStore?.save(session);
     return { channelSlug: session.channelSlug };
   });
+  /**
+   * Shared Kick per-account connect flow. Spawns a KickChatAdapter child in
+   * the multi-adapter, wires moderation, and starts the per-channel stats
+   * poll. Re-entrant — calling it again with the same accountId tears the
+   * previous child down first.
+   */
+  async function connectKickAccount(
+    accountId: string,
+    channelSlug: string,
+    credentialsInput: { clientId?: string; clientSecret?: string },
+  ): Promise<void> {
+    await ensureKickMultiRegistered();
+    const credentials = await resolveKickApiCredentials(credentialsInput);
+    const authSession = await ensureKickAuthSession(channelSlug, credentials, false);
+
+    kickAccountStatus.set(accountId, 'connecting');
+    kickAccountSlug.set(accountId, channelSlug);
+    chatLogService.openSession('kick', channelSlug);
+    suggestionService.clearSessionEntries();
+    setKickStatus('connecting', channelSlug);
+
+    try {
+      await kickMultiAdapter.addAccount({
+        accountId,
+        channelSlug,
+        broadcasterUserId: authSession?.broadcasterUserId ?? null,
+        clientId: credentials.clientId,
+        clientSecret: credentials.clientSecret,
+        oauthToken: authSession?.token,
+      });
+      const child = kickMultiAdapter.getAccount(accountId);
+      if (child) wireKickModeration(child, authSession);
+      kickAccountStatus.set(accountId, 'connected');
+      setKickStatus(aggregateKickStatus(), channelSlug);
+      startKickStatsPoll(channelSlug, credentials, authSession);
+    } catch (cause) {
+      stopKickStatsPollFor(channelSlug);
+      kickAccountStatus.set(accountId, 'error');
+      setKickStatus(aggregateKickStatus(), channelSlug);
+      throw cause;
+    }
+  }
+
+  async function disconnectKickAccount(accountId: string): Promise<void> {
+    const slug = kickAccountSlug.get(accountId);
+    if (kickMultiAdapter.hasAccount(accountId)) {
+      await kickMultiAdapter.removeAccount(accountId);
+    }
+    kickAccountStatus.delete(accountId);
+    kickAccountSlug.delete(accountId);
+    if (slug) stopKickStatsPollFor(slug);
+    if (!kickMultiAdapter.hasConnectedChild()) {
+      chatLogService.closeSession('kick');
+      setKickStatus('disconnected', null);
+    } else {
+      setKickStatus(aggregateKickStatus(), null);
+    }
+  }
+
   ipcMain.handle(IPC_CHANNELS.kickConnect, async (_, raw) => {
+    // Legacy single-account IPC. Routes through the multi adapter using a
+    // synthetic accountId so it coexists with new accounts.
     const input = kickConnectSchema.parse(raw);
     const channelSlug = normalizeKickChannelInput(input.channelInput);
     if (!channelSlug) {
       throw new Error('Kick channel is required. Use slug or URL like https://kick.com/channel');
     }
-
-    const credentials = await resolveKickApiCredentials(input);
-    const authSession = await ensureKickAuthSession(channelSlug, credentials, false);
-
-    setKickStatus('connecting', channelSlug);
-    chatLogService.openSession('kick', channelSlug);
-    suggestionService.clearSessionEntries();
-
-    try {
-      await chatService.replaceAdapter(createKickChatAdapter({
-        channelSlug,
-        broadcasterUserId: authSession?.broadcasterUserId,
-        clientId: credentials.clientId,
-        clientSecret: credentials.clientSecret,
-        oauthToken: authSession?.token,
-      }));
-      setKickStatus('connected', channelSlug);
-      startKickStatsPoll(channelSlug, credentials, authSession);
-    } catch (cause) {
-      stopKickStatsPoll();
-      setKickStatus('error', channelSlug);
-      throw cause;
-    }
+    await connectKickAccount(`legacy:${channelSlug}`, channelSlug, input);
   });
   ipcMain.handle(IPC_CHANNELS.kickDisconnect, async () => {
-    chatLogService.closeSession('kick');
-    await chatService.removeAdapter('kick');
-    stopKickStatsPoll();
+    // Tear down every Kick child — legacy callers don't carry an accountId.
+    for (const accountId of Array.from(kickAccountStatus.keys())) {
+      await disconnectKickAccount(accountId);
+    }
     setKickStatus('disconnected', null);
   });
-  ipcMain.handle(IPC_CHANNELS.kickGetStatus, async () => kickStatus);
+  ipcMain.handle(IPC_CHANNELS.kickGetStatus, async () => aggregateKickStatus());
   ipcMain.handle(IPC_CHANNELS.kickGetAuthStatus, async () => getKickAuthStatus());
 
-  // Auto-reconnect Twitch from saved credentials on startup
+  // Auto-reconnect Twitch on startup. The account model is the source of
+  // truth — for each enabled Twitch account, spin up a child in the
+  // multi-adapter. AutoConnect is implicit: every enabled account reconnects
+  // on boot. Only fall back to the legacy single-credentials store when no
+  // Twitch accounts exist (back-compat for installs that haven't migrated).
   void (async () => {
-    const store = await getTwitchCredentialsStore();
-    if (!store) return;
-    const creds = await store.load();
-    if (!creds) return;
+    await activeProfileDirectoryReady;
     try {
+      const accounts = await accountRepository.list();
+      const twitchAccounts = accounts.filter(
+        (a) => a.providerId === 'twitch' && a.enabled,
+      );
+      if (twitchAccounts.length > 0) {
+        for (const account of twitchAccounts) {
+          try {
+            await connectTwitchAccountFromRecord(account);
+            logService.info('twitch', 'Auto-reconnected account', { channel: account.channel, accountId: account.id });
+          } catch (cause) {
+            logService.warn('twitch', 'Auto-reconnect failed', {
+              accountId: account.id,
+              channel: account.channel,
+              error: cause instanceof Error ? cause.message : String(cause),
+            });
+          }
+        }
+        return;
+      }
+
+      // Legacy fallback: pre-account-model installs.
+      const store = await getTwitchCredentialsStore();
+      if (!store) return;
+      const creds = await store.load();
+      if (!creds) return;
       const token = creds.oauthToken.replace(/^oauth:/, '');
       await loadTwitchBadges(creds.channel, token);
       chatLogService.openSession('twitch', creds.channel);
       suggestionService.clearSessionEntries();
       twitchChannel = creds.channel;
       selfSenderName.twitch = creds.username.toLowerCase();
-      await chatService.replaceAdapter(createTwitchChatAdapter({
-        channels: [creds.channel],
+      await connectTwitchAccount({
+        accountId: `legacy:${creds.channel}`,
+        channel: creds.channel,
         username: creds.username,
-        password: creds.oauthToken,
-        onStatusChange: setTwitchStatus,
-        resolveBadgeUrls,
-      }));
-      logService.info('twitch', 'Auto-reconnected from saved credentials', { channel: creds.channel });
+        oauthToken: creds.oauthToken,
+      });
+      logService.info('twitch', 'Auto-reconnected from legacy credentials', { channel: creds.channel });
     } catch (cause) {
-      logService.warn('twitch', 'Auto-reconnect failed', { error: cause instanceof Error ? cause.message : String(cause) });
+      logService.warn('twitch', 'Auto-reconnect orchestration failed', {
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
     }
   })();
 
-  startYoutubeMonitor();
-
-  void loadYoutubeSettings().then((s) => {
-    if (s.chatChannelName) {
-      selfSenderName.youtube = s.chatChannelName.toLowerCase();
-      selfSenderName['youtube-v'] = s.chatChannelName.toLowerCase();
-    }
-  }).catch(() => undefined);
-
-  // TIKTOK_DISABLED: auto-reconnect desativado temporariamente
-  // void (async () => {
-  //   const store = await getTiktokSettingsStore();
-  //   if (!store) return;
-  //   const settings = await store.load();
-  //   if (!settings.autoConnect || !settings.username) return;
-  //   try {
-  //     setTiktokStatus('connecting', settings.username);
-  //     chatLogService.openSession('tiktok', settings.username);
-  //     suggestionService.clearSessionEntries();
-  //     await chatService.replaceAdapter(createTikTokChatAdapter({
-  //       username: settings.username,
-  //       onError: (cause) => logTikTokConnectionError('Auto-reconnect connection error', settings.username, cause),
-  //       onStatusChange: (status) => setTiktokStatus(status),
-  //       onLiveStats: (stats) => options.stateHub.pushTiktokLiveStats(stats),
-  //       onCaptchaDetected: () => logService.warn('tiktok', 'CAPTCHA detected — window shown to user'),
-  //     }));
-  //     logService.info('tiktok', 'Auto-reconnected from saved settings', { username: settings.username });
-  //   } catch (cause) {
-  //     logService.warn('tiktok', 'Auto-reconnect failed', { error: cause instanceof Error ? cause.message : String(cause) });
-  //   }
-  // })();
-
-  // Auto-reconnect Kick from saved settings on startup
   void (async () => {
-    const store = await getKickSettingsStore();
-    if (!store) return;
-    const settings = await store.load();
-    const slug = normalizeKickChannelInput(settings.channelInput);
-    if (!settings.autoConnect || !slug) return;
+    if (!youtubeAdapter) return;
+    const settings = await loadYoutubeSettings().catch(() => null);
+    if (!settings) return;
+    if (settings.chatChannelName) {
+      selfSenderName.youtube = settings.chatChannelName.toLowerCase();
+      selfSenderName['youtube-v'] = settings.chatChannelName.toLowerCase();
+    }
+    youtubeAdapter.setMonitoredChannels(
+      settings.channels.filter((c) => c.enabled).map((c) => c.handle),
+      { autoMonitor: true },
+    );
+    await chatService.replaceAdapter(youtubeAdapter);
+  })();
+
+  // Auto-attach the YouTube API adapter on startup. The adapter idles when
+  // there are no enabled youtube-api accounts.
+  void (async () => {
+    // Wait for the profile directory to resolve — accountRepository.list()
+    // throws otherwise during cold start.
+    await activeProfileDirectoryReady;
     try {
-      const tokenStore = await getKickTokenStore();
-      const authSession = tokenStore ? await tokenStore.load() : null;
-      const credentials = await resolveKickApiCredentials({ clientId: settings.clientId, clientSecret: settings.clientSecret });
-      setKickStatus('connecting', slug);
-      chatLogService.openSession('kick', slug);
-      suggestionService.clearSessionEntries();
-      await chatService.replaceAdapter(createKickChatAdapter({
-        channelSlug: slug,
-        broadcasterUserId: authSession?.channelSlug === slug ? authSession.broadcasterUserId : null,
-        clientId: credentials.clientId,
-        clientSecret: credentials.clientSecret,
-        oauthToken: authSession?.channelSlug === slug ? authSession.token : undefined,
-      }));
-      setKickStatus('connected', slug);
-      startKickStatsPoll(slug, credentials, authSession?.channelSlug === slug ? authSession : null);
-      logService.info('kick', 'Auto-reconnected from saved settings', { channelSlug: slug });
+      await refreshYoutubeApiAccounts();
     } catch (cause) {
-      stopKickStatsPoll();
-      setKickStatus('error', slug);
-      logService.warn('kick', 'Auto-reconnect failed', { channelSlug: slug, error: cause instanceof Error ? cause.message : String(cause) });
+      logService.warn('youtube-api', `Initial account scan failed: ${cause instanceof Error ? cause.message : String(cause)}`);
+    }
+    await chatService.replaceAdapter(youtubeApiAdapter);
+  })();
+
+  // Auto-reconnect TikTok on startup. Account-model takes precedence: spin up
+  // a multi-adapter child per enabled tiktok account. Fall back to the legacy
+  // single-account settings store for installs that haven't migrated.
+  void (async () => {
+    await activeProfileDirectoryReady;
+    try {
+      const accounts = await accountRepository.list();
+      const tiktokAccounts = accounts.filter((a) => a.providerId === 'tiktok' && a.enabled);
+      if (tiktokAccounts.length > 0) {
+        for (const account of tiktokAccounts) {
+          try {
+            await connectTiktokAccount(account.id, account.channel);
+            logService.info('tiktok', 'Auto-reconnected account', { username: account.channel, accountId: account.id });
+          } catch (cause) {
+            logService.warn('tiktok', 'Auto-reconnect failed', {
+              accountId: account.id,
+              username: account.channel,
+              error: cause instanceof Error ? cause.message : String(cause),
+            });
+          }
+        }
+        return;
+      }
+
+      const store = await getTiktokSettingsStore();
+      if (!store) return;
+      const settings = await store.load();
+      if (!settings.username) return;
+      try {
+        await connectTiktokAccount(`legacy:${settings.username}`, settings.username);
+        logService.info('tiktok', 'Auto-reconnected from legacy settings', { username: settings.username });
+      } catch (cause) {
+        logService.warn('tiktok', 'Legacy auto-reconnect failed', { error: cause instanceof Error ? cause.message : String(cause) });
+      }
+    } catch (cause) {
+      logService.warn('tiktok', 'Auto-reconnect orchestration failed', {
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
     }
   })();
 
-  void raffleOverlayServer.start();
+  // Auto-reconnect Kick on startup. Account-model takes precedence: spin up
+  // a multi-adapter child per enabled kick account. Fall back to the legacy
+  // single-account settings store for installs that haven't migrated.
+  void (async () => {
+    await activeProfileDirectoryReady;
+    try {
+      const accounts = await accountRepository.list();
+      const kickAccounts = accounts.filter((a) => a.providerId === 'kick' && a.enabled);
+      if (kickAccounts.length > 0) {
+        for (const account of kickAccounts) {
+          const slug = normalizeKickChannelInput(account.channel) ?? account.channel;
+          if (!slug) continue;
+          const clientId = typeof account.providerData?.clientId === 'string' ? account.providerData.clientId : undefined;
+          const clientSecret = typeof account.providerData?.clientSecret === 'string' ? account.providerData.clientSecret : undefined;
+          try {
+            await connectKickAccount(account.id, slug, { clientId, clientSecret });
+            logService.info('kick', 'Auto-reconnected account', { channelSlug: slug, accountId: account.id });
+          } catch (cause) {
+            logService.warn('kick', 'Auto-reconnect failed', {
+              accountId: account.id,
+              channelSlug: slug,
+              error: cause instanceof Error ? cause.message : String(cause),
+            });
+          }
+        }
+        return;
+      }
+
+      const store = await getKickSettingsStore();
+      if (!store) return;
+      const settings = await store.load();
+      const slug = normalizeKickChannelInput(settings.channelInput);
+      if (!slug) return;
+      try {
+        await connectKickAccount(`legacy:${slug}`, slug, { clientId: settings.clientId, clientSecret: settings.clientSecret });
+        logService.info('kick', 'Auto-reconnected from legacy settings', { channelSlug: slug });
+      } catch (cause) {
+        logService.warn('kick', 'Legacy auto-reconnect failed', { channelSlug: slug, error: cause instanceof Error ? cause.message : String(cause) });
+      }
+    } catch (cause) {
+      logService.warn('kick', 'Auto-reconnect orchestration failed', {
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
+    }
+  })();
+
+  // ── R2: Moderation IPC + setModeration wiring ────────────────────────────
+
+  async function wireTwitchModeration(adapter: TwitchChatAdapter, channel: string, oauthToken: string): Promise<void> {
+    try {
+      const accessToken = oauthToken.replace(/^oauth:/, '');
+      const headers = { Authorization: `Bearer ${accessToken}`, 'Client-Id': TWITCH_CLIENT_ID };
+      // Resolve broadcaster (channel) and moderator (the authed user) ids in one pair of calls.
+      const [broadcasterRes, modRes] = await Promise.all([
+        net.fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(channel)}`, { headers }),
+        net.fetch('https://api.twitch.tv/helix/users', { headers }),
+      ]);
+      const broadcasterData = await broadcasterRes.json() as { data?: Array<{ id: string }> };
+      const modData = await modRes.json() as { data?: Array<{ id: string }> };
+      const broadcasterUserId = broadcasterData.data?.[0]?.id;
+      const moderatorUserId = modData.data?.[0]?.id;
+      if (!broadcasterUserId || !moderatorUserId) {
+        logService.warn('twitch', 'Could not resolve user ids for moderation', { hasBroadcaster: !!broadcasterUserId, hasModerator: !!moderatorUserId });
+        return;
+      }
+      const api = new TwitchModerationApi({
+        accessToken,
+        clientId: TWITCH_CLIENT_ID,
+        broadcasterUserId,
+        moderatorUserId,
+      });
+      adapter.setModeration(api, TWITCH_MODERATION_CAPABILITIES);
+    } catch (cause) {
+      logService.warn('twitch', 'Failed to wire moderation API', { error: cause instanceof Error ? cause.message : String(cause) });
+    }
+  }
+
+  function wireKickModeration(adapter: KickChatAdapter, authSession: KickAuthSession | null): void {
+    if (!authSession?.token?.accessToken || typeof authSession.broadcasterUserId !== 'number') return;
+    const api = new KickModerationApi({
+      accessToken: authSession.token.accessToken,
+      broadcasterUserId: authSession.broadcasterUserId,
+    });
+    adapter.setModeration(api, KICK_MODERATION_CAPABILITIES);
+  }
+
+  ipcMain.handle(IPC_CHANNELS.moderationGetCapabilities, async (_, raw) => {
+    const platform = moderationGetCapabilitiesSchema.parse(raw);
+    const adapter = chatService.getAdapter(platform);
+    return adapter ? adapter.capabilities : null;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.moderationDeleteMessage, async (_, raw) => {
+    const input = moderationDeleteMessageSchema.parse(raw);
+    const api = chatService.getAdapter(input.platform)?.moderation;
+    if (!api) throw new Error(`Moderation not available for platform "${input.platform}"`);
+    await api.deleteMessage(input.messageId);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.moderationBanUser, async (_, raw) => {
+    const input = moderationBanUserSchema.parse(raw);
+    const api = chatService.getAdapter(input.platform)?.moderation;
+    if (!api) throw new Error(`Moderation not available for platform "${input.platform}"`);
+    await api.banUser(input.userId, input.reason);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.moderationUnbanUser, async (_, raw) => {
+    const input = moderationUnbanUserSchema.parse(raw);
+    const api = chatService.getAdapter(input.platform)?.moderation;
+    if (!api) throw new Error(`Moderation not available for platform "${input.platform}"`);
+    await api.unbanUser(input.userId);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.moderationTimeoutUser, async (_, raw) => {
+    const input = moderationTimeoutUserSchema.parse(raw);
+    const api = chatService.getAdapter(input.platform)?.moderation;
+    if (!api) throw new Error(`Moderation not available for platform "${input.platform}"`);
+    await api.timeoutUser(input.userId, input.durationSeconds, input.reason);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.moderationSetMode, async (_, raw) => {
+    const input = moderationSetModeSchema.parse(raw);
+    const api = chatService.getAdapter(input.platform)?.moderation;
+    if (!api) throw new Error(`Moderation not available for platform "${input.platform}"`);
+    switch (input.mode) {
+      case 'slow':
+        if (!api.setSlowMode) throw new Error(`Slow mode not supported on "${input.platform}"`);
+        await api.setSlowMode(input.enabled, input.value);
+        break;
+      case 'subscribers':
+        if (!api.setSubscribersOnly) throw new Error(`Subscriber-only not supported on "${input.platform}"`);
+        await api.setSubscribersOnly(input.enabled);
+        break;
+      case 'members':
+        if (!api.setMembersOnly) throw new Error(`Members-only not supported on "${input.platform}"`);
+        await api.setMembersOnly(input.enabled, input.value);
+        break;
+      case 'followers':
+        if (!api.setFollowersOnly) throw new Error(`Follower-only not supported on "${input.platform}"`);
+        await api.setFollowersOnly(input.enabled, input.value);
+        break;
+      case 'emote':
+        if (!api.setEmoteOnly) throw new Error(`Emote-only not supported on "${input.platform}"`);
+        await api.setEmoteOnly(input.enabled);
+        break;
+      case 'unique':
+        throw new Error('Unique chat mode not yet wired');
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.moderationManageRole, async (_, raw) => {
+    const input = moderationManageRoleSchema.parse(raw);
+    const api = chatService.getAdapter(input.platform)?.moderation;
+    if (!api) throw new Error(`Moderation not available for platform "${input.platform}"`);
+    if (input.role === 'mod') {
+      const fn = input.action === 'add' ? api.addMod : api.removeMod;
+      if (!fn) throw new Error(`Mod ${input.action} not supported on "${input.platform}"`);
+      await fn.call(api, input.userId);
+    } else {
+      const fn = input.action === 'add' ? api.addVip : api.removeVip;
+      if (!fn) throw new Error(`VIP ${input.action} not supported on "${input.platform}"`);
+      await fn.call(api, input.userId);
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.moderationRaid, async (_, raw) => {
+    const input = moderationRaidSchema.parse(raw);
+    const api = chatService.getAdapter(input.platform)?.moderation;
+    if (!api?.raid) throw new Error(`Raid not supported on "${input.platform}"`);
+    await api.raid(input.targetChannel);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.moderationShoutout, async (_, raw) => {
+    const input = moderationShoutoutSchema.parse(raw);
+    const api = chatService.getAdapter(input.platform)?.moderation;
+    if (!api?.shoutout) throw new Error(`Shoutout not supported on "${input.platform}"`);
+    await api.shoutout(input.userId);
+  });
+
+  // ── R6: Accounts (multi-account) ─────────────────────────────────────────
+
+  function pushAccountStatus(status: import('../shared/types.js').PlatformAccountStatus): void {
+    const win = options.getWindow();
+    if (!win || win.isDestroyed()) return;
+    win.webContents.send(IPC_CHANNELS.accountsStatus, status);
+  }
+
+  /** Re-broadcast every account of `providerId` after an internal status change. */
+  function broadcastAccountsForProvider(providerId: string): void {
+    void (async () => {
+      const provider = mainPlatforms.get(providerId);
+      if (!provider) return;
+      const accounts = await accountRepository.list();
+      for (const account of accounts) {
+        if (account.providerId !== providerId) continue;
+        const status = await provider.getStatus(account);
+        pushAccountStatus({ accountId: account.id, status });
+      }
+    })().catch(() => undefined);
+  }
+
+  // ── Provider registry: each entry below knows how to bring its own
+  //    accounts up/down and report status. The accounts:* IPC handlers and
+  //    the on-status-change subscription below are platform-agnostic and
+  //    dispatch through this registry; adding a new provider means adding
+  //    one entry here and a corresponding renderer-side AuthStep.
+
+  const twitchProvider: MainPlatformProvider = {
+    providerId: 'twitch',
+    getStatus: (account) => {
+      const status = twitchAccountStatus.get(account.id);
+      if (status === 'connected') return 'connected';
+      if (status === 'connecting') return 'connecting';
+      if (status === 'error') return 'error';
+      return 'disconnected';
+    },
+    async connect(account) {
+      // Intentionally NOT writing to the legacy TwitchCredentialsStore here.
+      // With multi-account, that file would just track whichever account
+      // connected last, and the boot path would auto-reconnect a duplicate
+      // child — the very bug this provider is meant to avoid. Account
+      // providerData is the source of truth.
+      await connectTwitchAccountFromRecord(account);
+    },
+    async disconnect(account) {
+      await disconnectTwitchAccount(account.id);
+      if (!twitchMultiAdapter.hasConnectedChild()) {
+        delete selfSenderName.twitch;
+        chatLogService.closeSession('twitch');
+      }
+    },
+    async purgeStores() {
+      const store = await getTwitchCredentialsStore();
+      if (store) await store.clear();
+    },
+    onStatusChange(listener) {
+      twitchStatusListeners.add(listener);
+      return () => twitchStatusListeners.delete(listener);
+    },
+  };
+
+  const kickProvider: MainPlatformProvider = {
+    providerId: 'kick',
+    getStatus: (account) => {
+      if (account) {
+        const status = kickAccountStatus.get(account.id);
+        return status ?? 'disconnected';
+      }
+      return aggregateKickStatus();
+    },
+    async connect(account) {
+      const channelSlug = normalizeKickChannelInput(account.channel) ?? account.channel;
+      if (!channelSlug) throw new Error('Kick account is missing a channel slug');
+      const clientId = typeof account.providerData.clientId === 'string' ? account.providerData.clientId : undefined;
+      const clientSecret = typeof account.providerData.clientSecret === 'string' ? account.providerData.clientSecret : undefined;
+      await connectKickAccount(account.id, channelSlug, { clientId, clientSecret });
+    },
+    async disconnect(account) {
+      await disconnectKickAccount(account.id);
+    },
+    async purgeStores(account) {
+      if (account) await disconnectKickAccount(account.id);
+      const settingsStore = await getKickSettingsStore();
+      if (settingsStore) await settingsStore.clear();
+      const tokenStore = await getKickTokenStore();
+      if (tokenStore) await tokenStore.clear();
+    },
+    onStatusChange(listener) {
+      kickStatusListeners.add(listener);
+      return () => kickStatusListeners.delete(listener);
+    },
+  };
+
+  // TikTok's lib needs an active live to find the room id, so unlike Twitch/Kick
+  // we can't keep a long-lived socket idle until chat starts. Instead, when the
+  // user is offline we keep retrying in the background every TIKTOK_RETRY_MS so
+  // the connection resumes automatically as soon as they go live. The provider
+  // resolves successfully on the first attempt regardless — the system is
+  // "watching", which is the closest analog to the other adapters' auto-connect
+  // semantics. Each account has its own retry timer / watching flag so multiple
+  // TikTok hosts can be tracked in parallel.
+  const TIKTOK_RETRY_MS = 60_000;
+
+  function clearTiktokRetryFor(accountId: string): void {
+    const timer = tiktokRetryTimers.get(accountId);
+    if (timer) {
+      clearTimeout(timer);
+      tiktokRetryTimers.delete(accountId);
+    }
+  }
+
+  async function tryConnectTiktokAccount(accountId: string, username: string): Promise<{ ok: boolean; error?: unknown }> {
+    try {
+      await ensureTiktokMultiRegistered();
+      await tiktokMultiAdapter.addAccount({
+        accountId,
+        username,
+        onError: (cause) => logTikTokConnectionError('Connection error', username, cause),
+        onStatusChange: (status) => {
+          if (status === 'connected') tiktokWatchingAccounts.delete(accountId);
+          tiktokAccountStatus.set(accountId, status);
+          setTiktokStatus(aggregateTiktokStatus(), username);
+          broadcastAccountsForProvider('tiktok');
+        },
+        onLiveStats: (stats) => options.stateHub.pushTiktokLiveStats(username, stats),
+        onCaptchaDetected: () => logService.warn('tiktok', 'CAPTCHA detected', { username }),
+      });
+      return { ok: true };
+    } catch (cause) {
+      // Make sure the half-attached child is gone so the next retry starts clean.
+      try { await tiktokMultiAdapter.removeAccount(accountId); } catch { /* ignore */ }
+      return { ok: false, error: cause };
+    }
+  }
+
+  function scheduleTiktokRetry(accountId: string, username: string): void {
+    clearTiktokRetryFor(accountId);
+    if (!tiktokWatchingAccounts.has(accountId)) return;
+    const timer = setTimeout(() => {
+      tiktokRetryTimers.delete(accountId);
+      if (!tiktokWatchingAccounts.has(accountId)) return;
+      void tryConnectTiktokAccount(accountId, username).then((result) => {
+        if (!tiktokWatchingAccounts.has(accountId)) return;
+        if (result.ok) return;
+        scheduleTiktokRetry(accountId, username);
+      });
+    }, TIKTOK_RETRY_MS);
+    tiktokRetryTimers.set(accountId, timer);
+  }
+
+  const connectTiktokAccount = async (accountId: string, username: string): Promise<void> => {
+    tiktokWatchingAccounts.delete(accountId);
+    clearTiktokRetryFor(accountId);
+    tiktokAccountStatus.set(accountId, 'connecting');
+    tiktokAccountUsername.set(accountId, username);
+    chatLogService.openSession('tiktok', username);
+    suggestionService.clearSessionEntries();
+    selfSenderName.tiktok = username.toLowerCase();
+    setTiktokStatus('connecting', username);
+
+    const result = await tryConnectTiktokAccount(accountId, username);
+    if (result.ok) return;
+
+    // First attempt failed — most commonly because the user isn't currently
+    // live. Switch to "watching" so the UI can distinguish it from an
+    // active in-progress connect, log the reason, and retry in background.
+    tiktokWatchingAccounts.add(accountId);
+    broadcastAccountsForProvider('tiktok');
+    logService.info('tiktok', 'User appears offline — will retry until they go live', {
+      accountId,
+      username,
+      retryMs: TIKTOK_RETRY_MS,
+      reason: result.error instanceof Error ? result.error.message || result.error.name : String(result.error),
+    });
+    scheduleTiktokRetry(accountId, username);
+  };
+
+  const disconnectTiktokAccount = async (accountId: string): Promise<void> => {
+    tiktokWatchingAccounts.delete(accountId);
+    clearTiktokRetryFor(accountId);
+    const username = tiktokAccountUsername.get(accountId);
+    tiktokAccountStatus.delete(accountId);
+    tiktokAccountUsername.delete(accountId);
+    if (tiktokMultiAdapter.hasAccount(accountId)) {
+      await tiktokMultiAdapter.removeAccount(accountId);
+    }
+    if (username) options.stateHub.pushTiktokLiveStats(username, null);
+    setTiktokStatus(aggregateTiktokStatus(), tiktokMultiAdapter.hasConnectedChild() ? null : null);
+    if (!tiktokMultiAdapter.hasConnectedChild()) {
+      chatLogService.closeSession('tiktok');
+    }
+    broadcastAccountsForProvider('tiktok');
+  };
+
+  const tiktokProvider: MainPlatformProvider = {
+    providerId: 'tiktok',
+    getStatus: (account) => {
+      if (account) {
+        const accountId = account.id;
+        const status = tiktokAccountStatus.get(accountId);
+        if (status === 'connected') return 'connected';
+        if (tiktokWatchingAccounts.has(accountId)) return 'watching';
+        if (status === 'connecting') return 'connecting';
+        if (status === 'captcha') return 'captcha';
+        if (status === 'error') return 'error';
+        return 'disconnected';
+      }
+      // Aggregate (legacy callers without an account hint).
+      const agg = aggregateTiktokStatus();
+      if (agg === 'disconnected' && tiktokWatchingAccounts.size > 0) return 'watching';
+      return agg;
+    },
+    async connect(account) {
+      await connectTiktokAccount(account.id, account.channel);
+    },
+    async disconnect(account) {
+      await disconnectTiktokAccount(account.id);
+    },
+    async purgeStores(account) {
+      if (account) await disconnectTiktokAccount(account.id);
+      const store = await getTiktokSettingsStore();
+      if (store) await store.clear();
+    },
+    onStatusChange(listener) {
+      tiktokStatusListeners.add(listener);
+      return () => tiktokStatusListeners.delete(listener);
+    },
+  };
+
+  const youtubeStatusListeners = new Set<() => void>();
+  const youtubeProvider: MainPlatformProvider = {
+    providerId: 'youtube',
+    async getStatus(account) {
+      // A YouTube account is "connected" while its handle is enabled in the
+      // shared YouTubeSettings.channels list — the adapter will pick it up
+      // and spawn scrapers when the channel goes live. Per-video scraper
+      // presence would be too noisy (offline streamers would flicker).
+      const settings = await loadYoutubeSettings();
+      const entry = settings.channels.find((c) => c.handle === account.channel);
+      return entry?.enabled ? 'connected' : 'disconnected';
+    },
+    async connect(account) {
+      const handle = account.channel;
+      if (!handle) throw new Error('YouTube account is missing a channel handle');
+      const settings = await loadYoutubeSettings();
+      const channels = [...settings.channels];
+      const idx = channels.findIndex((c) => c.handle === handle);
+      if (idx >= 0) channels[idx] = { ...channels[idx], enabled: true };
+      else channels.push({ id: randomUUID(), handle, name: account.label || handle, enabled: true });
+      await saveYoutubeSettings({ ...settings, channels });
+      youtubeStatusListeners.forEach((l) => l());
+    },
+    async disconnect(account) {
+      const handle = account.channel;
+      const settings = await loadYoutubeSettings();
+      const channels = settings.channels.map((c) => c.handle === handle ? { ...c, enabled: false } : c);
+      await saveYoutubeSettings({ ...settings, channels });
+      youtubeStatusListeners.forEach((l) => l());
+    },
+    async purgeStores(account) {
+      const settings = await loadYoutubeSettings();
+      const channels = settings.channels.filter((c) => c.handle !== account.channel);
+      await saveYoutubeSettings({ ...settings, channels });
+      youtubeStatusListeners.forEach((l) => l());
+    },
+    onStatusChange(listener) {
+      youtubeStatusListeners.add(listener);
+      return () => youtubeStatusListeners.delete(listener);
+    },
+  };
+
+  const youtubeApiStatusListeners = new Set<() => void>();
+  const youtubeApiProvider: MainPlatformProvider = {
+    providerId: 'youtube-api',
+    async getStatus(account) {
+      // Mirrors the YouTube scraper provider: the account is "connected" while
+      // it's enabled in the AccountRepository. Live monitoring takes over from
+      // there — going live spawns a YTApiClient automatically.
+      const stored = await accountRepository.get(account.id);
+      return stored?.enabled ? 'connected' : 'disconnected';
+    },
+    async connect(account) {
+      const stored = await accountRepository.get(account.id);
+      if (!stored) throw new Error(`Account ${account.id} not found`);
+      if (!stored.enabled) {
+        await accountRepository.upsert({ ...stored, enabled: true });
+      }
+      await refreshYoutubeApiAccounts();
+      youtubeApiStatusListeners.forEach((l) => l());
+    },
+    async disconnect(account) {
+      const stored = await accountRepository.get(account.id);
+      if (stored?.enabled) {
+        await accountRepository.upsert({ ...stored, enabled: false });
+      }
+      await refreshYoutubeApiAccounts();
+      youtubeApiStatusListeners.forEach((l) => l());
+    },
+    async purgeStores() {
+      // Account JSON is removed by the host before this runs — just refresh.
+      await refreshYoutubeApiAccounts();
+      youtubeApiStatusListeners.forEach((l) => l());
+    },
+    onStatusChange(listener) {
+      youtubeApiStatusListeners.add(listener);
+      return () => youtubeApiStatusListeners.delete(listener);
+    },
+  };
+
+  for (const provider of [twitchProvider, kickProvider, tiktokProvider, youtubeProvider, youtubeApiProvider]) {
+    mainPlatforms.register(provider);
+    provider.onStatusChange(() => broadcastAccountsForProvider(provider.providerId));
+  }
+
+  ipcMain.handle(IPC_CHANNELS.accountsList, async () => {
+    return accountRepository.list();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.accountsCreate, async (_, raw) => {
+    const input = accountCreateInputSchema.parse(raw);
+    const created = await accountRepository.upsert(input);
+    if (created.providerId === 'youtube-api') await refreshYoutubeApiAccounts();
+    // Auto-connect right after creation when the account opted in. The wizard
+    // saves with autoConnect+enabled by default, so the user expects the new
+    // network to come up without an extra "Connect" click. Fire-and-forget —
+    // failures surface through the normal account status push.
+    if (created.enabled && created.autoConnect) {
+      const provider = mainPlatforms.get(created.providerId);
+      if (provider) {
+        pushAccountStatus({ accountId: created.id, status: 'connecting' });
+        void (async () => {
+          try {
+            await provider.connect(created);
+            pushAccountStatus({ accountId: created.id, status: 'connected' });
+          } catch (cause) {
+            const message = describeConnectFailure(cause, created.providerId, created.channel);
+            logService.warn('accounts', 'Post-create auto-connect failed', {
+              providerId: created.providerId,
+              accountId: created.id,
+              channel: created.channel,
+              error: cause instanceof Error ? cause.message : String(cause),
+            });
+            pushAccountStatus({ accountId: created.id, status: 'error', detail: message });
+          }
+        })();
+      }
+    }
+    return created;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.accountsUpdate, async (_, raw) => {
+    const input = accountUpdateInputSchema.parse(raw);
+    const updated = await accountRepository.upsert(input);
+    if (updated.providerId === 'youtube-api') await refreshYoutubeApiAccounts();
+    return updated;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.accountsDelete, async (_, raw) => {
+    const input = accountIdInputSchema.parse(raw);
+    const account = await accountRepository.get(input.id);
+    if (account) {
+      const provider = mainPlatforms.get(account.providerId);
+      if (provider) {
+        try { await provider.disconnect(account); }
+        catch (cause) {
+          logService.warn('accounts', 'Disconnect during delete failed; proceeding with delete', {
+            accountId: account.id, providerId: account.providerId,
+            error: cause instanceof Error ? cause.message : String(cause),
+          });
+        }
+        try { await provider.purgeStores(account); }
+        catch (cause) {
+          logService.warn('accounts', 'Purging legacy stores failed during delete', {
+            accountId: account.id, providerId: account.providerId,
+            error: cause instanceof Error ? cause.message : String(cause),
+          });
+        }
+      }
+    }
+    await accountRepository.delete(input.id);
+    if (account?.providerId === 'youtube-api') await refreshYoutubeApiAccounts();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.accountsConnect, async (_, raw) => {
+    const input = accountIdInputSchema.parse(raw);
+    const account = await accountRepository.get(input.id);
+    if (!account) throw new Error(`Account "${input.id}" not found`);
+    const provider = mainPlatforms.get(account.providerId);
+    if (!provider) throw new Error(`Unknown providerId: ${account.providerId}`);
+    pushAccountStatus({ accountId: account.id, status: 'connecting' });
+    try {
+      await provider.connect(account);
+      pushAccountStatus({ accountId: account.id, status: 'connected' });
+    } catch (cause) {
+      // Some platform libraries throw Errors with empty/undefined messages,
+      // which surface in the renderer as a useless "Error" string. Build a
+      // descriptive fallback that includes the provider, account, and the
+      // most informative field we can find on the cause.
+      const message = describeConnectFailure(cause, account.providerId, account.channel);
+      logService.error('accounts', 'connect failed', {
+        providerId: account.providerId,
+        accountId: account.id,
+        channel: account.channel,
+        errorName: cause instanceof Error ? cause.name : null,
+        errorMessage: cause instanceof Error ? cause.message : String(cause),
+        errorStack: cause instanceof Error ? cause.stack : null,
+        cause: cause && typeof cause === 'object' ? JSON.stringify(cause, Object.getOwnPropertyNames(cause as object)) : null,
+      });
+      pushAccountStatus({
+        accountId: account.id,
+        status: 'error',
+        detail: message,
+      });
+      throw new Error(message);
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.accountsDisconnect, async (_, raw) => {
+    const input = accountIdInputSchema.parse(raw);
+    const account = await accountRepository.get(input.id);
+    if (!account) throw new Error(`Account "${input.id}" not found`);
+    const provider = mainPlatforms.get(account.providerId);
+    if (provider) await provider.disconnect(account);
+    pushAccountStatus({ accountId: account.id, status: 'disconnected' });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.accountsGetStatus, async (_, raw) => {
+    const input = accountIdInputSchema.parse(raw);
+    const account = await accountRepository.get(input.id);
+    if (!account) return null;
+    const provider = mainPlatforms.get(account.providerId);
+    const status = provider ? await provider.getStatus(account) : 'disconnected';
+    return { accountId: account.id, status };
+  });
+
+  // Backfill: on first boot post-R6 read legacy stores and create equivalent
+  // PlatformAccount records so the new wizard UI shows existing connections.
+  void backfillAccountsFromLegacyStores().catch((cause) => {
+    logService.warn('accounts', 'Account backfill failed', { error: cause instanceof Error ? cause.message : String(cause) });
+  });
+
+  async function backfillAccountsFromLegacyStores(): Promise<void> {
+    await activeProfileDirectoryReady;
+    const existing = await accountRepository.list();
+    const seenProviders = new Set(existing.map((a) => a.providerId));
+
+    if (!seenProviders.has('twitch')) {
+      const store = await getTwitchCredentialsStore();
+      const creds = store ? await store.load() : null;
+      if (creds) {
+        await accountRepository.upsert({
+          providerId: 'twitch',
+          label: creds.channel,
+          channel: creds.channel,
+          enabled: true,
+          autoConnect: true,
+          providerData: { username: creds.username, oauthToken: creds.oauthToken },
+        });
+        logService.info('accounts', 'Backfilled Twitch account from legacy store', { channel: creds.channel });
+      }
+    }
+
+    if (!seenProviders.has('kick')) {
+      const store = await getKickSettingsStore();
+      const settings = store ? await store.load() : null;
+      if (settings && settings.channelInput) {
+        await accountRepository.upsert({
+          providerId: 'kick',
+          label: settings.channelInput,
+          channel: settings.channelInput,
+          enabled: true,
+          autoConnect: settings.autoConnect,
+          providerData: { clientId: settings.clientId, clientSecret: settings.clientSecret },
+        });
+        logService.info('accounts', 'Backfilled Kick account from legacy store', { channel: settings.channelInput });
+      }
+    }
+
+    if (!seenProviders.has('tiktok')) {
+      const store = await getTiktokSettingsStore();
+      const settings = store ? await store.load() : null;
+      if (settings && settings.username) {
+        await accountRepository.upsert({
+          providerId: 'tiktok',
+          label: settings.username,
+          channel: settings.username,
+          enabled: true,
+          autoConnect: settings.autoConnect,
+          providerData: {},
+        });
+        logService.info('accounts', 'Backfilled TikTok account from legacy store', { username: settings.username });
+      }
+    }
+
+    if (!seenProviders.has('youtube')) {
+      const store = await getYoutubeSettingsStore();
+      const settings = store ? await store.load() : null;
+      if (settings?.channels?.length) {
+        for (const channel of settings.channels) {
+          await accountRepository.upsert({
+            providerId: 'youtube',
+            label: channel.name ?? channel.handle,
+            channel: channel.handle,
+            enabled: channel.enabled,
+            autoConnect: settings.autoConnect,
+            providerData: {},
+          });
+        }
+        logService.info('accounts', 'Backfilled YouTube accounts from legacy store', { count: settings.channels.length });
+      }
+    }
+  }
+
+  ipcMain.handle(IPC_CHANNELS.overlayServerInfo, async () => {
+    const status = overlayServer.getStatus();
+    let chat: string | null = null;
+    let raffles: string | null = null;
+    let polls: string | null = null;
+    let nowPlaying: string | null = null;
+    if (status.status === 'running') {
+      try { chat = overlayServer.getChatOverlayInfo().overlayUrl; } catch { chat = null; }
+      try { raffles = overlayServer.getOverlayInfo().overlayUrl; } catch { raffles = null; }
+      try { polls = overlayServer.getPollsOverlayInfo().overlayUrl; } catch { polls = null; }
+      try { nowPlaying = overlayServer.getNowPlayingInfo()?.overlayUrl ?? null; } catch { nowPlaying = null; }
+    }
+    return { ...status, urls: { chat, raffles, polls, nowPlaying } };
+  });
+
+  void overlayServer.start().catch((cause) => {
+    logService.error('overlay-server', 'Failed to start (port in use?)', {
+      port: generalSettingsStore.load().overlayServerPort,
+      error: cause instanceof Error ? cause.message : String(cause),
+    });
+  });
   raffleDeadlineRunner.start();
+  pollDeadlineRunner.start();
   schedulerService.start();
   void activeProfileDirectoryReady.then(() => obsService.start());
 
   return async () => {
     isShuttingDown = true;
     raffleDeadlineRunner.stop();
+    pollDeadlineRunner.stop();
     raffleService.dispose();
     schedulerService.stop();
     stopTwitchStatsPoll();
     stopKickStatsPoll();
-    if (youtubeMonitorTimer) clearInterval(youtubeMonitorTimer);
     musicService.reset();
     musicPlayerRef?.stop();
-    await Promise.allSettled([chatService.disconnectAll(), obsService.stop(), raffleOverlayServer.stop()]);
+    await Promise.allSettled([chatService.disconnectAll(), obsService.stop(), overlayServer.stop()]);
     Object.values(IPC_CHANNELS).forEach(c => ipcMain.removeHandler(c));
   };
 
@@ -1976,7 +3104,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   }
 
   async function sendPlatformMessage(platform: PlatformId, content: string): Promise<void> {
-    if (platform === 'youtube' || platform === 'youtube-v') {
+    if (isYoutubePlatform(platform)) {
       if (!getYoutubeScraperByPlatform(platform)) {
         throw new Error('Log in to YouTube in Platforms before sending messages.');
       }
@@ -2013,17 +3141,16 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }
   }
 
-  // TIKTOK_DISABLED
-  // function logTikTokConnectionError(message: string, username: string, cause: unknown): void {
-  //   const metadata = {
-  //     username,
-  //     errorName: cause instanceof Error ? cause.name : undefined,
-  //     error: cause instanceof Error ? cause.message : String(cause),
-  //     stack: cause instanceof Error ? cause.stack : undefined,
-  //   };
-  //   logService.error('tiktok', message, metadata);
-  //   console.error(`[tiktok] ${message}`, metadata);
-  // }
+  function logTikTokConnectionError(message: string, username: string, cause: unknown): void {
+    const metadata = {
+      username,
+      errorName: cause instanceof Error ? cause.name : undefined,
+      error: cause instanceof Error ? cause.message : String(cause),
+      stack: cause instanceof Error ? cause.stack : undefined,
+    };
+    logService.error('tiktok', message, metadata);
+    console.error(`[tiktok] ${message}`, metadata);
+  }
 
   function formatWinnerAnnouncement(raffle: Raffle, winnerName: string): string {
     return raffle.winnerAnnouncementTemplate
@@ -2033,8 +3160,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   function getConnectedYoutubePlatforms(): Array<'youtube' | 'youtube-v'> {
     const connected = new Set<'youtube' | 'youtube-v'>();
-    for (const data of youtubeStreamData.values()) {
-      connected.add(data.platform);
+    for (const stream of youtubeAdapter?.getCurrentStreams() ?? []) {
+      if (stream.platform === 'youtube' || stream.platform === 'youtube-v') {
+        connected.add(stream.platform);
+      }
     }
     return YT_PLATFORMS.filter((platform) => connected.has(platform));
   }
@@ -2043,13 +3172,33 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const connected: PlatformId[] = [];
     if (twitchStatus === 'connected') connected.push('twitch');
     if (getConnectedYoutubePlatforms().length > 0) connected.push('youtube');
+    if (youtubeApiAdapter.hasActiveStreams()) connected.push('youtube-api');
     return connected;
   }
 
-  function resolveRaffleAnnouncementTargets(requestedTargets: PlatformId[]): PlatformId[] {
+  function describeConnectFailure(cause: unknown, providerId: string, channel: string): string {
+    const fallback = `${providerId}: connect failed for "${channel}"`;
+    if (!cause) return fallback;
+    if (cause instanceof Error) {
+      const msg = cause.message?.trim();
+      if (msg) return `${providerId}: ${msg}`;
+      return `${providerId}: ${cause.name || 'Error'} (no message; check Event Log for details)`;
+    }
+    if (typeof cause === 'string' && cause.trim()) return `${providerId}: ${cause}`;
+    if (typeof cause === 'object') {
+      const obj = cause as Record<string, unknown>;
+      const candidate = (typeof obj.message === 'string' && obj.message)
+        || (typeof obj.error === 'string' && obj.error)
+        || (typeof obj.reason === 'string' && obj.reason);
+      if (candidate) return `${providerId}: ${candidate}`;
+    }
+    return fallback;
+  }
+
+  function resolveAnnouncementTargets(requestedTargets: PlatformId[]): PlatformId[] {
     const resolved = new Set<PlatformId>();
     for (const target of requestedTargets) {
-      if (target === 'youtube' || target === 'youtube-v') {
+      if (isYoutubePlatform(target)) {
         for (const ytTarget of getConnectedYoutubePlatforms()) resolved.add(ytTarget);
         continue;
       }
@@ -2074,17 +3223,18 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         for (const ytTarget of getConnectedYoutubePlatforms()) {
           resolved.add(ytTarget);
         }
+        continue;
+      }
+      if (target === 'youtube-api') {
+        if (youtubeApiAdapter.hasActiveStreams()) resolved.add('youtube-api');
+        continue;
       }
     }
     return Array.from(resolved);
   }
 
   function getYoutubeScraperByPlatform(platform: 'youtube' | 'youtube-v'): YTLiveClient | null {
-    for (const [videoId, scraper] of youtubeScrapers.entries()) {
-      const data = youtubeStreamData.get(videoId);
-      if (data?.platform === platform) return scraper;
-    }
-    return null;
+    return youtubeAdapter?.getScraperByPlatform(platform) ?? null;
   }
 
   async function sendYoutubeMessage(platform: 'youtube' | 'youtube-v', content: string): Promise<void> {
@@ -2180,7 +3330,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
           continue;
         }
 
-        if (target === 'youtube' || target === 'youtube-v') {
+        if (isYoutubePlatform(target)) {
           if (!getYoutubeScraperByPlatform(target)) {
             const reason = `${target}: disconnected`;
             skipped.push(reason);

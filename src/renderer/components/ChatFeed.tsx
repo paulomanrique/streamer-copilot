@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { LegendList, type LegendListRef } from '@legendapp/list/react';
 
 import type { ChatMessage, PlatformId, StreamEvent, SuggestionEntry, SuggestionList } from '../../shared/types.js';
+import type { PlatformCapabilities } from '../../shared/moderation.js';
 import { useI18n } from '../i18n/I18nProvider.js';
 import { EventBanner } from './EventBanner.js';
 import {
@@ -20,6 +21,8 @@ interface ContextMenuState {
   y: number;
   platform: string;
   author: string;
+  userId?: string;
+  messageId?: string;
 }
 
 interface ChatFeedProps {
@@ -48,6 +51,12 @@ const PLATFORM_META = {
     border: 'border-rose-400/20',
     icon: 'M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z',
   },
+  'youtube-api': {
+    bg: 'bg-red-500/20',
+    text: 'text-red-300',
+    border: 'border-red-500/20',
+    icon: 'M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z',
+  },
   kick: {
     bg: 'bg-green-500/20',
     text: 'text-green-300',
@@ -66,6 +75,7 @@ const PLATFORM_BUTTONS = [
   { id: 'twitch' },
   { id: 'youtube' },
   { id: 'youtube-v' },
+  { id: 'youtube-api' },
   { id: 'kick' },
   { id: 'tiktok' },
 ] as const;
@@ -196,6 +206,7 @@ function getPlatformDisplayName(platformId: string, connectedPlatforms: string[]
     return connectedPlatforms.includes('youtube-v') ? 'YouTube Horizontal' : 'YouTube';
   }
   if (platformId === 'youtube-v') return 'YouTube Vertical';
+  if (platformId === 'youtube-api') return 'YouTube (API)';
   if (platformId === 'twitch') return 'Twitch';
   if (platformId === 'kick') return 'Kick';
   if (platformId === 'tiktok') return 'TikTok';
@@ -214,7 +225,8 @@ function resolveProfileUrl(platform: string, author: string): string {
     case 'tiktok':
       return `https://www.tiktok.com/@${encodeURIComponent(username)}`;
     case 'youtube':
-    case 'youtube-v': {
+    case 'youtube-v':
+    case 'youtube-api': {
       // YouTube handles can't have spaces or special chars — if the display name
       // looks like a valid handle, use it directly; otherwise fall back to search.
       const handle = username.replace(/\s+/g, '');
@@ -235,7 +247,7 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
 
   const [feedMode,       setFeedMode]       = useState<FeedMode>('all');
   const [platformFilter, setPlatformFilter] = useState<Record<string, boolean>>({
-    twitch: true, youtube: true, 'youtube-v': true, kick: true, tiktok: true,
+    twitch: true, youtube: true, 'youtube-v': true, 'youtube-api': true, kick: true, tiktok: true,
   });
   const [inputValue,    setInputValue]    = useState('');
   const [inputPlatform, setInputPlatform] = useState(() => connectedPlatforms[0] ?? 'twitch');
@@ -248,6 +260,25 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
     visible: false, x: 0, y: 0, platform: '', author: '',
   });
   const hasMultipleYouTubeStreams = connectedPlatforms.includes('youtube') && connectedPlatforms.includes('youtube-v');
+  // Detect platforms with more than one distinct stream/channel from observed
+  // messages. When a platform has 2+ distinct `streamLabel`s, each row's badge
+  // shows the channel name instead of the generic platform name. Generic over
+  // all platforms — same treatment that started on Twitch now also applies to
+  // TikTok, Kick, and youtube-api.
+  const multiStreamPlatforms = useMemo(() => {
+    const labelsByPlatform = new Map<string, Set<string>>();
+    for (const m of messages) {
+      if (!m.streamLabel) continue;
+      const set = labelsByPlatform.get(m.platform) ?? new Set<string>();
+      set.add(m.streamLabel);
+      labelsByPlatform.set(m.platform, set);
+    }
+    const result = new Set<string>();
+    for (const [platform, labels] of labelsByPlatform) {
+      if (labels.size > 1) result.add(platform);
+    }
+    return result;
+  }, [messages]);
 
   const [suggestionLists,   setSuggestionLists]   = useState<SuggestionList[]>([]);
   const [suggestionEntries, setSuggestionEntries] = useState<Record<string, SuggestionEntry[]>>({});
@@ -332,6 +363,41 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
   // ── close context menu on outside click / Escape ───────────────────
   const hideMenu = useCallback(() => setCtxMenu((c) => ({ ...c, visible: false })), []);
 
+  // ── moderation capabilities cache, lazy-loaded per platform ────────
+  const [capabilitiesByPlatform, setCapabilitiesByPlatform] =
+    useState<Record<string, PlatformCapabilities | null>>({});
+  const [modActionError, setModActionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!modActionError) return;
+    const timeout = window.setTimeout(() => setModActionError(null), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [modActionError]);
+
+  useEffect(() => {
+    if (!ctxMenu.visible) return;
+    const platform = ctxMenu.platform;
+    if (!platform || platform in capabilitiesByPlatform) return;
+    let cancelled = false;
+    void window.copilot.moderationGetCapabilities(platform as PlatformId).then((caps) => {
+      if (cancelled) return;
+      setCapabilitiesByPlatform((prev) => ({ ...prev, [platform]: caps }));
+    });
+    return () => { cancelled = true; };
+  }, [capabilitiesByPlatform, ctxMenu.platform, ctxMenu.visible]);
+
+  const ctxCapabilities = capabilitiesByPlatform[ctxMenu.platform] ?? null;
+
+  const runModeration = useCallback(async (action: () => Promise<void>) => {
+    setModActionError(null);
+    hideMenu();
+    try {
+      await action();
+    } catch (cause) {
+      setModActionError(cause instanceof Error ? cause.message : 'Moderation action failed');
+    }
+  }, [hideMenu]);
+
   // ── close context menu on outside click / Escape ───────────────────
   useEffect(() => {
     if (!ctxMenu.visible) return;
@@ -388,7 +454,7 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
       // Keep the renderer prop/default fallback when settings cannot be read.
     }
 
-    const username = platform === 'youtube' || platform === 'youtube-v'
+    const username = platform === 'youtube' || platform === 'youtube-v' || platform === 'youtube-api'
       ? `@${author.replace(/^@+/, '')}`
       : author;
     const profileUrl = resolveProfileUrl(platform, author);
@@ -405,9 +471,9 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
     }
   };
 
-  const handleContextMenu = useCallback((e: React.MouseEvent, platform: string, author: string) => {
+  const handleContextMenu = useCallback((e: React.MouseEvent, platform: string, author: string, userId?: string, messageId?: string) => {
     e.preventDefault();
-    setCtxMenu({ visible: true, x: e.clientX, y: e.clientY, platform, author });
+    setCtxMenu({ visible: true, x: e.clientX, y: e.clientY, platform, author, userId, messageId });
   }, []);
 
   const renderItem = useCallback(
@@ -420,11 +486,12 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
           avatarUrl={avatarCache.get(item.message.author.toLowerCase()) || undefined}
           highlighted={highlighted === item.message.author}
           hasMultipleYouTubeStreams={hasMultipleYouTubeStreams}
+          showStreamLabel={multiStreamPlatforms.has(item.message.platform)}
           onReplyTo={replyTo}
           onContextMenuRequest={handleContextMenu}
         />
       ),
-    [avatarCache, handleContextMenu, hasMultipleYouTubeStreams, highlighted, replyTo],
+    [avatarCache, handleContextMenu, hasMultipleYouTubeStreams, multiStreamPlatforms, highlighted, replyTo],
   );
 
   const selectSuggestionList = async (listId: string) => {
@@ -663,6 +730,73 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
             </svg>
             {t('Copy username')}
           </button>
+
+          {/* Moderation actions — only when the platform supports them */}
+          {(ctxCapabilities?.canDeleteMessage || ctxCapabilities?.canTimeoutUser || ctxCapabilities?.canBanUser) ? (
+            <div className="border-t border-gray-700 my-1" />
+          ) : null}
+
+          {ctxCapabilities?.canDeleteMessage && ctxMenu.messageId ? (
+            <button type="button"
+              className="w-full text-left px-3 py-1.5 text-sm hover:bg-orange-600/20 text-orange-300 flex items-center gap-2"
+              onClick={() => {
+                const platform = ctxMenu.platform as PlatformId;
+                const messageId = ctxMenu.messageId!;
+                void runModeration(() => window.copilot.moderationDeleteMessage({ platform, messageId }));
+              }}>
+              <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/>
+              </svg>
+              Delete message
+            </button>
+          ) : null}
+
+          {ctxCapabilities?.canTimeoutUser && ctxMenu.userId ? (
+            <button type="button"
+              className="w-full text-left px-3 py-1.5 text-sm hover:bg-orange-600/20 text-orange-300 flex items-center gap-2"
+              onClick={() => {
+                const platform = ctxMenu.platform as PlatformId;
+                const userId = ctxMenu.userId!;
+                void runModeration(() => window.copilot.moderationTimeoutUser({
+                  platform,
+                  userId,
+                  durationSeconds: 600,
+                }));
+              }}>
+              <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              Timeout 10m
+            </button>
+          ) : null}
+
+          {ctxCapabilities?.canBanUser && ctxMenu.userId ? (
+            <button type="button"
+              className="w-full text-left px-3 py-1.5 text-sm hover:bg-red-600/20 text-red-300 flex items-center gap-2"
+              onClick={() => {
+                const platform = ctxMenu.platform as PlatformId;
+                const userId = ctxMenu.userId!;
+                if (!window.confirm(`Ban @${ctxMenu.author} on ${platform}?`)) return;
+                void runModeration(() => window.copilot.moderationBanUser({ platform, userId }));
+              }}>
+              <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L5.636 5.636"/>
+              </svg>
+              Ban user
+            </button>
+          ) : null}
+
+          {(ctxCapabilities?.canTimeoutUser || ctxCapabilities?.canBanUser) && !ctxMenu.userId ? (
+            <div className="px-3 py-1.5 text-[11px] text-gray-500 italic">
+              User id not available — can't ban/timeout
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {modActionError ? (
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 px-3 py-2 rounded-md bg-red-900/90 border border-red-700 text-xs text-red-100 shadow-xl z-50 max-w-md">
+          {modActionError}
         </div>
       ) : null}
     </div>
@@ -674,23 +808,30 @@ interface ChatMessageRowProps {
   avatarUrl?: string;
   highlighted: boolean;
   hasMultipleYouTubeStreams: boolean;
+  /** True when this message's platform has more than one distinct
+   *  streamLabel in flight — the row swaps its badge text for the channel
+   *  label so multi-account setups stay distinguishable. */
+  showStreamLabel: boolean;
   onReplyTo: (platform: string, author: string) => void;
-  onContextMenuRequest: (event: React.MouseEvent, platform: string, author: string) => void;
+  onContextMenuRequest: (event: React.MouseEvent, platform: string, author: string, userId?: string, messageId?: string) => void;
 }
 
-const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highlighted, hasMultipleYouTubeStreams, onReplyTo, onContextMenuRequest }: ChatMessageRowProps) {
+const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highlighted, hasMultipleYouTubeStreams, showStreamLabel, onReplyTo, onContextMenuRequest }: ChatMessageRowProps) {
   const pKey = platformKey(message.platform);
   const meta = PLATFORM_META[pKey];
   const badgeMeta = PLATFORM_BADGE_META[pKey] ?? PLATFORM_BADGE_META.twitch;
-  const badgeLabel = (pKey === 'youtube' || pKey === 'youtube-v')
+  const isYouTube = pKey === 'youtube' || pKey === 'youtube-v' || pKey === 'youtube-api';
+  const badgeLabel = isYouTube
     ? getYtBadgeLabel(message.platform, hasMultipleYouTubeStreams)
-    : badgeMeta.label;
+    : (showStreamLabel && message.streamLabel)
+      ? message.streamLabel
+      : badgeMeta.label;
   const isCommand = message.content.startsWith('!');
 
   // STAR LOGIC: 
   // YouTube: ONLY if badge is 'member'
   // Others: if 'subscriber', 'member' or 'subscriber/'
-  const isSub = message.platform === 'youtube' || message.platform === 'youtube-v'
+  const isSub = message.platform === 'youtube' || message.platform === 'youtube-v' || message.platform === 'youtube-api'
     ? message.badges.includes('member')
     : message.badges.some((b) => b.startsWith('subscriber/') || b === 'subscriber' || b === 'member');
 
@@ -710,7 +851,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highli
       data-platform={platformKey(message.platform)}
       data-author={message.author}
       onDoubleClick={() => onReplyTo(message.platform, message.author)}
-      onContextMenu={(event) => onContextMenuRequest(event, message.platform, message.author)}
+      onContextMenu={(event) => onContextMenuRequest(event, message.platform, message.author, message.userId, message.id)}
     >
       <span className="text-gray-600 text-xs mt-0.5 shrink-0 font-mono w-[54px] text-right">{message.timestampLabel}</span>
       <div className="flex-1 min-w-0">
@@ -755,7 +896,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highli
           {isSub ? <span className="text-yellow-400 text-xs leading-none">★</span> : null}
 
           <span className="font-semibold text-sm" style={{ color: authorColor }} data-no-i18n="true">
-            {message.platform === 'youtube' || message.platform === 'youtube-v' ? `@${message.author}` : message.author}
+            {message.platform === 'youtube' || message.platform === 'youtube-v' || message.platform === 'youtube-api' ? `@${message.author}` : message.author}
           </span>
 
           {message.platform !== 'twitch' && isMod ? <span className="text-xs text-emerald-400 font-semibold">MOD</span> : null}
