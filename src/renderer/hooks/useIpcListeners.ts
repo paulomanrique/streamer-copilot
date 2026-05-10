@@ -17,10 +17,10 @@ export function useIpcListeners(): void {
   const setYoutubeStreams = useAppStore((s) => s.setYoutubeStreams);
   const setTiktokStatus = useAppStore((s) => s.setTiktokStatus);
   const setTiktokUsername = useAppStore((s) => s.setTiktokUsername);
-  const setTiktokLiveStats = useAppStore((s) => s.setTiktokLiveStats);
+  const setTiktokLiveStatsForUsername = useAppStore((s) => s.setTiktokLiveStatsForUsername);
   const setKickStatus = useAppStore((s) => s.setKickStatus);
   const setKickSlug = useAppStore((s) => s.setKickSlug);
-  const setKickLiveStats = useAppStore((s) => s.setKickLiveStats);
+  const setKickLiveStatsForChannel = useAppStore((s) => s.setKickLiveStatsForChannel);
 
   // OBS listeners
   useEffect(() => {
@@ -49,17 +49,19 @@ export function useIpcListeners(): void {
     const unsubTiktok = window.copilot.onTiktokStatus((status, username) => {
       setTiktokStatus(status);
       setTiktokUsername(username);
-      if (status !== 'connected') setTiktokLiveStats(null);
     });
-    const unsubTiktokStats = window.copilot.onTiktokLiveStats(setTiktokLiveStats);
+    const unsubTiktokStats = window.copilot.onTiktokLiveStats(({ username, stats }) => {
+      setTiktokLiveStatsForUsername(username, stats);
+    });
     const unsubKick = window.copilot.onKickStatus((status, slug) => {
       setKickStatus(status);
       setKickSlug(slug);
-      if (status !== 'connected') setKickLiveStats(null);
     });
-    const unsubKickStats = window.copilot.onKickLiveStats(setKickLiveStats);
+    const unsubKickStats = window.copilot.onKickLiveStats(({ channel, stats }) => {
+      setKickLiveStatsForChannel(channel, stats);
+    });
     return () => { unsubTwitchStatus(); unsubTwitchStats(); unsubYt(); unsubTiktok(); unsubTiktokStats(); unsubKick(); unsubKickStats(); };
-  }, [setTwitchStatus, setTwitchChannel, setTwitchLiveStatsForChannel, setYoutubeStreams, setTiktokStatus, setTiktokUsername, setTiktokLiveStats, setKickStatus, setKickSlug, setKickLiveStats]);
+  }, [setTwitchStatus, setTwitchChannel, setTwitchLiveStatsForChannel, setYoutubeStreams, setTiktokStatus, setTiktokUsername, setTiktokLiveStatsForUsername, setKickStatus, setKickSlug, setKickLiveStatsForChannel]);
 
   // Chat message/event listeners
   useEffect(() => {

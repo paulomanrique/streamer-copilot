@@ -39,10 +39,10 @@ export default function App() {
     twitchChannel,
     tiktokStatus,
     tiktokUsername,
-    tiktokLiveStats,
+    tiktokLiveStatsByUsername,
     kickStatus,
     kickSlug,
-    kickLiveStats,
+    kickLiveStatsByChannel,
     setProfiles,
     setChatSnapshot,
     twitchLiveStatsByChannel,
@@ -52,7 +52,6 @@ export default function App() {
     setYoutubeStreams,
     setTiktokStatus,
     setKickStatus,
-    setKickLiveStats,
   } = useAppStore();
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -120,7 +119,6 @@ export default function App() {
         setYoutubeStreams(ytInitialStatus);
         setTiktokStatus(tiktokInitialStatus);
         setKickStatus(kickInitialStatus);
-        if (kickInitialStatus !== 'connected') setKickLiveStats(null);
         setSelectorProfileId(snapshot.activeProfileId);
         setRememberProfileSelection(snapshot.autoSelectActiveProfile);
         // Smart skip: don't bother prompting when there's only one profile,
@@ -145,7 +143,7 @@ export default function App() {
     };
 
     void load();
-  }, [setChatSnapshot, setProfiles, setTwitchStatus, setTwitchChannel, setKickStatus, setKickLiveStats]);
+  }, [setChatSnapshot, setProfiles, setTwitchStatus, setTwitchChannel, setKickStatus]);
 
   useEffect(() => {
     if (!isLoading && !activeProfileId) {
@@ -364,9 +362,10 @@ export default function App() {
             youtubeStreams={youtubeStreams}
             tiktokStatus={tiktokStatus}
             tiktokUsername={tiktokUsername}
+            tiktokLiveStatsByUsername={tiktokLiveStatsByUsername}
             kickStatus={kickStatus}
             kickSlug={kickSlug}
-            kickLiveStats={kickLiveStats}
+            kickLiveStatsByChannel={kickLiveStatsByChannel}
           />
         ) : null}
 
@@ -383,10 +382,10 @@ export default function App() {
             youtubeStreams={youtubeStreams}
             tiktokStatus={tiktokStatus}
             tiktokUsername={tiktokUsername}
-            tiktokLiveStats={tiktokLiveStats}
+            tiktokLiveStatsByUsername={tiktokLiveStatsByUsername}
             kickStatus={kickStatus}
             kickSlug={kickSlug}
-            kickLiveStats={kickLiveStats}
+            kickLiveStatsByChannel={kickLiveStatsByChannel}
             recommendationTemplate={generalSettings.recommendationTemplate}
           />
           </SectionErrorBoundary>

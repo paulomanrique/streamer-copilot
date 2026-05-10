@@ -45,12 +45,13 @@ import { MusicPlayer } from './music-player.js';
 import { MusicStreamResolver } from './music-stream-resolver.js';
 import { VoiceCommandRepository } from '../modules/voice/voice-repository.js';
 import { VoiceService } from '../modules/voice/voice-service.js';
-import { createKickChatAdapter, type KickChatAdapter } from '../platforms/kick/adapter.js';
+import { type KickChatAdapter } from '../platforms/kick/adapter.js';
+import { KickMultiChatAdapter } from '../platforms/kick/multi-adapter.js';
 import { KickModerationApi, KICK_MODERATION_CAPABILITIES } from '../platforms/kick/moderation.js';
 import { KickSettingsStore } from '../platforms/kick/settings-store.js';
 import { KickTokenStore, type KickAuthSession, type KickAuthToken } from '../platforms/kick/token-store.js';
 import { TikTokSettingsStore } from '../platforms/tiktok/settings-store.js';
-import { createTikTokChatAdapter } from '../platforms/tiktok/adapter.js';
+import { TikTokMultiChatAdapter } from '../platforms/tiktok/multi-adapter.js';
 import { TwitchCredentialsStore } from '../platforms/twitch/credentials-store.js';
 import { type TwitchChatAdapter } from '../platforms/twitch/adapter.js';
 import { TwitchMultiChatAdapter } from '../platforms/twitch/multi-adapter.js';
@@ -392,7 +393,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   let twitchChannel: string | null = null;
   // Maps platform → display name of the account that sends messages (used to skip self-welcomes)
   const selfSenderName: Partial<Record<string, string>> = {};
-  let kickStatsTimer: ReturnType<typeof setInterval> | null = null;
+  /** Per-channel stats poll. Mirrors the Twitch pattern so multiple Kick
+   *  channels can have their own viewer/follower counts pumped in parallel. */
+  const kickStatsTimers = new Map<string, ReturnType<typeof setInterval>>();
   const userAvatarCache = new Map<string, string>();
   const badgeCache = new Map<string, string>();
   // R6 (YouTube): scraper pool + monitor lives inside YouTubeChatAdapter now
@@ -717,10 +720,33 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     kickStatus = status;
     if (slug !== undefined) kickSlug = slug;
     options.stateHub.pushKickStatus(status, kickSlug);
-    if (status !== 'connected') {
-      options.stateHub.pushKickLiveStats(null);
-    }
+    // Per-channel stats are managed by start/stopKickStatsPollFor — no global
+    // null push here, otherwise multi-channel installs would clobber each
+    // other's cards on every status flip.
     for (const listener of kickStatusListeners) listener();
+  };
+
+  /** Singleton wrapper holding one KickChatAdapter child per connected
+   *  Kick account. Mirrors Twitch — registered once on demand, then children
+   *  added/removed as accounts connect. */
+  const kickMultiAdapter = new KickMultiChatAdapter();
+  let kickMultiRegistered = false;
+  const kickAccountStatus = new Map<string, KickConnectionStatus>();
+  /** accountId -> channel slug, for stats poll teardown on disconnect. */
+  const kickAccountSlug = new Map<string, string>();
+
+  const ensureKickMultiRegistered = async (): Promise<void> => {
+    if (kickMultiRegistered) return;
+    kickMultiRegistered = true;
+    await chatService.replaceAdapter(kickMultiAdapter);
+  };
+
+  const aggregateKickStatus = (): KickConnectionStatus => {
+    const statuses = Array.from(kickAccountStatus.values());
+    if (statuses.some((s) => s === 'connected')) return 'connected';
+    if (statuses.some((s) => s === 'connecting')) return 'connecting';
+    if (statuses.some((s) => s === 'error')) return 'error';
+    return 'disconnected';
   };
 
   const fetchKickClientAccessToken = async (credentials: { clientId: string; clientSecret: string }): Promise<string | null> => {
@@ -793,7 +819,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       const token = await fetchKickClientAccessToken(credentials) ?? authSession?.token.accessToken;
       if (!token) {
         const fallback = await fetchKickLegacyStats(channelSlug);
-        if (fallback) options.stateHub.pushKickLiveStats(fallback);
+        if (fallback) options.stateHub.pushKickLiveStats(channelSlug, fallback);
         return;
       }
 
@@ -805,7 +831,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       });
       if (!response.ok) {
         const fallback = await fetchKickLegacyStats(channelSlug);
-        if (fallback) options.stateHub.pushKickLiveStats(fallback);
+        if (fallback) options.stateHub.pushKickLiveStats(channelSlug, fallback);
         return;
       }
 
@@ -825,7 +851,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       const channel = payload.data?.[0];
       if (!channel) {
         const fallback = await fetchKickLegacyStats(channelSlug);
-        if (fallback) options.stateHub.pushKickLiveStats(fallback);
+        if (fallback) options.stateHub.pushKickLiveStats(channelSlug, fallback);
         return;
       }
 
@@ -835,10 +861,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         subscriberCount: typeof channel.active_subscribers_count === 'number' ? channel.active_subscribers_count : null,
         isLive: channel.stream?.is_live ?? (channel.stream?.viewer_count ?? 0) > 0,
       };
-      options.stateHub.pushKickLiveStats(stats);
+      options.stateHub.pushKickLiveStats(channelSlug, stats);
     } catch {
       const fallback = await fetchKickLegacyStats(channelSlug);
-      if (fallback) options.stateHub.pushKickLiveStats(fallback);
+      if (fallback) options.stateHub.pushKickLiveStats(channelSlug, fallback);
     }
   };
 
@@ -882,25 +908,63 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     credentials: { clientId: string; clientSecret: string },
     authSession: KickAuthSession | null,
   ) => {
-    if (kickStatsTimer) clearInterval(kickStatsTimer);
+    stopKickStatsPollFor(channelSlug);
     void pollKickStats(channelSlug, credentials, authSession);
-    kickStatsTimer = setInterval(() => void pollKickStats(channelSlug, credentials, authSession), 15_000);
+    const timer = setInterval(() => void pollKickStats(channelSlug, credentials, authSession), 15_000);
+    kickStatsTimers.set(channelSlug, timer);
+  };
+
+  const stopKickStatsPollFor = (channelSlug: string) => {
+    const timer = kickStatsTimers.get(channelSlug);
+    if (timer) {
+      clearInterval(timer);
+      kickStatsTimers.delete(channelSlug);
+    }
+    options.stateHub.pushKickLiveStats(channelSlug, null);
   };
 
   const stopKickStatsPoll = () => {
-    if (kickStatsTimer) {
-      clearInterval(kickStatsTimer);
-      kickStatsTimer = null;
+    for (const channelSlug of Array.from(kickStatsTimers.keys())) {
+      stopKickStatsPollFor(channelSlug);
     }
-    options.stateHub.pushKickLiveStats(null);
   };
 
   const tiktokStatusListeners = new Set<() => void>();
+  /** Aggregate TikTok status — derived from per-account map below. The legacy
+   *  global lives on for callers that still want a single status (live banner,
+   *  scheduled targets, etc.). */
   const setTiktokStatus = (status: TikTokConnectionStatus, username?: string | null) => {
     tiktokStatus = status;
     if (username !== undefined) tiktokUsername = username;
     options.stateHub.pushTiktokStatus(status, tiktokUsername);
     for (const listener of tiktokStatusListeners) listener();
+  };
+
+  /** Singleton wrapper holding one TikTokChatAdapter child per connected
+   *  TikTok account. Registered with chatService once on demand. Subsequent
+   *  connects/disconnects just add/remove children. Mirrors Twitch. */
+  const tiktokMultiAdapter = new TikTokMultiChatAdapter();
+  let tiktokMultiRegistered = false;
+  const tiktokAccountStatus = new Map<string, TikTokConnectionStatus>();
+  const tiktokAccountUsername = new Map<string, string>();
+  /** Per-account "watching" flag: TikTok needs the user to be live to bind a
+   *  room id, so when first connect fails we keep retrying. */
+  const tiktokWatchingAccounts = new Set<string>();
+  const tiktokRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  const ensureTiktokMultiRegistered = async (): Promise<void> => {
+    if (tiktokMultiRegistered) return;
+    tiktokMultiRegistered = true;
+    await chatService.replaceAdapter(tiktokMultiAdapter);
+  };
+
+  const aggregateTiktokStatus = (): TikTokConnectionStatus => {
+    const statuses = Array.from(tiktokAccountStatus.values());
+    if (statuses.some((s) => s === 'connected')) return 'connected';
+    if (statuses.some((s) => s === 'connecting')) return 'connecting';
+    if (statuses.some((s) => s === 'captcha')) return 'captcha';
+    if (statuses.some((s) => s === 'error')) return 'error';
+    return 'disconnected';
   };
 
   const checkYouTubeLive = async (handle: string): Promise<LiveStreamInfo[] | null> => {
@@ -1999,19 +2063,13 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.tiktokGetSettings, async () => { const s = await getTiktokSettingsStore(); return s ? s.load() : { username: '', autoConnect: false }; });
   ipcMain.handle(IPC_CHANNELS.tiktokSaveSettings, async (_, raw) => { const s = await getTiktokSettingsStore(); if (s) await s.save(tiktokSettingsSchema.parse(raw)); });
   ipcMain.handle(IPC_CHANNELS.tiktokConnect, async (_, raw) => {
+    // Legacy single-account IPC. Modern callers go through accounts:connect →
+    // tiktokProvider.connect; this path stays for back-compat with profiles
+    // that still hit the legacy settings store. Route through the multi
+    // adapter using a synthetic accountId so it coexists with new accounts.
     const c = tiktokConnectSchema.parse(raw);
-    setTiktokStatus('connecting', c.username);
-    chatLogService.openSession('tiktok', c.username);
-    suggestionService.clearSessionEntries();
-    selfSenderName.tiktok = c.username.toLowerCase();
     try {
-      await chatService.replaceAdapter(createTikTokChatAdapter({
-        username: c.username,
-        onError: (cause) => logTikTokConnectionError('Connection error', c.username, cause),
-        onStatusChange: (status) => setTiktokStatus(status, c.username),
-        onLiveStats: (stats) => options.stateHub.pushTiktokLiveStats(stats),
-        onCaptchaDetected: () => logService.warn('tiktok', 'CAPTCHA detected'),
-      }));
+      await connectTiktokAccount(`legacy:${c.username}`, c.username);
       const store = await getTiktokSettingsStore();
       if (store) await store.save({ username: c.username, autoConnect: true });
     } catch (cause) {
@@ -2020,18 +2078,22 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }
   });
   ipcMain.handle(IPC_CHANNELS.tiktokDisconnect, async () => {
-    chatLogService.closeSession('tiktok');
-    await chatService.removeAdapter('tiktok');
-    options.stateHub.pushTiktokLiveStats(null);
+    // Tear down every TikTok child — legacy callers don't carry an accountId.
+    for (const accountId of Array.from(tiktokAccountStatus.keys())) {
+      await disconnectTiktokAccount(accountId);
+    }
     setTiktokStatus('disconnected', null);
   });
-  ipcMain.handle(IPC_CHANNELS.tiktokGetStatus, async () => tiktokStatus);
+  ipcMain.handle(IPC_CHANNELS.tiktokGetStatus, async () => aggregateTiktokStatus());
   ipcMain.handle(IPC_CHANNELS.tiktokCheckLive, async (_, raw: unknown) => {
     const username = typeof raw === 'string' ? raw.trim() : '';
     if (!username) return { isLive: false };
-    // Lightweight check: try to connect briefly. Heavy probing is expensive on TikTok;
-    // returning unknown is acceptable — the wizard's "Add" step doesn't strictly require it.
-    return { isLive: tiktokUsername === username && tiktokStatus === 'connected' };
+    // Lightweight check — true if any connected child is currently bound to
+    // this username. The wizard's "Add" step doesn't strictly require it.
+    for (const [accountId, name] of tiktokAccountUsername) {
+      if (name === username && tiktokAccountStatus.get(accountId) === 'connected') return { isLive: true };
+    }
+    return { isLive: false };
   });
 
   // Kick Handlers
@@ -2064,56 +2126,82 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     return { channelSlug: session.channelSlug };
   });
   /**
-   * Shared Kick connect flow used by both the legacy `kick:connect` handler
-   * and the per-account `accounts:connect` branch. Caller is expected to have
-   * already resolved the channel slug.
+   * Shared Kick per-account connect flow. Spawns a KickChatAdapter child in
+   * the multi-adapter, wires moderation, and starts the per-channel stats
+   * poll. Re-entrant — calling it again with the same accountId tears the
+   * previous child down first.
    */
-  async function connectKickWithCredentials(
+  async function connectKickAccount(
+    accountId: string,
     channelSlug: string,
     credentialsInput: { clientId?: string; clientSecret?: string },
   ): Promise<void> {
+    await ensureKickMultiRegistered();
     const credentials = await resolveKickApiCredentials(credentialsInput);
     const authSession = await ensureKickAuthSession(channelSlug, credentials, false);
 
-    setKickStatus('connecting', channelSlug);
+    kickAccountStatus.set(accountId, 'connecting');
+    kickAccountSlug.set(accountId, channelSlug);
     chatLogService.openSession('kick', channelSlug);
     suggestionService.clearSessionEntries();
+    setKickStatus('connecting', channelSlug);
 
     try {
-      const kickAdapter = createKickChatAdapter({
+      await kickMultiAdapter.addAccount({
+        accountId,
         channelSlug,
-        broadcasterUserId: authSession?.broadcasterUserId,
+        broadcasterUserId: authSession?.broadcasterUserId ?? null,
         clientId: credentials.clientId,
         clientSecret: credentials.clientSecret,
         oauthToken: authSession?.token,
       });
-      await chatService.replaceAdapter(kickAdapter);
-      wireKickModeration(kickAdapter, authSession);
-      setKickStatus('connected', channelSlug);
+      const child = kickMultiAdapter.getAccount(accountId);
+      if (child) wireKickModeration(child, authSession);
+      kickAccountStatus.set(accountId, 'connected');
+      setKickStatus(aggregateKickStatus(), channelSlug);
       startKickStatsPoll(channelSlug, credentials, authSession);
     } catch (cause) {
-      stopKickStatsPoll();
-      setKickStatus('error', channelSlug);
+      stopKickStatsPollFor(channelSlug);
+      kickAccountStatus.set(accountId, 'error');
+      setKickStatus(aggregateKickStatus(), channelSlug);
       throw cause;
     }
   }
 
+  async function disconnectKickAccount(accountId: string): Promise<void> {
+    const slug = kickAccountSlug.get(accountId);
+    if (kickMultiAdapter.hasAccount(accountId)) {
+      await kickMultiAdapter.removeAccount(accountId);
+    }
+    kickAccountStatus.delete(accountId);
+    kickAccountSlug.delete(accountId);
+    if (slug) stopKickStatsPollFor(slug);
+    if (!kickMultiAdapter.hasConnectedChild()) {
+      chatLogService.closeSession('kick');
+      setKickStatus('disconnected', null);
+    } else {
+      setKickStatus(aggregateKickStatus(), null);
+    }
+  }
+
   ipcMain.handle(IPC_CHANNELS.kickConnect, async (_, raw) => {
+    // Legacy single-account IPC. Routes through the multi adapter using a
+    // synthetic accountId so it coexists with new accounts.
     const input = kickConnectSchema.parse(raw);
     const channelSlug = normalizeKickChannelInput(input.channelInput);
     if (!channelSlug) {
       throw new Error('Kick channel is required. Use slug or URL like https://kick.com/channel');
     }
-
-    await connectKickWithCredentials(channelSlug, input);
+    await connectKickAccount(`legacy:${channelSlug}`, channelSlug, input);
   });
   ipcMain.handle(IPC_CHANNELS.kickDisconnect, async () => {
-    chatLogService.closeSession('kick');
-    await chatService.removeAdapter('kick');
-    stopKickStatsPoll();
+    // Tear down every Kick child — legacy callers don't carry an accountId.
+    for (const accountId of Array.from(kickAccountStatus.keys())) {
+      await disconnectKickAccount(accountId);
+    }
     setKickStatus('disconnected', null);
   });
-  ipcMain.handle(IPC_CHANNELS.kickGetStatus, async () => kickStatus);
+  ipcMain.handle(IPC_CHANNELS.kickGetStatus, async () => aggregateKickStatus());
   ipcMain.handle(IPC_CHANNELS.kickGetAuthStatus, async () => getKickAuthStatus());
 
   // Auto-reconnect Twitch on startup. The account model is the source of
@@ -2198,61 +2286,90 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     await chatService.replaceAdapter(youtubeApiAdapter);
   })();
 
-  // Auto-reconnect TikTok from saved settings on startup (R5)
+  // Auto-reconnect TikTok on startup. Account-model takes precedence: spin up
+  // a multi-adapter child per enabled tiktok account. Fall back to the legacy
+  // single-account settings store for installs that haven't migrated.
   void (async () => {
-    const store = await getTiktokSettingsStore();
-    if (!store) return;
-    const settings = await store.load();
-    if (!settings.username) return;
+    await activeProfileDirectoryReady;
     try {
-      setTiktokStatus('connecting', settings.username);
-      chatLogService.openSession('tiktok', settings.username);
-      suggestionService.clearSessionEntries();
-      selfSenderName.tiktok = settings.username.toLowerCase();
-      await chatService.replaceAdapter(createTikTokChatAdapter({
-        username: settings.username,
-        onError: (cause) => logTikTokConnectionError('Auto-reconnect connection error', settings.username, cause),
-        onStatusChange: (status) => setTiktokStatus(status, settings.username),
-        onLiveStats: (stats) => options.stateHub.pushTiktokLiveStats(stats),
-        onCaptchaDetected: () => logService.warn('tiktok', 'CAPTCHA detected'),
-      }));
-      logService.info('tiktok', 'Auto-reconnected from saved settings', { username: settings.username });
+      const accounts = await accountRepository.list();
+      const tiktokAccounts = accounts.filter((a) => a.providerId === 'tiktok' && a.enabled);
+      if (tiktokAccounts.length > 0) {
+        for (const account of tiktokAccounts) {
+          try {
+            await connectTiktokAccount(account.id, account.channel);
+            logService.info('tiktok', 'Auto-reconnected account', { username: account.channel, accountId: account.id });
+          } catch (cause) {
+            logService.warn('tiktok', 'Auto-reconnect failed', {
+              accountId: account.id,
+              username: account.channel,
+              error: cause instanceof Error ? cause.message : String(cause),
+            });
+          }
+        }
+        return;
+      }
+
+      const store = await getTiktokSettingsStore();
+      if (!store) return;
+      const settings = await store.load();
+      if (!settings.username) return;
+      try {
+        await connectTiktokAccount(`legacy:${settings.username}`, settings.username);
+        logService.info('tiktok', 'Auto-reconnected from legacy settings', { username: settings.username });
+      } catch (cause) {
+        logService.warn('tiktok', 'Legacy auto-reconnect failed', { error: cause instanceof Error ? cause.message : String(cause) });
+      }
     } catch (cause) {
-      logService.warn('tiktok', 'Auto-reconnect failed', { error: cause instanceof Error ? cause.message : String(cause) });
-      setTiktokStatus('disconnected', null);
+      logService.warn('tiktok', 'Auto-reconnect orchestration failed', {
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
     }
   })();
 
-  // Auto-reconnect Kick from saved settings on startup
+  // Auto-reconnect Kick on startup. Account-model takes precedence: spin up
+  // a multi-adapter child per enabled kick account. Fall back to the legacy
+  // single-account settings store for installs that haven't migrated.
   void (async () => {
-    const store = await getKickSettingsStore();
-    if (!store) return;
-    const settings = await store.load();
-    const slug = normalizeKickChannelInput(settings.channelInput);
-    if (!slug) return;
+    await activeProfileDirectoryReady;
     try {
-      const tokenStore = await getKickTokenStore();
-      const authSession = tokenStore ? await tokenStore.load() : null;
-      const credentials = await resolveKickApiCredentials({ clientId: settings.clientId, clientSecret: settings.clientSecret });
-      setKickStatus('connecting', slug);
-      chatLogService.openSession('kick', slug);
-      suggestionService.clearSessionEntries();
-      const kickAdapter = createKickChatAdapter({
-        channelSlug: slug,
-        broadcasterUserId: authSession?.channelSlug === slug ? authSession.broadcasterUserId : null,
-        clientId: credentials.clientId,
-        clientSecret: credentials.clientSecret,
-        oauthToken: authSession?.channelSlug === slug ? authSession.token : undefined,
-      });
-      await chatService.replaceAdapter(kickAdapter);
-      wireKickModeration(kickAdapter, authSession?.channelSlug === slug ? authSession : null);
-      setKickStatus('connected', slug);
-      startKickStatsPoll(slug, credentials, authSession?.channelSlug === slug ? authSession : null);
-      logService.info('kick', 'Auto-reconnected from saved settings', { channelSlug: slug });
+      const accounts = await accountRepository.list();
+      const kickAccounts = accounts.filter((a) => a.providerId === 'kick' && a.enabled);
+      if (kickAccounts.length > 0) {
+        for (const account of kickAccounts) {
+          const slug = normalizeKickChannelInput(account.channel) ?? account.channel;
+          if (!slug) continue;
+          const clientId = typeof account.providerData?.clientId === 'string' ? account.providerData.clientId : undefined;
+          const clientSecret = typeof account.providerData?.clientSecret === 'string' ? account.providerData.clientSecret : undefined;
+          try {
+            await connectKickAccount(account.id, slug, { clientId, clientSecret });
+            logService.info('kick', 'Auto-reconnected account', { channelSlug: slug, accountId: account.id });
+          } catch (cause) {
+            logService.warn('kick', 'Auto-reconnect failed', {
+              accountId: account.id,
+              channelSlug: slug,
+              error: cause instanceof Error ? cause.message : String(cause),
+            });
+          }
+        }
+        return;
+      }
+
+      const store = await getKickSettingsStore();
+      if (!store) return;
+      const settings = await store.load();
+      const slug = normalizeKickChannelInput(settings.channelInput);
+      if (!slug) return;
+      try {
+        await connectKickAccount(`legacy:${slug}`, slug, { clientId: settings.clientId, clientSecret: settings.clientSecret });
+        logService.info('kick', 'Auto-reconnected from legacy settings', { channelSlug: slug });
+      } catch (cause) {
+        logService.warn('kick', 'Legacy auto-reconnect failed', { channelSlug: slug, error: cause instanceof Error ? cause.message : String(cause) });
+      }
     } catch (cause) {
-      stopKickStatsPoll();
-      setKickStatus('error', slug);
-      logService.warn('kick', 'Auto-reconnect failed', { channelSlug: slug, error: cause instanceof Error ? cause.message : String(cause) });
+      logService.warn('kick', 'Auto-reconnect orchestration failed', {
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
     }
   })();
 
@@ -2453,25 +2570,25 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   const kickProvider: MainPlatformProvider = {
     providerId: 'kick',
-    getStatus: () =>
-      kickStatus === 'connected' ? 'connected'
-      : kickStatus === 'connecting' ? 'connecting'
-      : kickStatus === 'error' ? 'error'
-      : 'disconnected',
+    getStatus: (account) => {
+      if (account) {
+        const status = kickAccountStatus.get(account.id);
+        return status ?? 'disconnected';
+      }
+      return aggregateKickStatus();
+    },
     async connect(account) {
       const channelSlug = normalizeKickChannelInput(account.channel) ?? account.channel;
       if (!channelSlug) throw new Error('Kick account is missing a channel slug');
       const clientId = typeof account.providerData.clientId === 'string' ? account.providerData.clientId : undefined;
       const clientSecret = typeof account.providerData.clientSecret === 'string' ? account.providerData.clientSecret : undefined;
-      await connectKickWithCredentials(channelSlug, { clientId, clientSecret });
+      await connectKickAccount(account.id, channelSlug, { clientId, clientSecret });
     },
-    async disconnect() {
-      chatLogService.closeSession('kick');
-      await chatService.removeAdapter('kick');
-      stopKickStatsPoll();
-      setKickStatus('disconnected', null);
+    async disconnect(account) {
+      await disconnectKickAccount(account.id);
     },
-    async purgeStores() {
+    async purgeStores(account) {
+      if (account) await disconnectKickAccount(account.id);
       const settingsStore = await getKickSettingsStore();
       if (settingsStore) await settingsStore.clear();
       const tokenStore = await getKickTokenStore();
@@ -2486,105 +2603,130 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   // TikTok's lib needs an active live to find the room id, so unlike Twitch/Kick
   // we can't keep a long-lived socket idle until chat starts. Instead, when the
   // user is offline we keep retrying in the background every TIKTOK_RETRY_MS so
-  // the connection resumes automatically as soon as they go live. The IPC
+  // the connection resumes automatically as soon as they go live. The provider
   // resolves successfully on the first attempt regardless — the system is
   // "watching", which is the closest analog to the other adapters' auto-connect
-  // semantics.
+  // semantics. Each account has its own retry timer / watching flag so multiple
+  // TikTok hosts can be tracked in parallel.
   const TIKTOK_RETRY_MS = 60_000;
-  let tiktokRetryTimer: ReturnType<typeof setTimeout> | null = null;
-  let tiktokWatchedUsername: string | null = null;
-  let tiktokIsWatching = false;
 
-  function clearTiktokRetry(): void {
-    if (tiktokRetryTimer) {
-      clearTimeout(tiktokRetryTimer);
-      tiktokRetryTimer = null;
+  function clearTiktokRetryFor(accountId: string): void {
+    const timer = tiktokRetryTimers.get(accountId);
+    if (timer) {
+      clearTimeout(timer);
+      tiktokRetryTimers.delete(accountId);
     }
   }
 
-  async function tryConnectTiktok(username: string, autoConnect: boolean): Promise<{ ok: boolean; error?: unknown }> {
+  async function tryConnectTiktokAccount(accountId: string, username: string): Promise<{ ok: boolean; error?: unknown }> {
     try {
-      await chatService.replaceAdapter(createTikTokChatAdapter({
+      await ensureTiktokMultiRegistered();
+      await tiktokMultiAdapter.addAccount({
+        accountId,
         username,
         onError: (cause) => logTikTokConnectionError('Connection error', username, cause),
         onStatusChange: (status) => {
-          // Once the adapter is actually online we exit "watching" mode.
-          if (status === 'connected') tiktokIsWatching = false;
-          setTiktokStatus(status, username);
+          if (status === 'connected') tiktokWatchingAccounts.delete(accountId);
+          tiktokAccountStatus.set(accountId, status);
+          setTiktokStatus(aggregateTiktokStatus(), username);
           broadcastAccountsForProvider('tiktok');
         },
-        onLiveStats: (stats) => options.stateHub.pushTiktokLiveStats(stats),
-        onCaptchaDetected: () => logService.warn('tiktok', 'CAPTCHA detected'),
-      }));
-      const store = await getTiktokSettingsStore();
-      if (store) await store.save({ username, autoConnect });
+        onLiveStats: (stats) => options.stateHub.pushTiktokLiveStats(username, stats),
+        onCaptchaDetected: () => logService.warn('tiktok', 'CAPTCHA detected', { username }),
+      });
       return { ok: true };
     } catch (cause) {
-      // Make sure the half-attached adapter is gone so the next retry starts clean.
-      try { await chatService.removeAdapter('tiktok'); } catch { /* ignore */ }
+      // Make sure the half-attached child is gone so the next retry starts clean.
+      try { await tiktokMultiAdapter.removeAccount(accountId); } catch { /* ignore */ }
       return { ok: false, error: cause };
     }
   }
 
-  function scheduleTiktokRetry(username: string, autoConnect: boolean): void {
-    clearTiktokRetry();
-    if (tiktokWatchedUsername !== username) return;
-    tiktokRetryTimer = setTimeout(() => {
-      tiktokRetryTimer = null;
-      if (tiktokWatchedUsername !== username) return;
-      void tryConnectTiktok(username, autoConnect).then((result) => {
-        if (tiktokWatchedUsername !== username) return;
+  function scheduleTiktokRetry(accountId: string, username: string): void {
+    clearTiktokRetryFor(accountId);
+    if (!tiktokWatchingAccounts.has(accountId)) return;
+    const timer = setTimeout(() => {
+      tiktokRetryTimers.delete(accountId);
+      if (!tiktokWatchingAccounts.has(accountId)) return;
+      void tryConnectTiktokAccount(accountId, username).then((result) => {
+        if (!tiktokWatchingAccounts.has(accountId)) return;
         if (result.ok) return;
-        scheduleTiktokRetry(username, autoConnect);
+        scheduleTiktokRetry(accountId, username);
       });
     }, TIKTOK_RETRY_MS);
+    tiktokRetryTimers.set(accountId, timer);
   }
+
+  const connectTiktokAccount = async (accountId: string, username: string): Promise<void> => {
+    tiktokWatchingAccounts.delete(accountId);
+    clearTiktokRetryFor(accountId);
+    tiktokAccountStatus.set(accountId, 'connecting');
+    tiktokAccountUsername.set(accountId, username);
+    chatLogService.openSession('tiktok', username);
+    suggestionService.clearSessionEntries();
+    selfSenderName.tiktok = username.toLowerCase();
+    setTiktokStatus('connecting', username);
+
+    const result = await tryConnectTiktokAccount(accountId, username);
+    if (result.ok) return;
+
+    // First attempt failed — most commonly because the user isn't currently
+    // live. Switch to "watching" so the UI can distinguish it from an
+    // active in-progress connect, log the reason, and retry in background.
+    tiktokWatchingAccounts.add(accountId);
+    broadcastAccountsForProvider('tiktok');
+    logService.info('tiktok', 'User appears offline — will retry until they go live', {
+      accountId,
+      username,
+      retryMs: TIKTOK_RETRY_MS,
+      reason: result.error instanceof Error ? result.error.message || result.error.name : String(result.error),
+    });
+    scheduleTiktokRetry(accountId, username);
+  };
+
+  const disconnectTiktokAccount = async (accountId: string): Promise<void> => {
+    tiktokWatchingAccounts.delete(accountId);
+    clearTiktokRetryFor(accountId);
+    const username = tiktokAccountUsername.get(accountId);
+    tiktokAccountStatus.delete(accountId);
+    tiktokAccountUsername.delete(accountId);
+    if (tiktokMultiAdapter.hasAccount(accountId)) {
+      await tiktokMultiAdapter.removeAccount(accountId);
+    }
+    if (username) options.stateHub.pushTiktokLiveStats(username, null);
+    setTiktokStatus(aggregateTiktokStatus(), tiktokMultiAdapter.hasConnectedChild() ? null : null);
+    if (!tiktokMultiAdapter.hasConnectedChild()) {
+      chatLogService.closeSession('tiktok');
+    }
+    broadcastAccountsForProvider('tiktok');
+  };
 
   const tiktokProvider: MainPlatformProvider = {
     providerId: 'tiktok',
-    getStatus: () => {
-      if (tiktokStatus === 'connected') return 'connected';
-      if (tiktokIsWatching) return 'watching';
-      if (tiktokStatus === 'connecting') return 'connecting';
-      if (tiktokStatus === 'captcha') return 'captcha';
-      if (tiktokStatus === 'error') return 'error';
-      return 'disconnected';
+    getStatus: (account) => {
+      if (account) {
+        const accountId = account.id;
+        const status = tiktokAccountStatus.get(accountId);
+        if (status === 'connected') return 'connected';
+        if (tiktokWatchingAccounts.has(accountId)) return 'watching';
+        if (status === 'connecting') return 'connecting';
+        if (status === 'captcha') return 'captcha';
+        if (status === 'error') return 'error';
+        return 'disconnected';
+      }
+      // Aggregate (legacy callers without an account hint).
+      const agg = aggregateTiktokStatus();
+      if (agg === 'disconnected' && tiktokWatchingAccounts.size > 0) return 'watching';
+      return agg;
     },
     async connect(account) {
-      tiktokWatchedUsername = account.channel;
-      tiktokIsWatching = false;
-      clearTiktokRetry();
-      setTiktokStatus('connecting', account.channel);
-      chatLogService.openSession('tiktok', account.channel);
-      suggestionService.clearSessionEntries();
-      selfSenderName.tiktok = account.channel.toLowerCase();
-
-      const result = await tryConnectTiktok(account.channel, account.autoConnect);
-      if (result.ok) return;
-
-      // First attempt failed — most commonly because the user isn't currently
-      // live. Switch to "watching" so the UI can distinguish it from an
-      // active in-progress connect, log the reason, and retry in background.
-      tiktokIsWatching = true;
-      broadcastAccountsForProvider('tiktok');
-      logService.info('tiktok', 'User appears offline — will retry until they go live', {
-        username: account.channel,
-        retryMs: TIKTOK_RETRY_MS,
-        reason: result.error instanceof Error ? result.error.message || result.error.name : String(result.error),
-      });
-      scheduleTiktokRetry(account.channel, account.autoConnect);
+      await connectTiktokAccount(account.id, account.channel);
     },
-    async disconnect() {
-      tiktokWatchedUsername = null;
-      tiktokIsWatching = false;
-      clearTiktokRetry();
-      chatLogService.closeSession('tiktok');
-      await chatService.removeAdapter('tiktok');
+    async disconnect(account) {
+      await disconnectTiktokAccount(account.id);
     },
-    async purgeStores() {
-      tiktokWatchedUsername = null;
-      tiktokIsWatching = false;
-      clearTiktokRetry();
+    async purgeStores(account) {
+      if (account) await disconnectTiktokAccount(account.id);
       const store = await getTiktokSettingsStore();
       if (store) await store.clear();
     },

@@ -130,16 +130,16 @@ export class StateHub {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.tiktokStatus, status, username ?? null);
   }
 
-  pushTiktokLiveStats(stats: TikTokLiveStats | null): void {
-    this.rendererWindow?.webContents.send(IPC_CHANNELS.tiktokLiveStats, stats);
+  pushTiktokLiveStats(username: string, stats: TikTokLiveStats | null): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.tiktokLiveStats, { username, stats });
   }
 
   pushKickStatus(status: KickConnectionStatus, slug?: string | null): void {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.kickStatus, status, slug ?? null);
   }
 
-  pushKickLiveStats(stats: KickLiveStats | null): void {
-    this.rendererWindow?.webContents.send(IPC_CHANNELS.kickLiveStats, stats);
+  pushKickLiveStats(channel: string, stats: KickLiveStats | null): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.kickLiveStats, { channel, stats });
   }
 
   pushMusicStateUpdate(state: MusicPlayerState): void {

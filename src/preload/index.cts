@@ -405,8 +405,8 @@ const copilotApi: CopilotApi = {
     ipcRenderer.on(IPC_CHANNELS.tiktokStatus, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.tiktokStatus, wrappedListener); };
   },
-  onTiktokLiveStats: (listener: (stats: { viewerCount: number } | null) => void) => {
-    const wrappedListener = (_event: Electron.IpcRendererEvent, stats: { viewerCount: number } | null) => listener(stats);
+  onTiktokLiveStats: (listener: (payload: { username: string; stats: { viewerCount: number } | null }) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: { username: string; stats: { viewerCount: number } | null }) => listener(payload);
     ipcRenderer.on(IPC_CHANNELS.tiktokLiveStats, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.tiktokLiveStats, wrappedListener); };
   },
@@ -478,8 +478,8 @@ const copilotApi: CopilotApi = {
     ipcRenderer.on(IPC_CHANNELS.twitchLiveStats, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.twitchLiveStats, wrappedListener); };
   },
-  onKickLiveStats: (listener: (stats: KickLiveStats | null) => void) => {
-    const wrappedListener = (_event: Electron.IpcRendererEvent, stats: KickLiveStats | null) => listener(stats);
+  onKickLiveStats: (listener: (payload: { channel: string; stats: KickLiveStats | null }) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: { channel: string; stats: KickLiveStats | null }) => listener(payload);
     ipcRenderer.on(IPC_CHANNELS.kickLiveStats, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.kickLiveStats, wrappedListener); };
   },
