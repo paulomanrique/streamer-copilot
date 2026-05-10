@@ -129,7 +129,7 @@ import {
   youtubeSettingsSchema,
   youtubeApiStartOAuthSchema,
 } from '../shared/schemas.js';
-import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, MusicRequestSettings, PlatformId, Raffle, SoundSettings, StreamEvent, StreamEventType, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
+import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, MusicRequestSettings, PlatformAccount, PlatformId, Raffle, SoundSettings, StreamEvent, StreamEventType, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
 
 const TWITCH_CLIENT_ID = 'vtwg8tzuv1nlip4qh9n6sxx2p76g0s';
 const TWITCH_REDIRECT_PORT = 32999;
@@ -1164,6 +1164,27 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }
   };
 
+  /** Shared connect path for the account model — used both by
+   *  `twitchProvider.connect` (UI button) and the boot-time auto-reconnect.
+   *  Validates providerData, primes per-channel side effects (badges, chat
+   *  log session, suggestion entries, self-sender filter), and spawns the
+   *  multi-adapter child. */
+  const connectTwitchAccountFromRecord = async (account: PlatformAccount): Promise<void> => {
+    const creds = {
+      channel: account.channel,
+      username: String((account.providerData as Record<string, unknown> | undefined)?.username ?? ''),
+      oauthToken: String((account.providerData as Record<string, unknown> | undefined)?.oauthToken ?? ''),
+    };
+    if (!creds.username || !creds.oauthToken) {
+      throw new Error('Twitch account missing username or oauthToken in providerData');
+    }
+    await loadTwitchBadges(creds.channel, creds.oauthToken.replace(/^oauth:/, ''));
+    chatLogService.openSession('twitch', creds.channel);
+    suggestionService.clearSessionEntries();
+    selfSenderName.twitch = creds.username.toLowerCase();
+    await connectTwitchAccount({ accountId: account.id, ...creds });
+  };
+
   const overlayServer = new OverlayServer({
     port: generalSettingsStore.load().overlayServerPort,
     getOverlayState: () => {
@@ -2072,13 +2093,39 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.kickGetStatus, async () => kickStatus);
   ipcMain.handle(IPC_CHANNELS.kickGetAuthStatus, async () => getKickAuthStatus());
 
-  // Auto-reconnect Twitch from saved credentials on startup
+  // Auto-reconnect Twitch on startup. The account model is the source of
+  // truth — for each enabled+autoConnect Twitch account, spin up a child in
+  // the multi-adapter. Only fall back to the legacy single-credentials store
+  // when no Twitch accounts exist (back-compat for installs that haven't
+  // migrated).
   void (async () => {
-    const store = await getTwitchCredentialsStore();
-    if (!store) return;
-    const creds = await store.load();
-    if (!creds) return;
+    await activeProfileDirectoryReady;
     try {
+      const accounts = await accountRepository.list();
+      const twitchAccounts = accounts.filter(
+        (a) => a.providerId === 'twitch' && a.enabled && a.autoConnect,
+      );
+      if (twitchAccounts.length > 0) {
+        for (const account of twitchAccounts) {
+          try {
+            await connectTwitchAccountFromRecord(account);
+            logService.info('twitch', 'Auto-reconnected account', { channel: account.channel, accountId: account.id });
+          } catch (cause) {
+            logService.warn('twitch', 'Auto-reconnect failed', {
+              accountId: account.id,
+              channel: account.channel,
+              error: cause instanceof Error ? cause.message : String(cause),
+            });
+          }
+        }
+        return;
+      }
+
+      // Legacy fallback: pre-account-model installs.
+      const store = await getTwitchCredentialsStore();
+      if (!store) return;
+      const creds = await store.load();
+      if (!creds) return;
       const token = creds.oauthToken.replace(/^oauth:/, '');
       await loadTwitchBadges(creds.channel, token);
       chatLogService.openSession('twitch', creds.channel);
@@ -2091,9 +2138,11 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         username: creds.username,
         oauthToken: creds.oauthToken,
       });
-      logService.info('twitch', 'Auto-reconnected from saved credentials', { channel: creds.channel });
+      logService.info('twitch', 'Auto-reconnected from legacy credentials', { channel: creds.channel });
     } catch (cause) {
-      logService.warn('twitch', 'Auto-reconnect failed', { error: cause instanceof Error ? cause.message : String(cause) });
+      logService.warn('twitch', 'Auto-reconnect orchestration failed', {
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
     }
   })();
 
@@ -2355,21 +2404,12 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       return 'disconnected';
     },
     async connect(account) {
-      const creds = {
-        channel: account.channel,
-        username: String(account.providerData.username ?? ''),
-        oauthToken: String(account.providerData.oauthToken ?? ''),
-      };
-      if (!creds.username || !creds.oauthToken) {
-        throw new Error('Twitch account missing username or oauthToken in providerData');
-      }
-      const store = await getTwitchCredentialsStore();
-      if (store) await store.save(creds);
-      await loadTwitchBadges(creds.channel, creds.oauthToken.replace(/^oauth:/, ''));
-      chatLogService.openSession('twitch', creds.channel);
-      suggestionService.clearSessionEntries();
-      selfSenderName.twitch = creds.username.toLowerCase();
-      await connectTwitchAccount({ accountId: account.id, ...creds });
+      // Intentionally NOT writing to the legacy TwitchCredentialsStore here.
+      // With multi-account, that file would just track whichever account
+      // connected last, and the boot path would auto-reconnect a duplicate
+      // child — the very bug this provider is meant to avoid. Account
+      // providerData is the source of truth.
+      await connectTwitchAccountFromRecord(account);
     },
     async disconnect(account) {
       await disconnectTwitchAccount(account.id);
