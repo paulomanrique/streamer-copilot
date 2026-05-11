@@ -389,4 +389,14 @@ export const MIGRATIONS: SqlMigration[] = [
       DROP TABLE IF EXISTS voice_commands;
     `,
   },
+  {
+    version: 20,
+    // The youtube-v slot is gone — every YouTube scraper stream emits the
+    // single 'youtube' platform id now. Rewrite any pre-existing chat-log
+    // sessions so the filter chips and exports keep working after upgrade.
+    name: 'collapse_youtube_v_chat_sessions',
+    sql: `
+      UPDATE chat_sessions SET platform = 'youtube' WHERE platform = 'youtube-v';
+    `,
+  },
 ];

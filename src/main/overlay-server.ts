@@ -440,8 +440,6 @@ const chatOverlayCss = `
   --twitch-text: #d8b4fe;
   --youtube: rgba(239, 68, 68, 0.2);
   --youtube-text: #fca5a5;
-  --youtube-v: rgba(251, 113, 133, 0.2);
-  --youtube-v-text: #fda4af;
   --kick: rgba(34, 197, 94, 0.2);
   --kick-text: #86efac;
   --tiktok: rgba(236, 72, 153, 0.2);
@@ -493,7 +491,6 @@ html, body {
 
 .chat-message.twitch { border-left-color: rgba(168, 85, 247, 0.2); }
 .chat-message.youtube { border-left-color: rgba(239, 68, 68, 0.2); }
-.chat-message.youtube-v { border-left-color: rgba(251, 113, 133, 0.2); }
 .chat-message.kick { border-left-color: rgba(34, 197, 94, 0.2); }
 .chat-message.tiktok { border-left-color: rgba(236, 72, 153, 0.2); }
 .chat-message.command { background: rgba(139, 92, 246, 0.05); }
@@ -543,7 +540,6 @@ html, body {
 
 .platform-badge.twitch { background: var(--twitch); color: var(--twitch-text); }
 .platform-badge.youtube { background: var(--youtube); color: var(--youtube-text); }
-.platform-badge.youtube-v { background: var(--youtube-v); color: var(--youtube-v-text); }
 .platform-badge.kick { background: var(--kick); color: var(--kick-text); }
 .platform-badge.tiktok { background: var(--tiktok); color: var(--tiktok-text); }
 
@@ -655,22 +651,19 @@ const chatOverlayJs = `
 
   function platformClass(platform) {
     var value = String(platform || 'twitch').replace(/[^a-z0-9-]/gi, '').toLowerCase();
-    if (value === 'youtube-v') return value;
     if (value === 'youtube-api') return 'youtube';
     return icons[value] ? value : 'twitch';
   }
 
   function platformLabel(platform) {
-    if (platform === 'youtube-v') return 'YouTube Vertical';
-    if (platform === 'youtube') return 'YouTube';
-    if (platform === 'youtube-api') return 'YouTube';
+    if (platform === 'youtube' || platform === 'youtube-api') return 'YouTube';
     if (platform === 'kick') return 'Kick';
     if (platform === 'tiktok') return 'TikTok';
     return 'Twitch';
   }
 
   function iconFor(platform) {
-    if (platform === 'youtube-v' || platform === 'youtube-api') return icons.youtube;
+    if (platform === 'youtube-api') return icons.youtube;
     return icons[platform] || icons.twitch;
   }
 
@@ -691,7 +684,7 @@ const chatOverlayJs = `
   }
 
   function isSubscriber(message) {
-    if (message.platform === 'youtube' || message.platform === 'youtube-v' || message.platform === 'youtube-api') return hasBadge(message, 'member');
+    if (message.platform === 'youtube' || message.platform === 'youtube-api') return hasBadge(message, 'member');
     return hasBadge(message, 'subscriber', 'subscriber/') || hasBadge(message, 'member');
   }
 
@@ -858,7 +851,7 @@ const chatOverlayJs = `
 
       var author = document.createElement('span');
       author.className = 'author';
-      author.textContent = platform === 'youtube' || platform === 'youtube-v' || platform === 'youtube-api' ? '@' + (message.author || 'chat') : (message.author || 'chat');
+      author.textContent = platform === 'youtube' || platform === 'youtube-api' ? '@' + (message.author || 'chat') : (message.author || 'chat');
       author.style.color = authorColor;
       meta.appendChild(author);
 

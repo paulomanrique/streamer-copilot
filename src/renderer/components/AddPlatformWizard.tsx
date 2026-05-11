@@ -50,8 +50,8 @@ export function AddPlatformWizard({ open, onClose, onCreated }: AddPlatformWizar
     setError(null);
     if (step === 'auth') {
       // Wizard-listed providers always have validate/defaultLabel — see
-      // listWizardPlatformProviders. The optional-chain handles the
-      // hide-from-wizard providers (e.g. youtube-v) defensively.
+      // listWizardPlatformProviders. The optional-chain handles any
+      // hide-from-wizard providers defensively.
       const validationError = provider.validate?.(channel, draft) ?? null;
       if (validationError) {
         setError(validationError);

@@ -45,7 +45,7 @@ export interface LanguageOption {
  * without editing the core type. Validation at the IPC boundary is shape-only
  * (`z.string()` + slug regex), not membership in this list.
  */
-export type PlatformId = 'twitch' | 'youtube' | 'youtube-v' | 'youtube-api' | 'kick' | 'tiktok' | (string & {});
+export type PlatformId = 'twitch' | 'youtube' | 'youtube-api' | 'kick' | 'tiktok' | (string & {});
 
 /**
  * Unified link status for every platform connection. Per-platform unions
@@ -149,11 +149,11 @@ export interface StreamEvent {
 
 export interface YouTubeStreamInfo {
   videoId: string;
-  /** Which YouTube driver produced this stream — scraper assigns 'youtube'
-   *  (or 'youtube-v' for the vertical slot) for legacy chat coloring; the
-   *  API driver always emits 'youtube-api'. The renderer uses this to pick
-   *  the right viewer-card color and to surface a per-driver filter chip. */
-  platform: 'youtube' | 'youtube-v' | 'youtube-api';
+  /** Which YouTube driver produced this stream — the scraper emits
+   *  'youtube' for every concurrent live, the Data API driver emits
+   *  'youtube-api'. The renderer uses this to pick the right viewer-card
+   *  color and to surface a per-driver filter chip. */
+  platform: 'youtube' | 'youtube-api';
   channelHandle: string | null;
   label: string;
   viewerCount: number | null;
