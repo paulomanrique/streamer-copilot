@@ -22,14 +22,19 @@ export async function checkYouTubeLiveViaApi(
 ): Promise<LiveStreamInfo[] | null> {
   const youtube = google.youtube({ version: 'v3', auth });
   try {
+    // YouTube rejects requests that combine `mine` with `broadcastStatus`
+    // ("Incompatible parameters") — `mine` already scopes to the authed user,
+    // and filtering by status must happen client-side. We pull a small page
+    // of broadcasts and keep only the ones that are actually live now.
     const broadcasts = await youtube.liveBroadcasts.list({
       part: ['id', 'snippet', 'status'],
-      broadcastStatus: 'active',
       broadcastType: 'all',
       mine: true,
-      maxResults: 5,
+      maxResults: 10,
     });
-    const items = broadcasts.data.items ?? [];
+    const items = (broadcasts.data.items ?? []).filter(
+      (b) => b.status?.lifeCycleStatus === 'live',
+    );
     if (items.length === 0) return [];
 
     const videoIds = items.map((b) => b.id).filter((id): id is string => !!id);
