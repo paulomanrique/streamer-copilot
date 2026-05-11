@@ -106,7 +106,7 @@ Adding a new platform or driver must be **one entry in a registry**, not edits a
 
 3. **State shape symmetric across platforms.** When you find yourself adding `twitchStatus` / `kickStatus` / `tiktokStatus` / `youtubeStreams` / `kickLiveStatsByChannel` / `tiktokLiveStatsByUsername` as parallel store fields, push them into a `Record<PlatformId, ...>` instead. Same for push channels: prefer `pushPlatformStatus(platformId, payload)` over `pushTwitchStatus`, `pushKickStatus`, `pushTiktokStatus`.
 
-4. **Driver families.** `youtube` (scraper) and `youtube-api` (API) are sibling drivers of the same logical platform. Express this in the registry (`family: 'youtube'`) instead of `||`-chaining the ids everywhere. Filter chips and cards iterate the registry; multi-driver fan-out reads the family.
+4. **Each platform id is independent — no driver families.** `youtube` (scraper) and `youtube-api` (API) are siblings logically, but the codebase treats them as fully separate platforms: independent filter chips, independent cards, independent registry entries, independent state. Do **not** introduce a `family` field, a `'youtube' | 'youtube-api'` union helper, or `isYouTube`-style aggregator predicates. If you need to do "X for both youtube drivers", iterate the registry and filter — don't hardcode the membership.
 
 5. **Fallback in the registry, not in callers.** When a platform doesn't have a custom entry (e.g. unknown id), the registry returns a generic fallback. Callers must not write `?? PLATFORM_META.twitch` — that quietly mis-styles the unknown platform as Twitch.
 
