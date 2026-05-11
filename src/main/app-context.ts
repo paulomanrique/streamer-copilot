@@ -1321,11 +1321,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         .replaceAll('{command}', raffle.entryCommand);
       for (const target of resolveAnnouncementTargets(raffle.acceptedPlatforms)) {
         try {
-          if (target === 'youtube') {
-            await sendYoutubeMessage(content);
-          } else {
-            await chatService.sendMessage(target, content);
-          }
+          await chatService.sendMessage(target, content);
           await pushLocalOutboundMessage(target, content);
         } catch (cause) {
           logService.warn('raffles', 'Failed to send open announcement', {
@@ -1342,11 +1338,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         .replaceAll('{title}', raffle.title);
       for (const target of resolveAnnouncementTargets(raffle.acceptedPlatforms)) {
         try {
-          if (target === 'youtube') {
-            await sendYoutubeMessage(content);
-          } else {
-            await chatService.sendMessage(target, content);
-          }
+          await chatService.sendMessage(target, content);
           await pushLocalOutboundMessage(target, content);
         } catch (cause) {
           logService.warn('raffles', 'Failed to send elimination announcement', {
@@ -1361,11 +1353,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       const content = formatWinnerAnnouncement(raffle, winner.displayName);
       for (const target of resolveAnnouncementTargets(raffle.acceptedPlatforms)) {
         try {
-          if (target === 'youtube') {
-            await sendYoutubeMessage(content);
-          } else {
-            await chatService.sendMessage(target, content);
-          }
+          await chatService.sendMessage(target, content);
           await pushLocalOutboundMessage(target, content);
         } catch (cause) {
           logService.warn('raffles', 'Failed to send winner announcement', {
@@ -1421,11 +1409,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       if (!content) return;
       for (const target of resolveAnnouncementTargets(poll.acceptedPlatforms)) {
         try {
-          if (target === 'youtube') {
-            await sendYoutubeMessage(content);
-          } else {
-            await chatService.sendMessage(target, content);
-          }
+          await chatService.sendMessage(target, content);
           await pushLocalOutboundMessage(target, content);
         } catch (cause) {
           logService.warn('polls', 'Failed to send poll result announcement', {
@@ -3128,22 +3112,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   }
 
   async function sendPlatformMessage(platform: PlatformId, content: string): Promise<void> {
-    if (platform === 'youtube') {
-      if (!hasYoutubeScraper()) {
-        throw new Error('Log in to YouTube in Platforms before sending messages.');
-      }
-      try {
-        await sendYoutubeMessage(content);
-      } catch (cause) {
-        const message = cause instanceof Error ? cause.message : String(cause);
-        if (/login|not available|not ready|not connected/i.test(message)) {
-          throw new Error('Log in to YouTube in Platforms before sending messages.', { cause });
-        }
-        throw cause;
-      }
-      return;
-    }
-
+    // Kick keeps a per-provider auth precheck because its OAuth state lives
+    // outside the chat adapter — checking it here gives a sharper error than
+    // letting the underlying API throw a 401 deep in the send path.
     if (platform === 'kick') {
       const authStatus = await getKickAuthStatus();
       if (!authStatus.isAuthorized || !authStatus.channelSlug) {
@@ -3154,8 +3125,11 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     try {
       await chatService.sendMessage(platform, content);
     } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      if (platform === 'youtube' && /login|not available|not ready|not connected/i.test(message)) {
+        throw new Error('Log in to YouTube in Platforms before sending messages.', { cause });
+      }
       if (platform === 'kick') {
-        const message = cause instanceof Error ? cause.message : String(cause);
         if (/authorization|chat:write|oauth|forbidden|401|403/i.test(message)) {
           throw new Error('Log in to Kick in Platforms before sending messages.', { cause });
         }
@@ -3246,15 +3220,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   }
 
   /** True when at least one YouTube scraper is currently attached. Used by
-   *  the announcement / dispatch paths to short-circuit with a friendly
-   *  "log in" error instead of bubbling the raw "scraper not connected". */
+   *  the announcement / dispatch paths to filter targets without going
+   *  through the chat-service adapter abstraction. */
   function hasYoutubeScraper(): boolean {
     return Boolean(youtubeAdapter && youtubeAdapter.getCurrentStreams().length > 0);
-  }
-
-  async function sendYoutubeMessage(content: string): Promise<void> {
-    if (!youtubeAdapter) throw new Error('youtube: scraper not connected');
-    await youtubeAdapter.sendMessage(content);
   }
 
   function listCommandScheduleTasks(): ScheduledTask[] {
@@ -3334,31 +3303,15 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       return { runAt, result: 'skipped', detail };
     }
 
+    // resolveDispatchTargets already filters out disconnected platforms, so
+    // we can dispatch through the unified chatService routing here — every
+    // adapter that supports scheduled messages is registered. The adapter
+    // throws if its connection has dropped between resolve and send.
     for (const target of effectiveTargets) {
       try {
-        if (target === 'twitch') {
-          await chatService.sendMessage('twitch', content);
-          sent.push('twitch');
-          logService.info('scheduled', 'Sent', { platform: 'twitch', content });
-          continue;
-        }
-
-        if (target === 'youtube') {
-          if (!hasYoutubeScraper()) {
-            const reason = `${target}: disconnected`;
-            skipped.push(reason);
-            logService.warn('scheduled', 'Skipped', { platform: target, reason, content });
-            continue;
-          }
-          await sendYoutubeMessage(content);
-          sent.push(target);
-          logService.info('scheduled', 'Sent', { platform: target, content });
-          continue;
-        }
-
-        const reason = `${target}: not-supported`;
-        skipped.push(reason);
-        logService.warn('scheduled', 'Skipped', { platform: target, reason, content });
+        await chatService.sendMessage(target, content);
+        sent.push(target);
+        logService.info('scheduled', 'Sent', { platform: target, content });
       } catch (error) {
         const detail = `${target}: ${error instanceof Error ? error.message : String(error)}`;
         failed.push(detail);
