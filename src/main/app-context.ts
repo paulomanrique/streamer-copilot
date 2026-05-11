@@ -1900,7 +1900,6 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }
     const s = await getTwitchCredentialsStore(); if (s) await s.clear();
   });
-  ipcMain.handle(IPC_CHANNELS.twitchGetStatus, async () => twitchStatus);
   ipcMain.handle(IPC_CHANNELS.twitchGetUserAvatars, async (_, logins) => {
     const list = Array.isArray(logins) ? logins.filter(l => typeof l === 'string') : [];
     if (list.length === 0) return {};
@@ -2025,7 +2024,6 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.youtubeDisconnect, async () => {
     youtubeAdapter?.stopAllScrapers();
   });
-  ipcMain.handle(IPC_CHANNELS.youtubeGetStatus, async () => getYoutubeStreams());
   ipcMain.handle(IPC_CHANNELS.youtubeOpenLogin, async (event) => {
     const parent = BrowserWindow.fromWebContents(event.sender) ?? undefined;
     const win = new BrowserWindow({
@@ -2097,7 +2095,6 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }
     setTiktokStatus('disconnected', null);
   });
-  ipcMain.handle(IPC_CHANNELS.tiktokGetStatus, async () => aggregateTiktokStatus());
   ipcMain.handle(IPC_CHANNELS.tiktokCheckLive, async (_, raw: unknown) => {
     const username = typeof raw === 'string' ? raw.trim() : '';
     if (!username) return { isLive: false };
@@ -2214,7 +2211,6 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }
     setKickStatus('disconnected', null);
   });
-  ipcMain.handle(IPC_CHANNELS.kickGetStatus, async () => aggregateKickStatus());
   ipcMain.handle(IPC_CHANNELS.kickGetAuthStatus, async () => getKickAuthStatus());
 
   // Auto-reconnect Twitch on startup. The account model is the source of

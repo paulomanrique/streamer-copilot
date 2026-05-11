@@ -3,8 +3,6 @@ import type {
   ChatOverlayInfo,
   ChatMessage,
   KickAuthStatus,
-  KickLiveStats,
-  TwitchLiveStats,
   CloneProfileInput,
   CreateProfileInput,
   DeleteProfileInput,
@@ -57,9 +55,7 @@ import type {
   ScheduledAvailableTargets,
   ScheduledStatusItem,
   SelectProfileInput,
-  TwitchConnectionStatus,
   TwitchCredentials,
-  KickConnectionStatus,
   KickSettings,
   VoiceCommand,
   VoiceCommandDeleteInput,
@@ -152,20 +148,15 @@ export const IPC_CHANNELS = {
   chatEventsBatch: 'chat:events-batch',
   chatSendMessage: 'chat:send-message',
   logsList: 'logs:list',
-  twitchLiveStats: 'twitch:live-stats',
-  kickLiveStats: 'kick:live-stats',
   twitchGetUserAvatars: 'twitch:get-user-avatars',
   twitchGetBadgeUrls: 'twitch:get-badge-urls',
   twitchGetCredentials: 'twitch:get-credentials',
   twitchConnect: 'twitch:connect',
   twitchDisconnect: 'twitch:disconnect',
-  twitchGetStatus: 'twitch:get-status',
-  twitchStatus: 'twitch:status',
   twitchStartOAuth: 'twitch:start-oauth',
   kickStartOAuth: 'kick:start-oauth',
   youtubeConnect: 'youtube:connect',
   youtubeDisconnect: 'youtube:disconnect',
-  youtubeGetStatus: 'youtube:get-status',
   youtubeOpenLogin: 'youtube:open-login',
   youtubeGetSettings: 'youtube:get-settings',
   youtubeSaveSettings: 'youtube:save-settings',
@@ -174,19 +165,14 @@ export const IPC_CHANNELS = {
   youtubeApiStartOAuth: 'youtube-api:start-oauth',
   tiktokConnect: 'tiktok:connect',
   tiktokDisconnect: 'tiktok:disconnect',
-  tiktokGetStatus: 'tiktok:get-status',
   tiktokGetSettings: 'tiktok:get-settings',
   tiktokSaveSettings: 'tiktok:save-settings',
-  tiktokStatus: 'tiktok:status',
-  tiktokLiveStats: 'tiktok:live-stats',
   tiktokCheckLive: 'tiktok:check-live',
   kickConnect: 'kick:connect',
   kickDisconnect: 'kick:disconnect',
-  kickGetStatus: 'kick:get-status',
   kickGetAuthStatus: 'kick:get-auth-status',
   kickGetSettings: 'kick:get-settings',
   kickSaveSettings: 'kick:save-settings',
-  kickStatus: 'kick:status',
   chatLogListSessions: 'chatLog:list-sessions',
   chatLogGetMessages: 'chatLog:get-messages',
   chatLogExportSession: 'chatLog:export-session',
@@ -334,18 +320,12 @@ export interface CopilotApi {
   twitchGetCredentials: () => Promise<TwitchCredentials | null>;
   twitchConnect: (input: TwitchCredentials) => Promise<void>;
   twitchDisconnect: () => Promise<void>;
-  twitchGetStatus: () => Promise<TwitchConnectionStatus>;
-  onTwitchStatus: (listener: (status: TwitchConnectionStatus, channel: string | null) => void) => () => void;
-  onTwitchLiveStats: (listener: (payload: { channel: string; stats: import('./types.js').TwitchLiveStats | null }) => void) => () => void;
-  onKickLiveStats: (listener: (payload: { channel: string; stats: KickLiveStats | null }) => void) => () => void;
-  onYoutubeStatus: (listener: (streams: import('./types.js').YouTubeStreamInfo[]) => void) => () => void;
   twitchGetUserAvatars: (logins: string[]) => Promise<Record<string, string>>;
   twitchGetBadgeUrls: (badgeIds: string[]) => Promise<Record<string, string>>;
   twitchStartOAuth: () => Promise<{ username: string; accessToken: string }>;
   kickStartOAuth: (input?: { channelSlug?: string }) => Promise<{ channelSlug: string }>;
   youtubeConnect: (input: { videoId: string }) => Promise<void>;
   youtubeDisconnect: () => Promise<void>;
-  youtubeGetStatus: () => Promise<import('./types.js').YouTubeStreamInfo[]>;
   youtubeOpenLogin: () => Promise<void>;
   youtubeGetSettings: () => Promise<import('./types.js').YouTubeSettings>;
   youtubeSaveSettings: (settings: import('./types.js').YouTubeSettings) => Promise<import('./types.js').YouTubeSettings>;
@@ -370,19 +350,14 @@ export interface CopilotApi {
   }>;
   tiktokConnect: (input: { username: string }) => Promise<void>;
   tiktokDisconnect: () => Promise<void>;
-  tiktokGetStatus: () => Promise<import('./types.js').TikTokConnectionStatus>;
   tiktokGetSettings: () => Promise<import('./types.js').TikTokSettings>;
   tiktokSaveSettings: (settings: import('./types.js').TikTokSettings) => Promise<void>;
-  onTiktokStatus: (listener: (status: import('./types.js').TikTokConnectionStatus, username: string | null) => void) => () => void;
-  onTiktokLiveStats: (listener: (payload: { username: string; stats: import('./types.js').TikTokLiveStats | null }) => void) => () => void;
   tiktokCheckLive: (username: string) => Promise<{ isLive: boolean }>;
   kickConnect: (input: { channelInput: string; clientId: string; clientSecret: string }) => Promise<void>;
   kickDisconnect: () => Promise<void>;
-  kickGetStatus: () => Promise<KickConnectionStatus>;
   kickGetAuthStatus: () => Promise<KickAuthStatus>;
   kickGetSettings: () => Promise<KickSettings>;
   kickSaveSettings: (settings: KickSettings) => Promise<void>;
-  onKickStatus: (listener: (status: KickConnectionStatus, slug: string | null) => void) => () => void;
   chatLogListSessions: (filters?: { platform?: string }) => Promise<ChatSession[]>;
   chatLogGetMessages: (sessionId: string, opts?: { limit?: number; offset?: number }) => Promise<ChatLogMessage[]>;
   chatLogExportSession: (sessionId: string) => Promise<void>;
