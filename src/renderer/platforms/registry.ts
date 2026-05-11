@@ -71,6 +71,11 @@ export interface PlatformBehavior {
    *  chat row to link author names to their platform profile. Returns `''`
    *  when no canonical URL is known. */
   profileUrl(handle: string): string;
+  /** Whether incoming chat messages already carry rendered badge image URLs
+   *  on `message.badgeUrls` (Twitch via tmi.js). When false the chat row
+   *  shows a synthesized avatar slot instead, and renders a textual `MOD`
+   *  label for moderators since no badge image is available. */
+  hasNativeBadgeUrls: boolean;
 }
 
 export interface PlatformProvider extends PlatformVisuals, PlatformBehavior {
@@ -161,6 +166,7 @@ const FALLBACK_PROVIDER: PlatformProvider = {
   subscriberBadge: 'subscriber',
   authorAtPrefix: false,
   profileUrl: () => '',
+  hasNativeBadgeUrls: false,
 };
 
 /** Returns the provider matching `id`, or a gray fallback when the id is

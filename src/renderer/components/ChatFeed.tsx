@@ -246,7 +246,9 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
     for (const item of items) {
       if (item.kind !== 'message') continue;
       const { message } = item;
-      if (message.platform === 'twitch' || message.avatarUrl) continue;
+      // Skip the avatar lookup when the adapter already attached badges/avatar
+      // info to the message (Twitch via tmi.js) — the row uses those directly.
+      if (getPlatformProviderOrFallback(message.platform).hasNativeBadgeUrls || message.avatarUrl) continue;
       const login = message.author.toLowerCase();
       if (!seen.has(login) && !requestedAvatarsRef.current.has(login)) {
         seen.add(login);
@@ -762,8 +764,10 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highli
             {badgeLabel}
           </span>
 
-          {/* Avatar (Shown for everyone except Twitch by default, or if available) */}
-          {message.platform !== 'twitch' && (
+          {/* Avatar — shown for platforms whose messages don't ship with
+              native badge images. When the adapter already gave us
+              badge.png URLs (Twitch), the badges themselves fill this slot. */}
+          {!meta.hasNativeBadgeUrls && (
             effectiveAvatarUrl ? (
               <img
                 src={effectiveAvatarUrl}
@@ -784,8 +788,10 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highli
             )
           )}
 
-          {/* Twitch chat badges (broadcaster, moderator, subscriber, etc.) */}
-          {message.platform === 'twitch' && message.badgeUrls?.map((url, i) => (
+          {/* Native chat badges (broadcaster, moderator, subscriber, etc.) —
+              only emitted by platforms whose adapter resolves badge image
+              URLs upstream. Others fall back to the textual MOD label below. */}
+          {meta.hasNativeBadgeUrls && message.badgeUrls?.map((url, i) => (
             <img key={i} src={url} alt="" className="w-4 h-4 rounded-sm shrink-0 object-contain" />
           ))}
 
@@ -796,7 +802,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highli
             {meta.authorAtPrefix ? `@${message.author}` : message.author}
           </span>
 
-          {message.platform !== 'twitch' && isMod ? <span className="text-xs text-emerald-400 font-semibold">MOD</span> : null}
+          {!meta.hasNativeBadgeUrls && isMod ? <span className="text-xs text-emerald-400 font-semibold">MOD</span> : null}
         </div>
         <p className={`text-sm mt-0.5 break-words leading-snug ${isCommand ? 'text-violet-300 font-mono' : 'text-gray-300'}`} data-no-i18n="true">
           {messageContent}
