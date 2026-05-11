@@ -15,16 +15,9 @@ import type {
   SoundPlayPayload,
   StreamEvent,
   SuggestionSnapshot,
-  KickConnectionStatus,
-  KickLiveStats,
   PlatformId,
   PlatformLinkStatus,
-  TikTokConnectionStatus,
-  TikTokLiveStats,
-  TwitchConnectionStatus,
-  TwitchLiveStats,
   VoiceSpeakPayload,
-  YouTubeStreamInfo,
 } from '../shared/types.js';
 
 // Foundation placeholder for future push-based state sync to renderer.
@@ -135,44 +128,6 @@ export class StateHub {
       channelKey,
       stats,
     });
-  }
-
-  // Per-platform shims kept around so app-context callsites don't all need to
-  // be rewritten at once. Each delegates straight to the symmetric push above —
-  // these will be deleted in the next pass once every callsite uses
-  // pushPlatformStatus / pushPlatformLiveStats directly.
-
-  pushTwitchStatus(status: TwitchConnectionStatus, channel?: string | null): void {
-    this.pushPlatformStatus('twitch', status, channel ?? null);
-  }
-
-  pushTwitchLiveStats(channel: string, stats: TwitchLiveStats | null): void {
-    this.pushPlatformLiveStats('twitch', channel, stats);
-  }
-
-  pushYoutubeStatus(streams: YouTubeStreamInfo[]): void {
-    // YouTube has no single aggregate status; broadcast one live-stats entry
-    // per concurrent stream keyed by videoId. The renderer derives the
-    // "connected" flag from whether any entries exist for the driver id.
-    for (const stream of streams) {
-      this.pushPlatformLiveStats(stream.platform, stream.videoId, stream);
-    }
-  }
-
-  pushTiktokStatus(status: TikTokConnectionStatus, username?: string | null): void {
-    this.pushPlatformStatus('tiktok', status, username ?? null);
-  }
-
-  pushTiktokLiveStats(username: string, stats: TikTokLiveStats | null): void {
-    this.pushPlatformLiveStats('tiktok', username, stats);
-  }
-
-  pushKickStatus(status: KickConnectionStatus, slug?: string | null): void {
-    this.pushPlatformStatus('kick', status, slug ?? null);
-  }
-
-  pushKickLiveStats(channel: string, stats: KickLiveStats | null): void {
-    this.pushPlatformLiveStats('kick', channel, stats);
   }
 
   pushMusicStateUpdate(state: MusicPlayerState): void {
