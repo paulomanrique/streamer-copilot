@@ -163,7 +163,6 @@ export const IPC_CHANNELS = {
   kickStartOAuth: 'kick:start-oauth',
   youtubeConnect: 'youtube:connect',
   youtubeDisconnect: 'youtube:disconnect',
-  youtubeDisconnectVideo: 'youtube:disconnect-video',
   youtubeGetStatus: 'youtube:get-status',
   youtubeOpenLogin: 'youtube:open-login',
   youtubeGetSettings: 'youtube:get-settings',
@@ -335,7 +334,6 @@ export interface CopilotApi {
   kickStartOAuth: (input?: { channelSlug?: string }) => Promise<{ channelSlug: string }>;
   youtubeConnect: (input: { videoId: string }) => Promise<void>;
   youtubeDisconnect: () => Promise<void>;
-  youtubeDisconnectVideo: (input: { videoId: string }) => Promise<void>;
   youtubeGetStatus: () => Promise<import('./types.js').YouTubeStreamInfo[]>;
   youtubeOpenLogin: () => Promise<void>;
   youtubeGetSettings: () => Promise<import('./types.js').YouTubeSettings>;
