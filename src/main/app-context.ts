@@ -420,7 +420,13 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     ...(youtubeApiAdapter?.getCurrentStreams() ?? []),
   ];
   const pushMergedYoutubeStreams = (): void => {
-    options.stateHub.pushYoutubeStatus(getYoutubeStreams());
+    // YouTube has no single aggregate status — fan out each concurrent
+    // stream as a live-stats entry keyed by videoId. The driver id (`youtube`,
+    // `youtube-v`, `youtube-api`) lives on the stream itself, so this stays
+    // free of hardcoded platform branches.
+    for (const stream of getYoutubeStreams()) {
+      options.stateHub.pushPlatformLiveStats(stream.platform, stream.videoId, stream);
+    }
   };
 
   /**
@@ -729,7 +735,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const setKickStatus = (status: KickConnectionStatus, slug?: string | null) => {
     kickStatus = status;
     if (slug !== undefined) kickSlug = slug;
-    options.stateHub.pushKickStatus(status, kickSlug);
+    options.stateHub.pushPlatformStatus('kick', status, kickSlug);
     // Per-channel stats are managed by start/stopKickStatsPollFor — no global
     // null push here, otherwise multi-channel installs would clobber each
     // other's cards on every status flip.
@@ -829,7 +835,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       const token = await fetchKickClientAccessToken(credentials) ?? authSession?.token.accessToken;
       if (!token) {
         const fallback = await fetchKickLegacyStats(channelSlug);
-        if (fallback) options.stateHub.pushKickLiveStats(channelSlug, fallback);
+        if (fallback) options.stateHub.pushPlatformLiveStats('kick', channelSlug, fallback);
         return;
       }
 
@@ -841,7 +847,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       });
       if (!response.ok) {
         const fallback = await fetchKickLegacyStats(channelSlug);
-        if (fallback) options.stateHub.pushKickLiveStats(channelSlug, fallback);
+        if (fallback) options.stateHub.pushPlatformLiveStats('kick', channelSlug, fallback);
         return;
       }
 
@@ -861,7 +867,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       const channel = payload.data?.[0];
       if (!channel) {
         const fallback = await fetchKickLegacyStats(channelSlug);
-        if (fallback) options.stateHub.pushKickLiveStats(channelSlug, fallback);
+        if (fallback) options.stateHub.pushPlatformLiveStats('kick', channelSlug, fallback);
         return;
       }
 
@@ -871,10 +877,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         subscriberCount: typeof channel.active_subscribers_count === 'number' ? channel.active_subscribers_count : null,
         isLive: channel.stream?.is_live ?? (channel.stream?.viewer_count ?? 0) > 0,
       };
-      options.stateHub.pushKickLiveStats(channelSlug, stats);
+      options.stateHub.pushPlatformLiveStats('kick', channelSlug, stats);
     } catch {
       const fallback = await fetchKickLegacyStats(channelSlug);
-      if (fallback) options.stateHub.pushKickLiveStats(channelSlug, fallback);
+      if (fallback) options.stateHub.pushPlatformLiveStats('kick', channelSlug, fallback);
     }
   };
 
@@ -930,7 +936,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       clearInterval(timer);
       kickStatsTimers.delete(channelSlug);
     }
-    options.stateHub.pushKickLiveStats(channelSlug, null);
+    options.stateHub.pushPlatformLiveStats('kick', channelSlug, null);
   };
 
   const stopKickStatsPoll = () => {
@@ -946,7 +952,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const setTiktokStatus = (status: TikTokConnectionStatus, username?: string | null) => {
     tiktokStatus = status;
     if (username !== undefined) tiktokUsername = username;
-    options.stateHub.pushTiktokStatus(status, tiktokUsername);
+    options.stateHub.pushPlatformStatus('tiktok', status, tiktokUsername);
     for (const listener of tiktokStatusListeners) listener();
   };
 
@@ -1112,7 +1118,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         }
       }
 
-      options.stateHub.pushTwitchLiveStats(channel, {
+      options.stateHub.pushPlatformLiveStats('twitch', channel, {
         viewerCount: stream?.viewer_count ?? 0,
         followerCount: followersData.total ?? 0,
         isLive: !!stream,
@@ -1139,7 +1145,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const t = twitchStatsTimers.get(channel);
     if (t) clearInterval(t);
     twitchStatsTimers.delete(channel);
-    options.stateHub.pushTwitchLiveStats(channel, null);
+    options.stateHub.pushPlatformLiveStats('twitch', channel, null);
   };
 
   const stopTwitchStatsPoll = () => {
@@ -1185,7 +1191,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const setTwitchStatus = (status: TwitchConnectionStatus, channel?: string | null) => {
     twitchStatus = status;
     if (channel !== undefined) twitchChannel = channel;
-    options.stateHub.pushTwitchStatus(status, twitchChannel);
+    options.stateHub.pushPlatformStatus('twitch', status, twitchChannel);
     if (status !== 'connected') stopTwitchStatsPoll();
     for (const listener of twitchStatusListeners) listener();
   };
@@ -2640,7 +2646,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
           setTiktokStatus(aggregateTiktokStatus(), username);
           broadcastAccountsForProvider('tiktok');
         },
-        onLiveStats: (stats) => options.stateHub.pushTiktokLiveStats(username, stats),
+        onLiveStats: (stats) => options.stateHub.pushPlatformLiveStats('tiktok', username, stats),
         onCaptchaDetected: () => logService.warn('tiktok', 'CAPTCHA detected', { username }),
       });
       return { ok: true };
@@ -2702,7 +2708,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     if (tiktokMultiAdapter.hasAccount(accountId)) {
       await tiktokMultiAdapter.removeAccount(accountId);
     }
-    if (username) options.stateHub.pushTiktokLiveStats(username, null);
+    if (username) options.stateHub.pushPlatformLiveStats('tiktok', username, null);
     setTiktokStatus(aggregateTiktokStatus(), tiktokMultiAdapter.hasConnectedChild() ? null : null);
     if (!tiktokMultiAdapter.hasConnectedChild()) {
       chatLogService.closeSession('tiktok');
