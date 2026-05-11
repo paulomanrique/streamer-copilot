@@ -7,6 +7,7 @@ import { AddPlatformWizard } from './AddPlatformWizard.js';
 // Side effect imports — each provider self-registers on import.
 import '../platforms/twitch-provider.js';
 import '../platforms/youtube-provider.js';
+import '../platforms/youtube-v-provider.js';
 import '../platforms/youtube-api-provider.js';
 import '../platforms/kick-provider.js';
 import '../platforms/tiktok-provider.js';

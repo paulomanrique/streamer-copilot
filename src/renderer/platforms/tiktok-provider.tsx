@@ -38,6 +38,29 @@ registerPlatformProvider({
   displayName: 'TikTok',
   accentClass: 'border-l-pink-500',
   supportsMultipleAccounts: true,
+  icon: 'M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.67a8.17 8.17 0 0 0 4.79 1.53V6.75a4.85 4.85 0 0 1-1.02-.06z',
+  badge: {
+    bg: 'bg-pink-500/20',
+    text: 'text-pink-300',
+    rowBorder: 'border-pink-500/20',
+  },
+  accentBg: 'bg-pink-500',
+  bannerBorderColor: 'rgba(236,72,153,0.2)',
+  card: {
+    classes: 'bg-pink-500/10 border-pink-500/20 text-pink-300',
+    metaClass: 'text-pink-400',
+  },
+  liveLink: {
+    color: 'text-pink-400',
+    border: 'border-pink-500/30',
+    btnBg: 'bg-pink-600/30 hover:bg-pink-600/50 text-pink-300',
+  },
+  subscriberBadge: 'subscriber',
+  authorAtPrefix: false,
+  profileUrl: (handle) => {
+    const username = handle.replace(/^@+/, '').trim();
+    return username ? `https://www.tiktok.com/@${encodeURIComponent(username)}` : '';
+  },
   AuthStep: TikTokAuthStep,
   validate(channel) {
     if (!channel) return 'TikTok username is required';

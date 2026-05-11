@@ -3,6 +3,7 @@ import { useState } from 'react';
 import logoUrl from '../assets/logo.svg';
 import type { AppInfo, KickConnectionStatus, KickLiveStats, TikTokConnectionStatus, TikTokLiveStats, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
+import { getPlatformProviderOrFallback } from '../platforms/registry.js';
 import type { AppSection } from './SectionTabs.js';
 
 interface AppHeaderProps {
@@ -22,10 +23,35 @@ interface AppHeaderProps {
   kickLiveStatsByChannel: Record<string, KickLiveStats>;
 }
 
-const TWITCH_ICON = 'M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z';
-const YOUTUBE_ICON = 'M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z';
-const KICK_ICON = 'M2 2h4v8l4-4h4l-6 6 6 6h-4l-4-4v4H2V2zm14 0h4v20h-4z';
-const TIKTOK_ICON = 'M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1v-3.51a6.37 6.37 0 0 0-.79-.05A6.34 6.34 0 0 0 3.15 15.17a6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V8.75a8.18 8.18 0 0 0 4.76 1.52V6.84a4.84 4.84 0 0 1-1-.15z';
+/** Build a single live-link row using the platform registry — every
+ *  consumer of this helper just supplies the per-row label / URL pair. */
+function makeLiveLink(
+  platformId: string,
+  id: string,
+  label: string,
+  full: string,
+): {
+  id: string;
+  label: string;
+  url: string;
+  full: string;
+  icon: string;
+  color: string;
+  border: string;
+  btnBg: string;
+} {
+  const meta = getPlatformProviderOrFallback(platformId);
+  return {
+    id,
+    label,
+    url: full.replace(/^https?:\/\//, ''),
+    full,
+    icon: meta.icon,
+    color: meta.liveLink.color,
+    border: meta.liveLink.border,
+    btnBg: meta.liveLink.btnBg,
+  };
+}
 
 export function AppHeader({
   appInfo,
@@ -74,54 +100,22 @@ export function AppHeader({
     || liveTiktokUsernames.length > 0;
 
   const liveLinks = [
-    ...liveTwitchChannels.map((channel) => ({
-      id: `twitch-${channel}`,
-      label: `Twitch #${channel}`,
-      url: `twitch.tv/${channel}`,
-      full: `https://twitch.tv/${channel}`,
-      icon: TWITCH_ICON,
-      color: 'text-purple-400',
-      border: 'border-purple-500/30',
-      btnBg: 'bg-purple-600/30 hover:bg-purple-600/50 text-purple-300',
-    })),
-    ...youtubeStreams.map((stream) => {
-      // stream.label already carries the "YouTube" prefix when needed
-      // (e.g. "YouTube Horizontal", "YouTube @user", "YouTube-1") and is
-      // just "YouTube" for the single-stream case — see
-      // computeYouTubeStreamLabels in the main process.
-      return ({
-      id: `yt-${stream.videoId}`,
-      label: stream.label || 'YouTube',
-      url: stream.liveUrl.replace(/^https?:\/\//, ''),
-      full: stream.liveUrl,
-      icon: YOUTUBE_ICON,
-      color: stream.platform === 'youtube-v' ? 'text-rose-400' : 'text-red-400',
-      border: stream.platform === 'youtube-v' ? 'border-rose-500/30' : 'border-red-500/30',
-      btnBg: stream.platform === 'youtube-v'
-        ? 'bg-rose-600/30 hover:bg-rose-600/50 text-rose-300'
-        : 'bg-red-600/30 hover:bg-red-600/50 text-red-300',
-    });
-    }),
-    ...liveKickChannels.map((channel) => ({
-      id: `kick-${channel}`,
-      label: `Kick ${channel}`,
-      url: `kick.com/${channel}`,
-      full: `https://kick.com/${channel}`,
-      icon: KICK_ICON,
-      color: 'text-green-400',
-      border: 'border-green-500/30',
-      btnBg: 'bg-green-600/30 hover:bg-green-600/50 text-green-300',
-    })),
-    ...liveTiktokUsernames.map((username) => ({
-      id: `tiktok-${username}`,
-      label: `TikTok @${username}`,
-      url: `tiktok.com/@${username}/live`,
-      full: `https://www.tiktok.com/@${username}/live`,
-      icon: TIKTOK_ICON,
-      color: 'text-pink-400',
-      border: 'border-pink-500/30',
-      btnBg: 'bg-pink-600/30 hover:bg-pink-600/50 text-pink-300',
-    })),
+    ...liveTwitchChannels.map((channel) =>
+      makeLiveLink('twitch', `twitch-${channel}`, `Twitch #${channel}`, `https://twitch.tv/${channel}`),
+    ),
+    // stream.label already carries the "YouTube" prefix when needed
+    // (e.g. "YouTube Horizontal", "YouTube @user", "YouTube-1") and is
+    // just "YouTube" for the single-stream case — see
+    // computeYouTubeStreamLabels in the main process.
+    ...youtubeStreams.map((stream) =>
+      makeLiveLink(stream.platform, `yt-${stream.videoId}`, stream.label || 'YouTube', stream.liveUrl),
+    ),
+    ...liveKickChannels.map((channel) =>
+      makeLiveLink('kick', `kick-${channel}`, `Kick ${channel}`, `https://kick.com/${channel}`),
+    ),
+    ...liveTiktokUsernames.map((username) =>
+      makeLiveLink('tiktok', `tiktok-${username}`, `TikTok @${username}`, `https://www.tiktok.com/@${username}/live`),
+    ),
   ];
 
   const copyLink = (id: string, url: string) => {

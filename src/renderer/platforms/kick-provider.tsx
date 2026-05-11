@@ -52,6 +52,29 @@ registerPlatformProvider({
   displayName: 'Kick',
   accentClass: 'border-l-green-500',
   supportsMultipleAccounts: true,
+  icon: 'M2 2h4v8l4-4h4l-6 6 6 6h-4l-4-4v4H2V2zm14 0h4v20h-4z',
+  badge: {
+    bg: 'bg-green-500/20',
+    text: 'text-green-300',
+    rowBorder: 'border-green-500/20',
+  },
+  accentBg: 'bg-green-500',
+  bannerBorderColor: 'rgba(34,197,94,0.2)',
+  card: {
+    classes: 'bg-green-500/10 border-green-500/20 text-green-300',
+    metaClass: 'text-green-400',
+  },
+  liveLink: {
+    color: 'text-green-400',
+    border: 'border-green-500/30',
+    btnBg: 'bg-green-600/30 hover:bg-green-600/50 text-green-300',
+  },
+  subscriberBadge: 'subscriber',
+  authorAtPrefix: false,
+  profileUrl: (handle) => {
+    const username = handle.replace(/^@+/, '').trim().toLowerCase();
+    return username ? `https://kick.com/${encodeURIComponent(username)}` : '';
+  },
   AuthStep: KickAuthStep,
   validate(channel) {
     if (!channel) return 'Channel slug is required';

@@ -2,30 +2,15 @@ import { useEffect, useState } from 'react';
 
 import type { PlatformAccount, PlatformAccountConnectionStatus } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
+import { getPlatformProviderOrFallback } from '../platforms/registry.js';
 
 interface StatusBarProps {
   activeProfileName: string;
   obsConnected: boolean;
 }
 
-const PROVIDER_LABELS: Record<string, string> = {
-  twitch: 'Twitch',
-  youtube: 'YouTube',
-  'youtube-api': 'YouTube (API)',
-  kick: 'Kick',
-  tiktok: 'TikTok',
-};
-
-const PROVIDER_DOT: Record<string, string> = {
-  twitch: 'bg-purple-500 pulse-dot',
-  youtube: 'bg-red-500 pulse-dot',
-  'youtube-api': 'bg-red-500 pulse-dot',
-  kick: 'bg-green-500 pulse-dot',
-  tiktok: 'bg-pink-500 pulse-dot',
-};
-
 function dotClass(providerId: string, status: PlatformAccountConnectionStatus): string {
-  if (status === 'connected') return PROVIDER_DOT[providerId] ?? 'bg-emerald-500 pulse-dot';
+  if (status === 'connected') return `${getPlatformProviderOrFallback(providerId).accentBg} pulse-dot`;
   if (status === 'connecting' || status === 'watching' || status === 'captcha') return 'bg-yellow-400 animate-pulse';
   if (status === 'error') return 'bg-red-500';
   return 'bg-gray-600';
@@ -81,7 +66,7 @@ export function StatusBar({ activeProfileName, obsConnected }: StatusBarProps) {
     <footer className="h-8 bg-gray-900 border-t border-gray-800 flex items-center px-4 gap-4 shrink-0 text-xs text-gray-500 overflow-x-auto whitespace-nowrap">
       {accounts.map((account) => {
         const status = statuses[account.id] ?? 'disconnected';
-        const providerLabel = PROVIDER_LABELS[account.providerId] ?? account.providerId;
+        const providerLabel = getPlatformProviderOrFallback(account.providerId).displayName;
         const display = status === 'connected'
           ? (account.label || account.channel || statusLabel(status))
           : statusLabel(status);

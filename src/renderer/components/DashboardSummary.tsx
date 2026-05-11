@@ -52,13 +52,13 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
   );
 
   const connectedPlatforms = useMemo(() => {
+    // Each platform id is asked independently — no driver-family grouping.
+    // YouTube scraper slots ('youtube', 'youtube-v') and the API driver
+    // ('youtube-api') each get their own filter chip / card / live-link.
     const list: import('../../shared/types.js').PlatformId[] = [];
     if (twitchStatus === 'connected') list.push('twitch');
-    // Scraper and API are sibling YouTube drivers in the same array,
-    // discriminated by `platform`. Each surfaces its own filter chip.
-    const scrapeYoutube = youtubeStreams.filter((s) => s.platform === 'youtube' || s.platform === 'youtube-v');
-    if (scrapeYoutube.length >= 1) list.push('youtube');
-    if (scrapeYoutube.length >= 2) list.push('youtube-v');
+    if (youtubeStreams.some((s) => s.platform === 'youtube')) list.push('youtube');
+    if (youtubeStreams.some((s) => s.platform === 'youtube-v')) list.push('youtube-v');
     if (youtubeStreams.some((s) => s.platform === 'youtube-api')) list.push('youtube-api');
     if (tiktokStatus === 'connected') list.push('tiktok');
     if (kickStatus === 'connected') list.push('kick');
