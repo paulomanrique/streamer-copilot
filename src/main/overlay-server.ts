@@ -637,12 +637,67 @@ const chatOverlayJs = `
 (function () {
   var listEl = document.getElementById('chat-list');
   var renderedIds = new Set();
-  var icons = {
-    twitch: 'M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z',
-    youtube: 'M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z',
-    kick: 'M2 2h4v8l4-4h4l-6 6 6 6h-4l-4-4v4H2V2zm14 0h4v20h-4z',
-    tiktok: 'M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.67a8.17 8.17 0 0 0 4.79 1.53V6.75a4.85 4.85 0 0 1-1.02-.06z',
+  // Per-platform metadata for the chat overlay. The overlay runs in a
+  // browser popup so it can't import the renderer registry — but the shape
+  // mirrors what PlatformProvider exposes there. Adding a new platform is
+  // one entry here plus the matching renderer provider.
+  // - cssClass:    bound to .chat-message.<cls> / .platform-badge.<cls> rules above
+  // - label:       text shown in the message's platform badge
+  // - icon:        SVG path drawn in the badge and as a fallback avatar
+  // - badgeStyle:  'native' (adapter ships badge image URLs on the message,
+  //                  e.g. Twitch via tmi.js) or 'synthesized' (the row draws
+  //                  an avatar slot and a textual MOD label instead)
+  // - subscriberBadge: which badge id earns the supporter star — YouTube
+  //                    drivers use 'member', others use 'subscriber'
+  // - authorAtPrefix: whether to prepend '@' to the author name
+  var PLATFORMS = {
+    twitch: {
+      cssClass: 'twitch',
+      label: 'Twitch',
+      icon: 'M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z',
+      badgeStyle: 'native',
+      subscriberBadge: 'subscriber',
+      authorAtPrefix: false,
+    },
+    youtube: {
+      cssClass: 'youtube',
+      label: 'YouTube',
+      icon: 'M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z',
+      badgeStyle: 'synthesized',
+      subscriberBadge: 'member',
+      authorAtPrefix: true,
+    },
+    'youtube-api': {
+      cssClass: 'youtube',
+      label: 'YouTube',
+      icon: 'M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z',
+      badgeStyle: 'synthesized',
+      subscriberBadge: 'member',
+      authorAtPrefix: true,
+    },
+    kick: {
+      cssClass: 'kick',
+      label: 'Kick',
+      icon: 'M2 2h4v8l4-4h4l-6 6 6 6h-4l-4-4v4H2V2zm14 0h4v20h-4z',
+      badgeStyle: 'synthesized',
+      subscriberBadge: 'subscriber',
+      authorAtPrefix: false,
+    },
+    tiktok: {
+      cssClass: 'tiktok',
+      label: 'TikTok',
+      icon: 'M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.67a8.17 8.17 0 0 0 4.79 1.53V6.75a4.85 4.85 0 0 1-1.02-.06z',
+      badgeStyle: 'synthesized',
+      subscriberBadge: 'subscriber',
+      authorAtPrefix: false,
+    },
   };
+  var DEFAULT_PLATFORM = PLATFORMS.twitch;
+
+  function platformOf(id) {
+    return PLATFORMS[String(id || '').toLowerCase()] || DEFAULT_PLATFORM;
+  }
+
   var defaultColors = [
     '#FF0000', '#0000FF', '#008000', '#B22222', '#FF7F50',
     '#9ACD32', '#FF4500', '#2E8B57', '#DAA520', '#D2691E',
@@ -650,21 +705,15 @@ const chatOverlayJs = `
   ];
 
   function platformClass(platform) {
-    var value = String(platform || 'twitch').replace(/[^a-z0-9-]/gi, '').toLowerCase();
-    if (value === 'youtube-api') return 'youtube';
-    return icons[value] ? value : 'twitch';
+    return platformOf(platform).cssClass;
   }
 
   function platformLabel(platform) {
-    if (platform === 'youtube' || platform === 'youtube-api') return 'YouTube';
-    if (platform === 'kick') return 'Kick';
-    if (platform === 'tiktok') return 'TikTok';
-    return 'Twitch';
+    return platformOf(platform).label;
   }
 
   function iconFor(platform) {
-    if (platform === 'youtube-api') return icons.youtube;
-    return icons[platform] || icons.twitch;
+    return platformOf(platform).icon;
   }
 
   function resolveAuthorColor(message) {
@@ -684,7 +733,8 @@ const chatOverlayJs = `
   }
 
   function isSubscriber(message) {
-    if (message.platform === 'youtube' || message.platform === 'youtube-api') return hasBadge(message, 'member');
+    var meta = platformOf(message.platform);
+    if (meta.subscriberBadge === 'member') return hasBadge(message, 'member');
     return hasBadge(message, 'subscriber', 'subscriber/') || hasBadge(message, 'member');
   }
 
@@ -703,7 +753,9 @@ const chatOverlayJs = `
   }
 
   function appendAvatar(meta, message, platform, authorColor) {
-    if (platform === 'twitch') return;
+    // Native-badge platforms (Twitch) get badge images attached to the
+    // message — they fill the avatar slot, so we skip the synth one here.
+    if (platformOf(platform).badgeStyle === 'native') return;
 
     if (message.avatarUrl) {
       var img = document.createElement('img');
@@ -724,8 +776,11 @@ const chatOverlayJs = `
     meta.appendChild(fallback);
   }
 
-  function appendTwitchBadges(meta, message) {
-    if (message.platform !== 'twitch' || !Array.isArray(message.badgeUrls)) return;
+  function appendNativeBadges(meta, message) {
+    // Only native-badge platforms (Twitch) ship rendered badge image URLs
+    // on the message. The .twitch-badge class is historical; keep it so
+    // existing overlay CSS still applies, but the logic is platform-agnostic.
+    if (platformOf(message.platform).badgeStyle !== 'native' || !Array.isArray(message.badgeUrls)) return;
     message.badgeUrls.forEach(function (url) {
       var badge = document.createElement('img');
       badge.className = 'twitch-badge';
@@ -840,7 +895,7 @@ const chatOverlayJs = `
       meta.appendChild(badge);
 
       appendAvatar(meta, message, platform, authorColor);
-      appendTwitchBadges(meta, message);
+      appendNativeBadges(meta, message);
 
       if (isSubscriber(message)) {
         var star = document.createElement('span');
@@ -849,13 +904,17 @@ const chatOverlayJs = `
         meta.appendChild(star);
       }
 
+      var meta_ = platformOf(platform);
       var author = document.createElement('span');
       author.className = 'author';
-      author.textContent = platform === 'youtube' || platform === 'youtube-api' ? '@' + (message.author || 'chat') : (message.author || 'chat');
+      var rawAuthor = message.author || 'chat';
+      author.textContent = meta_.authorAtPrefix ? '@' + rawAuthor : rawAuthor;
       author.style.color = authorColor;
       meta.appendChild(author);
 
-      if (platform !== 'twitch' && isModerator(message)) {
+      // Native-badge platforms surface "Mod" via the badge image; the
+      // synthesized renderer falls back to a textual MOD chip.
+      if (meta_.badgeStyle !== 'native' && isModerator(message)) {
         var mod = document.createElement('span');
         mod.className = 'mod';
         mod.textContent = 'MOD';
