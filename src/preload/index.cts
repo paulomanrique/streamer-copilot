@@ -219,6 +219,9 @@ const IPC_CHANNELS = {
   moderationManageRole: 'moderation:manage-role',
   moderationRaid: 'moderation:raid',
   moderationShoutout: 'moderation:shoutout',
+  platformsGetStatuses: 'platforms:get-statuses',
+  platformStatus: 'platform:status',
+  platformLiveStats: 'platform:live-stats',
   accountsList: 'accounts:list',
   accountsCreate: 'accounts:create',
   accountsUpdate: 'accounts:update',
@@ -497,6 +500,23 @@ const copilotApi: CopilotApi = {
   moderationManageRole: (input) => ipcRenderer.invoke(IPC_CHANNELS.moderationManageRole, input) as Promise<void>,
   moderationRaid: (input) => ipcRenderer.invoke(IPC_CHANNELS.moderationRaid, input) as Promise<void>,
   moderationShoutout: (input) => ipcRenderer.invoke(IPC_CHANNELS.moderationShoutout, input) as Promise<void>,
+  getPlatformStatuses: () => ipcRenderer.invoke(IPC_CHANNELS.platformsGetStatuses),
+  onPlatformStatus: (listener) => {
+    const wrappedListener = (
+      _event: Electron.IpcRendererEvent,
+      payload: { platformId: import('../shared/types.js').PlatformId; status: import('../shared/types.js').PlatformLinkStatus; primaryChannel: string | null },
+    ) => listener(payload);
+    ipcRenderer.on(IPC_CHANNELS.platformStatus, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.platformStatus, wrappedListener); };
+  },
+  onPlatformLiveStats: (listener) => {
+    const wrappedListener = (
+      _event: Electron.IpcRendererEvent,
+      payload: { platformId: import('../shared/types.js').PlatformId; channelKey: string; stats: unknown | null },
+    ) => listener(payload);
+    ipcRenderer.on(IPC_CHANNELS.platformLiveStats, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.platformLiveStats, wrappedListener); };
+  },
   accountsList: () => ipcRenderer.invoke(IPC_CHANNELS.accountsList),
   accountsCreate: (input) => ipcRenderer.invoke(IPC_CHANNELS.accountsCreate, input),
   accountsUpdate: (input) => ipcRenderer.invoke(IPC_CHANNELS.accountsUpdate, input),

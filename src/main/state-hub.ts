@@ -17,6 +17,8 @@ import type {
   SuggestionSnapshot,
   KickConnectionStatus,
   KickLiveStats,
+  PlatformId,
+  PlatformLinkStatus,
   TikTokConnectionStatus,
   TikTokLiveStats,
   TwitchConnectionStatus,
@@ -114,32 +116,72 @@ export class StateHub {
     this.chatEventsFlushTimer = setTimeout(() => this.flushChatEvents(), 50);
   }
 
+  /**
+   * Unified, platform-agnostic status push. Use this for every new platform —
+   * the per-platform variants below (`pushTwitchStatus`, `pushKickStatus`,
+   * `pushTiktokStatus`, `pushYoutubeStatus`) are legacy and currently delegate
+   * here in addition to firing their own channel. They will be removed once
+   * every consumer subscribes via `onPlatformStatus`.
+   */
+  pushPlatformStatus(platformId: PlatformId, status: PlatformLinkStatus, primaryChannel: string | null = null): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.platformStatus, {
+      platformId,
+      status,
+      primaryChannel,
+    });
+  }
+
+  /**
+   * Unified live-stats push. `channelKey` is the per-account identifier
+   * (channel slug, username, video id, etc.) — meaningful only to the
+   * platform's own renderer code.
+   */
+  pushPlatformLiveStats(platformId: PlatformId, channelKey: string, stats: unknown | null): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.platformLiveStats, {
+      platformId,
+      channelKey,
+      stats,
+    });
+  }
+
   pushTwitchStatus(status: TwitchConnectionStatus, channel?: string | null): void {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.twitchStatus, status, channel ?? null);
+    this.pushPlatformStatus('twitch', status, channel ?? null);
   }
 
   pushTwitchLiveStats(channel: string, stats: TwitchLiveStats | null): void {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.twitchLiveStats, { channel, stats });
+    this.pushPlatformLiveStats('twitch', channel, stats);
   }
 
   pushYoutubeStatus(streams: YouTubeStreamInfo[]): void {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.youtubeGetStatus, streams);
+    // Mirror as per-stream live-stats keyed by videoId so the symmetric model
+    // sees one entry per concurrent YouTube live. Aggregate "connected" status
+    // is derived by the renderer from whether any entries exist.
+    for (const stream of streams) {
+      this.pushPlatformLiveStats(stream.platform, stream.videoId, stream);
+    }
   }
 
   pushTiktokStatus(status: TikTokConnectionStatus, username?: string | null): void {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.tiktokStatus, status, username ?? null);
+    this.pushPlatformStatus('tiktok', status, username ?? null);
   }
 
   pushTiktokLiveStats(username: string, stats: TikTokLiveStats | null): void {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.tiktokLiveStats, { username, stats });
+    this.pushPlatformLiveStats('tiktok', username, stats);
   }
 
   pushKickStatus(status: KickConnectionStatus, slug?: string | null): void {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.kickStatus, status, slug ?? null);
+    this.pushPlatformStatus('kick', status, slug ?? null);
   }
 
   pushKickLiveStats(channel: string, stats: KickLiveStats | null): void {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.kickLiveStats, { channel, stats });
+    this.pushPlatformLiveStats('kick', channel, stats);
   }
 
   pushMusicStateUpdate(state: MusicPlayerState): void {

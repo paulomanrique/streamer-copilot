@@ -47,6 +47,27 @@ export interface LanguageOption {
  */
 export type PlatformId = 'twitch' | 'youtube' | 'youtube-v' | 'youtube-api' | 'kick' | 'tiktok' | (string & {});
 
+/**
+ * Unified link status for every platform connection. Per-platform unions
+ * (TwitchConnectionStatus, KickConnectionStatus, TikTokConnectionStatus) are
+ * legacy and being phased out — new code consumes this single union via the
+ * symmetric `platformStatus: Record<PlatformId, PlatformLinkStatus>` state
+ * field. Keep the union open enough to cover platform-specific states
+ * (TikTok's 'captcha') so the core plumbing never has to special-case.
+ */
+export type PlatformLinkStatus =
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+  | 'error'
+  | 'captcha';
+
+/** Snapshot row returned by the unified `platformsGetStatuses` IPC. */
+export interface PlatformLinkSnapshot {
+  status: PlatformLinkStatus;
+  primaryChannel: string | null;
+}
+
 export type ChatBadge = 'moderator' | 'subscriber' | 'member' | 'vip' | 'broadcaster' | (string & {});
 export type ChatMessageContentPart =
   | { type: 'text'; text: string }
