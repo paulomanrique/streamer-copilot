@@ -22,8 +22,18 @@ import { computeYouTubeStreamLabels, type LiveStreamInfo } from '../../main/yout
  */
 
 const MONITOR_INTERVAL_MS = 120_000;
-const MAX_CONCURRENT_STREAMS = 2;
+/** Cap for auto-monitored streams: a typical streamer has at most a horizontal
+ *  + vertical broadcast at the same time, so the auto-monitor only attaches
+ *  to the first two it finds. Manual adds (testing panel) bypass this cap. */
+const MAX_AUTO_STREAMS = 2;
+/** Hard ceiling across auto + manual scrapers so we don't accidentally light
+ *  up a dozen YT chat WebSockets. Loose enough for multi-stream label testing. */
+const MAX_TOTAL_STREAMS = 8;
+/** Slot assignment for the legacy `platform` field. Slots beyond index 1
+ *  reuse 'youtube' — streamLabel handles per-stream disambiguation now, so
+ *  the platform color is only meaningful for the primary H/V pair. */
 const YT_PLATFORMS: ReadonlyArray<'youtube' | 'youtube-v'> = ['youtube', 'youtube-v'];
+const slotPlatform = (idx: number): 'youtube' | 'youtube-v' => YT_PLATFORMS[idx] ?? 'youtube';
 
 export interface YouTubeAdapterDependencies {
   /** Returns the live streams currently active for `handle`, or `null` if the lookup failed. */
@@ -59,6 +69,11 @@ interface StreamData {
   subscriberCount: number | null;
   platform: 'youtube' | 'youtube-v';
   channelHandle: string | null;
+  /** True if this scraper was added via `addManualVideo` (test panel or
+   *  legacy `youtube:connect` IPC). The auto-monitor leaves manual entries
+   *  alone — it neither tears them down when they aren't in the latest
+   *  poll, nor counts them against the auto cap. */
+  manual: boolean;
 }
 
 export class YouTubeChatAdapter implements PlatformChatAdapter {
@@ -122,14 +137,16 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
     if (this.connected) void this.runMonitor();
   }
 
-  /** Manual connect by videoId (used by the legacy panel). Slot is auto-assigned. */
+  /** Manual connect by videoId (used by the test panel and legacy IPC). Slot
+   *  is auto-assigned. Bypasses the auto-monitor cap and is preserved across
+   *  auto-monitor cycles (`manual: true`). */
   async addManualVideo(videoId: string): Promise<void> {
     if (this.scrapers.has(videoId)) return;
     const slotIdx = this.scrapers.size;
-    if (slotIdx >= MAX_CONCURRENT_STREAMS) {
-      throw new Error(`Cannot start a third scraper — only ${MAX_CONCURRENT_STREAMS} concurrent streams supported`);
+    if (slotIdx >= MAX_TOTAL_STREAMS) {
+      throw new Error(`Cannot start another scraper — ${MAX_TOTAL_STREAMS} concurrent streams already running`);
     }
-    const platform = YT_PLATFORMS[slotIdx];
+    const platform = slotPlatform(slotIdx);
     this.streamData.set(videoId, {
       label: 'YouTube',
       title: '',
@@ -137,6 +154,7 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
       subscriberCount: null,
       platform,
       channelHandle: null,
+      manual: true,
     });
     this.recomputeLabels();
     this.deps.openChatLogSession(platform, videoId);
@@ -235,16 +253,19 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
       }
     }
 
-    // Update existing scrapers; stop any that are no longer live.
+    // Update existing scrapers; stop any that are no longer live. Manual entries
+    // (added via `addManualVideo`) are immune — the auto-monitor only owns the
+    // scrapers it started itself.
     let removed = 0;
     for (const [videoId, scraper] of this.scrapers) {
+      const stale = this.streamData.get(videoId);
+      if (stale?.manual) continue;
       const updated = allLive.find((s) => s.videoId === videoId);
       if (!updated) {
         if (anyCheckFailed) {
           this.deps.log?.info?.(`Keeping scraper for ${videoId} alive (channel check failed this cycle)`);
           continue;
         }
-        const stale = this.streamData.get(videoId);
         if (stale) this.deps.closeChatLogSession(stale.platform);
         scraper.stop();
         this.scrapers.delete(videoId);
@@ -269,12 +290,17 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
     }
     if (removed > 0) this.recomputeLabels();
 
-    // Start scrapers for newly detected streams (up to MAX_CONCURRENT_STREAMS).
+    // Start scrapers for newly detected streams. Auto-monitor obeys
+    // MAX_AUTO_STREAMS (typical H+V pair) and the global MAX_TOTAL_STREAMS so
+    // it never crowds out manually-added test scrapers.
     let added = 0;
-    for (let i = 0; i < Math.min(allLive.length, MAX_CONCURRENT_STREAMS); i++) {
+    const autoActive = Array.from(this.streamData.values()).filter((d) => !d.manual).length;
+    for (let i = 0; i < allLive.length; i++) {
+      if (autoActive + added >= MAX_AUTO_STREAMS) break;
+      if (this.scrapers.size >= MAX_TOTAL_STREAMS) break;
       const { videoId, title, viewCount, subscriberCount, channelHandle } = allLive[i];
       if (this.scrapers.has(videoId)) continue;
-      const platform = YT_PLATFORMS[i];
+      const platform = slotPlatform(this.scrapers.size);
       this.streamData.set(videoId, {
         label: 'YouTube',
         title,
@@ -282,6 +308,7 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
         subscriberCount,
         platform,
         channelHandle: channelHandle ?? null,
+        manual: false,
       });
       this.deps.log?.info?.(`Auto-detected live (${platform}): ${videoId} — "${title}"`);
       this.deps.openChatLogSession(platform, videoId);
