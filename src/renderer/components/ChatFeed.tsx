@@ -82,11 +82,12 @@ const PLATFORM_BUTTONS = [
 const DEFAULT_RECOMMENDATION_TEMPLATE = 'Pessoal, visitem o {username}';
 
 const PLATFORM_BADGE_META: Record<string, { bg: string; text: string; label: string }> = {
-  twitch:      { bg: 'bg-purple-500/20', text: 'text-purple-300', label: 'Twitch' },
-  youtube:     { bg: 'bg-red-500/20',    text: 'text-red-300',    label: 'YouTube' },
-  'youtube-v': { bg: 'bg-rose-400/20',   text: 'text-rose-300',   label: 'YouTube Vertical' },
-  kick:        { bg: 'bg-green-500/20',  text: 'text-green-300',  label: 'Kick' },
-  tiktok:      { bg: 'bg-pink-500/20',   text: 'text-pink-300',   label: 'TikTok' },
+  twitch:        { bg: 'bg-purple-500/20', text: 'text-purple-300', label: 'Twitch' },
+  youtube:       { bg: 'bg-red-500/20',    text: 'text-red-300',    label: 'YouTube' },
+  'youtube-v':   { bg: 'bg-rose-400/20',   text: 'text-rose-300',   label: 'YouTube Vertical' },
+  'youtube-api': { bg: 'bg-red-500/20',    text: 'text-red-300',    label: 'YouTube' },
+  kick:          { bg: 'bg-green-500/20',  text: 'text-green-300',  label: 'Kick' },
+  tiktok:        { bg: 'bg-pink-500/20',   text: 'text-pink-300',   label: 'TikTok' },
 };
 
 function getYtBadgeLabel(streamLabel: string | undefined, hasMultipleYouTubeStreams: boolean): string {

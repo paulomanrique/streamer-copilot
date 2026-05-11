@@ -122,7 +122,11 @@ export interface StreamEvent {
 
 export interface YouTubeStreamInfo {
   videoId: string;
-  platform: 'youtube' | 'youtube-v';
+  /** Which YouTube driver produced this stream — scraper assigns 'youtube'
+   *  (or 'youtube-v' for the vertical slot) for legacy chat coloring; the
+   *  API driver always emits 'youtube-api'. The renderer uses this to pick
+   *  the right viewer-card color and to surface a per-driver filter chip. */
+  platform: 'youtube' | 'youtube-v' | 'youtube-api';
   channelHandle: string | null;
   label: string;
   viewerCount: number | null;

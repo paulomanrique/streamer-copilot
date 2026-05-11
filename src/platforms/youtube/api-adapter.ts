@@ -1,6 +1,6 @@
 import type { OAuth2Client } from 'google-auth-library';
 
-import type { ChatMessage, PlatformId, StreamEvent } from '../../shared/types.js';
+import type { ChatMessage, PlatformId, StreamEvent, YouTubeStreamInfo } from '../../shared/types.js';
 import type { ModerationApi, PlatformCapabilities } from '../../shared/moderation.js';
 import { READ_ONLY_CAPABILITIES, type PlatformChatAdapter } from '../base.js';
 import type { LiveStreamInfo } from '../../main/youtube-helpers.js';
@@ -52,6 +52,11 @@ export interface YouTubeApiAdapterDependencies {
   closeChatLogSession: (platform: PlatformId) => void;
   /** Optional callback for a new client start (used by the scrape adapter to clear suggestion entries). */
   onClientStart?: () => void;
+  /** Called whenever the set of active API streams (or their metadata) changes.
+   *  The host typically merges this with the scrape adapter's streams and
+   *  forwards both to the renderer so cards / live-links / filter chips show
+   *  the API-driven streams too. */
+  onStreamsChanged?: () => void;
   /** Logging hooks. */
   log?: { info?: (msg: string) => void; warn?: (msg: string) => void };
 }
@@ -131,6 +136,25 @@ export class YouTubeApiChatAdapter implements PlatformChatAdapter {
     return this.clients.size > 0;
   }
 
+  /** Returns the active API streams in the same shape as the scrape adapter's
+   *  output, so the host can merge both lists when pushing to the renderer.
+   *  Labels follow the same rules as the scraper — single stream → "YouTube",
+   *  multiple → the resolver kicks in via the host-side merge. */
+  getCurrentStreams(): YouTubeStreamInfo[] {
+    return Array.from(this.clients.keys()).map((videoId) => {
+      const data = this.streamData.get(videoId);
+      return {
+        videoId,
+        platform: 'youtube-api' as const,
+        channelHandle: data?.label ?? null,
+        label: data?.label ?? 'YouTube',
+        viewerCount: data?.viewerCount ?? null,
+        subscriberCount: data?.subscriberCount ?? null,
+        liveUrl: `https://www.youtube.com/watch?v=${videoId}`,
+      };
+    });
+  }
+
   /** Triggered by the host when the account list changes (connect / disconnect). */
   refresh(): void {
     if (this.connected) void this.runMonitor();
@@ -150,6 +174,7 @@ export class YouTubeApiChatAdapter implements PlatformChatAdapter {
         this.clients.clear();
         this.streamData.clear();
         this.messageOwners.clear();
+        this.deps.onStreamsChanged?.();
       }
       return;
     }
@@ -187,6 +212,7 @@ export class YouTubeApiChatAdapter implements PlatformChatAdapter {
     }
 
     // Update existing clients; stop any that are no longer live.
+    let removed = 0;
     for (const [videoId, client] of this.clients) {
       const updated = discovered.find((s) => s.videoId === videoId);
       if (!updated) {
@@ -195,6 +221,7 @@ export class YouTubeApiChatAdapter implements PlatformChatAdapter {
         this.clients.delete(videoId);
         this.streamData.delete(videoId);
         this.dropMessageOwners(videoId);
+        removed++;
         this.deps.log?.info?.(`[YT-API] Stopped client for ${videoId} (no longer live)`);
       } else {
         const data = this.streamData.get(videoId);
@@ -209,6 +236,7 @@ export class YouTubeApiChatAdapter implements PlatformChatAdapter {
     }
 
     // Start clients for new live streams.
+    let added = 0;
     for (const stream of discovered) {
       if (this.clients.has(stream.videoId)) continue;
       const account = accountById.get(stream.accountId);
@@ -224,7 +252,10 @@ export class YouTubeApiChatAdapter implements PlatformChatAdapter {
       this.deps.onClientStart?.();
       this.deps.log?.info?.(`[YT-API] Auto-detected live: ${stream.videoId} — "${stream.title}" (account=${account.label})`);
       await this.startClient(stream.videoId, account);
+      added++;
     }
+
+    if (removed > 0 || added > 0) this.deps.onStreamsChanged?.();
   }
 
   private async startClient(videoId: string, account: YouTubeApiAccount): Promise<void> {
@@ -261,6 +292,7 @@ export class YouTubeApiChatAdapter implements PlatformChatAdapter {
         const data = this.streamData.get(videoId);
         if (!data || data.viewerCount === count) return;
         this.streamData.set(videoId, { ...data, viewerCount: count });
+        this.deps.onStreamsChanged?.();
       },
     });
     this.clients.set(videoId, client);
