@@ -3,11 +3,13 @@ import { useEffect, useState } from 'react';
 import { PERMISSION_LEVELS } from '../../shared/constants.js';
 import type {
   PermissionLevel,
+  PlatformId,
   ScheduledAvailableTargets,
   TextCommand,
   TextCommandUpsertInput,
   TextSettings,
 } from '../../shared/types.js';
+import { getPlatformProviderOrFallback } from '../platforms/registry.js';
 import { ToggleSwitch } from './ToggleSwitch.js';
 
 const PERMISSION_LABELS: Record<PermissionLevel, string> = {
@@ -18,12 +20,6 @@ const PERMISSION_LABELS: Record<PermissionLevel, string> = {
   moderator: 'Moderators',
   broadcaster: 'Broadcaster',
 };
-
-const SCHEDULE_PLATFORMS: { id: 'twitch' | 'youtube' | 'youtube-api'; label: string }[] = [
-  { id: 'twitch', label: 'Twitch' },
-  { id: 'youtube', label: 'YouTube (Scraped)' },
-  { id: 'youtube-api', label: 'YouTube (API)' },
-];
 
 interface TextCommandModalProps {
   open: boolean;
@@ -60,7 +56,7 @@ export function TextCommandModal({
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [scheduleIntervalMinutes, setScheduleIntervalMinutes] = useState(15);
   const [scheduleRandomWindowMinutes, setScheduleRandomWindowMinutes] = useState(0);
-  const [schedulePlatforms, setSchedulePlatforms] = useState<('twitch' | 'youtube' | 'youtube-api')[]>(['twitch', 'youtube']);
+  const [schedulePlatforms, setSchedulePlatforms] = useState<PlatformId[]>([]);
   const [enabled, setEnabled] = useState(true);
 
   const [isBusy, setIsBusy] = useState(false);
@@ -83,10 +79,11 @@ export function TextCommandModal({
       setScheduleEnabled(Boolean(initialData.schedule?.enabled));
       setScheduleIntervalMinutes(Math.round((initialData.schedule?.intervalSeconds ?? 900) / 60));
       setScheduleRandomWindowMinutes(Math.round((initialData.schedule?.randomWindowSeconds ?? 0) / 60));
+      // Only keep targets the backend still claims to support — this drops
+      // platform ids that were removed from the build between sessions.
       setSchedulePlatforms(
-        (initialData.schedule?.targetPlatforms.filter(
-          (p): p is 'twitch' | 'youtube' | 'youtube-api' => p === 'twitch' || p === 'youtube',
-        ) ?? ['twitch', 'youtube']),
+        initialData.schedule?.targetPlatforms.filter((p) => availableTargets.supported.includes(p))
+          ?? [...availableTargets.connected],
       );
       setEnabled(initialData.enabled);
     } else {
@@ -101,10 +98,10 @@ export function TextCommandModal({
       setScheduleEnabled(false);
       setScheduleIntervalMinutes(15);
       setScheduleRandomWindowMinutes(0);
-      setSchedulePlatforms(['twitch', 'youtube']);
+      setSchedulePlatforms([...availableTargets.connected]);
       setEnabled(true);
     }
-  }, [open, initialData, settings]);
+  }, [open, initialData, settings, availableTargets]);
 
   const toggleLevel = (level: PermissionLevel) => {
     setLevels((current) => {
@@ -116,7 +113,7 @@ export function TextCommandModal({
     });
   };
 
-  const toggleSchedulePlatform = (platform: 'twitch' | 'youtube' | 'youtube-api') => {
+  const toggleSchedulePlatform = (platform: PlatformId) => {
     setSchedulePlatforms((current) =>
       current.includes(platform) ? current.filter((p) => p !== platform) : [...current, platform],
     );
@@ -368,8 +365,9 @@ export function TextCommandModal({
                     </div>
                     <div className="space-y-2">
                       <p className="text-xs text-gray-400">Targets</p>
-                      {SCHEDULE_PLATFORMS.map(({ id, label }) => {
+                      {availableTargets.supported.map((id) => {
                         const connected = availableTargets.connected.includes(id);
+                        const label = getPlatformProviderOrFallback(id).displayName;
                         return (
                           <label key={id} className="flex items-center justify-between text-sm text-gray-300 cursor-pointer">
                             <span>{label}</span>

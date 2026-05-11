@@ -1,22 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChatLogMessage, ChatSession } from '../../shared/ipc.js';
 import { useI18n } from '../i18n/I18nProvider.js';
+import { getPlatformProviderOrFallback } from '../platforms/registry.js';
 
-const PLATFORM_LABELS: Record<string, string> = {
-  twitch: 'Twitch',
-  youtube: 'YouTube',
-  'youtube-v': 'YouTube (V)',
-  kick: 'Kick',
-  tiktok: 'TikTok',
-};
+/** Single chip class from the registry — bg + text + border come straight
+ *  from the provider's `badge` visuals so adding a new platform doesn't need
+ *  a new chip color rule here. */
+function platformChipClasses(platformId: string): string {
+  const visuals = getPlatformProviderOrFallback(platformId);
+  return `${visuals.badge.bg} ${visuals.badge.text} ${visuals.badge.rowBorder}`;
+}
 
-const PLATFORM_COLORS: Record<string, string> = {
-  twitch: 'bg-purple-600/20 text-purple-300 border-purple-600/40',
-  youtube: 'bg-red-600/20 text-red-300 border-red-600/40',
-  'youtube-v': 'bg-red-600/20 text-red-300 border-red-600/40',
-  kick: 'bg-green-600/20 text-green-300 border-green-600/40',
-  tiktok: 'bg-pink-600/20 text-pink-300 border-pink-600/40',
-};
+function platformLabel(platformId: string): string {
+  return getPlatformProviderOrFallback(platformId).displayName;
+}
 
 const PAGE_SIZE = 100;
 
@@ -106,7 +103,7 @@ export function ChatLogsPage() {
   };
 
   const handleDelete = async (session: ChatSession) => {
-    const platform = PLATFORM_LABELS[session.platform] ?? session.platform;
+    const platform = platformLabel(session.platform);
     const confirmed = window.confirm(
       `${t('Delete this chat log?')}\n\n${platform} · ${session.channel}\n${formatDate(session.startedAt)}\n${session.messageCount.toLocaleString()} ${t('messages')}\n\n${t('This cannot be undone.')}`,
     );
@@ -190,11 +187,11 @@ export function ChatLogsPage() {
                   onClick={() => setPlatformFilter(p === platformFilter ? null : p)}
                   className={`px-2.5 py-0.5 rounded-full text-xs border transition-colors ${
                     platformFilter === p
-                      ? (PLATFORM_COLORS[p] ?? 'bg-gray-600/30 text-gray-300 border-gray-600/50')
+                      ? platformChipClasses(p)
                       : 'bg-gray-800 text-gray-400 border-gray-700 hover:text-gray-200'
                   }`}
                 >
-                  {PLATFORM_LABELS[p] ?? p}
+                  {platformLabel(p)}
                 </button>
               ))}
             </div>
@@ -219,9 +216,9 @@ export function ChatLogsPage() {
                 >
                   <div className="flex items-center justify-between gap-2 mb-1">
                     <span
-                      className={`text-xs px-1.5 py-0.5 rounded border ${PLATFORM_COLORS[session.platform] ?? 'bg-gray-700 text-gray-400 border-gray-600'}`}
+                      className={`text-xs px-1.5 py-0.5 rounded border ${platformChipClasses(session.platform)}`}
                     >
-                      {PLATFORM_LABELS[session.platform] ?? session.platform}
+                      {platformLabel(session.platform)}
                     </span>
                     <span className="text-xs text-gray-500">{formatDuration(session.startedAt, session.endedAt)}</span>
                   </div>
@@ -251,9 +248,9 @@ export function ChatLogsPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <span
-                      className={`text-xs px-1.5 py-0.5 rounded border ${PLATFORM_COLORS[selectedSession.platform] ?? 'bg-gray-700 text-gray-400 border-gray-600'}`}
+                      className={`text-xs px-1.5 py-0.5 rounded border ${platformChipClasses(selectedSession.platform)}`}
                     >
-                      {PLATFORM_LABELS[selectedSession.platform] ?? selectedSession.platform}
+                      {platformLabel(selectedSession.platform)}
                     </span>
                     <span className="text-sm font-mono text-gray-300">{selectedSession.channel}</span>
                   </div>
