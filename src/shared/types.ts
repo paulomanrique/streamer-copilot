@@ -128,10 +128,6 @@ export interface YouTubeStreamInfo {
   viewerCount: number | null;
   subscriberCount: number | null;
   liveUrl: string;
-  /** True when this stream was added via the manual test panel (or legacy
-   *  `youtube:connect` IPC). Auto-detected streams from monitored handles
-   *  carry false. Used by the UI to mark/hide manual entries differently. */
-  manual: boolean;
 }
 
 export interface PlatformConnectionStatus {

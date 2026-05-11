@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import type { PlatformAccount, PlatformAccountConnectionStatus } from '../../shared/types.js';
-import { useAppStore } from '../store.js';
 import { listPlatformProviders, getPlatformProvider } from '../platforms/registry.js';
 import { AddPlatformWizard } from './AddPlatformWizard.js';
 
@@ -191,8 +190,6 @@ export function ConnectedAccounts() {
         </ul>
       )}
 
-      <ManualYouTubeConnect />
-
       <AddPlatformWizard
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}
@@ -202,152 +199,3 @@ export function ConnectedAccounts() {
   );
 }
 
-/**
- * Inline "connect by YouTube videoId" panel. Spawns a scraper for an arbitrary
- * live videoId without registering an account — useful to test chat plumbing
- * against a public live (yours or anyone else's) when the auto-monitor has
- * nothing to attach to. Session-only, gone on next app boot.
- */
-function ManualYouTubeConnect() {
-  const [open, setOpen] = useState(false);
-  const [input, setInput] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [stoppingId, setStoppingId] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
-
-  // Pulls the active YouTube streams from the store so the manual entries
-  // show up as they connect, and disappear when stopped or when the auto
-  // monitor cycle prunes the list.
-  const allStreams = useAppStore((s) => s.youtubeStreams);
-  const manualStreams = allStreams.filter((s) => s.manual);
-
-  async function submit() {
-    const videoId = extractYouTubeVideoId(input);
-    if (!videoId) {
-      setFeedback({ kind: 'error', text: 'Could not find a videoId in that input.' });
-      return;
-    }
-    setBusy(true);
-    setFeedback(null);
-    try {
-      await window.copilot.youtubeConnect({ videoId });
-      setFeedback({ kind: 'ok', text: `Connected scraper to ${videoId}.` });
-      setInput('');
-    } catch (cause) {
-      setFeedback({ kind: 'error', text: cause instanceof Error ? cause.message : String(cause) });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function stop(videoId: string) {
-    setStoppingId(videoId);
-    setFeedback(null);
-    try {
-      await window.copilot.youtubeDisconnectVideo({ videoId });
-    } catch (cause) {
-      setFeedback({ kind: 'error', text: cause instanceof Error ? cause.message : String(cause) });
-    } finally {
-      setStoppingId(null);
-    }
-  }
-
-  return (
-    <div className="mt-4 rounded-lg border border-gray-700/60 bg-gray-800/30">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="w-full px-4 py-2 flex items-center justify-between text-xs text-gray-400 hover:text-gray-200"
-      >
-        <span>
-          Test: connect YouTube by video URL or ID
-          {manualStreams.length > 0 ? (
-            <span className="ml-2 text-emerald-400">({manualStreams.length} active)</span>
-          ) : null}
-        </span>
-        <span className="text-gray-500">{open ? '−' : '+'}</span>
-      </button>
-      {open && (
-        <div className="px-4 pb-3 space-y-3">
-          <p className="text-xs text-gray-500">
-            Spawns a session-only scraper for any live YouTube video — handy for testing chat plumbing,
-            multi-stream labels, sound/voice commands, etc. without going live yourself.
-          </p>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder="https://youtube.com/watch?v=… or video id"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !busy) void submit(); }}
-              className="flex-1 bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-100"
-            />
-            <button
-              type="button"
-              disabled={busy || !input.trim()}
-              onClick={() => void submit()}
-              className="px-3 py-1.5 rounded bg-emerald-600/20 border border-emerald-500/40 text-xs text-emerald-200 hover:bg-emerald-600/30 disabled:opacity-50"
-            >
-              {busy ? 'Connecting…' : 'Connect'}
-            </button>
-          </div>
-          {feedback && (
-            <p className={feedback.kind === 'ok' ? 'text-xs text-emerald-300' : 'text-xs text-rose-300'}>
-              {feedback.text}
-            </p>
-          )}
-          {manualStreams.length > 0 && (
-            <ul className="space-y-1.5">
-              {manualStreams.map((stream) => (
-                <li key={stream.videoId} className="flex items-center gap-2 bg-gray-900/60 border border-gray-700/60 rounded px-3 py-1.5">
-                  <span className="text-xs text-gray-400 font-medium">{stream.label}</span>
-                  <span className="text-xs text-gray-500 font-mono truncate flex-1">{stream.videoId}</span>
-                  {stream.viewerCount !== null && (
-                    <span className="text-xs text-gray-500">{stream.viewerCount.toLocaleString()} viewers</span>
-                  )}
-                  <button
-                    type="button"
-                    disabled={stoppingId === stream.videoId}
-                    onClick={() => void stop(stream.videoId)}
-                    className="px-2 py-0.5 rounded text-xs text-rose-300 hover:bg-rose-500/10 disabled:opacity-50"
-                  >
-                    {stoppingId === stream.videoId ? 'Stopping…' : 'Stop'}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Accepts a full youtube URL (watch / live / youtu.be / shorts) or a bare 11-char videoId. */
-function extractYouTubeVideoId(raw: string): string | null {
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  // Bare videoId (YouTube ids are 11 chars in [A-Za-z0-9_-]).
-  if (/^[A-Za-z0-9_-]{11}$/.test(trimmed)) return trimmed;
-  try {
-    const url = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
-    const host = url.hostname.toLowerCase().replace(/^www\./, '');
-    if (host === 'youtu.be') {
-      const id = url.pathname.split('/').filter(Boolean)[0];
-      return id && /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
-    }
-    if (host.endsWith('youtube.com')) {
-      const v = url.searchParams.get('v');
-      if (v && /^[A-Za-z0-9_-]{11}$/.test(v)) return v;
-      // /live/<id> and /shorts/<id> paths.
-      const parts = url.pathname.split('/').filter(Boolean);
-      const idx = parts.findIndex((p) => p === 'live' || p === 'shorts' || p === 'embed');
-      if (idx >= 0 && parts[idx + 1] && /^[A-Za-z0-9_-]{11}$/.test(parts[idx + 1])) {
-        return parts[idx + 1];
-      }
-    }
-  } catch {
-    // fallthrough — not a parseable URL
-  }
-  return null;
-}
