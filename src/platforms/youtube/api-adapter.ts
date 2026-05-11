@@ -18,7 +18,10 @@ import { checkYouTubeLiveViaApi } from './api-monitor.js';
  * (that would burn 100u/call on `search.list`).
  */
 
-const MONITOR_INTERVAL_MS = 120_000;
+/** Polling cadence for `liveBroadcasts.list?mine=true`. At ~3 quota units per
+ *  call this is ~4.3k units/day per account — comfortable under the 10k/day
+ *  default with up to two accounts on the same OAuth client. */
+const MONITOR_INTERVAL_MS = 60_000;
 const MAX_CONCURRENT_STREAMS_PER_ACCOUNT = 2;
 
 const YOUTUBE_API_CAPABILITIES: PlatformCapabilities = Object.freeze({
@@ -156,10 +159,23 @@ export class YouTubeApiChatAdapter implements PlatformChatAdapter {
     const discovered: DiscoveredStream[] = [];
     let anyCheckFailed = false;
     for (const account of accounts) {
-      const liveStreams = await checkYouTubeLiveViaApi(account.label, account.oauth);
+      const liveStreams = await checkYouTubeLiveViaApi(account.label, account.oauth, (cause) => {
+        const message = cause instanceof Error ? (cause.message || cause.name) : String(cause);
+        // The googleapis Error frequently carries `code` + a richer body in
+        // `errors[0].reason` (e.g. quotaExceeded, authError, forbidden,
+        // liveStreamingNotEnabled). Surface what we can find without leaking
+        // the full payload.
+        const errObj = cause as { code?: number; errors?: Array<{ reason?: string }> } | undefined;
+        const reason = errObj?.errors?.[0]?.reason ?? null;
+        const status = errObj?.code ?? null;
+        this.deps.log?.warn?.(
+          `[YT-API] live check failed for ${account.label}: ${message}`
+          + (status ? ` (status=${status})` : '')
+          + (reason ? ` (reason=${reason})` : ''),
+        );
+      });
       if (liveStreams === null) {
         anyCheckFailed = true;
-        this.deps.log?.warn?.(`[YT-API] live check failed for ${account.label}`);
         continue;
       }
       const limited = liveStreams.slice(0, MAX_CONCURRENT_STREAMS_PER_ACCOUNT);

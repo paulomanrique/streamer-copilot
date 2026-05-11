@@ -18,6 +18,7 @@ import type { LiveStreamInfo } from '../../main/youtube-helpers.js';
 export async function checkYouTubeLiveViaApi(
   channelHandle: string,
   auth: OAuth2Client,
+  onError?: (cause: unknown) => void,
 ): Promise<LiveStreamInfo[] | null> {
   const youtube = google.youtube({ version: 'v3', auth });
   try {
@@ -56,8 +57,12 @@ export async function checkYouTubeLiveViaApi(
       });
     }
     return out;
-  } catch {
+  } catch (cause) {
     // Transient — let the adapter retry next cycle without tearing down clients.
+    // Surface the cause through the optional callback so the host can log /
+    // diagnose (quota exhausted, missing scope, expired refresh token, etc.)
+    // instead of silently returning null.
+    onError?.(cause);
     return null;
   }
 }
