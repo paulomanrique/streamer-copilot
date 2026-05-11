@@ -183,8 +183,23 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
         viewerCount: data?.viewerCount ?? null,
         subscriberCount: data?.subscriberCount ?? null,
         liveUrl: `https://www.youtube.com/watch?v=${videoId}`,
+        manual: data?.manual ?? false,
       };
     });
+  }
+
+  /** Stops and removes a single scraper by videoId. Used by the test panel
+   *  to take a manual video offline without tearing down the whole adapter. */
+  removeVideo(videoId: string): void {
+    const scraper = this.scrapers.get(videoId);
+    if (!scraper) return;
+    const stale = this.streamData.get(videoId);
+    scraper.stop();
+    this.scrapers.delete(videoId);
+    this.streamData.delete(videoId);
+    if (stale) this.deps.closeChatLogSession(stale.platform);
+    this.recomputeLabels();
+    this.emitStreamsChanged();
   }
 
   /** Recomputes the display label for every active stream. Call after the

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import type { PlatformAccount, PlatformAccountConnectionStatus } from '../../shared/types.js';
+import { useAppStore } from '../store.js';
 import { listPlatformProviders, getPlatformProvider } from '../platforms/registry.js';
 import { AddPlatformWizard } from './AddPlatformWizard.js';
 
@@ -211,7 +212,14 @@ function ManualYouTubeConnect() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  const [stoppingId, setStoppingId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+
+  // Pulls the active YouTube streams from the store so the manual entries
+  // show up as they connect, and disappear when stopped or when the auto
+  // monitor cycle prunes the list.
+  const allStreams = useAppStore((s) => s.youtubeStreams);
+  const manualStreams = allStreams.filter((s) => s.manual);
 
   async function submit() {
     const videoId = extractYouTubeVideoId(input);
@@ -232,6 +240,18 @@ function ManualYouTubeConnect() {
     }
   }
 
+  async function stop(videoId: string) {
+    setStoppingId(videoId);
+    setFeedback(null);
+    try {
+      await window.copilot.youtubeDisconnectVideo({ videoId });
+    } catch (cause) {
+      setFeedback({ kind: 'error', text: cause instanceof Error ? cause.message : String(cause) });
+    } finally {
+      setStoppingId(null);
+    }
+  }
+
   return (
     <div className="mt-4 rounded-lg border border-gray-700/60 bg-gray-800/30">
       <button
@@ -239,11 +259,16 @@ function ManualYouTubeConnect() {
         onClick={() => setOpen((v) => !v)}
         className="w-full px-4 py-2 flex items-center justify-between text-xs text-gray-400 hover:text-gray-200"
       >
-        <span>Test: connect YouTube by video URL or ID</span>
+        <span>
+          Test: connect YouTube by video URL or ID
+          {manualStreams.length > 0 ? (
+            <span className="ml-2 text-emerald-400">({manualStreams.length} active)</span>
+          ) : null}
+        </span>
         <span className="text-gray-500">{open ? '−' : '+'}</span>
       </button>
       {open && (
-        <div className="px-4 pb-3 space-y-2">
+        <div className="px-4 pb-3 space-y-3">
           <p className="text-xs text-gray-500">
             Spawns a session-only scraper for any live YouTube video — handy for testing chat plumbing,
             multi-stream labels, sound/voice commands, etc. without going live yourself.
@@ -270,6 +295,27 @@ function ManualYouTubeConnect() {
             <p className={feedback.kind === 'ok' ? 'text-xs text-emerald-300' : 'text-xs text-rose-300'}>
               {feedback.text}
             </p>
+          )}
+          {manualStreams.length > 0 && (
+            <ul className="space-y-1.5">
+              {manualStreams.map((stream) => (
+                <li key={stream.videoId} className="flex items-center gap-2 bg-gray-900/60 border border-gray-700/60 rounded px-3 py-1.5">
+                  <span className="text-xs text-gray-400 font-medium">{stream.label}</span>
+                  <span className="text-xs text-gray-500 font-mono truncate flex-1">{stream.videoId}</span>
+                  {stream.viewerCount !== null && (
+                    <span className="text-xs text-gray-500">{stream.viewerCount.toLocaleString()} viewers</span>
+                  )}
+                  <button
+                    type="button"
+                    disabled={stoppingId === stream.videoId}
+                    onClick={() => void stop(stream.videoId)}
+                    className="px-2 py-0.5 rounded text-xs text-rose-300 hover:bg-rose-500/10 disabled:opacity-50"
+                  >
+                    {stoppingId === stream.videoId ? 'Stopping…' : 'Stop'}
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       )}
