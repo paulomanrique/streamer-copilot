@@ -411,7 +411,17 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   // eslint-disable-next-line prefer-const -- forward-declared; assigned after dependent services are created
   let pollService: PollService;
 
-  const getYoutubeStreams = (): YouTubeStreamInfo[] => youtubeAdapter?.getCurrentStreams() ?? [];
+  /** Merged view of every active YouTube live across both drivers — the
+   *  scrape adapter and the API adapter. The renderer consumes this single
+   *  list (cards, live-links, filter chips). The `platform` field on each
+   *  entry tells the consumer which driver it came from. */
+  const getYoutubeStreams = (): YouTubeStreamInfo[] => [
+    ...(youtubeAdapter?.getCurrentStreams() ?? []),
+    ...(youtubeApiAdapter?.getCurrentStreams() ?? []),
+  ];
+  const pushMergedYoutubeStreams = (): void => {
+    options.stateHub.pushYoutubeStatus(getYoutubeStreams());
+  };
 
   /**
    * Type guard for the two YouTube platform slots. Needed because PlatformId
@@ -1496,7 +1506,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     fetchYtLiveViewerCount,
     openChatLogSession: (platform, videoId) => chatLogService.openSession(platform, videoId),
     closeChatLogSession: (platform) => chatLogService.closeSession(platform),
-    onStreamsChanged: (streams) => options.stateHub.pushYoutubeStatus(streams),
+    // The scrape adapter's stream list is merged with the API adapter's list
+    // on every push, so cards / live-links / filter chips see both drivers.
+    onStreamsChanged: () => pushMergedYoutubeStreams(),
     onScraperStart: () => suggestionService.clearSessionEntries(),
     log: {
       info: (msg) => logService.info('youtube', msg),
@@ -1558,6 +1570,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     openChatLogSession: (platform, videoId) => chatLogService.openSession(platform, videoId),
     closeChatLogSession: (platform) => chatLogService.closeSession(platform),
     onClientStart: () => suggestionService.clearSessionEntries(),
+    onStreamsChanged: () => pushMergedYoutubeStreams(),
     log: {
       info: (msg) => logService.info('youtube-api', msg),
       warn: (msg) => logService.warn('youtube-api', msg),
