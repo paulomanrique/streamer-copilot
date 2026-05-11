@@ -182,6 +182,8 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
         role,
         unifiedLevel: resolveFromRole(role),
         streamLabel,
+        // Routes the chat-log session to this TikTok host.
+        channelId: streamLabel,
         ...(payload.user?.uniqueId ? { userId: payload.user.uniqueId } : {}),
       });
     });

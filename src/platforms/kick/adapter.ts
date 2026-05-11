@@ -764,9 +764,13 @@ export class KickChatAdapter implements PlatformChatAdapter {
   }
 
   private emitMessage(message: ChatMessage): void {
-    const enriched = message.streamLabel
-      ? message
-      : { ...message, streamLabel: this.options.channelSlug || undefined };
+    const slug = this.options.channelSlug || undefined;
+    const enriched: ChatMessage = {
+      ...message,
+      streamLabel: message.streamLabel ?? slug,
+      // Routes the chat-log session for this Kick channel.
+      channelId: message.channelId ?? slug,
+    };
     for (const handler of this.messageHandlers) {
       handler(enriched);
     }
