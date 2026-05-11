@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import { registerPlatformProvider, type AuthStepProps } from './registry.js';
+import { YOUTUBE_ICON, youtubeProfileUrl } from './youtube-shared.js';
 
 /**
  * YouTube (API) provider — sibling to the scraped YouTube provider.
@@ -109,6 +110,26 @@ registerPlatformProvider({
   displayName: 'YouTube (API)',
   accentClass: 'border-l-red-500',
   supportsMultipleAccounts: true,
+  icon: YOUTUBE_ICON,
+  badge: {
+    bg: 'bg-red-500/20',
+    text: 'text-red-300',
+    rowBorder: 'border-red-500/20',
+  },
+  accentBg: 'bg-red-500',
+  bannerBorderColor: 'rgba(239,68,68,0.2)',
+  card: {
+    classes: 'bg-red-500/10 border-red-500/20 text-red-300',
+    metaClass: 'text-red-400',
+  },
+  liveLink: {
+    color: 'text-red-400',
+    border: 'border-red-500/30',
+    btnBg: 'bg-red-600/30 hover:bg-red-600/50 text-red-300',
+  },
+  subscriberBadge: 'member',
+  authorAtPrefix: true,
+  profileUrl: youtubeProfileUrl,
   AuthStep: YouTubeApiAuthStep,
   validate(channel, providerData) {
     if (!channel) return 'Connect to Google first';

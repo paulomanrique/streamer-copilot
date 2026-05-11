@@ -6,6 +6,7 @@ import type { ChatMessage, PlatformId, StreamEvent, SuggestionEntry, SuggestionL
 import type { PlatformCapabilities } from '../../shared/moderation.js';
 import { useI18n } from '../i18n/I18nProvider.js';
 import { EventBanner } from './EventBanner.js';
+import { getPlatformDisplayName, getPlatformProviderOrFallback, listPlatformProviders } from '../platforms/registry.js';
 import {
   computeStableChatFeedRows,
   DEFAULT_MAX_CHAT_FEED_ROWS,
@@ -32,72 +33,7 @@ interface ChatFeedProps {
   recommendationTemplate: string;
 }
 
-const PLATFORM_META = {
-  twitch: {
-    bg: 'bg-purple-500/20',
-    text: 'text-purple-300',
-    border: 'border-purple-500/20',
-    icon: 'M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z',
-  },
-  youtube: {
-    bg: 'bg-red-500/20',
-    text: 'text-red-300',
-    border: 'border-red-500/20',
-    icon: 'M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z',
-  },
-  'youtube-v': {
-    bg: 'bg-rose-400/20',
-    text: 'text-rose-300',
-    border: 'border-rose-400/20',
-    icon: 'M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z',
-  },
-  'youtube-api': {
-    bg: 'bg-red-500/20',
-    text: 'text-red-300',
-    border: 'border-red-500/20',
-    icon: 'M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z',
-  },
-  kick: {
-    bg: 'bg-green-500/20',
-    text: 'text-green-300',
-    border: 'border-green-500/20',
-    icon: 'M2 2h4v8l4-4h4l-6 6 6 6h-4l-4-4v4H2V2zm14 0h4v20h-4z',
-  },
-  tiktok: {
-    bg: 'bg-pink-500/20',
-    text: 'text-pink-300',
-    border: 'border-pink-500/20',
-    icon: 'M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.67a8.17 8.17 0 0 0 4.79 1.53V6.75a4.85 4.85 0 0 1-1.02-.06z',
-  },
-} as const;
-
-const PLATFORM_BUTTONS = [
-  { id: 'twitch' },
-  { id: 'youtube' },
-  { id: 'youtube-v' },
-  { id: 'youtube-api' },
-  { id: 'kick' },
-  { id: 'tiktok' },
-] as const;
 const DEFAULT_RECOMMENDATION_TEMPLATE = 'Pessoal, visitem o {username}';
-
-const PLATFORM_BADGE_META: Record<string, { bg: string; text: string; label: string }> = {
-  twitch:        { bg: 'bg-purple-500/20', text: 'text-purple-300', label: 'Twitch' },
-  youtube:       { bg: 'bg-red-500/20',    text: 'text-red-300',    label: 'YouTube' },
-  'youtube-v':   { bg: 'bg-rose-400/20',   text: 'text-rose-300',   label: 'YouTube Vertical' },
-  'youtube-api': { bg: 'bg-red-500/20',    text: 'text-red-300',    label: 'YouTube' },
-  kick:          { bg: 'bg-green-500/20',  text: 'text-green-300',  label: 'Kick' },
-  tiktok:        { bg: 'bg-pink-500/20',   text: 'text-pink-300',   label: 'TikTok' },
-};
-
-function getYtBadgeLabel(streamLabel: string | undefined, hasMultipleYouTubeStreams: boolean): string {
-  if (!hasMultipleYouTubeStreams) return 'YouTube';
-  // streamLabel is resolved server-side by computeYouTubeStreamLabels —
-  // "YouTube Horizontal" / "YouTube @user" / "YouTube-1" / etc. — so the
-  // badge just renders whatever it got. Falling back to "YouTube" covers
-  // late messages that arrived before the labeler caught up.
-  return streamLabel || 'YouTube';
-}
 
 // Twitch's default color palette assigned when a user has no color set
 const TWITCH_DEFAULT_COLORS = [
@@ -200,48 +136,13 @@ function renderMessageContent(message: ChatMessage): ReactNode[] {
   return nodes;
 }
 
-function platformKey(platform: string): keyof typeof PLATFORM_META {
-  if (platform === 'youtube-v') return 'youtube-v';
-  if (platform in PLATFORM_META) return platform as keyof typeof PLATFORM_META;
-  return 'twitch';
-}
-
-function getPlatformDisplayName(platformId: string, connectedPlatforms: string[]): string {
-  if (platformId === 'youtube') {
-    return connectedPlatforms.includes('youtube-v') ? 'YouTube Horizontal' : 'YouTube';
-  }
-  if (platformId === 'youtube-v') return 'YouTube Vertical';
-  if (platformId === 'youtube-api') return 'YouTube (API)';
-  if (platformId === 'twitch') return 'Twitch';
-  if (platformId === 'kick') return 'Kick';
-  if (platformId === 'tiktok') return 'TikTok';
-  return platformId;
-}
+// Profile-URL resolution + display-name + platform metadata now live on each
+// platform's provider entry in `../platforms/registry`; reach them via
+// `getPlatformProviderOrFallback(...)` and `getPlatformDisplayName(...)` —
+// see AGENTS.md "Platform-agnostic UI" rules.
 
 function resolveProfileUrl(platform: string, author: string): string {
-  const username = author.replace(/^@+/, '').trim();
-  if (!username) return '';
-
-  switch (platform) {
-    case 'twitch':
-      return `https://twitch.tv/${encodeURIComponent(username)}`;
-    case 'kick':
-      return `https://kick.com/${encodeURIComponent(username.toLowerCase())}`;
-    case 'tiktok':
-      return `https://www.tiktok.com/@${encodeURIComponent(username)}`;
-    case 'youtube':
-    case 'youtube-v':
-    case 'youtube-api': {
-      // YouTube handles can't have spaces or special chars — if the display name
-      // looks like a valid handle, use it directly; otherwise fall back to search.
-      const handle = username.replace(/\s+/g, '');
-      return /^[\w.-]+$/.test(handle)
-        ? `https://www.youtube.com/@${handle}`
-        : `https://www.youtube.com/results?search_query=${encodeURIComponent('@' + username)}`;
-    }
-    default:
-      return '';
-  }
+  return getPlatformProviderOrFallback(platform).profileUrl(author);
 }
 
 export function ChatFeed({ messages, events, connectedPlatforms, recommendationTemplate }: ChatFeedProps) {
@@ -251,9 +152,10 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
   const menuRef  = useRef<HTMLDivElement | null>(null);
 
   const [feedMode,       setFeedMode]       = useState<FeedMode>('all');
-  const [platformFilter, setPlatformFilter] = useState<Record<string, boolean>>({
-    twitch: true, youtube: true, 'youtube-v': true, 'youtube-api': true, kick: true, tiktok: true,
-  });
+  // Default-on for every registered platform; clicks toggle in place.
+  const [platformFilter, setPlatformFilter] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(listPlatformProviders().map((m) => [m.id, true])),
+  );
   const [inputValue,    setInputValue]    = useState('');
   const [inputPlatform, setInputPlatform] = useState(() => connectedPlatforms[0] ?? 'twitch');
   const [sendError, setSendError] = useState<string | null>(null);
@@ -264,7 +166,6 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState>({
     visible: false, x: 0, y: 0, platform: '', author: '',
   });
-  const hasMultipleYouTubeStreams = connectedPlatforms.includes('youtube') && connectedPlatforms.includes('youtube-v');
   // Detect platforms with more than one distinct stream/channel from observed
   // messages. When a platform has 2+ distinct `streamLabel`s, each row's badge
   // shows the channel name instead of the generic platform name. Generic over
@@ -316,7 +217,7 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
 
   // ── filtering ──────────────────────────────────────────────────────
   const platformEnabled = useCallback(
-    (platform: string) => platformFilter[platformKey(platform)] !== false,
+    (platform: string) => platformFilter[platform] !== false,
     [platformFilter],
   );
 
@@ -459,7 +360,7 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
       // Keep the renderer prop/default fallback when settings cannot be read.
     }
 
-    const username = platform === 'youtube' || platform === 'youtube-v' || platform === 'youtube-api'
+    const username = getPlatformProviderOrFallback(platform).authorAtPrefix
       ? `@${author.replace(/^@+/, '')}`
       : author;
     const profileUrl = resolveProfileUrl(platform, author);
@@ -490,13 +391,12 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
           message={item.message}
           avatarUrl={avatarCache.get(item.message.author.toLowerCase()) || undefined}
           highlighted={highlighted === item.message.author}
-          hasMultipleYouTubeStreams={hasMultipleYouTubeStreams}
           showStreamLabel={multiStreamPlatforms.has(item.message.platform)}
           onReplyTo={replyTo}
           onContextMenuRequest={handleContextMenu}
         />
       ),
-    [avatarCache, handleContextMenu, hasMultipleYouTubeStreams, multiStreamPlatforms, highlighted, replyTo],
+    [avatarCache, handleContextMenu, multiStreamPlatforms, highlighted, replyTo],
   );
 
   const selectSuggestionList = async (listId: string) => {
@@ -575,14 +475,14 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
 
         {!selectedListId && (
           <div className="flex items-center gap-1.5 shrink-0">
-            {PLATFORM_BUTTONS.filter((b) => (connectedPlatforms as readonly string[]).includes(b.id)).map(({ id }) => {
-              const meta = PLATFORM_META[platformKey(id)];
+            {connectedPlatforms.map((id) => {
+              const meta = getPlatformProviderOrFallback(id);
               const on = platformFilter[id] !== false;
               const title = getPlatformDisplayName(id, connectedPlatforms);
               return (
                 <button key={id} type="button" title={title} aria-label={title}
                   onClick={() => setPlatformFilter((c) => ({ ...c, [id]: !c[id] }))}
-                  className={`flex items-center justify-center w-8 h-8 rounded transition-all ${on ? `${meta.bg} ${meta.text} hover:opacity-90` : 'grayscale opacity-40 bg-gray-700/30 text-gray-500'}`}>
+                  className={`flex items-center justify-center w-8 h-8 rounded transition-all ${on ? `${meta.badge.bg} ${meta.badge.text} hover:opacity-90` : 'grayscale opacity-40 bg-gray-700/30 text-gray-500'}`}>
                   <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d={meta.icon} /></svg>
                 </button>
               );
@@ -655,7 +555,7 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
               onChange={(e) => setInputPlatform(e.target.value)}
               className="bg-gray-800 border border-gray-700 rounded text-xs text-gray-300 px-2 py-1.5 focus:outline-none focus:border-violet-500"
             >
-              {PLATFORM_BUTTONS.filter((b) => connectedPlatforms.includes(b.id)).map(({ id }) => (
+              {connectedPlatforms.map((id) => (
                 <option key={id} value={id}>{getPlatformDisplayName(id, connectedPlatforms)}</option>
               ))}
             </select>
@@ -812,7 +712,6 @@ interface ChatMessageRowProps {
   message: ChatMessage;
   avatarUrl?: string;
   highlighted: boolean;
-  hasMultipleYouTubeStreams: boolean;
   /** True when this message's platform has more than one distinct
    *  streamLabel in flight — the row swaps its badge text for the channel
    *  label so multi-account setups stay distinguishable. */
@@ -821,22 +720,15 @@ interface ChatMessageRowProps {
   onContextMenuRequest: (event: React.MouseEvent, platform: string, author: string, userId?: string, messageId?: string) => void;
 }
 
-const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highlighted, hasMultipleYouTubeStreams, showStreamLabel, onReplyTo, onContextMenuRequest }: ChatMessageRowProps) {
-  const pKey = platformKey(message.platform);
-  const meta = PLATFORM_META[pKey];
-  const badgeMeta = PLATFORM_BADGE_META[pKey] ?? PLATFORM_BADGE_META.twitch;
-  const isYouTube = pKey === 'youtube' || pKey === 'youtube-v' || pKey === 'youtube-api';
-  const badgeLabel = isYouTube
-    ? getYtBadgeLabel(message.streamLabel, hasMultipleYouTubeStreams)
-    : (showStreamLabel && message.streamLabel)
-      ? message.streamLabel
-      : badgeMeta.label;
+const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highlighted, showStreamLabel, onReplyTo, onContextMenuRequest }: ChatMessageRowProps) {
+  const meta = getPlatformProviderOrFallback(message.platform);
+  const badgeLabel = (showStreamLabel && message.streamLabel) ? message.streamLabel : meta.displayName;
   const isCommand = message.content.startsWith('!');
 
-  // STAR LOGIC: 
-  // YouTube: ONLY if badge is 'member'
-  // Others: if 'subscriber', 'member' or 'subscriber/'
-  const isSub = message.platform === 'youtube' || message.platform === 'youtube-v' || message.platform === 'youtube-api'
+  // Supporter star: the badge id that earns it varies per platform — YouTube
+  // says 'member', everyone else says some flavor of 'subscriber'. The
+  // registry encodes which vocabulary each platform uses.
+  const isSub = meta.subscriberBadge === 'member'
     ? message.badges.includes('member')
     : message.badges.some((b) => b.startsWith('subscriber/') || b === 'subscriber' || b === 'member');
 
@@ -850,10 +742,10 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highli
   return (
     <div
       className={`chat-message flex gap-2 px-3 py-1.5 border-l-2 cursor-default select-text transition-all duration-75
-        ${meta.border}
+        ${meta.badge.rowBorder}
         ${highlighted ? 'ring-1 ring-yellow-400/70 bg-yellow-500/10' : 'hover:bg-white/[0.02]'}
         ${isCommand ? 'bg-violet-500/5' : ''}`}
-      data-platform={platformKey(message.platform)}
+      data-platform={meta.id}
       data-author={message.author}
       onDoubleClick={() => onReplyTo(message.platform, message.author)}
       onContextMenu={(event) => onContextMenuRequest(event, message.platform, message.author, message.userId, message.id)}
@@ -863,7 +755,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highli
         <div className="flex items-center gap-1.5 flex-wrap">
 
           {/* Platform Badge (Activity Log Style) */}
-          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] text-[10px] font-bold shrink-0 ${badgeMeta.bg} ${badgeMeta.text}`}>
+          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] text-[10px] font-bold shrink-0 ${meta.badge.bg} ${meta.badge.text}`}>
             <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor">
               <path d={meta.icon} />
             </svg>
@@ -901,7 +793,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highli
           {isSub ? <span className="text-yellow-400 text-xs leading-none">★</span> : null}
 
           <span className="font-semibold text-sm" style={{ color: authorColor }} data-no-i18n="true">
-            {message.platform === 'youtube' || message.platform === 'youtube-v' || message.platform === 'youtube-api' ? `@${message.author}` : message.author}
+            {meta.authorAtPrefix ? `@${message.author}` : message.author}
           </span>
 
           {message.platform !== 'twitch' && isMod ? <span className="text-xs text-emerald-400 font-semibold">MOD</span> : null}
@@ -946,14 +838,14 @@ function SuggestionEntriesPanel({ list, entries, onClear }: SuggestionEntriesPan
       ) : (
         <div className="flex-1 overflow-y-auto">
           {entries.map((entry, idx) => {
-            const badgeMeta = PLATFORM_BADGE_META[entry.platform] ?? PLATFORM_BADGE_META.twitch;
+            const entryMeta = getPlatformProviderOrFallback(entry.platform);
             return (
               <div key={entry.id} className="flex gap-3 px-4 py-2.5 border-b border-gray-800/60 hover:bg-white/[0.02]">
                 <span className="text-xs text-gray-600 mt-0.5 shrink-0 font-mono w-5 text-right">{idx + 1}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-[4px] ${badgeMeta.bg} ${badgeMeta.text}`}>
-                      {badgeMeta.label}
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-[4px] ${entryMeta.badge.bg} ${entryMeta.badge.text}`}>
+                      {entryMeta.displayName}
                     </span>
                     <span className="text-sm font-semibold text-gray-300">{entry.displayName}</span>
                   </div>

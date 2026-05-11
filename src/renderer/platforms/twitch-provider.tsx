@@ -54,6 +54,29 @@ registerPlatformProvider({
   displayName: 'Twitch',
   accentClass: 'border-l-purple-500',
   supportsMultipleAccounts: true,
+  icon: 'M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z',
+  badge: {
+    bg: 'bg-purple-500/20',
+    text: 'text-purple-300',
+    rowBorder: 'border-purple-500/20',
+  },
+  accentBg: 'bg-purple-500',
+  bannerBorderColor: 'rgba(168,85,247,0.2)',
+  card: {
+    classes: 'bg-purple-500/10 border-purple-500/20 text-purple-300',
+    metaClass: 'text-purple-400',
+  },
+  liveLink: {
+    color: 'text-purple-400',
+    border: 'border-purple-500/30',
+    btnBg: 'bg-purple-600/30 hover:bg-purple-600/50 text-purple-300',
+  },
+  subscriberBadge: 'subscriber',
+  authorAtPrefix: false,
+  profileUrl: (handle) => {
+    const username = handle.replace(/^@+/, '').trim();
+    return username ? `https://twitch.tv/${encodeURIComponent(username)}` : '';
+  },
   AuthStep: TwitchAuthStep,
   validate(channel, providerData) {
     if (!channel) return 'Channel is required';

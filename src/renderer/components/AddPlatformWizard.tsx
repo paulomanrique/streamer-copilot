@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 
-import { listPlatformProviders, type PlatformProvider } from '../platforms/registry.js';
+import { listWizardPlatformProviders, type PlatformProvider } from '../platforms/registry.js';
 import type { PlatformAccount } from '../../shared/types.js';
 
 interface AddPlatformWizardProps {
@@ -12,7 +12,7 @@ interface AddPlatformWizardProps {
 type Step = 'pick-provider' | 'auth' | 'confirm';
 
 export function AddPlatformWizard({ open, onClose, onCreated }: AddPlatformWizardProps) {
-  const providers = useMemo(() => listPlatformProviders(), []);
+  const providers = useMemo(() => listWizardPlatformProviders(), []);
   const [step, setStep] = useState<Step>('pick-provider');
   const [provider, setProvider] = useState<PlatformProvider | null>(null);
   const [draft, setDraft] = useState<Record<string, unknown>>({});
@@ -49,12 +49,15 @@ export function AddPlatformWizard({ open, onClose, onCreated }: AddPlatformWizar
     if (!provider) return;
     setError(null);
     if (step === 'auth') {
-      const validationError = provider.validate(channel, draft);
+      // Wizard-listed providers always have validate/defaultLabel — see
+      // listWizardPlatformProviders. The optional-chain handles the
+      // hide-from-wizard providers (e.g. youtube-v) defensively.
+      const validationError = provider.validate?.(channel, draft) ?? null;
       if (validationError) {
         setError(validationError);
         return;
       }
-      if (!label) setLabel(provider.defaultLabel(channel));
+      if (!label) setLabel(provider.defaultLabel?.(channel) ?? channel);
       setStep('confirm');
     }
   }
@@ -65,7 +68,7 @@ export function AddPlatformWizard({ open, onClose, onCreated }: AddPlatformWizar
     try {
       const account = await window.copilot.accountsCreate({
         providerId: provider.id,
-        label: label || provider.defaultLabel(channel),
+        label: label || provider.defaultLabel?.(channel) || channel,
         channel,
         enabled: true,
         autoConnect: true,
@@ -121,7 +124,7 @@ export function AddPlatformWizard({ open, onClose, onCreated }: AddPlatformWizar
             </div>
           )}
 
-          {step === 'auth' && provider && (
+          {step === 'auth' && provider?.AuthStep && (
             <provider.AuthStep
               draft={draft}
               updateDraft={(patch) => setDraft((prev) => ({ ...prev, ...patch }))}
