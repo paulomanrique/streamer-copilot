@@ -4,7 +4,6 @@ export interface TranslationMessages {
   common: {
     appLanguageName: Record<AppLanguage, string>;
     permissionLevel: Record<PermissionLevel, string>;
-    platform: Record<string, string>;
     status: Record<string, string>;
     save: string;
     saving: string;
