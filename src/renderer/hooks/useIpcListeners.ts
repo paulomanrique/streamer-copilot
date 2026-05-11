@@ -21,6 +21,8 @@ export function useIpcListeners(): void {
   const setKickStatus = useAppStore((s) => s.setKickStatus);
   const setKickSlug = useAppStore((s) => s.setKickSlug);
   const setKickLiveStatsForChannel = useAppStore((s) => s.setKickLiveStatsForChannel);
+  const setPlatformStatus = useAppStore((s) => s.setPlatformStatus);
+  const setPlatformLiveStats = useAppStore((s) => s.setPlatformLiveStats);
 
   // OBS listeners
   useEffect(() => {
@@ -62,6 +64,20 @@ export function useIpcListeners(): void {
     });
     return () => { unsubTwitchStatus(); unsubTwitchStats(); unsubYt(); unsubTiktok(); unsubTiktokStats(); unsubKick(); unsubKickStats(); };
   }, [setTwitchStatus, setTwitchChannel, setTwitchLiveStatsForChannel, setYoutubeStreams, setTiktokStatus, setTiktokUsername, setTiktokLiveStatsForUsername, setKickStatus, setKickSlug, setKickLiveStatsForChannel]);
+
+  // Symmetric platform listeners — these write to the new
+  // `platformStatus` / `platformLiveStats` store fields keyed by PlatformId.
+  // They run alongside the legacy per-platform listeners above so the two
+  // shapes stay in sync while consumers are migrated component by component.
+  useEffect(() => {
+    const unsubStatus = window.copilot.onPlatformStatus(({ platformId, status, primaryChannel }) => {
+      setPlatformStatus(platformId, status, primaryChannel);
+    });
+    const unsubStats = window.copilot.onPlatformLiveStats(({ platformId, channelKey, stats }) => {
+      setPlatformLiveStats(platformId, channelKey, stats);
+    });
+    return () => { unsubStatus(); unsubStats(); };
+  }, [setPlatformStatus, setPlatformLiveStats]);
 
   // Chat message/event listeners
   useEffect(() => {
