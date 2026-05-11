@@ -4,13 +4,11 @@ import type { PlatformAccount, PlatformAccountConnectionStatus } from '../../sha
 import { listPlatformProviders, getPlatformProvider } from '../platforms/registry.js';
 import { AddPlatformWizard } from './AddPlatformWizard.js';
 
-// Side effect imports — each provider self-registers on import.
-import '../platforms/twitch-provider.js';
-import '../platforms/youtube-provider.js';
-import '../platforms/youtube-v-provider.js';
-import '../platforms/youtube-api-provider.js';
-import '../platforms/kick-provider.js';
-import '../platforms/tiktok-provider.js';
+// Side-effect import — registers every PlatformProvider via the registry
+// barrel. Adding a new platform means dropping its file in
+// `src/renderer/platforms/` and listing it in `register-all.ts`; no edit
+// here is required.
+import '../platforms/register-all.js';
 
 const STATUS_STYLE: Record<PlatformAccountConnectionStatus, { dot: string; text: string; label: string }> = {
   connected: { dot: 'bg-emerald-400', text: 'text-emerald-300', label: 'Connected' },
