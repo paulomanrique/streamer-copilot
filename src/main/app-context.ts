@@ -2834,6 +2834,32 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     provider.onStatusChange(() => broadcastAccountsForProvider(provider.providerId));
   }
 
+  // Symmetric snapshot used by the renderer's initial-load path. Today this
+  // is a pragmatic shim over the per-platform aggregates that still live on
+  // app-context — each provider should eventually expose `getAggregateStatus()`
+  // via MainPlatformProvider and this handler should iterate `mainPlatforms.list()`
+  // instead of hardcoding the ids below.
+  ipcMain.handle(IPC_CHANNELS.platformsGetStatuses, async () => {
+    const streams = getYoutubeStreams();
+    return {
+      twitch: { status: twitchStatus, primaryChannel: twitchChannel },
+      kick: { status: aggregateKickStatus(), primaryChannel: kickSlug },
+      tiktok: { status: aggregateTiktokStatus(), primaryChannel: tiktokUsername },
+      youtube: {
+        status: streams.some((s) => s.platform === 'youtube') ? ('connected' as const) : ('disconnected' as const),
+        primaryChannel: null,
+      },
+      'youtube-v': {
+        status: streams.some((s) => s.platform === 'youtube-v') ? ('connected' as const) : ('disconnected' as const),
+        primaryChannel: null,
+      },
+      'youtube-api': {
+        status: streams.some((s) => s.platform === 'youtube-api') ? ('connected' as const) : ('disconnected' as const),
+        primaryChannel: null,
+      },
+    };
+  });
+
   ipcMain.handle(IPC_CHANNELS.accountsList, async () => {
     return accountRepository.list();
   });
