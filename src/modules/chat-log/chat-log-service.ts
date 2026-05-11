@@ -109,7 +109,7 @@ export class ChatLogService {
 
     const messages = this.repo.getMessages(sessionId, { limit: 100_000 });
 
-    const platformLabel = session.platform === 'youtube-v' ? 'YouTube (Vertical)' : session.platform.charAt(0).toUpperCase() + session.platform.slice(1);
+    const platformLabel = session.platform.charAt(0).toUpperCase() + session.platform.slice(1);
     const startDate = new Date(session.startedAt).toLocaleString();
     const endDate = session.endedAt ? new Date(session.endedAt).toLocaleString() : 'Active';
 

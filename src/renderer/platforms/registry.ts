@@ -124,7 +124,7 @@ export function listPlatformProviders(): PlatformProvider[] {
 }
 
 /** Providers users can pick in the "Add network" wizard — alphabetically
- *  sorted, excludes `hideFromWizard` entries (e.g. the youtube-v slot). */
+ *  sorted, excludes `hideFromWizard` entries. */
 export function listWizardPlatformProviders(): PlatformProvider[] {
   return listPlatformProviders()
     .filter((p) => !p.hideFromWizard && p.AuthStep)
@@ -175,10 +175,9 @@ export function getPlatformProviderOrFallback(providerId: string): PlatformProvi
   return providers.get(providerId) ?? FALLBACK_PROVIDER;
 }
 
-/** Contextual display name. Only the YouTube scraper's primary slot
- *  ('youtube') needs the "Horizontal" suffix when the vertical slot is also
- *  connected — every other id uses its registry `displayName` verbatim. */
-export function getPlatformDisplayName(id: string, connectedPlatforms: readonly string[]): string {
-  if (id === 'youtube' && connectedPlatforms.includes('youtube-v')) return 'YouTube Horizontal';
+/** Contextual display name. Every id uses its registry `displayName`
+ *  verbatim — concurrent streams from the same provider are disambiguated
+ *  via the per-message `streamLabel` field, not by their platform id. */
+export function getPlatformDisplayName(id: string, _connectedPlatforms: readonly string[]): string {
   return getPlatformProviderOrFallback(id).displayName;
 }

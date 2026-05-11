@@ -496,16 +496,11 @@ export class RaffleService implements CommandModule {
   }
 
   private buildUserKey(platform: PlatformId, author: string): string {
-    return `${this.normalizeEntryPlatform(platform)}:${author.trim().toLowerCase()}`;
-  }
-
-  private normalizeEntryPlatform(platform: PlatformId): PlatformId {
-    return platform === 'youtube-v' ? 'youtube' : platform;
+    return `${platform}:${author.trim().toLowerCase()}`;
   }
 
   private isAcceptedPlatform(acceptedPlatforms: PlatformId[], platform: PlatformId): boolean {
-    const normalized = this.normalizeEntryPlatform(platform);
-    return acceptedPlatforms.some((item) => this.normalizeEntryPlatform(item) === normalized);
+    return acceptedPlatforms.includes(platform);
   }
 
   private matchesStaffTrigger(raffle: Raffle, content: string): boolean {

@@ -9,7 +9,6 @@
  */
 import './twitch-provider.js';
 import './youtube-provider.js';
-import './youtube-v-provider.js';
 import './youtube-api-provider.js';
 import './kick-provider.js';
 import './tiktok-provider.js';

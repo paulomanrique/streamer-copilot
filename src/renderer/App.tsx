@@ -60,7 +60,7 @@ export default function App() {
   // Flatten across all youtube driver ids so the renderer sees a single list.
   const youtubeStreams = useMemo(() => {
     const out: YouTubeStreamInfo[] = [];
-    for (const driverId of ['youtube', 'youtube-v', 'youtube-api'] as const) {
+    for (const driverId of ['youtube', 'youtube-api'] as const) {
       const byVideoId = platformLiveStats[driverId];
       if (!byVideoId) continue;
       for (const stream of Object.values(byVideoId)) {
