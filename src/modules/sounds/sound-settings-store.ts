@@ -1,7 +1,5 @@
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-
 import type { SoundSettings } from '../../shared/types.js';
+import { JsonSettingsStore } from '../base/settings-store.js';
 
 const SETTINGS_FILE = 'sound-settings.json';
 
@@ -10,39 +8,25 @@ const DEFAULT_SETTINGS: SoundSettings = {
   defaultUserCooldownSeconds: 0,
 };
 
-export class SoundSettingsStore {
-  private readonly filePath: string;
-
+export class SoundSettingsStore extends JsonSettingsStore<SoundSettings> {
   constructor(profileDirectory: string) {
-    this.filePath = path.join(profileDirectory, SETTINGS_FILE);
+    super(profileDirectory, SETTINGS_FILE);
   }
 
-  async load(): Promise<SoundSettings> {
-    try {
-      const data = await fs.readFile(this.filePath, 'utf-8');
-      const parsed = JSON.parse(data) as Partial<SoundSettings>;
-      return {
-        defaultCooldownSeconds:
-          typeof parsed.defaultCooldownSeconds === 'number'
-            ? parsed.defaultCooldownSeconds
-            : DEFAULT_SETTINGS.defaultCooldownSeconds,
-        defaultUserCooldownSeconds:
-          typeof parsed.defaultUserCooldownSeconds === 'number'
-            ? parsed.defaultUserCooldownSeconds
-            : DEFAULT_SETTINGS.defaultUserCooldownSeconds,
-      };
-    } catch {
-      return { ...DEFAULT_SETTINGS };
-    }
+  protected defaults(): SoundSettings {
+    return { ...DEFAULT_SETTINGS };
   }
 
-  async save(input: SoundSettings): Promise<SoundSettings> {
-    const next: SoundSettings = {
-      defaultCooldownSeconds: input.defaultCooldownSeconds,
-      defaultUserCooldownSeconds: input.defaultUserCooldownSeconds,
+  protected parse(raw: Record<string, unknown>): SoundSettings {
+    return {
+      defaultCooldownSeconds:
+        typeof raw.defaultCooldownSeconds === 'number'
+          ? raw.defaultCooldownSeconds
+          : DEFAULT_SETTINGS.defaultCooldownSeconds,
+      defaultUserCooldownSeconds:
+        typeof raw.defaultUserCooldownSeconds === 'number'
+          ? raw.defaultUserCooldownSeconds
+          : DEFAULT_SETTINGS.defaultUserCooldownSeconds,
     };
-    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    await fs.writeFile(this.filePath, JSON.stringify(next, null, 2), 'utf-8');
-    return next;
   }
 }

@@ -1,7 +1,5 @@
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-
 import type { MusicRequestSettings } from '../../shared/types.js';
+import { JsonSettingsStore } from '../base/settings-store.js';
 
 const SETTINGS_FILE = 'music-request-settings.json';
 
@@ -20,42 +18,52 @@ const DEFAULT_SETTINGS: MusicRequestSettings = {
   userCooldownSeconds: 30,
 };
 
-export class MusicSettingsStore {
-  private readonly filePath: string;
-
+export class MusicSettingsStore extends JsonSettingsStore<MusicRequestSettings> {
   constructor(profileDirectory: string) {
-    this.filePath = path.join(profileDirectory, SETTINGS_FILE);
+    super(profileDirectory, SETTINGS_FILE);
   }
 
-  async load(): Promise<MusicRequestSettings> {
-    try {
-      const data = await fs.readFile(this.filePath, 'utf-8');
-      const parsed = JSON.parse(data) as Record<string, unknown>;
-      return {
-        enabled: typeof parsed.enabled === 'boolean' ? parsed.enabled : DEFAULT_SETTINGS.enabled,
-        volume: typeof parsed.volume === 'number' ? parsed.volume : DEFAULT_SETTINGS.volume,
-        maxQueueSize: typeof parsed.maxQueueSize === 'number' ? parsed.maxQueueSize : DEFAULT_SETTINGS.maxQueueSize,
-        maxDurationSeconds: typeof parsed.maxDurationSeconds === 'number' ? parsed.maxDurationSeconds : DEFAULT_SETTINGS.maxDurationSeconds,
-        requestTrigger: typeof parsed.requestTrigger === 'string' && parsed.requestTrigger.trim() ? parsed.requestTrigger as string : DEFAULT_SETTINGS.requestTrigger,
-        skipTrigger: typeof parsed.skipTrigger === 'string' && parsed.skipTrigger.trim() ? parsed.skipTrigger as string : DEFAULT_SETTINGS.skipTrigger,
-        queueTrigger: typeof parsed.queueTrigger === 'string' && parsed.queueTrigger.trim() ? parsed.queueTrigger as string : DEFAULT_SETTINGS.queueTrigger,
-        cancelTrigger: typeof parsed.cancelTrigger === 'string' && parsed.cancelTrigger.trim() ? parsed.cancelTrigger as string : DEFAULT_SETTINGS.cancelTrigger,
-        requestPermissions: Array.isArray(parsed.requestPermissions) && parsed.requestPermissions.length > 0
-          ? parsed.requestPermissions as MusicRequestSettings['requestPermissions']
+  protected defaults(): MusicRequestSettings {
+    return { ...DEFAULT_SETTINGS };
+  }
+
+  protected parse(raw: Record<string, unknown>): MusicRequestSettings {
+    return {
+      enabled: typeof raw.enabled === 'boolean' ? raw.enabled : DEFAULT_SETTINGS.enabled,
+      volume: typeof raw.volume === 'number' ? raw.volume : DEFAULT_SETTINGS.volume,
+      maxQueueSize: typeof raw.maxQueueSize === 'number' ? raw.maxQueueSize : DEFAULT_SETTINGS.maxQueueSize,
+      maxDurationSeconds: typeof raw.maxDurationSeconds === 'number' ? raw.maxDurationSeconds : DEFAULT_SETTINGS.maxDurationSeconds,
+      requestTrigger:
+        typeof raw.requestTrigger === 'string' && raw.requestTrigger.trim()
+          ? (raw.requestTrigger as string)
+          : DEFAULT_SETTINGS.requestTrigger,
+      skipTrigger:
+        typeof raw.skipTrigger === 'string' && raw.skipTrigger.trim()
+          ? (raw.skipTrigger as string)
+          : DEFAULT_SETTINGS.skipTrigger,
+      queueTrigger:
+        typeof raw.queueTrigger === 'string' && raw.queueTrigger.trim()
+          ? (raw.queueTrigger as string)
+          : DEFAULT_SETTINGS.queueTrigger,
+      cancelTrigger:
+        typeof raw.cancelTrigger === 'string' && raw.cancelTrigger.trim()
+          ? (raw.cancelTrigger as string)
+          : DEFAULT_SETTINGS.cancelTrigger,
+      requestPermissions:
+        Array.isArray(raw.requestPermissions) && raw.requestPermissions.length > 0
+          ? (raw.requestPermissions as MusicRequestSettings['requestPermissions'])
           : DEFAULT_SETTINGS.requestPermissions,
-        skipPermissions: Array.isArray(parsed.skipPermissions) && parsed.skipPermissions.length > 0
-          ? parsed.skipPermissions as MusicRequestSettings['skipPermissions']
+      skipPermissions:
+        Array.isArray(raw.skipPermissions) && raw.skipPermissions.length > 0
+          ? (raw.skipPermissions as MusicRequestSettings['skipPermissions'])
           : DEFAULT_SETTINGS.skipPermissions,
-        cooldownSeconds: typeof parsed.cooldownSeconds === 'number' ? parsed.cooldownSeconds : DEFAULT_SETTINGS.cooldownSeconds,
-        userCooldownSeconds: typeof parsed.userCooldownSeconds === 'number' ? parsed.userCooldownSeconds : DEFAULT_SETTINGS.userCooldownSeconds,
-      };
-    } catch {
-      return { ...DEFAULT_SETTINGS };
-    }
+      cooldownSeconds: typeof raw.cooldownSeconds === 'number' ? raw.cooldownSeconds : DEFAULT_SETTINGS.cooldownSeconds,
+      userCooldownSeconds: typeof raw.userCooldownSeconds === 'number' ? raw.userCooldownSeconds : DEFAULT_SETTINGS.userCooldownSeconds,
+    };
   }
 
-  async save(input: MusicRequestSettings): Promise<MusicRequestSettings> {
-    const next: MusicRequestSettings = {
+  protected normalize(input: MusicRequestSettings): MusicRequestSettings {
+    return {
       enabled: Boolean(input.enabled),
       volume: Math.max(0, Math.min(1, input.volume)),
       maxQueueSize: input.maxQueueSize,
@@ -69,8 +77,5 @@ export class MusicSettingsStore {
       cooldownSeconds: input.cooldownSeconds,
       userCooldownSeconds: input.userCooldownSeconds,
     };
-    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    await fs.writeFile(this.filePath, JSON.stringify(next, null, 2), 'utf-8');
-    return next;
   }
 }
