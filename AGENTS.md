@@ -96,21 +96,45 @@ streamer-copilot/
 
 ## Platform-agnostic UI / state (no hardcoded platform lists)
 
-Adding a new platform or driver must be **one entry in a registry**, not edits across N files. If you find yourself writing the string `'twitch'`, `'youtube'`, `'youtube-v'`, `'youtube-api'`, `'kick'` or `'tiktok'` in renderer code, stop and ask whether the data should come from a registry instead. The same applies in the main process for cross-platform plumbing (status pushes, stats merging, account routing).
+Adding a new platform or driver must be **one entry in a registry**, not edits across N files. If you find yourself writing the string `'twitch'`, `'youtube'`, `'youtube-api'`, `'kick'` or `'tiktok'` in any file outside the platform providers themselves, stop and ask whether the data should come from a registry instead. The same applies in the main process for cross-platform plumbing (status pushes, stats merging, account routing).
+
+### Where the registries live
+
+- **Renderer**: `src/renderer/platforms/registry.ts` — `PlatformProvider` interface (visuals + behavior), `getPlatformProviderOrFallback(id)`, `listPlatformProviders()`, `listWizardPlatformProviders()`. Each platform self-registers from its own file (`src/renderer/platforms/<id>-provider.tsx`); side-effect imports are collected in `src/renderer/platforms/register-all.ts`.
+- **Main**: `src/main/platforms/registry.ts` — `MainPlatformProvider` interface for the runtime lifecycle (`connect`, `disconnect`, `getStatus`, `purgeStores`, `onStatusChange`). Providers are instantiated and registered in `app-context.ts`.
+- **Overlay (browser-injected)**: `src/main/overlay-server.ts` ships its own `PLATFORMS` map inside the chat-overlay JS string — same shape, separate copy because the overlay runs in a popup window and can't import the renderer registry.
 
 ### Rules
 
-1. **Single platform-metadata registry.** Per-platform display data (label, colors, badge bg/text classes, SVG icon path, border color, accent class) lives in **one** registry consumed by every component. Components do not hold their own copy. Today the same data is duplicated across `ChatFeed.PLATFORM_META`, `ChatFeed.PLATFORM_BADGE_META`, `EventBanner.PLATFORM_META`, `EventBanner.getBorderColor`, `ObsStatsPanel.ICONS`, `AppHeader` icon constants, `ConnectedAccounts.STATUS_STYLE`. Goal: one source of truth, imported by all of them.
+1. **Single platform-metadata registry per side.** Per-platform display data (label, colors, badge classes, icon, border color, accent class, `hasNativeBadgeUrls`, `authorAtPrefix`, etc.) lives in the `PlatformProvider` entries — consumed by every renderer component that needs to depict it (chat row, viewer card, live-link button, status bar, chat-log filter chips). Components do not hold their own copy.
 
-2. **No per-platform conditionals for styling or behavior in components.** Patterns like `platform === 'youtube-v' ? rose : red`, `isYouTube = platform === 'youtube' || platform === 'youtube-v' || platform === 'youtube-api'`, `if (twitchStatus === 'connected') list.push('twitch')` are smells. Drive UI from the registry (colors as fields, families as a group property) or from the data itself (`connectedPlatforms` derived by iterating the platforms list, not by typing each id out).
+2. **No per-platform conditionals for styling or behavior in components.** Patterns like `platform === 'twitch' ? renderBadge() : renderAvatar()`, `if (platform === 'youtube' || platform === 'youtube-api') ...`, `if (twitchStatus === 'connected') list.push('twitch')` are smells. Drive UI from registry fields (e.g. `meta.hasNativeBadgeUrls`, `meta.authorAtPrefix`) or from the data itself (`Object.keys(platformLiveStats)` instead of typing each id out).
 
-3. **State shape symmetric across platforms.** When you find yourself adding `twitchStatus` / `kickStatus` / `tiktokStatus` / `youtubeStreams` / `kickLiveStatsByChannel` / `tiktokLiveStatsByUsername` as parallel store fields, push them into a `Record<PlatformId, ...>` instead. Same for push channels: prefer `pushPlatformStatus(platformId, payload)` over `pushTwitchStatus`, `pushKickStatus`, `pushTiktokStatus`.
+3. **State shape symmetric across platforms.** Platform connection state and per-stream stats live in `Record<PlatformId, ...>` maps:
+   - `platformStatus: Partial<Record<PlatformId, PlatformLinkStatus>>`
+   - `platformPrimaryChannel: Partial<Record<PlatformId, string | null>>`
+   - `platformLiveStats: Partial<Record<PlatformId, Record<string /* channel/videoId */, unknown>>>`
 
-4. **Each platform id is independent — no driver families.** `youtube` (scraper) and `youtube-api` (API) are siblings logically, but the codebase treats them as fully separate platforms: independent filter chips, independent cards, independent registry entries, independent state. Do **not** introduce a `family` field, a `'youtube' | 'youtube-api'` union helper, or `isYouTube`-style aggregator predicates. If you need to do "X for both youtube drivers", iterate the registry and filter — don't hardcode the membership.
+   Same for push channels: there is **one** `pushPlatformStatus(platformId, status, channel)` / `pushPlatformLiveStats(platformId, channelKey, stats)` pair in `state-hub.ts`. **Bad**: `pushTwitchStatus`, `pushKickStatus`, `pushTiktokStatus`. **Good**: `pushPlatformStatus('twitch', status, channel)`. The renderer subscribes once via `onPlatformStatus` / `onPlatformLiveStats` — never per platform.
 
-5. **Fallback in the registry, not in callers.** When a platform doesn't have a custom entry (e.g. unknown id), the registry returns a generic fallback. Callers must not write `?? PLATFORM_META.twitch` — that quietly mis-styles the unknown platform as Twitch.
+4. **Each platform id is independent — no driver families.** `youtube` (scraper) and `youtube-api` (Data API) are siblings logically, but the codebase treats them as fully separate ids: independent filter chips, independent cards, independent registry entries, independent state. Do **not** introduce a `family` field, a `'youtube' | 'youtube-api'` union helper, or `isYouTube`-style aggregator predicates. If you need to do "X for every YouTube driver", iterate the registry and filter — don't hardcode the membership. **Concurrent live streams from the same provider** (e.g. YouTube horizontal + vertical) share the same `platformId` and are differentiated by the `channelId` field on each message — exactly like multi-account Twitch. Never invent a parallel id (like the retired `youtube-v`) just to give the second stream a stable session key.
 
-6. **Adding a platform: one PR, two files max.** Drop one entry in the registry; if the new platform has unique semantics, register one provider on each side (renderer `registerPlatformProvider` + main `MainPlatformProvider`). No edits to `ChatFeed`, `EventBanner`, `ObsStatsPanel`, `AppHeader`, `DashboardSummary`, `StatusBar`, store, IPC channel list, or state-hub should be required just to surface a new chat / card / live-link.
+5. **Multi-channel support keys by `(platform, channelId)`.** The chat-log service indexes sessions by the compound key, and every adapter must stamp `channelId` on the `ChatMessage` objects it emits (Twitch: channel name; Kick: slug; TikTok: username; YouTube: videoId). Without `channelId`, the message gets dropped from the log — there is no implicit "any session" fallback.
+
+6. **Fallback in the registry, not in callers.** When a platform id is unknown, `getPlatformProviderOrFallback()` returns a gray fallback. Callers must not write `?? PLATFORM_META.twitch` — that quietly mis-styles the unknown platform as Twitch.
+
+7. **Adding a platform: one entry per side + the provider file itself.** Drop one entry in `src/renderer/platforms/<new>-provider.tsx` and add a line to `register-all.ts`; instantiate a `MainPlatformProvider` in `app-context.ts`. **No edits** to `ChatFeed`, `EventBanner`, `ObsStatsPanel`, `AppHeader`, `DashboardSummary`, `StatusBar`, `ConnectedAccounts`, `store.ts`, `shared/ipc.ts`, `state-hub.ts`, or per-platform sections of `app-context.ts` should be required to surface a new chat row / card / live-link / status push.
+
+### Anti-regression checklist (run before committing platform-touching changes)
+
+- `grep -rn "'twitch'\|'youtube'\|'kick'\|'tiktok'\|'youtube-api'" src/` returns hits **only** in:
+  - the provider files (`src/renderer/platforms/*-provider.*` and the main-side equivalents)
+  - the overlay-server `PLATFORMS` map
+  - DB migrations
+- No new `push<Platform>Status` or `set<Platform>Status` in `state-hub.ts` / `store.ts`.
+- No new `<platform>Status` / `<platform>Channel` / `<platform>LiveStatsBy*` fields in `AppStore`.
+- No new `is<Platform>` predicate or `<PLATFORM>_GROUP` array constant.
+- Adding a new platform would touch ≤ 3 files (provider + barrel + main provider entry).
 
 ### When to refactor vs. accept the smell
 
