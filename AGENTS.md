@@ -94,6 +94,32 @@ streamer-copilot/
 
 ---
 
+## Platform-agnostic UI / state (no hardcoded platform lists)
+
+Adding a new platform or driver must be **one entry in a registry**, not edits across N files. If you find yourself writing the string `'twitch'`, `'youtube'`, `'youtube-v'`, `'youtube-api'`, `'kick'` or `'tiktok'` in renderer code, stop and ask whether the data should come from a registry instead. The same applies in the main process for cross-platform plumbing (status pushes, stats merging, account routing).
+
+### Rules
+
+1. **Single platform-metadata registry.** Per-platform display data (label, colors, badge bg/text classes, SVG icon path, border color, accent class) lives in **one** registry consumed by every component. Components do not hold their own copy. Today the same data is duplicated across `ChatFeed.PLATFORM_META`, `ChatFeed.PLATFORM_BADGE_META`, `EventBanner.PLATFORM_META`, `EventBanner.getBorderColor`, `ObsStatsPanel.ICONS`, `AppHeader` icon constants, `ConnectedAccounts.STATUS_STYLE`. Goal: one source of truth, imported by all of them.
+
+2. **No per-platform conditionals for styling or behavior in components.** Patterns like `platform === 'youtube-v' ? rose : red`, `isYouTube = platform === 'youtube' || platform === 'youtube-v' || platform === 'youtube-api'`, `if (twitchStatus === 'connected') list.push('twitch')` are smells. Drive UI from the registry (colors as fields, families as a group property) or from the data itself (`connectedPlatforms` derived by iterating the platforms list, not by typing each id out).
+
+3. **State shape symmetric across platforms.** When you find yourself adding `twitchStatus` / `kickStatus` / `tiktokStatus` / `youtubeStreams` / `kickLiveStatsByChannel` / `tiktokLiveStatsByUsername` as parallel store fields, push them into a `Record<PlatformId, ...>` instead. Same for push channels: prefer `pushPlatformStatus(platformId, payload)` over `pushTwitchStatus`, `pushKickStatus`, `pushTiktokStatus`.
+
+4. **Driver families.** `youtube` (scraper) and `youtube-api` (API) are sibling drivers of the same logical platform. Express this in the registry (`family: 'youtube'`) instead of `||`-chaining the ids everywhere. Filter chips and cards iterate the registry; multi-driver fan-out reads the family.
+
+5. **Fallback in the registry, not in callers.** When a platform doesn't have a custom entry (e.g. unknown id), the registry returns a generic fallback. Callers must not write `?? PLATFORM_META.twitch` — that quietly mis-styles the unknown platform as Twitch.
+
+6. **Adding a platform: one PR, two files max.** Drop one entry in the registry; if the new platform has unique semantics, register one provider on each side (renderer `registerPlatformProvider` + main `MainPlatformProvider`). No edits to `ChatFeed`, `EventBanner`, `ObsStatsPanel`, `AppHeader`, `DashboardSummary`, `StatusBar`, store, IPC channel list, or state-hub should be required just to surface a new chat / card / live-link.
+
+### When to refactor vs. accept the smell
+
+- **Greenfield code or new feature**: do it registry-first. Don't introduce new per-platform store fields, switch statements, or `PLATFORM_X_META` maps.
+- **Touching existing per-platform code**: if the file already has the pattern, prefer pulling the next change into the registry over copy-pasting another branch. Worst case, leave a TODO referencing this rule and the planned extraction.
+- **Don't extract speculatively.** The registry exists to eliminate the duplication that already hurts (UI metadata, status/state plumbing). It is not an excuse to abstract every per-platform behavior — adapters and providers still legitimately differ per platform.
+
+---
+
 ## Electron Runtime Notes
 
 - Clear `ELECTRON_RUN_AS_NODE` in dev and start scripts.
