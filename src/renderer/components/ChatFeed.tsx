@@ -89,9 +89,13 @@ const PLATFORM_BADGE_META: Record<string, { bg: string; text: string; label: str
   tiktok:      { bg: 'bg-pink-500/20',   text: 'text-pink-300',   label: 'TikTok' },
 };
 
-function getYtBadgeLabel(platform: string, hasMultipleYouTubeStreams: boolean): string {
+function getYtBadgeLabel(streamLabel: string | undefined, hasMultipleYouTubeStreams: boolean): string {
   if (!hasMultipleYouTubeStreams) return 'YouTube';
-  return platform === 'youtube-v' ? 'YouTube Vertical' : 'YouTube Horizontal';
+  // streamLabel is resolved server-side by computeYouTubeStreamLabels —
+  // "YouTube Horizontal" / "YouTube @user" / "YouTube-1" / etc. — so the
+  // badge just renders whatever it got. Falling back to "YouTube" covers
+  // late messages that arrived before the labeler caught up.
+  return streamLabel || 'YouTube';
 }
 
 // Twitch's default color palette assigned when a user has no color set
@@ -822,7 +826,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highli
   const badgeMeta = PLATFORM_BADGE_META[pKey] ?? PLATFORM_BADGE_META.twitch;
   const isYouTube = pKey === 'youtube' || pKey === 'youtube-v' || pKey === 'youtube-api';
   const badgeLabel = isYouTube
-    ? getYtBadgeLabel(message.platform, hasMultipleYouTubeStreams)
+    ? getYtBadgeLabel(message.streamLabel, hasMultipleYouTubeStreams)
     : (showStreamLabel && message.streamLabel)
       ? message.streamLabel
       : badgeMeta.label;
