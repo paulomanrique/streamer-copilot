@@ -71,6 +71,7 @@ registerPlatformProvider({
   },
   subscriberBadge: 'subscriber',
   authorAtPrefix: false,
+  hasNativeBadgeUrls: false,
   profileUrl: (handle) => {
     const username = handle.replace(/^@+/, '').trim().toLowerCase();
     return username ? `https://kick.com/${encodeURIComponent(username)}` : '';

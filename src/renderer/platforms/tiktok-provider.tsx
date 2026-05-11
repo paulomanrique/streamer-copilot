@@ -57,6 +57,7 @@ registerPlatformProvider({
   },
   subscriberBadge: 'subscriber',
   authorAtPrefix: false,
+  hasNativeBadgeUrls: false,
   profileUrl: (handle) => {
     const username = handle.replace(/^@+/, '').trim();
     return username ? `https://www.tiktok.com/@${encodeURIComponent(username)}` : '';

@@ -76,6 +76,7 @@ registerPlatformProvider({
   },
   subscriberBadge: 'member',
   authorAtPrefix: true,
+  hasNativeBadgeUrls: false,
   profileUrl: youtubeProfileUrl,
   AuthStep: YouTubeAuthStep,
   validate(channel) {
