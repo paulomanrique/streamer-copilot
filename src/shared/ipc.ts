@@ -14,6 +14,8 @@ import type {
   ObsConnectionSettings,
   ObsStatsSnapshot,
   PlatformId,
+  PlatformLinkSnapshot,
+  PlatformLinkStatus,
   ProfileSettings,
   ProfilesSnapshot,
   Poll,
@@ -221,6 +223,15 @@ export const IPC_CHANNELS = {
   moderationManageRole: 'moderation:manage-role',
   moderationRaid: 'moderation:raid',
   moderationShoutout: 'moderation:shoutout',
+  /**
+   * Unified, platform-agnostic status / live-stats channels. Per-platform
+   * channels (twitchStatus, kickStatus, tiktokStatus, twitchLiveStats, etc.)
+   * are legacy and being phased out. All new producers/consumers must use
+   * these symmetric channels with `platformId` as a payload field.
+   */
+  platformsGetStatuses: 'platforms:get-statuses',
+  platformStatus: 'platform:status',
+  platformLiveStats: 'platform:live-stats',
   accountsList: 'accounts:list',
   accountsCreate: 'accounts:create',
   accountsUpdate: 'accounts:update',
@@ -407,6 +418,36 @@ export interface CopilotApi {
   moderationManageRole: (input: { platform: PlatformId; role: 'mod' | 'vip'; action: 'add' | 'remove'; userId: string }) => Promise<void>;
   moderationRaid: (input: { platform: PlatformId; targetChannel: string }) => Promise<void>;
   moderationShoutout: (input: { platform: PlatformId; userId: string }) => Promise<void>;
+  /**
+   * Returns a `Record<PlatformId, PlatformLinkSnapshot>` covering every
+   * registered platform. Replaces the per-platform `twitchGetStatus`,
+   * `kickGetStatus`, `tiktokGetStatus`, `youtubeGetStatus` getters during the
+   * symmetric-state migration. New code should call this and select by
+   * `platformId`.
+   */
+  getPlatformStatuses: () => Promise<Partial<Record<PlatformId, PlatformLinkSnapshot>>>;
+  /**
+   * Unified status push. Replaces per-platform `onTwitchStatus`,
+   * `onKickStatus`, `onTiktokStatus` listeners — every platform reports
+   * through this single channel.
+   */
+  onPlatformStatus: (listener: (payload: {
+    platformId: PlatformId;
+    status: PlatformLinkStatus;
+    primaryChannel: string | null;
+  }) => void) => () => void;
+  /**
+   * Unified live-stats push. Replaces per-platform `onTwitchLiveStats`,
+   * `onKickLiveStats`, `onTiktokLiveStats`, `onYoutubeStatus`. The
+   * `channelKey` is the per-account identifier (channel slug, username,
+   * videoId, etc.) — its meaning is opaque to the core plumbing; consumers
+   * resolve it via the platform registry.
+   */
+  onPlatformLiveStats: (listener: (payload: {
+    platformId: PlatformId;
+    channelKey: string;
+    stats: unknown | null;
+  }) => void) => () => void;
   accountsList: () => Promise<import('./types.js').PlatformAccount[]>;
   accountsCreate: (input: AccountCreateInput) => Promise<import('./types.js').PlatformAccount>;
   accountsUpdate: (input: AccountUpdateInput) => Promise<import('./types.js').PlatformAccount>;

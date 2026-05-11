@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import type { ChatMessage, KickConnectionStatus, KickLiveStats, ObsStatsSnapshot, ProfilesSnapshot, StreamEvent, TikTokConnectionStatus, TikTokLiveStats, TwitchConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../shared/types.js';
+import type { ChatMessage, KickConnectionStatus, KickLiveStats, ObsStatsSnapshot, PlatformId, PlatformLinkStatus, ProfilesSnapshot, StreamEvent, TikTokConnectionStatus, TikTokLiveStats, TwitchConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../shared/types.js';
 
 const DEFAULT_OBS_STATS: ObsStatsSnapshot = {
   connected: false,
@@ -21,6 +21,28 @@ interface AppStore extends ProfilesSnapshot {
   chatEvents: StreamEvent[];
   chatSequence: number;
   obsStats: ObsStatsSnapshot;
+  /**
+   * Symmetric, platform-agnostic connection state. Consumers must read from
+   * this map instead of the per-platform fields below (`twitchStatus`,
+   * `kickStatus`, `tiktokStatus`), which are legacy and being phased out.
+   * Lookups for unregistered platforms return `'disconnected'` via the
+   * `getPlatformStatus` selector.
+   */
+  platformStatus: Partial<Record<PlatformId, PlatformLinkStatus>>;
+  /**
+   * Symmetric primary-channel map. Stores the account identifier shown in
+   * single-account UIs (Twitch login, Kick slug, TikTok username). For
+   * platforms with many concurrent connections (YouTube scraper slots,
+   * multi-account Twitch), prefer iterating `platformLiveStats` keys.
+   */
+  platformPrimaryChannel: Partial<Record<PlatformId, string | null>>;
+  /**
+   * Symmetric per-channel live stats keyed by `(platformId, channelKey)`.
+   * The stats payload is platform-specific; consumers cast via the platform
+   * registry. Core plumbing keeps it `unknown` to honour the rule that
+   * cross-platform code never knows a platform's stat shape.
+   */
+  platformLiveStats: Partial<Record<PlatformId, Record<string, unknown>>>;
   twitchStatus: TwitchConnectionStatus;
   twitchChannel: string | null;
   /** Per-channel Twitch stats — one entry per connected account. The legacy
@@ -36,6 +58,14 @@ interface AppStore extends ProfilesSnapshot {
   kickSlug: string | null;
   /** Per-channel Kick stats — one entry per connected account. */
   kickLiveStatsByChannel: Record<string, KickLiveStats>;
+  /** Updates the symmetric `platformStatus` (and optionally
+   *  `platformPrimaryChannel`) entries for one platform. */
+  setPlatformStatus: (platformId: PlatformId, status: PlatformLinkStatus, primaryChannel?: string | null) => void;
+  /** Updates one entry in `platformLiveStats[platformId][channelKey]`. Passing
+   *  `null` removes the entry — same convention as the legacy per-platform setters. */
+  setPlatformLiveStats: (platformId: PlatformId, channelKey: string, stats: unknown | null) => void;
+  /** Bulk loader for the initial snapshot delivered by `getPlatformStatuses`. */
+  hydratePlatformStatuses: (snapshot: Partial<Record<PlatformId, { status: PlatformLinkStatus; primaryChannel: string | null }>>) => void;
   setProfiles: (snapshot: ProfilesSnapshot) => void;
   setObsStats: (stats: ObsStatsSnapshot | ((current: ObsStatsSnapshot) => ObsStatsSnapshot)) => void;
   setChatSnapshot: (snapshot: { messages: ChatMessage[]; events: StreamEvent[] }) => void;
@@ -63,6 +93,9 @@ export const useAppStore = create<AppStore>((set) => ({
   chatSequence: 0,
   profiles: [],
   obsStats: DEFAULT_OBS_STATS,
+  platformStatus: {} as Partial<Record<PlatformId, PlatformLinkStatus>>,
+  platformPrimaryChannel: {} as Partial<Record<PlatformId, string | null>>,
+  platformLiveStats: {} as Partial<Record<PlatformId, Record<string, unknown>>>,
   twitchStatus: 'disconnected',
   twitchChannel: null,
   twitchLiveStatsByChannel: {},
@@ -102,6 +135,40 @@ export const useAppStore = create<AppStore>((set) => ({
     set((state) => appendChatEventsToState(state, [event])),
   appendChatEvents: (events) =>
     set((state) => appendChatEventsToState(state, events)),
+  setPlatformStatus: (platformId, status, primaryChannel) =>
+    set((state) => {
+      const nextStatus = { ...state.platformStatus, [platformId]: status };
+      // Only touch primaryChannel when the caller actually supplied one — a
+      // bare status push (no channel arg) must not wipe an existing label.
+      if (primaryChannel === undefined) {
+        return { platformStatus: nextStatus };
+      }
+      return {
+        platformStatus: nextStatus,
+        platformPrimaryChannel: { ...state.platformPrimaryChannel, [platformId]: primaryChannel },
+      };
+    }),
+  setPlatformLiveStats: (platformId, channelKey, stats) =>
+    set((state) => {
+      const current = state.platformLiveStats[platformId] ?? {};
+      const next = { ...current };
+      if (stats === null) delete next[channelKey];
+      else next[channelKey] = stats;
+      return {
+        platformLiveStats: { ...state.platformLiveStats, [platformId]: next },
+      };
+    }),
+  hydratePlatformStatuses: (snapshot) =>
+    set(() => {
+      const nextStatus: Partial<Record<PlatformId, PlatformLinkStatus>> = {};
+      const nextChannel: Partial<Record<PlatformId, string | null>> = {};
+      for (const [platformId, entry] of Object.entries(snapshot)) {
+        if (!entry) continue;
+        nextStatus[platformId as PlatformId] = entry.status;
+        nextChannel[platformId as PlatformId] = entry.primaryChannel;
+      }
+      return { platformStatus: nextStatus, platformPrimaryChannel: nextChannel };
+    }),
   setTwitchStatus: (status) => set({ twitchStatus: status }),
   setTwitchChannel: (channel) => set({ twitchChannel: channel }),
   setTwitchLiveStatsForChannel: (channel, stats) =>
