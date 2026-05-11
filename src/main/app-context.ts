@@ -2670,7 +2670,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     tiktokRetryTimers.set(accountId, timer);
   }
 
-  const connectTiktokAccount = async (accountId: string, username: string): Promise<void> => {
+  async function connectTiktokAccount(accountId: string, username: string): Promise<void> {
     tiktokWatchingAccounts.delete(accountId);
     clearTiktokRetryFor(accountId);
     tiktokAccountStatus.set(accountId, 'connecting');
@@ -2695,9 +2695,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       reason: result.error instanceof Error ? result.error.message || result.error.name : String(result.error),
     });
     scheduleTiktokRetry(accountId, username);
-  };
+  }
 
-  const disconnectTiktokAccount = async (accountId: string): Promise<void> => {
+  async function disconnectTiktokAccount(accountId: string): Promise<void> {
     tiktokWatchingAccounts.delete(accountId);
     clearTiktokRetryFor(accountId);
     const username = tiktokAccountUsername.get(accountId);
@@ -2712,7 +2712,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       chatLogService.closeSession('tiktok');
     }
     broadcastAccountsForProvider('tiktok');
-  };
+  }
 
   const tiktokProvider: MainPlatformProvider = {
     providerId: 'tiktok',
