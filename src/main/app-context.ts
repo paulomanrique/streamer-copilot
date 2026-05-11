@@ -2012,6 +2012,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.youtubeDisconnect, async () => {
     youtubeAdapter?.stopAllScrapers();
   });
+  ipcMain.handle(IPC_CHANNELS.youtubeDisconnectVideo, async (_, raw) => {
+    const i = youtubeConnectSchema.parse(raw);
+    youtubeAdapter?.removeVideo(i.videoId);
+  });
   ipcMain.handle(IPC_CHANNELS.youtubeGetStatus, async () => getYoutubeStreams());
   ipcMain.handle(IPC_CHANNELS.youtubeOpenLogin, async (event) => {
     const parent = BrowserWindow.fromWebContents(event.sender) ?? undefined;
