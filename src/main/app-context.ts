@@ -403,8 +403,6 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   // here so helpers defined earlier can defer to the adapter once it exists.
   let youtubeAdapter: YouTubeChatAdapter | null = null;
 
-  // Ordered list of platform IDs for YouTube streams (first = horizontal, second = vertical)
-  const YT_PLATFORMS: Array<'youtube' | 'youtube-v'> = ['youtube', 'youtube-v'];
   const SCHEDULED_SUPPORTED_TARGETS: PlatformId[] = ['twitch', 'youtube', 'youtube-api'];
   // eslint-disable-next-line prefer-const -- forward-declared; assigned after dependent services are created
   let raffleService: RaffleService;
@@ -421,21 +419,13 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ];
   const pushMergedYoutubeStreams = (): void => {
     // YouTube has no single aggregate status — fan out each concurrent
-    // stream as a live-stats entry keyed by videoId. The driver id (`youtube`,
-    // `youtube-v`, `youtube-api`) lives on the stream itself, so this stays
-    // free of hardcoded platform branches.
+    // stream as a live-stats entry keyed by videoId. The driver id
+    // ('youtube' for the scraper, 'youtube-api' for the Data API) lives on
+    // the stream itself, so this stays free of hardcoded platform branches.
     for (const stream of getYoutubeStreams()) {
       options.stateHub.pushPlatformLiveStats(stream.platform, stream.videoId, stream);
     }
   };
-
-  /**
-   * Type guard for the two YouTube platform slots. Needed because PlatformId
-   * is an open enum (`'twitch' | ... | (string & {})`) and the literal
-   * narrowing `target === 'youtube'` doesn't survive the wider member.
-   */
-  const isYoutubePlatform = (p: PlatformId): p is 'youtube' | 'youtube-v' =>
-    p === 'youtube' || p === 'youtube-v';
 
   const getTwitchCredentialsStore = async (): Promise<TwitchCredentialsStore | null> => {
     const snapshot = await profileStore.list();
@@ -476,10 +466,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     await youtubeSettingsWrite;
     if (settings.chatChannelName) {
       selfSenderName.youtube = settings.chatChannelName.toLowerCase();
-      selfSenderName['youtube-v'] = settings.chatChannelName.toLowerCase();
     } else if (!settings.chatChannelPageId) {
       delete selfSenderName.youtube;
-      delete selfSenderName['youtube-v'];
     }
     await refreshYoutubeAdapter();
     return settings;
@@ -1333,8 +1321,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         .replaceAll('{command}', raffle.entryCommand);
       for (const target of resolveAnnouncementTargets(raffle.acceptedPlatforms)) {
         try {
-          if (isYoutubePlatform(target)) {
-            await sendYoutubeMessage(target, content);
+          if (target === 'youtube') {
+            await sendYoutubeMessage(content);
           } else {
             await chatService.sendMessage(target, content);
           }
@@ -1354,8 +1342,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         .replaceAll('{title}', raffle.title);
       for (const target of resolveAnnouncementTargets(raffle.acceptedPlatforms)) {
         try {
-          if (isYoutubePlatform(target)) {
-            await sendYoutubeMessage(target, content);
+          if (target === 'youtube') {
+            await sendYoutubeMessage(content);
           } else {
             await chatService.sendMessage(target, content);
           }
@@ -1373,8 +1361,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       const content = formatWinnerAnnouncement(raffle, winner.displayName);
       for (const target of resolveAnnouncementTargets(raffle.acceptedPlatforms)) {
         try {
-          if (isYoutubePlatform(target)) {
-            await sendYoutubeMessage(target, content);
+          if (target === 'youtube') {
+            await sendYoutubeMessage(content);
           } else {
             await chatService.sendMessage(target, content);
           }
@@ -1433,8 +1421,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       if (!content) return;
       for (const target of resolveAnnouncementTargets(poll.acceptedPlatforms)) {
         try {
-          if (isYoutubePlatform(target)) {
-            await sendYoutubeMessage(target, content);
+          if (target === 'youtube') {
+            await sendYoutubeMessage(content);
           } else {
             await chatService.sendMessage(target, content);
           }
@@ -1839,7 +1827,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.chatSendMessage, async (_, raw) => {
     const i = chatSendMessageSchema.parse(raw);
     await sendPlatformMessage(i.platform, i.content);
-    if (i.platform !== 'youtube' && i.platform !== 'youtube-v' && i.platform !== 'kick') {
+    if (i.platform !== 'youtube' && i.platform !== 'kick') {
       await pushLocalOutboundMessage(i.platform, i.content);
     }
   });
@@ -2278,7 +2266,6 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     if (!settings) return;
     if (settings.chatChannelName) {
       selfSenderName.youtube = settings.chatChannelName.toLowerCase();
-      selfSenderName['youtube-v'] = settings.chatChannelName.toLowerCase();
     }
     youtubeAdapter.setMonitoredChannels(
       settings.channels.filter((c) => c.enabled).map((c) => c.handle),
@@ -2851,10 +2838,6 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         status: streams.some((s) => s.platform === 'youtube') ? ('connected' as const) : ('disconnected' as const),
         primaryChannel: null,
       },
-      'youtube-v': {
-        status: streams.some((s) => s.platform === 'youtube-v') ? ('connected' as const) : ('disconnected' as const),
-        primaryChannel: null,
-      },
       'youtube-api': {
         status: streams.some((s) => s.platform === 'youtube-api') ? ('connected' as const) : ('disconnected' as const),
         primaryChannel: null,
@@ -3145,12 +3128,12 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   }
 
   async function sendPlatformMessage(platform: PlatformId, content: string): Promise<void> {
-    if (isYoutubePlatform(platform)) {
-      if (!getYoutubeScraperByPlatform(platform)) {
+    if (platform === 'youtube') {
+      if (!hasYoutubeScraper()) {
         throw new Error('Log in to YouTube in Platforms before sending messages.');
       }
       try {
-        await sendYoutubeMessage(platform, content);
+        await sendYoutubeMessage(content);
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
         if (/login|not available|not ready|not connected/i.test(message)) {
@@ -3199,20 +3182,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       .replaceAll('{title}', raffle.title);
   }
 
-  function getConnectedYoutubePlatforms(): Array<'youtube' | 'youtube-v'> {
-    const connected = new Set<'youtube' | 'youtube-v'>();
-    for (const stream of youtubeAdapter?.getCurrentStreams() ?? []) {
-      if (stream.platform === 'youtube' || stream.platform === 'youtube-v') {
-        connected.add(stream.platform);
-      }
-    }
-    return YT_PLATFORMS.filter((platform) => connected.has(platform));
-  }
-
   function getConnectedScheduledTargets(): PlatformId[] {
     const connected: PlatformId[] = [];
     if (twitchStatus === 'connected') connected.push('twitch');
-    if (getConnectedYoutubePlatforms().length > 0) connected.push('youtube');
+    if (hasYoutubeScraper()) connected.push('youtube');
     if (youtubeApiAdapter.hasActiveStreams()) connected.push('youtube-api');
     return connected;
   }
@@ -3239,8 +3212,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   function resolveAnnouncementTargets(requestedTargets: PlatformId[]): PlatformId[] {
     const resolved = new Set<PlatformId>();
     for (const target of requestedTargets) {
-      if (isYoutubePlatform(target)) {
-        for (const ytTarget of getConnectedYoutubePlatforms()) resolved.add(ytTarget);
+      if (target === 'youtube') {
+        if (hasYoutubeScraper()) resolved.add('youtube');
         continue;
       }
       if (target === 'twitch' && twitchStatus === 'connected') {
@@ -3261,9 +3234,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         continue;
       }
       if (target === 'youtube') {
-        for (const ytTarget of getConnectedYoutubePlatforms()) {
-          resolved.add(ytTarget);
-        }
+        if (hasYoutubeScraper()) resolved.add('youtube');
         continue;
       }
       if (target === 'youtube-api') {
@@ -3274,15 +3245,16 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     return Array.from(resolved);
   }
 
-  function getYoutubeScraperByPlatform(platform: 'youtube' | 'youtube-v'): YTLiveClient | null {
-    return youtubeAdapter?.getScraperByPlatform(platform) ?? null;
+  /** True when at least one YouTube scraper is currently attached. Used by
+   *  the announcement / dispatch paths to short-circuit with a friendly
+   *  "log in" error instead of bubbling the raw "scraper not connected". */
+  function hasYoutubeScraper(): boolean {
+    return Boolean(youtubeAdapter && youtubeAdapter.getCurrentStreams().length > 0);
   }
 
-  async function sendYoutubeMessage(platform: 'youtube' | 'youtube-v', content: string): Promise<void> {
-    const scraper = getYoutubeScraperByPlatform(platform);
-    if (!scraper) throw new Error(`${platform}: scraper not connected`);
-    const ytSettings = await loadYoutubeSettings();
-    await scraper.sendMessage(content, ytSettings.chatChannelPageId);
+  async function sendYoutubeMessage(content: string): Promise<void> {
+    if (!youtubeAdapter) throw new Error('youtube: scraper not connected');
+    await youtubeAdapter.sendMessage(content);
   }
 
   function listCommandScheduleTasks(): ScheduledTask[] {
@@ -3371,14 +3343,14 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
           continue;
         }
 
-        if (isYoutubePlatform(target)) {
-          if (!getYoutubeScraperByPlatform(target)) {
+        if (target === 'youtube') {
+          if (!hasYoutubeScraper()) {
             const reason = `${target}: disconnected`;
             skipped.push(reason);
             logService.warn('scheduled', 'Skipped', { platform: target, reason, content });
             continue;
           }
-          await sendYoutubeMessage(target, content);
+          await sendYoutubeMessage(content);
           sent.push(target);
           logService.info('scheduled', 'Sent', { platform: target, content });
           continue;

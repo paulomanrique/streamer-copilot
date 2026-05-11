@@ -12,7 +12,9 @@ import { computeYouTubeStreamLabels, type LiveStreamInfo } from '../../main/yout
  *
  *   - Owns its own scraper map (keyed by videoId).
  *   - Periodically polls each monitored channel handle for new live videos.
- *   - Spawns up to 2 scrapers, one per `YT_PLATFORMS` slot.
+ *   - Spawns up to MAX_CONCURRENT_STREAMS scrapers; every concurrent stream
+ *     emits messages with platform='youtube' and channelId=videoId, so the
+ *     chat-log keeps a distinct (platform, channel) session per live.
  *   - Polls per-video viewer counts on a separate timer.
  *
  * The API-driven flavor lives in a sibling module (`youtube-api/api-adapter.ts`):
@@ -23,7 +25,6 @@ import { computeYouTubeStreamLabels, type LiveStreamInfo } from '../../main/yout
 
 const MONITOR_INTERVAL_MS = 120_000;
 const MAX_CONCURRENT_STREAMS = 2;
-const YT_PLATFORMS: ReadonlyArray<'youtube' | 'youtube-v'> = ['youtube', 'youtube-v'];
 
 export interface YouTubeAdapterDependencies {
   /** Returns the live streams currently active for `handle`, or `null` if the lookup failed. */
@@ -33,9 +34,9 @@ export interface YouTubeAdapterDependencies {
    *  metadata-update event (every ~5s) instead of polling here. */
   fetchYtLiveViewerCount: (videoId: string) => Promise<number | null>;
   /** Tells the host to open a chat-log session for the given platform (called when a new scraper starts). */
-  openChatLogSession: (platform: 'youtube' | 'youtube-v', videoId: string) => void;
+  openChatLogSession: (platform: 'youtube', videoId: string) => void;
   /** Tells the host to close a chat-log session (called when a scraper stops). */
-  closeChatLogSession: (platform: 'youtube' | 'youtube-v', videoId: string) => void;
+  closeChatLogSession: (platform: 'youtube', videoId: string) => void;
   /** Called whenever the set of active streams or their metadata changes. */
   onStreamsChanged: (streams: YouTubeStreamInfo[]) => void;
   /** Optional callback for new scraper start (currently used to clear suggestion entries). */
@@ -57,7 +58,6 @@ interface StreamData {
   title: string;
   viewerCount: number | null;
   subscriberCount: number | null;
-  platform: 'youtube' | 'youtube-v';
   channelHandle: string | null;
 }
 
@@ -90,7 +90,7 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
     this.connected = false;
     if (this.monitorTimer !== null) { clearInterval(this.monitorTimer); this.monitorTimer = null; }
     for (const [, scraper] of this.scrapers) scraper.stop();
-    for (const [videoId, data] of this.streamData) this.deps.closeChatLogSession(data.platform, videoId);
+    for (const videoId of this.streamData.keys()) this.deps.closeChatLogSession('youtube', videoId);
     this.scrapers.clear();
     this.streamData.clear();
     this.deps.onStreamsChanged([]);
@@ -106,12 +106,19 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
     return () => this.eventHandlers.delete(handler);
   }
 
-  /** Sends to whichever scraper is currently bound to `'youtube'`. */
+  /** Sends through the first active scraper. Multiple concurrent lives
+   *  share a single chat output channel from the user's perspective — we
+   *  just need any live scraper to relay the message. */
   async sendMessage(content: string): Promise<void> {
-    const scraper = this.getScraperByPlatform('youtube');
+    const [, scraper] = this.scrapers.entries().next().value ?? [];
     if (!scraper) throw new Error('youtube: scraper not connected');
     const channelPageId = await this.deps.getChatChannelPageId();
     await scraper.sendMessage(content, channelPageId);
+  }
+
+  /** Returns the scraper for a given videoId. */
+  getScraperByVideoId(videoId: string): YTLiveClient | null {
+    return this.scrapers.get(videoId) ?? null;
   }
 
   // ── YouTube-specific public API ─────────────────────────────────────────
@@ -122,33 +129,30 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
     if (this.connected) void this.runMonitor();
   }
 
-  /** Manual connect by videoId (used by the legacy panel). Slot is auto-assigned. */
+  /** Manual connect by videoId (used by the legacy panel). */
   async addManualVideo(videoId: string): Promise<void> {
     if (this.scrapers.has(videoId)) return;
-    const slotIdx = this.scrapers.size;
-    if (slotIdx >= MAX_CONCURRENT_STREAMS) {
+    if (this.scrapers.size >= MAX_CONCURRENT_STREAMS) {
       throw new Error(`Cannot start a third scraper — only ${MAX_CONCURRENT_STREAMS} concurrent streams supported`);
     }
-    const platform = YT_PLATFORMS[slotIdx];
     this.streamData.set(videoId, {
       label: 'YouTube',
       title: '',
       viewerCount: null,
       subscriberCount: null,
-      platform,
       channelHandle: null,
     });
     this.recomputeLabels();
-    this.deps.openChatLogSession(platform, videoId);
+    this.deps.openChatLogSession('youtube', videoId);
     this.deps.onScraperStart?.();
-    await this.startScraper(videoId, platform);
+    await this.startScraper(videoId);
     this.emitStreamsChanged();
   }
 
   /** Stops all scrapers (used by the legacy `youtube:disconnect` IPC). */
   stopAllScrapers(): void {
     for (const [, scraper] of this.scrapers) scraper.stop();
-    for (const [videoId, data] of this.streamData) this.deps.closeChatLogSession(data.platform, videoId);
+    for (const videoId of this.streamData.keys()) this.deps.closeChatLogSession('youtube', videoId);
     this.scrapers.clear();
     this.streamData.clear();
     this.emitStreamsChanged();
@@ -159,7 +163,7 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
       const data = this.streamData.get(videoId);
       return {
         videoId,
-        platform: data?.platform ?? 'youtube',
+        platform: 'youtube',
         channelHandle: data?.channelHandle ?? null,
         label: data?.label ?? 'YouTube',
         viewerCount: data?.viewerCount ?? null,
@@ -185,14 +189,6 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
     }
   }
 
-  getScraperByPlatform(platform: 'youtube' | 'youtube-v'): YTLiveClient | null {
-    for (const [videoId, scraper] of this.scrapers) {
-      const data = this.streamData.get(videoId);
-      if (data?.platform === platform) return scraper;
-    }
-    return null;
-  }
-
   // ── Internal ────────────────────────────────────────────────────────────
 
   private async runMonitor(): Promise<void> {
@@ -209,7 +205,7 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
       // pool keeps polling videos that nothing in the UI references.
       if (this.scrapers.size > 0) {
         for (const [, scraper] of this.scrapers) scraper.stop();
-        for (const [videoId, data] of this.streamData) this.deps.closeChatLogSession(data.platform, videoId);
+        for (const videoId of this.streamData.keys()) this.deps.closeChatLogSession('youtube', videoId);
         this.scrapers.clear();
         this.streamData.clear();
       }
@@ -245,7 +241,7 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
           continue;
         }
         const stale = this.streamData.get(videoId);
-        if (stale) this.deps.closeChatLogSession(stale.platform, videoId);
+        if (stale) this.deps.closeChatLogSession('youtube', videoId);
         scraper.stop();
         this.scrapers.delete(videoId);
         this.streamData.delete(videoId);
@@ -274,19 +270,17 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
     for (let i = 0; i < Math.min(allLive.length, MAX_CONCURRENT_STREAMS); i++) {
       const { videoId, title, viewCount, subscriberCount, channelHandle } = allLive[i];
       if (this.scrapers.has(videoId)) continue;
-      const platform = YT_PLATFORMS[i];
       this.streamData.set(videoId, {
         label: 'YouTube',
         title,
         viewerCount: viewCount,
         subscriberCount,
-        platform,
         channelHandle: channelHandle ?? null,
       });
-      this.deps.log?.info?.(`Auto-detected live (${platform}): ${videoId} — "${title}"`);
-      this.deps.openChatLogSession(platform, videoId);
+      this.deps.log?.info?.(`Auto-detected live youtube: ${videoId} — "${title}"`);
+      this.deps.openChatLogSession('youtube', videoId);
       this.deps.onScraperStart?.();
-      await this.startScraper(videoId, platform);
+      await this.startScraper(videoId);
       added++;
     }
 
@@ -294,7 +288,7 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
     this.emitStreamsChanged();
   }
 
-  private async startScraper(videoId: string, platform: 'youtube' | 'youtube-v'): Promise<void> {
+  private async startScraper(videoId: string): Promise<void> {
     const fmt = new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' });
     // Look up the latest label per emit so when a second stream goes live and
     // labels get recomputed, already-running scrapers immediately switch over.
@@ -306,7 +300,7 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
           id: `yt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           timestampLabel: fmt.format(new Date()),
           ...message,
-          platform,
+          platform: 'youtube',
           channelId: videoId,
           streamLabel: currentLabel(),
         };
@@ -317,7 +311,7 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
           id: `yt-event-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           timestampLabel: fmt.format(new Date()),
           ...event,
-          platform,
+          platform: 'youtube',
           streamLabel: currentLabel(),
         };
         for (const handler of this.eventHandlers) handler(payload);
