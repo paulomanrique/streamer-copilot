@@ -12,14 +12,6 @@ const en: TranslationMessages = {
       moderator: 'Moderators',
       broadcaster: 'Broadcaster',
     },
-    platform: {
-      twitch: 'Twitch',
-      youtube: 'YouTube',
-      'youtube-v': 'YouTube (Vertical)',
-      kick: 'Kick',
-      tiktok: 'TikTok',
-      obs: 'OBS',
-    },
     status: {
       connected: 'Connected',
       connecting: 'Connecting',

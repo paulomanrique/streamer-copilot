@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 
 import type { ChatMessage, KickConnectionStatus, KickLiveStats, ObsStatsSnapshot, StreamEvent, TikTokConnectionStatus, TikTokLiveStats, TwitchConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
+import { useAppStore } from '../store.js';
 import { ChatFeed } from './ChatFeed.js';
 import { EventBanner } from './EventBanner.js';
 import { ObsStatsPanel } from './ObsStatsPanel.js';
@@ -51,19 +52,23 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
     [t],
   );
 
+  // Derive the connected-platforms list from the symmetric stores: any
+  // platform whose status is 'connected' OR which has at least one
+  // live-stats entry (covers YouTube's per-stream entries — the driver id
+  // is the map key, so each driver still counts independently with no
+  // driver-family check).
+  const platformStatus = useAppStore((s) => s.platformStatus);
+  const platformLiveStats = useAppStore((s) => s.platformLiveStats);
   const connectedPlatforms = useMemo(() => {
-    // Each platform id is asked independently — no driver-family grouping.
-    // YouTube scraper slots ('youtube', 'youtube-v') and the API driver
-    // ('youtube-api') each get their own filter chip / card / live-link.
-    const list: import('../../shared/types.js').PlatformId[] = [];
-    if (twitchStatus === 'connected') list.push('twitch');
-    if (youtubeStreams.some((s) => s.platform === 'youtube')) list.push('youtube');
-    if (youtubeStreams.some((s) => s.platform === 'youtube-v')) list.push('youtube-v');
-    if (youtubeStreams.some((s) => s.platform === 'youtube-api')) list.push('youtube-api');
-    if (tiktokStatus === 'connected') list.push('tiktok');
-    if (kickStatus === 'connected') list.push('kick');
-    return list;
-  }, [twitchStatus, youtubeStreams, tiktokStatus, kickStatus]);
+    const seen = new Set<import('../../shared/types.js').PlatformId>();
+    for (const [id, status] of Object.entries(platformStatus)) {
+      if (status === 'connected') seen.add(id as import('../../shared/types.js').PlatformId);
+    }
+    for (const [id, byChannel] of Object.entries(platformLiveStats)) {
+      if (byChannel && Object.keys(byChannel).length > 0) seen.add(id as import('../../shared/types.js').PlatformId);
+    }
+    return [...seen];
+  }, [platformStatus, platformLiveStats]);
 
   const filteredActivity = visibleEvents.filter((event) => enabledTypes[event.type] !== false);
 
