@@ -1511,7 +1511,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     checkYouTubeLive,
     fetchYtLiveViewerCount,
     openChatLogSession: (platform, videoId) => chatLogService.openSession(platform, videoId),
-    closeChatLogSession: (platform) => chatLogService.closeSession(platform),
+    closeChatLogSession: (platform, videoId) => chatLogService.closeSession(platform, videoId),
     // The scrape adapter's stream list is merged with the API adapter's list
     // on every push, so cards / live-links / filter chips see both drivers.
     onStreamsChanged: () => pushMergedYoutubeStreams(),
@@ -1574,7 +1574,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const youtubeApiAdapter = new YouTubeApiChatAdapter({
     getActiveAccounts: () => cachedYoutubeApiAccounts,
     openChatLogSession: (platform, videoId) => chatLogService.openSession(platform, videoId),
-    closeChatLogSession: (platform) => chatLogService.closeSession(platform),
+    closeChatLogSession: (platform, videoId) => chatLogService.closeSession(platform, videoId),
     onClientStart: () => suggestionService.clearSessionEntries(),
     onStreamsChanged: () => pushMergedYoutubeStreams(),
     log: {
@@ -1898,7 +1898,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
   ipcMain.handle(IPC_CHANNELS.twitchDisconnect, async () => {
     delete selfSenderName.twitch;
-    chatLogService.closeSession('twitch');
+    chatLogService.closeSessionsForPlatform('twitch');
     // Tear down every child the legacy IPC may have spawned. Account-model
     // disconnects flow through `twitchProvider.disconnect` instead.
     for (const accountId of Array.from(twitchAccountStatus.keys())) {
@@ -2193,7 +2193,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     kickAccountSlug.delete(accountId);
     if (slug) stopKickStatsPollFor(slug);
     if (!kickMultiAdapter.hasConnectedChild()) {
-      chatLogService.closeSession('kick');
+      chatLogService.closeSessionsForPlatform('kick');
       setKickStatus('disconnected', null);
     } else {
       setKickStatus(aggregateKickStatus(), null);
@@ -2570,7 +2570,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       await disconnectTwitchAccount(account.id);
       if (!twitchMultiAdapter.hasConnectedChild()) {
         delete selfSenderName.twitch;
-        chatLogService.closeSession('twitch');
+        chatLogService.closeSessionsForPlatform('twitch');
       }
     },
     async purgeStores() {
@@ -2711,7 +2711,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     if (username) options.stateHub.pushPlatformLiveStats('tiktok', username, null);
     setTiktokStatus(aggregateTiktokStatus(), tiktokMultiAdapter.hasConnectedChild() ? null : null);
     if (!tiktokMultiAdapter.hasConnectedChild()) {
-      chatLogService.closeSession('tiktok');
+      chatLogService.closeSessionsForPlatform('tiktok');
     }
     broadcastAccountsForProvider('tiktok');
   }

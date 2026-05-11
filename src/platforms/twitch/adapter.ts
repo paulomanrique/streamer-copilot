@@ -171,6 +171,7 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
       const [channel, tags, message, self] = args as [string, TmiTags, string, boolean];
       if (self) return;
       const role = this.resolveRole(tags, channel);
+      const normalizedChannel = this.normalizeChannelName(channel) ?? undefined;
       this.emitMessage({
         platform: 'twitch',
         author: this.resolveAuthor(tags, channel),
@@ -182,7 +183,10 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
         unifiedLevel: resolveFromRole(role),
         // Per-channel hint so the chat feed can label multi-channel Twitch
         // setups with the source channel instead of a generic "Twitch" badge.
-        streamLabel: this.normalizeChannelName(channel) ?? undefined,
+        streamLabel: normalizedChannel,
+        // Routes the chat-log to the right (platform, channel) session
+        // when multiple Twitch accounts are connected concurrently.
+        channelId: normalizedChannel,
       }, tags);
     });
 

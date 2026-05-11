@@ -48,8 +48,10 @@ export interface YouTubeApiAdapterDependencies {
   getActiveAccounts: () => readonly YouTubeApiAccount[];
   /** Tells the host to open a chat-log session for a stream. */
   openChatLogSession: (platform: PlatformId, videoId: string) => void;
-  /** Tells the host to close a chat-log session. */
-  closeChatLogSession: (platform: PlatformId) => void;
+  /** Tells the host to close a chat-log session. `videoId` matches the one
+   *  passed to `openChatLogSession` — the (platform, channel) compound key
+   *  lets multiple concurrent streams each have their own log row. */
+  closeChatLogSession: (platform: PlatformId, videoId: string) => void;
   /** Optional callback for a new client start (used by the scrape adapter to clear suggestion entries). */
   onClientStart?: () => void;
   /** Called whenever the set of active API streams (or their metadata) changes.
@@ -106,8 +108,10 @@ export class YouTubeApiChatAdapter implements PlatformChatAdapter {
   async disconnect(): Promise<void> {
     this.connected = false;
     if (this.monitorTimer !== null) { clearInterval(this.monitorTimer); this.monitorTimer = null; }
-    for (const [, client] of this.clients) client.stop();
-    this.deps.closeChatLogSession(this.platform);
+    for (const [videoId, client] of this.clients) {
+      client.stop();
+      this.deps.closeChatLogSession(this.platform, videoId);
+    }
     this.clients.clear();
     this.streamData.clear();
     this.messageOwners.clear();
@@ -169,8 +173,10 @@ export class YouTubeApiChatAdapter implements PlatformChatAdapter {
     if (accounts.length === 0) {
       // No accounts enabled; tear down any stragglers.
       if (this.clients.size > 0) {
-        for (const [, client] of this.clients) client.stop();
-        this.deps.closeChatLogSession(this.platform);
+        for (const [videoId, client] of this.clients) {
+          client.stop();
+          this.deps.closeChatLogSession(this.platform, videoId);
+        }
         this.clients.clear();
         this.streamData.clear();
         this.messageOwners.clear();
@@ -218,6 +224,7 @@ export class YouTubeApiChatAdapter implements PlatformChatAdapter {
       if (!updated) {
         if (anyCheckFailed) continue;
         client.stop();
+        this.deps.closeChatLogSession(this.platform, videoId);
         this.clients.delete(videoId);
         this.streamData.delete(videoId);
         this.dropMessageOwners(videoId);
@@ -273,6 +280,7 @@ export class YouTubeApiChatAdapter implements PlatformChatAdapter {
           timestampLabel: fmt.format(new Date()),
           ...message,
           platform: this.platform,
+          channelId: videoId,
           streamLabel: account.label,
         };
         for (const handler of this.messageHandlers) handler(payload);

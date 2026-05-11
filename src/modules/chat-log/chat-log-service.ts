@@ -4,28 +4,42 @@ import type { ChatLogRepository, ChatSession, ChatLogMessage } from './chat-log-
 export type { ChatSession, ChatLogMessage };
 
 export class ChatLogService {
-  // platform → active session id
-  private readonly activeSessions = new Map<PlatformId, string>();
+  /** Compound `${platform}::${channel}` → active session id. Keying by
+   *  channel as well as platform lets concurrent YouTube streams (or
+   *  multiple Twitch accounts) each persist to their own session — the
+   *  former platform-only key forced the slot hack in scraper-adapter
+   *  and clobbered multi-account Twitch sessions silently. */
+  private readonly activeSessions = new Map<string, string>();
 
   constructor(private readonly repo: ChatLogRepository) {}
 
-  openSession(platform: PlatformId, channel: string): void {
-    // Close any existing session for this platform first
-    this.closeSession(platform);
-    const session = this.repo.openSession(platform, channel);
-    this.activeSessions.set(platform, session.id);
+  private key(platform: PlatformId, channel: string): string {
+    return `${platform}::${channel}`;
   }
 
-  closeSession(platform: PlatformId): void {
-    const sessionId = this.activeSessions.get(platform);
+  openSession(platform: PlatformId, channel: string): void {
+    // Close any existing session for this exact (platform, channel) pair
+    // — re-opening means a reconnect, so we end the prior row cleanly.
+    this.closeSession(platform, channel);
+    const session = this.repo.openSession(platform, channel);
+    this.activeSessions.set(this.key(platform, channel), session.id);
+  }
+
+  closeSession(platform: PlatformId, channel: string): void {
+    const k = this.key(platform, channel);
+    const sessionId = this.activeSessions.get(k);
     if (sessionId) {
       this.repo.closeSession(sessionId);
-      this.activeSessions.delete(platform);
+      this.activeSessions.delete(k);
     }
   }
 
   recordMessage(message: ChatMessage): void {
-    const sessionId = this.activeSessions.get(message.platform);
+    // Messages route via the `channelId` field set by their adapter. Without
+    // one we can't disambiguate between concurrent sessions for the same
+    // platform, so we just drop the log (no global "any-session" fallback).
+    if (!message.channelId) return;
+    const sessionId = this.activeSessions.get(this.key(message.platform, message.channelId));
     if (!sessionId) return;
     this.repo.recordMessage(sessionId, {
       id: message.id,
@@ -66,6 +80,27 @@ export class ChatLogService {
   deleteAllSessions(): void {
     this.activeSessions.clear();
     this.repo.deleteAllSessions();
+  }
+
+  /** Closes every active session in one shot. Called on profile switch /
+   *  shutdown so dangling chat-log rows get a proper ended_at. */
+  closeAllSessions(): void {
+    for (const sessionId of this.activeSessions.values()) {
+      this.repo.closeSession(sessionId);
+    }
+    this.activeSessions.clear();
+  }
+
+  /** Closes every active session whose platform matches `platform`. Used
+   *  by the legacy disconnect IPCs that don't know which channels are
+   *  attached — they just want to drop everything for one provider. */
+  closeSessionsForPlatform(platform: PlatformId): void {
+    const prefix = `${platform}::`;
+    for (const [key, sessionId] of [...this.activeSessions]) {
+      if (!key.startsWith(prefix)) continue;
+      this.repo.closeSession(sessionId);
+      this.activeSessions.delete(key);
+    }
   }
 
   exportSessionHtml(sessionId: string): string {

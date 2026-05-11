@@ -35,7 +35,7 @@ export interface YouTubeAdapterDependencies {
   /** Tells the host to open a chat-log session for the given platform (called when a new scraper starts). */
   openChatLogSession: (platform: 'youtube' | 'youtube-v', videoId: string) => void;
   /** Tells the host to close a chat-log session (called when a scraper stops). */
-  closeChatLogSession: (platform: 'youtube' | 'youtube-v') => void;
+  closeChatLogSession: (platform: 'youtube' | 'youtube-v', videoId: string) => void;
   /** Called whenever the set of active streams or their metadata changes. */
   onStreamsChanged: (streams: YouTubeStreamInfo[]) => void;
   /** Optional callback for new scraper start (currently used to clear suggestion entries). */
@@ -90,7 +90,7 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
     this.connected = false;
     if (this.monitorTimer !== null) { clearInterval(this.monitorTimer); this.monitorTimer = null; }
     for (const [, scraper] of this.scrapers) scraper.stop();
-    for (const [, data] of this.streamData) this.deps.closeChatLogSession(data.platform);
+    for (const [videoId, data] of this.streamData) this.deps.closeChatLogSession(data.platform, videoId);
     this.scrapers.clear();
     this.streamData.clear();
     this.deps.onStreamsChanged([]);
@@ -148,7 +148,7 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
   /** Stops all scrapers (used by the legacy `youtube:disconnect` IPC). */
   stopAllScrapers(): void {
     for (const [, scraper] of this.scrapers) scraper.stop();
-    for (const [, data] of this.streamData) this.deps.closeChatLogSession(data.platform);
+    for (const [videoId, data] of this.streamData) this.deps.closeChatLogSession(data.platform, videoId);
     this.scrapers.clear();
     this.streamData.clear();
     this.emitStreamsChanged();
@@ -209,7 +209,7 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
       // pool keeps polling videos that nothing in the UI references.
       if (this.scrapers.size > 0) {
         for (const [, scraper] of this.scrapers) scraper.stop();
-        for (const [, data] of this.streamData) this.deps.closeChatLogSession(data.platform);
+        for (const [videoId, data] of this.streamData) this.deps.closeChatLogSession(data.platform, videoId);
         this.scrapers.clear();
         this.streamData.clear();
       }
@@ -245,7 +245,7 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
           continue;
         }
         const stale = this.streamData.get(videoId);
-        if (stale) this.deps.closeChatLogSession(stale.platform);
+        if (stale) this.deps.closeChatLogSession(stale.platform, videoId);
         scraper.stop();
         this.scrapers.delete(videoId);
         this.streamData.delete(videoId);
@@ -307,6 +307,7 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
           timestampLabel: fmt.format(new Date()),
           ...message,
           platform,
+          channelId: videoId,
           streamLabel: currentLabel(),
         };
         for (const handler of this.messageHandlers) handler(payload);
