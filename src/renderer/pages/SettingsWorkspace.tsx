@@ -1,25 +1,22 @@
 import { useState } from 'react';
 import type { ReactElement } from 'react';
 
-import type { AppLanguage, GeneralSettings, ObsStatsSnapshot, PermissionLevel, ProfileSettings, ProfileSummary } from '../../shared/types.js';
+import type { AppLanguage, GeneralSettings, PermissionLevel, ProfileSettings, ProfileSummary } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
 import { PlatformsSettingsPage } from './PlatformsSettings.js';
 import { SettingsProfilesPanel } from '../components/SettingsProfilesPanel.js';
 import { GeneralSettingsPage } from './GeneralSettings.js';
-import { ObsSettingsPage } from './ObsSettings.js';
 import { ChatLogsPage } from './ChatLogs.js';
-import { PollsPage } from './Polls.js';
-import { RafflesPage } from './Raffles.js';
-import { SoundCommandsPage } from './SoundCommands.js';
-import { SuggestionsPage } from './Suggestions.js';
-import { TextCommandsPage } from './TextCommands.js';
 import { EventLogPage } from './EventLog.js';
 import { VoiceCommandsPage } from './VoiceCommands.js';
-import { WelcomeMessagePage } from './WelcomeMessage.js';
-import { MusicRequestPage } from './MusicRequest.js';
-import { OverlaysPage } from './Overlays.js';
+// Side-effect import: every module's registry entry registers itself here.
+import '../modules/register-all.js';
+import { listRendererModules, type RendererSettingsGroup } from '../modules/registry.js';
 
-type SettingsView = 'general' | 'profiles' | 'platforms' | 'obs' | 'sound' | 'text' | 'voice' | 'welcome' | 'music' | 'polls' | 'raffles' | 'suggestions' | 'chat-logs' | 'event-log' | 'overlays';
+// Route ids that are hardcoded in this file (App + Platforms groups + the
+// Voice page, which still takes props). Every other view comes from the
+// module registry.
+type SettingsView = 'general' | 'profiles' | 'platforms' | 'voice' | 'chat-logs' | 'event-log' | string;
 
 interface SettingsWorkspaceProps {
   activeProfileId: string;
@@ -42,15 +39,18 @@ interface SettingsWorkspaceProps {
   voiceVolume: number;
   onChangeVoiceRate: (value: number) => void;
   onChangeVoiceVolume: (value: number) => void;
-  obsStats: ObsStatsSnapshot;
 }
 
-type SettingsGroup = {
-  label: string;
-  items: Array<{ id: SettingsView; label: string; icon: ReactElement }>;
-};
+// Group labels that show up in the sidebar. Modules / Integrations items
+// come from the registry below.
+type SettingsGroupLabel = 'App' | 'Platforms' | 'Modules' | 'Integrations';
 
-const SETTINGS_GROUPS: SettingsGroup[] = [
+type SidebarItem = { id: SettingsView; label: string; icon: ReactElement };
+type SettingsGroup = { label: SettingsGroupLabel; items: SidebarItem[] };
+
+// Static items: App + Platforms + Voice. Modules / Integrations items get
+// merged in below from the renderer module registry.
+const STATIC_SETTINGS_GROUPS: SettingsGroup[] = [
   {
     label: 'App',
     items: [
@@ -108,65 +108,11 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
     ],
   },
   {
+    // Voice still takes props from App.tsx (rate/volume + callbacks), so it
+    // stays in the static list. Every other module entry comes from the
+    // registry below.
     label: 'Modules',
-    // Sorted alphabetically by label so the order is provider-agnostic and
-    // doesn't bake "commands vs automations" into the navigation taxonomy.
     items: [
-      {
-        id: 'music',
-        label: 'Music Request',
-        icon: (
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
-          </svg>
-        ),
-      },
-      {
-        id: 'polls',
-        label: 'Polls',
-        icon: (
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V5m6 14V9m6 10H3" />
-          </svg>
-        ),
-      },
-      {
-        id: 'raffles',
-        label: 'Raffles',
-        icon: (
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3l7 4v5c0 5-3 8-7 9-4-1-7-4-7-9V7l7-4z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 11l2 2 4-4" />
-          </svg>
-        ),
-      },
-      {
-        id: 'sound',
-        label: 'Sound Commands',
-        icon: (
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.536 8.464a5 5 0 010 7.072M12 6v12m-3.536-9.536a5 5 0 000 7.072M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        ),
-      },
-      {
-        id: 'suggestions',
-        label: 'Suggestions',
-        icon: (
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-          </svg>
-        ),
-      },
-      {
-        id: 'text',
-        label: 'Text Commands',
-        icon: (
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 8h10M7 12h8m-8 4h6M5 4h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z" />
-          </svg>
-        ),
-      },
       {
         id: 'voice',
         label: 'Voice (TTS)',
@@ -176,47 +122,58 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
           </svg>
         ),
       },
-      {
-        id: 'welcome',
-        label: 'Welcome Message',
-        icon: (
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-          </svg>
-        ),
-      },
-    ],
-  },
-  {
-    label: 'Integrations',
-    items: [
-      {
-        id: 'obs',
-        label: 'OBS Studio',
-        icon: (
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="10" strokeWidth="2" />
-            <circle cx="12" cy="12" r="4" strokeWidth="2" />
-          </svg>
-        ),
-      },
-      {
-        id: 'overlays',
-        label: 'Overlays',
-        icon: (
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <rect x="3" y="3" width="18" height="14" rx="2" strokeWidth="2" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 21h8M12 17v4" />
-          </svg>
-        ),
-      },
     ],
   },
 ];
 
+/** Build the full sidebar by folding registry-provided items into the
+ *  static groups. Each registered module declares which group it lives in. */
+function buildSettingsGroups(): SettingsGroup[] {
+  const merged: SettingsGroup[] = STATIC_SETTINGS_GROUPS.map((g) => ({
+    label: g.label,
+    items: [...g.items],
+  }));
+
+  // Ensure every registered group exists even if no static item lives there.
+  const groupsByLabel = new Map<SettingsGroupLabel, SettingsGroup>();
+  for (const g of merged) groupsByLabel.set(g.label, g);
+  const ensureGroup = (label: RendererSettingsGroup): SettingsGroup => {
+    let group = groupsByLabel.get(label);
+    if (!group) {
+      group = { label, items: [] };
+      groupsByLabel.set(label, group);
+      merged.push(group);
+    }
+    return group;
+  };
+
+  for (const m of listRendererModules()) {
+    ensureGroup(m.group).items.push({ id: m.id, label: m.fallbackLabel, icon: m.icon });
+  }
+
+  return merged;
+}
+
 export function SettingsWorkspace(props: SettingsWorkspaceProps) {
   const { messages } = useI18n();
   const [currentView, setCurrentView] = useState<SettingsView>('general');
+
+  const SETTINGS_GROUPS = buildSettingsGroups();
+
+  // Lookup table from view id to its `messages.settings.X` key. Items not
+  // covered here (registry-supplied modules without a labelKey, the
+  // moderation/obs/overlays placeholders) fall back to the static label
+  // passed in the SidebarItem.
+  const I18N_KEY_BY_ID: Record<string, keyof typeof messages.settings> = {
+    general: 'general',
+    'chat-logs': 'chatLogs',
+    'event-log': 'eventLog',
+    platforms: 'connections',
+    voice: 'voiceTts',
+  };
+  for (const m of listRendererModules()) {
+    if (m.labelKey) I18N_KEY_BY_ID[m.id] = m.labelKey;
+  }
 
   const labelForGroup = (label: string) => ({
     App: messages.settings.app,
@@ -225,24 +182,12 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
     Integrations: messages.settings.integrations,
   }[label] ?? label);
 
-  const labelForItem = (id: SettingsView, label: string) => ({
-    general: messages.settings.general,
-    'chat-logs': messages.settings.chatLogs,
-    'event-log': messages.settings.eventLog,
-    profiles: messages.profile.profiles,
-    platforms: messages.settings.connections,
-    sound: messages.settings.soundCommands,
-    voice: messages.settings.voiceTts,
-    text: messages.settings.textCommands,
-    welcome: messages.settings.welcomeMessage,
-    music: messages.settings.musicRequest,
-    polls: messages.settings.polls,
-    raffles: messages.settings.raffles,
-    suggestions: messages.settings.suggestions,
-    moderation: 'Moderation',
-    obs: 'OBS Studio',
-    overlays: 'Overlays',
-  }[id] ?? label);
+  const labelForItem = (id: SettingsView, label: string) => {
+    if (id === 'profiles') return messages.profile.profiles;
+    const key = I18N_KEY_BY_ID[id];
+    if (key) return messages.settings[key] ?? label;
+    return label;
+  };
 
   return (
     <section className="flex-1 min-h-0 flex">
@@ -310,9 +255,6 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
           />
         ) : null}
         {currentView === 'platforms' ? <PlatformsSettingsPage /> : null}
-        {currentView === 'obs' ? <ObsSettingsPage obsStats={props.obsStats} /> : null}
-        {currentView === 'sound' ? <SoundCommandsPage /> : null}
-        {currentView === 'text' ? <TextCommandsPage /> : null}
         {currentView === 'voice' ? (
           <VoiceCommandsPage
             voiceRate={props.voiceRate}
@@ -321,14 +263,13 @@ export function SettingsWorkspace(props: SettingsWorkspaceProps) {
             onChangeVoiceVolume={props.onChangeVoiceVolume}
           />
         ) : null}
-        {currentView === 'welcome' ? <WelcomeMessagePage /> : null}
-        {currentView === 'music' ? <MusicRequestPage /> : null}
-        {currentView === 'polls' ? <PollsPage /> : null}
-        {currentView === 'raffles' ? <RafflesPage /> : null}
-        {currentView === 'suggestions' ? <SuggestionsPage /> : null}
-        {currentView === 'overlays' ? <OverlaysPage /> : null}
         {currentView === 'chat-logs' ? <ChatLogsPage /> : null}
         {currentView === 'event-log' ? <EventLogPage /> : null}
+        {/* Registry-driven module pages. Each module declares its own
+            view id and component — adding one doesn't touch this file. */}
+        {listRendererModules().map((m) =>
+          currentView === m.id ? <m.SettingsPage key={m.id} /> : null,
+        )}
       </div>
     </section>
   );

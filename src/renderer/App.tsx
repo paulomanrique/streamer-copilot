@@ -423,7 +423,6 @@ export default function App() {
             voiceVolume={voiceVolume}
             onChangeVoiceRate={setVoiceRate}
             onChangeVoiceVolume={setVoiceVolume}
-            obsStats={obsStats}
           />
           </SectionErrorBoundary>
         ) : null}
