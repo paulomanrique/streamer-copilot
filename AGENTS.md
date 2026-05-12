@@ -144,6 +144,34 @@ Adding a new platform or driver must be **one entry in a registry**, not edits a
 
 ---
 
+## Module-agnostic settings UI (renderer)
+
+Like platforms, each user-facing module (sounds, polls, raffles, suggestions, text/music/welcome/overlays/obs/...) registers itself with a renderer module registry — `SettingsWorkspace` reads the registry to populate the sidebar and dispatch page renders.
+
+### Where the registry lives
+
+- `src/renderer/modules/registry.ts` — `RendererSettingsModule` interface (id, group, labelKey?, fallbackLabel, icon, SettingsPage), `registerRendererModule(...)`, `listRendererModules()`.
+- `src/renderer/modules/<name>-settings-module.tsx` — one tiny file per module that calls `registerRendererModule({...})`. Each module imports the corresponding page component from `src/renderer/pages/`.
+- `src/renderer/modules/register-all.ts` — side-effect barrel listing every entry file. `SettingsWorkspace` imports this barrel; nothing else does.
+
+### Rules
+
+1. **One registration file per module.** A module's settings module entry lives next to its peers in `src/renderer/modules/`. Adding a new module = one new file + one line in `register-all.ts`. No edits to `SettingsWorkspace`, no new branch in the sidebar/dispatch.
+
+2. **Page components must be props-free.** Anything a module needs (settings blob, store state, callbacks) comes from `useAppStore` and `window.copilot` directly. The registry can only render `ComponentType` (no props) — keeps `SettingsWorkspace` from leaking module-specific data through props.
+
+3. **Persistence inherits `JsonSettingsStore<T>`.** Per-profile JSON settings stores live in `src/modules/<name>/<name>-settings-store.ts` and extend `JsonSettingsStore<T>` from `src/modules/base/settings-store.ts`. Subclasses declare `defaults()`, `parse(raw)`, and optionally `normalize(input)`. Don't reimplement the readFile + JSON.parse + mkdir + writeFile dance — that's exactly what the base owns.
+
+4. **Hardcoded entries are temporary.** Today the App group (General, Chat Logs, Event Log, Profiles), the Platforms entry, and the Voice page stay hardcoded inside `SettingsWorkspace` because each still needs ambient props from `App.tsx`. New modules should not extend this list — make them props-free and route through the registry.
+
+5. **No new per-module enumeration outside the registry.** Patterns like `const SETTINGS_VIEWS = ['sound', 'polls', ...]` or `if (view === 'polls')` are smells. Iterate `listRendererModules()` instead.
+
+### Main-process modules: still hardcoded, watch for the smell
+
+The main process keeps its module wiring (service instantiation + IPC handler registration) hardcoded inside `app-context.ts`. A parallel `MainModuleRegistry` hasn't been built yet, so adding a backend module still touches `app-context.ts`, `shared/ipc.ts`, and the module's own service files. When you do touch this area, lean toward registering the next module behind a uniform interface rather than copy-pasting another `ipcMain.handle(...)` block — even before the registry exists.
+
+---
+
 ## Electron Runtime Notes
 
 - Clear `ELECTRON_RUN_AS_NODE` in dev and start scripts.
