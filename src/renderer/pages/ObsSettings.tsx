@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 
-import type { ObsConnectionSettings, ObsStatsSnapshot } from '../../shared/types.js';
+import type { ObsConnectionSettings } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
+import { useAppStore } from '../store.js';
 
 const DEFAULT_SETTINGS: ObsConnectionSettings = {
   host: '127.0.0.1',
@@ -9,12 +10,9 @@ const DEFAULT_SETTINGS: ObsConnectionSettings = {
   password: '',
 };
 
-interface ObsSettingsPageProps {
-  obsStats: ObsStatsSnapshot;
-}
-
-export function ObsSettingsPage({ obsStats }: ObsSettingsPageProps) {
+export function ObsSettingsPage() {
   const { messages, t } = useI18n();
+  const obsStats = useAppStore((s) => s.obsStats);
   const [settings, setSettings] = useState<ObsConnectionSettings>(DEFAULT_SETTINGS);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
