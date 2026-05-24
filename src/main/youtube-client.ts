@@ -1,6 +1,6 @@
 import { session } from 'electron';
 import { Innertube, Log } from 'youtubei.js';
-import type { ChatMessage, ChatBadge, StreamEvent } from '../shared/types.js';
+import type { ChatMessage, ChatBadge, ChatMessageContentPart, StreamEvent } from '../shared/types.js';
 import type { YouTubeLiveClient, YouTubeLiveClientOptions } from '../platforms/youtube/live-client.js';
 
 // Silence youtubei.js's INFO/WARN console output (extractor warnings, deprecation
@@ -130,6 +130,75 @@ export class YTLiveClient implements YouTubeLiveClient {
       .filter((ch) => ch.name || ch.handle);
   }
 
+  /**
+   * Walks a youtubei.js `Text` and produces:
+   *   - `content`: a string with custom channel emojis collapsed to their
+   *     first shortcut (e.g. `:yk:`) for command parsing / chat logs.
+   *   - `contentParts`: the structured representation consumed by ChatFeed,
+   *     where custom emojis carry their thumbnail URL so they can render as
+   *     `<img>`. Unicode emojis stay as text — they render natively.
+   * `Text.toString()` cannot be used because for custom emojis it produces
+   * the raw `channelId/assetId` instead of the shortcut.
+   */
+  private static renderMessage(message: any): { content: string; contentParts: ChatMessageContentPart[] } {
+    if (!message) return { content: '', contentParts: [] };
+    const runs: any[] | undefined = Array.isArray(message.runs) ? message.runs : undefined;
+    if (!runs || runs.length === 0) {
+      const text = typeof message.text === 'string' ? message.text : (message.toString?.() ?? '');
+      return { content: text, contentParts: text ? [{ type: 'text', text }] : [] };
+    }
+    const parts: ChatMessageContentPart[] = [];
+    let content = '';
+    for (const run of runs) {
+      const emoji = run?.emoji;
+      if (emoji && (emoji.is_custom || YTLiveClient.findEmojiImageUrl(emoji))) {
+        const shortcut = Array.isArray(emoji.shortcuts)
+          ? emoji.shortcuts.find((s: unknown) => typeof s === 'string' && s)
+          : undefined;
+        const name = typeof shortcut === 'string' && shortcut
+          ? shortcut.replace(/^:|:$/g, '')
+          : (typeof emoji.emoji_id === 'string' ? emoji.emoji_id.split('/').pop() ?? '' : '');
+        if (!name) continue;
+        const imageUrl = YTLiveClient.findEmojiImageUrl(emoji);
+        parts.push({ type: 'emote', name, ...(imageUrl ? { imageUrl } : {}) });
+        content += `:${name}:`;
+        continue;
+      }
+      const text = typeof run?.text === 'string' ? run.text : '';
+      if (!text) continue;
+      const last = parts[parts.length - 1];
+      if (last && last.type === 'text') last.text += text;
+      else parts.push({ type: 'text', text });
+      content += text;
+    }
+    return { content, contentParts: parts };
+  }
+
+  /**
+   * Extracts the best-quality thumbnail URL for a youtubei.js emoji object.
+   * The library parses raw YouTube responses into a `Thumbnail[]` on
+   * `emoji.image`, but for YouTube's built-in reaction emojis the raw shape
+   * occasionally bypasses `Thumbnail.fromResponse` (so `.image` ends up as
+   * the raw `{ thumbnails: [...] }` instead of the parsed array). Probe both
+   * shapes so we always render `<img>` for emojis that have an image.
+   */
+  private static findEmojiImageUrl(emoji: any): string | undefined {
+    if (!emoji) return undefined;
+    const direct = emoji.image;
+    if (Array.isArray(direct)) {
+      const hit = direct.find((t: any) => t && typeof t.url === 'string' && t.url);
+      if (hit) return hit.url;
+    }
+    if (direct && typeof direct === 'object') {
+      const thumbs = (direct.thumbnails ?? direct.sources) as Array<{ url?: string }> | undefined;
+      if (Array.isArray(thumbs)) {
+        const hit = thumbs.find((t) => t && typeof t.url === 'string' && t.url);
+        if (hit?.url) return hit.url;
+      }
+    }
+    return undefined;
+  }
+
   private static findObou(obj: unknown, depth = 0): string | undefined {
     if (depth > 8 || obj === null || obj === undefined) return undefined;
     if (typeof obj === 'object') {
@@ -159,7 +228,8 @@ export class YTLiveClient implements YouTubeLiveClient {
 
   private handleTextMessage(item: any): void {
     const author = this.authorName(item.author);
-    const content: string = item.message?.toString()?.trim() ?? '';
+    const { content: rawContent, contentParts } = YTLiveClient.renderMessage(item.message);
+    const content = rawContent.trim();
     if (!content) return;
 
     const badges = this.parseBadges(item.author);
@@ -172,6 +242,7 @@ export class YTLiveClient implements YouTubeLiveClient {
       platform: 'youtube',
       author,
       content,
+      ...(contentParts.length > 0 ? { contentParts } : {}),
       badges,
       avatarUrl,
       ...(userId ? { userId } : {}),
@@ -182,7 +253,7 @@ export class YTLiveClient implements YouTubeLiveClient {
   private handleSuperChat(item: any): void {
     const author = this.authorName(item.author);
     const amountText: string = item.purchase_amount ?? '';
-    const messageText: string = item.message?.toString()?.trim() ?? '';
+    const messageText = YTLiveClient.renderMessage(item.message).content.trim();
     const amount = this.parseAmount(amountText);
     const displayMessage = messageText
       ? `${messageText} (${amountText})`
