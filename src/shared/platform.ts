@@ -14,6 +14,9 @@ export interface PlatformRole {
   readonly vip?: boolean;
   readonly subscriber?: boolean;
   readonly follower?: boolean;
+  /** Identificador do tier de membro (ex: '1'/'2'/'3' no Twitch, nome do nível no YouTube).
+   *  Opaco para o core — só o resolver de permissões compara via catálogo ordenado. */
+  readonly subscriberTier?: string;
   readonly extras?: Record<string, unknown>;
 }
 

@@ -32,6 +32,7 @@ describe('VoiceService', () => {
           enabled: true,
         },
       ]) as never,
+      getSubscriberTierCatalog: () => ({ byPlatform: {} }),
       onSpeak,
     });
 
@@ -54,6 +55,7 @@ describe('VoiceService', () => {
           enabled: true,
         },
       ]) as never,
+      getSubscriberTierCatalog: () => ({ byPlatform: {} }),
       onSpeak: vi.fn(),
     });
 
@@ -77,6 +79,7 @@ describe('VoiceService', () => {
           enabled: true,
         },
       ]) as never,
+      getSubscriberTierCatalog: () => ({ byPlatform: {} }),
       onSpeak,
     });
 
@@ -105,6 +108,7 @@ describe('VoiceService', () => {
           enabled: true,
         },
       ]) as never,
+      getSubscriberTierCatalog: () => ({ byPlatform: {} }),
       onSpeak,
       now,
     });

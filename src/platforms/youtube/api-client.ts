@@ -2,6 +2,7 @@ import { google, type youtube_v3 } from 'googleapis';
 import type { OAuth2Client } from 'google-auth-library';
 
 import type { ChatBadge } from '../../shared/types.js';
+import type { PlatformRole } from '../../shared/platform.js';
 import type {
   YouTubeLiveClient,
   YouTubeLiveClientOptions,
@@ -43,6 +44,22 @@ export class YTApiClient implements YouTubeLiveClient {
   private chatTimer: ReturnType<typeof setTimeout> | null = null;
   private viewerTimer: ReturnType<typeof setInterval> | null = null;
   private stopped = false;
+
+  /**
+   * Mapeamento per-canal do tier de membro observado.
+   *
+   * A API do YouTube Data v3 só expõe `memberLevelName` em eventos
+   * `newSponsorEvent` / `memberMilestoneChatEvent`, nunca no `authorDetails`
+   * de uma mensagem de texto regular. Para gating de comandos, capturamos
+   * o tier sempre que um desses eventos passa e aplicamos a mensagens de
+   * texto subsequentes do mesmo `channelId`.
+   *
+   * Limitação: um membro que assinou antes da sessão (e que não dispara
+   * nenhum evento durante a sessão) fica sem tier preenchido. O scraper
+   * driver não tem essa limitação porque os badges de tier vêm direto na
+   * mensagem de texto.
+   */
+  private readonly tierByChannel = new Map<string, string>();
 
   constructor(private readonly options: YTApiClientOptions) {
     this.videoId = options.videoId;
@@ -216,6 +233,8 @@ export class YTApiClient implements YouTubeLiveClient {
     const publishedAt = snippet.publishedAt ? Date.parse(snippet.publishedAt) : Date.now();
     const isHistory = Number.isFinite(publishedAt) && publishedAt < this.startedAt;
 
+    const role = this.buildRole(author);
+
     this.options.onMessage({
       platform: 'youtube',
       author: this.authorName(author),
@@ -225,7 +244,22 @@ export class YTApiClient implements YouTubeLiveClient {
       ...(author.channelId ? { userId: author.channelId } : {}),
       ...(isHistory ? { isHistory: true } : {}),
       ...(item.id ? { platformMessageId: item.id } : {}),
+      ...(role ? { role } : {}),
     });
+  }
+
+  private buildRole(author: youtube_v3.Schema$LiveChatMessageAuthorDetails): PlatformRole | undefined {
+    const moderator = Boolean(author.isChatModerator);
+    const subscriber = Boolean(author.isChatSponsor);
+    const broadcaster = Boolean(author.isChatOwner);
+    if (!moderator && !subscriber && !broadcaster) return undefined;
+    const tier = subscriber && author.channelId ? this.tierByChannel.get(author.channelId) : undefined;
+    return {
+      ...(broadcaster ? { broadcaster: true } : {}),
+      ...(moderator ? { moderator: true } : {}),
+      ...(subscriber ? { subscriber: true } : {}),
+      ...(tier ? { subscriberTier: tier } : {}),
+    };
   }
 
   private emitSuperChat(
@@ -272,6 +306,7 @@ export class YTApiClient implements YouTubeLiveClient {
   ): void {
     const details = snippet.newSponsorDetails;
     const tier = details?.memberLevelName ?? '';
+    if (tier && author.channelId) this.tierByChannel.set(author.channelId, tier);
     const message = tier ? `Novo membro: ${tier}` : 'Novo membro';
     this.options.onEvent?.({
       platform: 'youtube',
@@ -290,6 +325,7 @@ export class YTApiClient implements YouTubeLiveClient {
     const months = details?.memberMonth ?? 0;
     const userMessage = details?.userComment?.trim() ?? '';
     const tier = details?.memberLevelName ?? '';
+    if (tier && author.channelId) this.tierByChannel.set(author.channelId, tier);
     const monthsLabel = months ? `${months} meses` : 'membro';
     const base = tier ? `${tier} • ${monthsLabel}` : monthsLabel;
     const message = userMessage ? `${base}: ${userMessage}` : base;

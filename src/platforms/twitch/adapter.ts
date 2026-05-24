@@ -427,6 +427,7 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
       moderator,
       vip,
       subscriber,
+      ...(subTier !== undefined ? { subscriberTier: String(subTier) } : {}),
       // Twitch follower status requires a Helix call; left for app-context to hydrate.
       extras: Object.keys(extras).length > 0 ? extras : undefined,
     };

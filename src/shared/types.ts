@@ -26,10 +26,27 @@ export interface ProfileSettings {
 
 export type PermissionLevel = 'everyone' | 'follower' | 'subscriber' | 'vip' | 'moderator' | 'broadcaster';
 
+/** Tier mínimo de assinante exigido, por plataforma. Só aplicado quando `'subscriber'`
+ *  está em `allowedLevels`. Plataforma ausente do mapa = aceita qualquer tier. */
+export type MinSubscriberTier = Partial<Record<PlatformId, string>>;
+
 export interface CommandPermission {
   allowedLevels: PermissionLevel[];
   cooldownSeconds: number;
   userCooldownSeconds: number;
+  minSubscriberTier?: MinSubscriberTier;
+}
+
+/** Entry de tier de membro num canal. `order` é crescente (1 = mais baixo). */
+export interface SubscriberTierEntry {
+  id: string;
+  label: string;
+  order: number;
+  source: 'builtin' | 'scraped' | 'api';
+}
+
+export interface SubscriberTierCatalog {
+  byPlatform: Partial<Record<PlatformId, SubscriberTierEntry[]>>;
 }
 
 export interface LanguageOption {
@@ -264,6 +281,7 @@ export interface VoiceCommand {
   template: string | null;
   language: string;
   permissions: PermissionLevel[];
+  minSubscriberTier?: MinSubscriberTier;
   cooldownSeconds: number;
   userCooldownSeconds: number;
   announceUsername: boolean;
@@ -277,6 +295,7 @@ export interface VoiceCommandUpsertInput {
   template: string | null;
   language: string;
   permissions: PermissionLevel[];
+  minSubscriberTier?: MinSubscriberTier;
   cooldownSeconds: number;
   userCooldownSeconds: number;
   announceUsername: boolean;
@@ -416,6 +435,7 @@ export interface SoundCommand {
   trigger: string | null;
   filePath: string;
   permissions: PermissionLevel[];
+  minSubscriberTier?: MinSubscriberTier;
   cooldownSeconds: number | null;
   userCooldownSeconds: number | null;
   commandEnabled: boolean;
@@ -429,6 +449,7 @@ export interface SoundCommandUpsertInput {
   trigger: string | null;
   filePath: string;
   permissions: PermissionLevel[];
+  minSubscriberTier?: MinSubscriberTier;
   cooldownSeconds: number | null;
   userCooldownSeconds: number | null;
   commandEnabled: boolean;

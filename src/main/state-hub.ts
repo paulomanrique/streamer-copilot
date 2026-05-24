@@ -14,6 +14,7 @@ import type {
   ScheduledStatusItem,
   SoundPlayPayload,
   StreamEvent,
+  SubscriberTierCatalog,
   SuggestionSnapshot,
   PlatformId,
   PlatformLinkStatus,
@@ -75,6 +76,10 @@ export class StateHub {
 
   pushSoundPlay(payload: SoundPlayPayload): void {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.soundsPlay, payload);
+  }
+
+  pushSubscriberTiers(payload: SubscriberTierCatalog): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.subscriberTiersUpdate, payload);
   }
 
   pushGoogleTtsAudio(payload: { base64: string }): void {

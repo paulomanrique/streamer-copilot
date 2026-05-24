@@ -1,6 +1,7 @@
 import { session } from 'electron';
 import { Innertube, Log } from 'youtubei.js';
 import type { ChatMessage, ChatBadge, ChatMessageContentPart, StreamEvent } from '../shared/types.js';
+import type { PlatformRole } from '../shared/platform.js';
 import type { YouTubeLiveClient, YouTubeLiveClientOptions } from '../platforms/youtube/live-client.js';
 
 // Silence youtubei.js's INFO/WARN console output (extractor warnings, deprecation
@@ -233,6 +234,7 @@ export class YTLiveClient implements YouTubeLiveClient {
     if (!content) return;
 
     const badges = this.parseBadges(item.author);
+    const role = YTLiveClient.buildRole(item.author);
     const avatarUrl: string | undefined = item.author?.thumbnails?.[0]?.url ?? undefined;
     const userId: string | undefined = typeof item.author?.id === 'string' && item.author.id ? item.author.id : undefined;
     // item.timestamp is in milliseconds (timestampUsec / 1000)
@@ -247,6 +249,7 @@ export class YTLiveClient implements YouTubeLiveClient {
       avatarUrl,
       ...(userId ? { userId } : {}),
       ...(isHistory ? { isHistory: true } : {}),
+      ...(role ? { role } : {}),
     });
   }
 
@@ -306,6 +309,51 @@ export class YTLiveClient implements YouTubeLiveClient {
     // Any non-moderator badge indicates a channel member
     if ((author?.badges?.length ?? 0) > 0 && !author?.is_moderator) badges.push('member');
     return badges;
+  }
+
+  /**
+   * Resolve o `PlatformRole` a partir das flags + badges do autor.
+   *
+   * `subscriberTier` vem do tooltip do badge de membro (youtubei.js expõe esse
+   * texto). Os tooltips do YouTube têm o formato `"<Nível> (<duração>)"` —
+   * "Member (2 months)", "Apoiador (1 year, 3 months)", etc. Extraímos o
+   * trecho antes do parêntese. Sem tooltip → sem tier (degradação graciosa,
+   * o gate por tier simplesmente nega).
+   */
+  private static buildRole(author: any): PlatformRole | undefined {
+    const moderator = Boolean(author?.is_moderator);
+    const sponsorBadge = YTLiveClient.findMemberBadge(author);
+    const subscriber = Boolean(sponsorBadge) || Boolean(author?.is_chat_sponsor);
+    if (!moderator && !subscriber) return undefined;
+    const tier = sponsorBadge ? YTLiveClient.extractTierFromBadge(sponsorBadge) : undefined;
+    return {
+      ...(moderator ? { moderator: true } : {}),
+      ...(subscriber ? { subscriber: true } : {}),
+      ...(tier ? { subscriberTier: tier } : {}),
+    };
+  }
+
+  private static findMemberBadge(author: any): unknown | null {
+    const list = Array.isArray(author?.badges) ? author.badges : [];
+    for (const b of list) {
+      const iconType: string = String(b?.icon_type ?? '').toUpperCase();
+      if (iconType === 'MODERATOR' || iconType === 'OWNER' || iconType === 'VERIFIED') continue;
+      // Custom emoji badges (membership) frequently lack icon_type; the
+      // presence of a custom_thumbnail is the strong signal.
+      if (b?.custom_thumbnail || iconType === 'MEMBER' || b?.tooltip) return b;
+    }
+    return null;
+  }
+
+  private static extractTierFromBadge(badge: any): string | undefined {
+    const tooltip: string = typeof badge?.tooltip === 'string'
+      ? badge.tooltip
+      : (typeof badge?.tooltip?.text === 'string' ? badge.tooltip.text : '');
+    if (!tooltip) return undefined;
+    // "Apoiador (2 months)" → "Apoiador"; "Member" → "Member".
+    const parenIdx = tooltip.indexOf('(');
+    const label = (parenIdx >= 0 ? tooltip.slice(0, parenIdx) : tooltip).trim();
+    return label || undefined;
   }
 
   private parseAmount(raw: string): number {

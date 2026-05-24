@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 
 import { PERMISSION_LEVELS } from '../../shared/constants.js';
-import type { PermissionLevel, SoundCommand, SoundCommandUpsertInput, SoundSettings } from '../../shared/types.js';
+import type { MinSubscriberTier, PermissionLevel, SoundCommand, SoundCommandUpsertInput, SoundSettings } from '../../shared/types.js';
+import { SubscriberTierPicker } from './SubscriberTierPicker.js';
 import { ToggleSwitch } from './ToggleSwitch.js';
 
 const PERMISSION_LABELS: Record<PermissionLevel, string> = {
@@ -36,6 +37,7 @@ export function SoundCommandModal({ open, onClose, onSave, initialData, settings
   const [commandEnabled, setCommandEnabled] = useState(true);
   const [trigger, setTrigger] = useState('!');
   const [levels, setLevels] = useState<PermissionLevel[]>(['everyone']);
+  const [minSubscriberTier, setMinSubscriberTier] = useState<MinSubscriberTier | undefined>(undefined);
   const [useGlobalCooldown, setUseGlobalCooldown] = useState(true);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [userCooldownSeconds, setUserCooldownSeconds] = useState(0);
@@ -57,6 +59,7 @@ export function SoundCommandModal({ open, onClose, onSave, initialData, settings
       setCommandEnabled(initialData.commandEnabled);
       setTrigger(initialData.trigger ?? '!');
       setLevels(initialData.permissions);
+      setMinSubscriberTier(initialData.minSubscriberTier);
       const isGlobal = initialData.cooldownSeconds === null && initialData.userCooldownSeconds === null;
       setUseGlobalCooldown(isGlobal);
       setCooldownSeconds(initialData.cooldownSeconds ?? settings.defaultCooldownSeconds);
@@ -71,6 +74,7 @@ export function SoundCommandModal({ open, onClose, onSave, initialData, settings
       setCommandEnabled(true);
       setTrigger('!');
       setLevels(['everyone']);
+      setMinSubscriberTier(undefined);
       setUseGlobalCooldown(true);
       setCooldownSeconds(settings.defaultCooldownSeconds);
       setUserCooldownSeconds(settings.defaultUserCooldownSeconds);
@@ -137,6 +141,7 @@ export function SoundCommandModal({ open, onClose, onSave, initialData, settings
         trigger: commandEnabled ? trigger.trim() : null,
         filePath,
         permissions: levels,
+        ...(minSubscriberTier ? { minSubscriberTier } : {}),
         cooldownSeconds: useGlobalCooldown ? null : cooldownSeconds,
         userCooldownSeconds: useGlobalCooldown ? null : userCooldownSeconds,
         commandEnabled,
@@ -266,6 +271,11 @@ export function SoundCommandModal({ open, onClose, onSave, initialData, settings
                           );
                         })}
                       </div>
+                      <SubscriberTierPicker
+                        value={minSubscriberTier}
+                        onChange={setMinSubscriberTier}
+                        visible={levels.includes('subscriber')}
+                      />
                     </div>
                     <div>
                       <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer mb-2">

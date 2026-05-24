@@ -13,6 +13,7 @@ export function useIpcListeners(): void {
   const appendChatEvents = useAppStore((s) => s.appendChatEvents);
   const setPlatformStatus = useAppStore((s) => s.setPlatformStatus);
   const setPlatformLiveStats = useAppStore((s) => s.setPlatformLiveStats);
+  const setSubscriberTiers = useAppStore((s) => s.setSubscriberTiers);
 
   // OBS listeners
   useEffect(() => {
@@ -50,4 +51,12 @@ export function useIpcListeners(): void {
     });
     return () => { unsubMessages(); unsubEvents(); };
   }, [appendChatEvents, appendChatMessages]);
+
+  // Subscriber tier catalog: kicks in when the scraper learns a new tier or
+  // when the management UI saves a reordering.
+  useEffect(() => {
+    return window.copilot.onSubscriberTiersUpdate((catalog) => {
+      setSubscriberTiers(catalog);
+    });
+  }, [setSubscriberTiers]);
 }

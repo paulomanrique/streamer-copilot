@@ -50,6 +50,7 @@ export class SoundCommandRepository {
       trigger: input.trigger?.trim() ?? null,
       filePath: input.filePath,
       permissions: input.permissions,
+      ...(input.minSubscriberTier ? { minSubscriberTier: input.minSubscriberTier } : {}),
       cooldownSeconds: input.cooldownSeconds,
       userCooldownSeconds: input.userCooldownSeconds,
       commandEnabled: input.commandEnabled,

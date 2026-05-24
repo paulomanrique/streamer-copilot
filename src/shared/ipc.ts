@@ -49,6 +49,8 @@ import type {
   TextCommandDeleteInput,
   TextCommandUpsertInput,
   StreamEvent,
+  SubscriberTierCatalog,
+  SubscriberTierEntry,
   ScheduledMessage,
   ScheduledMessageDeleteInput,
   ScheduledMessageUpsertInput,
@@ -218,6 +220,9 @@ export const IPC_CHANNELS = {
   platformsGetStatuses: 'platforms:get-statuses',
   platformStatus: 'platform:status',
   platformLiveStats: 'platform:live-stats',
+  subscriberTiersGet: 'subscriber-tiers:get',
+  subscriberTiersReplace: 'subscriber-tiers:replace',
+  subscriberTiersUpdate: 'subscriber-tiers:update',
   accountsList: 'accounts:list',
   accountsCreate: 'accounts:create',
   accountsUpdate: 'accounts:update',
@@ -423,6 +428,13 @@ export interface CopilotApi {
     channelKey: string;
     stats: unknown | null;
   }) => void) => () => void;
+  /** Snapshot atual do catálogo de tiers de membro (todas as plataformas). */
+  getSubscriberTiers: () => Promise<SubscriberTierCatalog>;
+  /** Substitui as entries de uma plataforma (usado pelo painel de gestão e
+   *  pelo path da API do YouTube na conexão). */
+  replaceSubscriberTiers: (input: { platform: PlatformId; entries: SubscriberTierEntry[] }) => Promise<SubscriberTierCatalog>;
+  /** Push assíncrono quando o catálogo muda (ex: scraper aprende um nível novo). */
+  onSubscriberTiersUpdate: (listener: (payload: SubscriberTierCatalog) => void) => () => void;
   accountsList: () => Promise<import('./types.js').PlatformAccount[]>;
   accountsCreate: (input: AccountCreateInput) => Promise<import('./types.js').PlatformAccount>;
   accountsUpdate: (input: AccountUpdateInput) => Promise<import('./types.js').PlatformAccount>;

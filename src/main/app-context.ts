@@ -31,6 +31,7 @@ import { ProfileStore } from '../modules/settings/profile-store.js';
 import { SoundCommandRepository } from '../modules/sounds/sound-repository.js';
 import { SoundService } from '../modules/sounds/sound-service.js';
 import { SoundSettingsStore } from '../modules/sounds/sound-settings-store.js';
+import { SubscriberTiersStore } from '../modules/subscriber-tiers/subscriber-tiers-store.js';
 import { SuggestionRepository } from '../modules/suggestions/suggestion-repository.js';
 import { SuggestionService } from '../modules/suggestions/suggestion-service.js';
 import { TextCommandRepository } from '../modules/text/text-repository.js';
@@ -120,6 +121,7 @@ import {
   tiktokConnectSchema,
   tiktokSettingsSchema,
   twitchCredentialsSchema,
+  subscriberTiersReplaceInputSchema,
   voiceCommandDeleteInputSchema,
   voiceCommandUpsertInputSchema,
   voiceSpeakPayloadSchema,
@@ -130,7 +132,7 @@ import {
   youtubeSettingsSchema,
   youtubeApiStartOAuthSchema,
 } from '../shared/schemas.js';
-import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, MusicRequestSettings, PlatformAccount, PlatformId, Raffle, SoundSettings, StreamEvent, StreamEventType, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
+import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, MusicRequestSettings, PlatformAccount, PlatformId, Raffle, SoundSettings, StreamEvent, StreamEventType, SubscriberTierCatalog, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
 
 const TWITCH_CLIENT_ID = 'vtwg8tzuv1nlip4qh9n6sxx2p76g0s';
 const TWITCH_REDIRECT_PORT = 32999;
@@ -211,6 +213,28 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const suggestionRepository = new SuggestionRepository(getActiveProfileDirectory);
   const obsSettingsStore = new ObsSettingsStore(getActiveProfileDirectory);
 
+  // Subscriber tier catalog: per-profile JSON. Cached in memory for sync access
+  // in permission checks (isCommandAllowedWithTier) inside the message hot path.
+  let subscriberTiersCache: SubscriberTierCatalog = { byPlatform: {} };
+  const getSubscriberTiersStore = (): SubscriberTiersStore | null => {
+    if (!activeProfileDirectory) return null;
+    return new SubscriberTiersStore(activeProfileDirectory);
+  };
+  const reloadSubscriberTiersCache = async (): Promise<void> => {
+    const store = getSubscriberTiersStore();
+    if (store) subscriberTiersCache = await store.load();
+  };
+  const upsertScrapedTier = (platform: PlatformId, tierId: string): void => {
+    const store = getSubscriberTiersStore();
+    if (!store) return;
+    void store.upsertScraped(platform, tierId).then(async (changed) => {
+      if (changed) {
+        subscriberTiersCache = await store.load();
+        options.stateHub.pushSubscriberTiers(subscriberTiersCache);
+      }
+    }).catch(() => { /* best-effort */ });
+  };
+
   // Sound settings: file-based, per-profile. Cached in memory for synchronous access in canRun().
   let soundSettingsCache: SoundSettings = { defaultCooldownSeconds: 0, defaultUserCooldownSeconds: 0 };
 
@@ -289,6 +313,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   void reloadTextSettingsCache();
   void reloadWelcomeSettingsCache();
   void reloadMusicSettingsCache();
+  void activeProfileDirectoryReady.then(() => reloadSubscriberTiersCache());
 
   const schedulerService = new SchedulerService({
     source: {
@@ -302,6 +327,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const soundService = new SoundService({
     repository: soundRepository,
     getSettings: () => soundSettingsCache,
+    getSubscriberTierCatalog: () => subscriberTiersCache,
     onPlay: (payload) => options.stateHub.pushSoundPlay(payload),
   });
   const textService = new TextService({
@@ -355,6 +381,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   let isShuttingDown = false;
   const voiceService = new VoiceService({
     repository: voiceRepository,
+    getSubscriberTierCatalog: () => subscriberTiersCache,
     onSpeak: (payload) => {
       // Google TTS: lang field starts with "google:"
       if (payload.lang.startsWith('google:')) {
@@ -1515,6 +1542,12 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         const self = selfSenderName[message.platform];
         if (!self || message.author.toLowerCase() !== self) {
           welcomeService.handleMessage(message);
+        }
+        // Aprende dinamicamente os tiers de membro pagos observados no chat.
+        // Twitch tem catálogo builtin; YouTube/Kick precisam aprender da experiência.
+        const tier = message.role?.subscriberTier;
+        if (tier && message.platform !== 'twitch') {
+          upsertScrapedTier(message.platform, tier);
         }
       }
     },
@@ -2882,6 +2915,21 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         primaryChannel: null,
       },
     };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.subscriberTiersGet, async () => {
+    const store = getSubscriberTiersStore();
+    if (store) subscriberTiersCache = await store.load();
+    return subscriberTiersCache;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.subscriberTiersReplace, async (_, raw) => {
+    const { platform, entries } = subscriberTiersReplaceInputSchema.parse(raw);
+    const store = getSubscriberTiersStore();
+    if (!store) throw new Error('No active profile');
+    subscriberTiersCache = await store.replaceForPlatform(platform, entries);
+    options.stateHub.pushSubscriberTiers(subscriberTiersCache);
+    return subscriberTiersCache;
   });
 
   ipcMain.handle(IPC_CHANNELS.accountsList, async () => {

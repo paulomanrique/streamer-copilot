@@ -5,6 +5,7 @@ import { LegendList, type LegendListRef } from '@legendapp/list/react';
 import type { ChatMessage, PlatformId, StreamEvent, SuggestionEntry, SuggestionList } from '../../shared/types.js';
 import type { PlatformCapabilities } from '../../shared/moderation.js';
 import { useI18n } from '../i18n/I18nProvider.js';
+import { useAppStore } from '../store.js';
 import { EventBanner } from './EventBanner.js';
 import { getPlatformDisplayName, getPlatformProviderOrFallback, listPlatformProviders } from '../platforms/registry.js';
 import {
@@ -725,6 +726,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highli
   const meta = getPlatformProviderOrFallback(message.platform);
   const badgeLabel = (showStreamLabel && message.streamLabel) ? message.streamLabel : meta.displayName;
   const isCommand = message.content.startsWith('!');
+  const subscriberTiers = useAppStore((s) => s.subscriberTiers);
 
   // Supporter star: the badge id that earns it varies per platform — YouTube
   // says 'member', everyone else says some flavor of 'subscriber'. The
@@ -732,6 +734,18 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highli
   const isSub = meta.subscriberBadge === 'member'
     ? message.badges.includes('member')
     : message.badges.some((b) => b.startsWith('subscriber/') || b === 'subscriber' || b === 'member');
+
+  // Tier label: '★ T2' (Twitch) or '★ Apoiador' (YouTube) when the adapter
+  // emitted `role.subscriberTier` AND the catalog has the entry. Falls back
+  // to a bare ★ when the tier is unknown — graceful degradation for stale
+  // catalogs or platforms whose tier wasn't captured.
+  const tierLabel = (() => {
+    const tier = message.role?.subscriberTier;
+    if (!isSub || !tier) return null;
+    const list = subscriberTiers.byPlatform[message.platform] ?? [];
+    const entry = list.find((e) => e.id === tier);
+    return entry?.label ?? tier;
+  })();
 
   const isMod = message.badges.some((b) => b.startsWith('moderator/') || b === 'moderator');
   const authorColor = resolveAuthorColor(message);
@@ -794,8 +808,12 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highli
             <img key={i} src={url} alt="" className="w-4 h-4 rounded-sm shrink-0 object-contain" />
           ))}
 
-          {/* Member Star */}
-          {isSub ? <span className="text-yellow-400 text-xs leading-none">★</span> : null}
+          {/* Member Star — annotated with the tier label when known. */}
+          {isSub ? (
+            <span className="text-yellow-400 text-xs leading-none whitespace-nowrap">
+              ★{tierLabel ? <span className="ml-0.5 text-[10px] text-yellow-300 font-semibold">{tierLabel}</span> : null}
+            </span>
+          ) : null}
 
           <span className="font-semibold text-sm" style={{ color: authorColor }} data-no-i18n="true">
             {meta.authorAtPrefix ? `@${message.author}` : message.author}

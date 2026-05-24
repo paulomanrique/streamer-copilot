@@ -29,6 +29,7 @@ function buildService(
   return new SoundService({
     repository: createRepository(commands) as never,
     getSettings: () => options?.settings ?? DEFAULT_SETTINGS,
+    getSubscriberTierCatalog: () => ({ byPlatform: {} }),
     onPlay: options?.onPlay ?? vi.fn(),
     now: options?.now,
   });

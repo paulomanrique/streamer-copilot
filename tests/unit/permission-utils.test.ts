@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   PERMISSION_RANK,
+  isCommandAllowedWithTier,
   isPermissionAllowed,
   resolveFromRole,
   resolvePermissionLevel,
 } from '../../src/modules/commands/permission-utils.js';
-import type { ChatMessage } from '../../src/shared/types.js';
+import type { ChatMessage, SubscriberTierCatalog } from '../../src/shared/types.js';
 
 function makeMessage(extra: Partial<ChatMessage> = {}): ChatMessage {
   return {
@@ -87,5 +88,65 @@ describe('PERMISSION_RANK ordering', () => {
 
   it('isPermissionAllowed blocks subscriber for moderator gate', () => {
     expect(isPermissionAllowed(['moderator'], 'subscriber')).toBe(false);
+  });
+});
+
+describe('isCommandAllowedWithTier', () => {
+  const catalog: SubscriberTierCatalog = {
+    byPlatform: {
+      twitch: [
+        { id: '1', label: 'Tier 1', order: 1, source: 'builtin' },
+        { id: '2', label: 'Tier 2', order: 2, source: 'builtin' },
+        { id: '3', label: 'Tier 3', order: 3, source: 'builtin' },
+      ],
+      youtube: [
+        { id: 'Member', label: 'Member', order: 1, source: 'scraped' },
+        { id: 'Apoiador', label: 'Apoiador', order: 2, source: 'scraped' },
+        { id: 'Super fã', label: 'Super fã', order: 3, source: 'scraped' },
+      ],
+    },
+  };
+
+  it('passa quando não há minSubscriberTier configurado', () => {
+    expect(isCommandAllowedWithTier(['subscriber'], undefined, 'subscriber', 'twitch', '1', catalog)).toBe(true);
+  });
+
+  it('passa quando a plataforma do remetente não está no mapa', () => {
+    expect(isCommandAllowedWithTier(['subscriber'], { twitch: '2' }, 'subscriber', 'youtube', 'Member', catalog)).toBe(true);
+  });
+
+  it('passa quando o tier do usuário >= tier requerido', () => {
+    expect(isCommandAllowedWithTier(['subscriber'], { twitch: '2' }, 'subscriber', 'twitch', '3', catalog)).toBe(true);
+    expect(isCommandAllowedWithTier(['subscriber'], { youtube: 'Apoiador' }, 'subscriber', 'youtube', 'Super fã', catalog)).toBe(true);
+  });
+
+  it('bloqueia quando o tier do usuário < tier requerido', () => {
+    expect(isCommandAllowedWithTier(['subscriber'], { twitch: '2' }, 'subscriber', 'twitch', '1', catalog)).toBe(false);
+    expect(isCommandAllowedWithTier(['subscriber'], { youtube: 'Apoiador' }, 'subscriber', 'youtube', 'Member', catalog)).toBe(false);
+  });
+
+  it('bloqueia quando o tier do usuário não está catalogado', () => {
+    expect(isCommandAllowedWithTier(['subscriber'], { twitch: '1' }, 'subscriber', 'twitch', undefined, catalog)).toBe(false);
+    expect(isCommandAllowedWithTier(['subscriber'], { twitch: '1' }, 'subscriber', 'twitch', '99', catalog)).toBe(false);
+  });
+
+  it('bloqueia quando o tier requerido não existe no catálogo (proteção contra config stale)', () => {
+    expect(isCommandAllowedWithTier(['subscriber'], { youtube: 'NívelInexistente' }, 'subscriber', 'youtube', 'Member', catalog)).toBe(false);
+  });
+
+  it('bloqueia quando a plataforma não tem catálogo', () => {
+    expect(isCommandAllowedWithTier(['subscriber'], { kick: '1' }, 'subscriber', 'kick', '1', catalog)).toBe(false);
+  });
+
+  it('moderator passa direto ignorando minSubscriberTier', () => {
+    expect(isCommandAllowedWithTier(['subscriber'], { twitch: '3' }, 'moderator', 'twitch', undefined, catalog)).toBe(true);
+  });
+
+  it('broadcaster passa direto ignorando minSubscriberTier', () => {
+    expect(isCommandAllowedWithTier(['subscriber'], { twitch: '3' }, 'broadcaster', 'twitch', undefined, catalog)).toBe(true);
+  });
+
+  it('respeita o gate base de allowedLevels antes do tier check', () => {
+    expect(isCommandAllowedWithTier(['moderator'], { twitch: '1' }, 'subscriber', 'twitch', '3', catalog)).toBe(false);
   });
 });

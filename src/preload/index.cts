@@ -206,6 +206,9 @@ const IPC_CHANNELS = {
   platformsGetStatuses: 'platforms:get-statuses',
   platformStatus: 'platform:status',
   platformLiveStats: 'platform:live-stats',
+  subscriberTiersGet: 'subscriber-tiers:get',
+  subscriberTiersReplace: 'subscriber-tiers:replace',
+  subscriberTiersUpdate: 'subscriber-tiers:update',
   accountsList: 'accounts:list',
   accountsCreate: 'accounts:create',
   accountsUpdate: 'accounts:update',
@@ -461,6 +464,16 @@ const copilotApi: CopilotApi = {
     ) => listener(payload);
     ipcRenderer.on(IPC_CHANNELS.platformLiveStats, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.platformLiveStats, wrappedListener); };
+  },
+  getSubscriberTiers: () => ipcRenderer.invoke(IPC_CHANNELS.subscriberTiersGet),
+  replaceSubscriberTiers: (input) => ipcRenderer.invoke(IPC_CHANNELS.subscriberTiersReplace, input),
+  onSubscriberTiersUpdate: (listener) => {
+    const wrappedListener = (
+      _event: Electron.IpcRendererEvent,
+      payload: import('../shared/types.js').SubscriberTierCatalog,
+    ) => listener(payload);
+    ipcRenderer.on(IPC_CHANNELS.subscriberTiersUpdate, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.subscriberTiersUpdate, wrappedListener); };
   },
   accountsList: () => ipcRenderer.invoke(IPC_CHANNELS.accountsList),
   accountsCreate: (input) => ipcRenderer.invoke(IPC_CHANNELS.accountsCreate, input),

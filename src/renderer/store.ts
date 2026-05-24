@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import type { ChatMessage, ObsStatsSnapshot, PlatformId, PlatformLinkStatus, ProfilesSnapshot, StreamEvent } from '../shared/types.js';
+import type { ChatMessage, ObsStatsSnapshot, PlatformId, PlatformLinkStatus, ProfilesSnapshot, StreamEvent, SubscriberTierCatalog } from '../shared/types.js';
 
 const DEFAULT_OBS_STATS: ObsStatsSnapshot = {
   connected: false,
@@ -43,6 +43,11 @@ interface AppStore extends ProfilesSnapshot {
   setPlatformLiveStats: (platformId: PlatformId, channelKey: string, stats: unknown | null) => void;
   /** Bulk loader for the initial snapshot delivered by `getPlatformStatuses`. */
   hydratePlatformStatuses: (snapshot: Partial<Record<PlatformId, { status: PlatformLinkStatus; primaryChannel: string | null }>>) => void;
+  /** Catálogo per-canal de tiers de membro pagos (Twitch builtin, YouTube
+   *  aprendido). Consumido por PermissionPicker (selectors de mín tier) e
+   *  ChatFeed (label do badge). */
+  subscriberTiers: SubscriberTierCatalog;
+  setSubscriberTiers: (catalog: SubscriberTierCatalog) => void;
   setProfiles: (snapshot: ProfilesSnapshot) => void;
   setObsStats: (stats: ObsStatsSnapshot | ((current: ObsStatsSnapshot) => ObsStatsSnapshot)) => void;
   setChatSnapshot: (snapshot: { messages: ChatMessage[]; events: StreamEvent[] }) => void;
@@ -63,6 +68,8 @@ export const useAppStore = create<AppStore>((set) => ({
   platformStatus: {},
   platformPrimaryChannel: {},
   platformLiveStats: {},
+  subscriberTiers: { byPlatform: {} },
+  setSubscriberTiers: (catalog) => set({ subscriberTiers: catalog }),
   setProfiles: (snapshot) =>
     set({
       activeProfileId: snapshot.activeProfileId,

@@ -19,3 +19,4 @@ import './raffles-settings-module.js';
 import './suggestions-settings-module.js';
 import './overlays-settings-module.js';
 import './obs-settings-module.js';
+import './subscriber-tiers-settings-module.js';

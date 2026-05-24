@@ -1,11 +1,20 @@
-import type { ChatMessage, PermissionLevel, SoundCommand, SoundPlayPayload, SoundSettings } from '../../shared/types.js';
+import type {
+  ChatMessage,
+  PermissionLevel,
+  PlatformId,
+  SoundCommand,
+  SoundPlayPayload,
+  SoundSettings,
+  SubscriberTierCatalog,
+} from '../../shared/types.js';
 import type { CommandModule } from '../commands/command-dispatcher.js';
-import { isPermissionAllowed } from '../commands/permission-utils.js';
+import { isCommandAllowedWithTier, isPermissionAllowed } from '../commands/permission-utils.js';
 import { SoundCommandRepository } from './sound-repository.js';
 
 interface SoundServiceOptions {
   repository: SoundCommandRepository;
   getSettings: () => SoundSettings;
+  getSubscriberTierCatalog: () => SubscriberTierCatalog;
   onPlay: (payload: SoundPlayPayload) => void;
   now?: () => number;
 }
@@ -13,6 +22,11 @@ interface SoundServiceOptions {
 interface ChatPermissionContext {
   permissionLevel: PermissionLevel;
   userId: string;
+  /** Platform de origem da mensagem; necessário para o gate por tier.
+   *  Quando ausente (caminho de testes legados), tier gating é pulado e o
+   *  comando aceita qualquer assinante, igual ao comportamento pré-tier. */
+  platform?: PlatformId;
+  subscriberTier?: string;
 }
 
 export class SoundService implements CommandModule {
@@ -40,18 +54,36 @@ export class SoundService implements CommandModule {
 
   /** CommandModule entry point — called by CommandDispatcher with resolved permission. */
   handle(message: ChatMessage, permissionLevel: PermissionLevel): void {
-    this.handleChatMessage(message.content, { permissionLevel, userId: message.author });
+    this.handleChatMessage(message.content, {
+      permissionLevel,
+      userId: message.author,
+      platform: message.platform,
+      subscriberTier: message.role?.subscriberTier,
+    });
   }
 
   handleChatMessage(content: string, context: ChatPermissionContext): SoundPlayPayload | null {
     const commands = this.options.repository.list();
+    const catalog = this.options.getSubscriberTierCatalog();
 
     for (const command of commands) {
       const timestamp = this.now();
       if (!command.enabled) continue;
       if (command.commandEnabled === false || !command.trigger) continue;
       if (!content.startsWith(command.trigger)) continue;
-      if (!isPermissionAllowed(command.permissions, context.permissionLevel)) continue;
+      // Tier gating só se aplica quando o caller informou a plataforma.
+      // Sem plataforma (testes), cai no gate base sem tier.
+      const allowed = context.platform
+        ? isCommandAllowedWithTier(
+            command.permissions,
+            command.minSubscriberTier,
+            context.permissionLevel,
+            context.platform,
+            context.subscriberTier,
+            catalog,
+          )
+        : isPermissionAllowed(command.permissions, context.permissionLevel);
+      if (!allowed) continue;
       if (!this.canRun(command, context.userId, timestamp)) continue;
 
       const payload = { filePath: command.filePath };

@@ -9,6 +9,7 @@ import { z } from 'zod';
 const platformIdSchema = z.string().min(1).max(64).regex(/^[a-z0-9-]+$/);
 const scheduledTargetPlatformSchema = z.enum(['twitch', 'youtube', 'youtube-api']);
 const permissionLevelSchema = z.enum(['everyone', 'follower', 'subscriber', 'moderator', 'broadcaster']);
+const minSubscriberTierSchema = z.record(platformIdSchema, z.string().min(1).max(120)).optional();
 const eventLogLevelSchema = z.enum(['info', 'warn', 'error']);
 const raffleModeSchema = z.enum(['single-winner', 'survivor-final']);
 const raffleControlActionSchema = z.enum(['open_entries', 'close_entries', 'spin', 'finalize', 'cancel', 'reset']);
@@ -117,6 +118,7 @@ export const voiceCommandUpsertInputSchema = z.object({
   template: z.string().max(500).nullable(),
   language: z.string().min(2).max(200),
   permissions: z.array(permissionLevelSchema).min(1),
+  minSubscriberTier: minSubscriberTierSchema,
   cooldownSeconds: z.number().int().min(0).max(3600),
   userCooldownSeconds: z.number().int().min(0).max(3600),
   announceUsername: z.boolean(),
@@ -208,6 +210,7 @@ export const soundCommandUpsertInputSchema = z.object({
   trigger: z.string().max(80).nullable(),
   filePath: z.string().min(1),
   permissions: z.array(permissionLevelSchema).min(1),
+  minSubscriberTier: minSubscriberTierSchema,
   cooldownSeconds: z.number().int().min(0).max(3600).nullable(),
   userCooldownSeconds: z.number().int().min(0).max(3600).nullable(),
   commandEnabled: z.boolean(),
@@ -447,6 +450,24 @@ export const moderationShoutoutSchema = z.object({
   platform: platformIdSchema,
   userId: z.string().min(1).max(200),
 });
+
+// ── Subscriber tiers ──────────────────────────────────────────────────────────
+
+const subscriberTierSourceSchema = z.enum(['builtin', 'scraped', 'api']);
+
+export const subscriberTierEntrySchema = z.object({
+  id: z.string().min(1).max(120),
+  label: z.string().min(1).max(120),
+  order: z.number().int().min(0).max(10_000),
+  source: subscriberTierSourceSchema,
+});
+
+export const subscriberTiersReplaceInputSchema = z.object({
+  platform: platformIdSchema,
+  entries: z.array(subscriberTierEntrySchema).max(50),
+});
+
+export type SubscriberTiersReplaceInputSchema = z.infer<typeof subscriberTiersReplaceInputSchema>;
 
 // ── Accounts (R6) ─────────────────────────────────────────────────────────────
 

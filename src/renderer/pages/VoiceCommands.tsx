@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { PERMISSION_LEVELS } from '../../shared/constants.js';
-import type { PermissionLevel, VoiceCommand } from '../../shared/types.js';
+import type { MinSubscriberTier, PermissionLevel, VoiceCommand } from '../../shared/types.js';
+import { SubscriberTierPicker } from '../components/SubscriberTierPicker.js';
 import { ToggleSwitch } from '../components/ToggleSwitch.js';
 
 const GOOGLE_TTS_LANGUAGES = [
@@ -67,6 +68,7 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
   const [characterLimit, setCharacterLimit] = useState(200);
   const [announceUsername, setAnnounceUsername] = useState(true);
   const [permissions, setPermissions] = useState<PermissionLevel[]>(['everyone']);
+  const [minSubscriberTier, setMinSubscriberTier] = useState<MinSubscriberTier | undefined>(undefined);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [userCooldownSeconds, setUserCooldownSeconds] = useState(0);
 
@@ -101,6 +103,7 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
           setCharacterLimit(cmd.characterLimit);
           setAnnounceUsername(cmd.announceUsername);
           setPermissions(cmd.permissions);
+          setMinSubscriberTier(cmd.minSubscriberTier);
           setCooldownSeconds(cmd.cooldownSeconds);
           setUserCooldownSeconds(cmd.userCooldownSeconds);
         }
@@ -149,6 +152,7 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
     template: null as null,
     language: selectedVoiceName,
     permissions: overrides?.permissions ?? permissions,
+    ...(minSubscriberTier ? { minSubscriberTier } : {}),
     cooldownSeconds,
     userCooldownSeconds,
     announceUsername,
@@ -282,6 +286,11 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
               </button>
             ))}
           </div>
+          <SubscriberTierPicker
+            value={minSubscriberTier}
+            onChange={setMinSubscriberTier}
+            visible={permissions.includes('subscriber')}
+          />
         </div>
 
         {/* Cooldowns */}

@@ -41,6 +41,7 @@ export default function App() {
     setProfiles,
     setChatSnapshot,
     hydratePlatformStatuses,
+    setSubscriberTiers,
   } = useAppStore();
 
   // Per-platform views, derived from the symmetric store. This local
@@ -115,12 +116,13 @@ export default function App() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [info, snapshot, recentChat, nextGeneralSettings, platformStatuses] = await Promise.all([
+        const [info, snapshot, recentChat, nextGeneralSettings, platformStatuses, tiers] = await Promise.all([
           window.copilot.getAppInfo(),
           window.copilot.listProfiles(),
           window.copilot.getRecentChat(),
           window.copilot.getGeneralSettings(),
           window.copilot.getPlatformStatuses(),
+          window.copilot.getSubscriberTiers(),
         ]);
         setAppInfo(info);
         setProfiles(snapshot);
@@ -128,6 +130,7 @@ export default function App() {
         setChatSnapshot(recentChat);
         setGeneralSettings(nextGeneralSettings);
         hydratePlatformStatuses(platformStatuses);
+        setSubscriberTiers(tiers);
         setSelectorProfileId(snapshot.activeProfileId);
         setRememberProfileSelection(snapshot.autoSelectActiveProfile);
         // Smart skip: don't bother prompting when there's only one profile,
@@ -152,7 +155,7 @@ export default function App() {
     };
 
     void load();
-  }, [setChatSnapshot, setProfiles, hydratePlatformStatuses]);
+  }, [setChatSnapshot, setProfiles, hydratePlatformStatuses, setSubscriberTiers]);
 
   useEffect(() => {
     if (!isLoading && !activeProfileId) {

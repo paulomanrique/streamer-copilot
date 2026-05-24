@@ -40,6 +40,7 @@ export class VoiceCommandRepository {
       template: input.template,
       language: input.language,
       permissions: input.permissions,
+      ...(input.minSubscriberTier ? { minSubscriberTier: input.minSubscriberTier } : {}),
       cooldownSeconds: input.cooldownSeconds,
       userCooldownSeconds: input.userCooldownSeconds,
       announceUsername: input.announceUsername,
