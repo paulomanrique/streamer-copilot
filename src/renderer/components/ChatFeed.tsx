@@ -233,11 +233,10 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
   );
   const items = useStableRows(rawItems);
 
-  // ── auto-scroll ────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!isAtBottom) return;
-    void listRef.current?.scrollToEnd({ animated: false });
-  }, [items.length, isAtBottom]);
+  // Auto-scroll is fully owned by LegendList's `maintainScrollAtEnd` — adding
+  // our own scrollToEnd on items.length change races with the library's
+  // scroll handler and can make `isAtEnd` flicker false during the scroll
+  // (showing the "New Messages Below" button when the user didn't scroll).
 
   // ── batch-fetch avatars for non-Twitch platforms ──────────────────
   useEffect(() => {
@@ -518,7 +517,7 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
                 estimatedItemSize={64}
                 initialScrollAtEnd
                 maintainScrollAtEnd
-                maintainScrollAtEndThreshold={0.08}
+                maintainScrollAtEndThreshold={0.25}
                 maintainVisibleContentPosition
                 onScroll={onScroll}
                 className="h-full overflow-y-auto overflow-x-hidden py-1"
