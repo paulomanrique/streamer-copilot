@@ -137,6 +137,7 @@ const ptUi: Record<string, string> = {
   'Voice (TTS)': 'Voz (TTS)',
   'Text Commands': 'Comandos de Texto',
   'Raffles': 'Sorteios',
+  'Polls': 'Enquetes',
   'Suggestions': 'Sugestões',
   'OBS Studio': 'OBS Studio',
   'Application behavior.': 'Comportamento da aplicação.',
@@ -757,6 +758,8 @@ const ptUi: Record<string, string> = {
   'No accounts yet. Click': 'Nenhuma conta ainda. Clique em',
   'to connect your first chat source.': 'para conectar sua primeira fonte de chat.',
   'Login': 'Entrar',
+  'Re-run sign-in flow for this account': 'Refazer o fluxo de login desta conta',
+  'Remove account': 'Remover conta',
   'Remove this account': 'Remover esta conta',
   'Remove this account? You can re-add it later.': 'Remover esta conta? Você pode adicioná-la novamente depois.',
   'Choose which platform to connect': 'Escolha qual plataforma conectar',
@@ -785,7 +788,6 @@ const ptUi: Record<string, string> = {
   'Sign in to YouTube': 'Entrar no YouTube',
   'Optional but required to send messages from the app. Reading chat works without it. Opens a Google login window; the cookies are kept inside this app\'s session.': 'Opcional, mas necessário para enviar mensagens pelo app. A leitura do chat funciona sem isso. Abre uma janela de login do Google; os cookies são mantidos dentro da sessão deste app.',
   'Opening login window…': 'Abrindo janela de login...',
-  'YouTube (Scraped)': 'YouTube (raspagem)',
   'Channel handle or ID is required': 'Handle ou ID do canal é obrigatório',
 
   // YouTube API provider
