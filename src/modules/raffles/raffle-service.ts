@@ -170,7 +170,7 @@ export class RaffleService implements CommandModule {
 
     const entry = this.options.repository.registerEntry({
       raffleId: raffle.id,
-      platform: this.normalizeEntryPlatform(message.platform),
+      platform: message.platform,
       userKey: this.buildUserKey(message.platform, message.author),
       displayName: message.author,
       sourceMessageId: message.id,
@@ -489,7 +489,7 @@ export class RaffleService implements CommandModule {
       ...input,
       title: input.title.trim(),
       entryCommand: input.entryCommand.trim(),
-      acceptedPlatforms: Array.from(new Set(input.acceptedPlatforms.map((platform) => this.normalizeEntryPlatform(platform)))),
+      acceptedPlatforms: Array.from(new Set(input.acceptedPlatforms)),
       staffTriggerCommand: input.staffTriggerCommand.trim(),
       winnerAnnouncementTemplate: input.winnerAnnouncementTemplate.trim(),
     };
