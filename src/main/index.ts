@@ -16,6 +16,15 @@ import { AppSettingsRepository } from '../modules/settings/app-settings-reposito
 import { GeneralSettingsStore } from '../modules/settings/general-settings-store.js';
 import { StateHub } from './state-hub.js';
 import { startAutoUpdater } from './updater.js';
+import type { AppLanguage } from '../shared/types.js';
+import { DEFAULT_APP_LANGUAGE } from '../shared/constants.js';
+
+const TRAY_LABELS: Record<AppLanguage, { show: string; quit: string }> = {
+  'en-US': { show: 'Show', quit: 'Quit' },
+  'pt-BR': { show: 'Mostrar', quit: 'Sair' },
+};
+
+let trayLanguage: AppLanguage = DEFAULT_APP_LANGUAGE;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -63,9 +72,22 @@ async function createMainWindow(): Promise<void> {
   });
 
   mainWindow.on('close', (event) => {
-    if (isQuitting || !mainWindow || !generalSettingsStore?.load().minimizeToTray) return;
+    if (isQuitting || !mainWindow) return;
+    if (generalSettingsStore?.load().minimizeToTray) {
+      event.preventDefault();
+      mainWindow.hide();
+      return;
+    }
+    // minimizeToTray=false: drive a full quit ourselves. The Kick adapter
+    // holds offscreen BrowserWindows for its chat client, so letting the OS
+    // close just the main window leaves those alive and `window-all-closed`
+    // never fires — the app would sit invisibly behind the tray icon and the
+    // tray "Show" handler can't recover the now-null mainWindow. Routing
+    // through app.quit() lets before-quit tear those down via
+    // chatService.disconnectAll() and the process actually exits.
+    isQuitting = true;
     event.preventDefault();
-    mainWindow.hide();
+    app.quit();
   });
 
   mainWindow.on('closed', () => {
@@ -83,6 +105,7 @@ async function createMainWindow(): Promise<void> {
 }
 
 app.whenReady().then(async () => {
+  Menu.setApplicationMenu(null);
   await migrateLegacyProfilesIfNeeded();
   setDockIcon();
 
@@ -106,6 +129,7 @@ app.whenReady().then(async () => {
     databaseHandle: databaseHandle,
     generalSettingsStore,
     onGeneralSettingsChanged: (settings) => applyGeneralSettings(settings),
+    onAppLanguageChanged: (language) => setTrayLanguage(language),
     stateHub,
     userDataPath: app.getPath('userData'),
     getWindow: () => mainWindow,
@@ -198,25 +222,7 @@ function ensureTray(): void {
   const icon = nativeImage.createFromPath(getAppIconPath()).resize({ width: 16, height: 16 });
   tray = new Tray(icon);
   tray.setToolTip('Streamer Copilot');
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      {
-        label: 'Show',
-        click: () => {
-          if (!mainWindow) return;
-          mainWindow.show();
-          mainWindow.focus();
-        },
-      },
-      {
-        label: 'Quit',
-        click: () => {
-          isQuitting = true;
-          app.quit();
-        },
-      },
-    ]),
-  );
+  applyTrayMenu();
   tray.on('click', () => {
     if (!mainWindow) return;
     if (mainWindow.isVisible()) mainWindow.hide();
@@ -225,6 +231,36 @@ function ensureTray(): void {
       mainWindow.focus();
     }
   });
+}
+
+function applyTrayMenu(): void {
+  if (!tray) return;
+  const labels = TRAY_LABELS[trayLanguage] ?? TRAY_LABELS[DEFAULT_APP_LANGUAGE];
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      {
+        label: labels.show,
+        click: () => {
+          if (!mainWindow) return;
+          mainWindow.show();
+          mainWindow.focus();
+        },
+      },
+      {
+        label: labels.quit,
+        click: () => {
+          isQuitting = true;
+          app.quit();
+        },
+      },
+    ]),
+  );
+}
+
+function setTrayLanguage(language: AppLanguage): void {
+  if (trayLanguage === language) return;
+  trayLanguage = language;
+  applyTrayMenu();
 }
 
 function setDockIcon(): void {

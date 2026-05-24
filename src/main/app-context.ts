@@ -145,6 +145,7 @@ interface AppContextOptions {
   databaseHandle: DatabaseHandle;
   generalSettingsStore: GeneralSettingsStore;
   onGeneralSettingsChanged: (settings: import('../shared/types.js').GeneralSettings) => Promise<void> | void;
+  onAppLanguageChanged: (language: import('../shared/types.js').AppLanguage) => void;
   stateHub: StateHub;
   userDataPath: string;
   getWindow: () => BrowserWindow | null;
@@ -1683,7 +1684,15 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     return r.canceled ? null : r.filePaths[0];
   });
   ipcMain.handle(IPC_CHANNELS.profilesGetSettings, async () => profileStore.getSettings());
-  ipcMain.handle(IPC_CHANNELS.profilesSaveSettings, async (_, raw) => profileStore.saveSettings(profileSettingsSchema.parse(raw)));
+  ipcMain.handle(IPC_CHANNELS.profilesSaveSettings, async (_, raw) => {
+    const saved = await profileStore.saveSettings(profileSettingsSchema.parse(raw));
+    options.onAppLanguageChanged(saved.appLanguage);
+    return saved;
+  });
+
+  // Initial broadcast so the tray label tracks the active profile language
+  // even before the renderer first saves the settings.
+  void profileStore.getSettings().then((s) => options.onAppLanguageChanged(s.appLanguage)).catch(() => {});
 
   ipcMain.handle(IPC_CHANNELS.generalGetSettings, async () => generalSettingsStore.load());
   ipcMain.handle(IPC_CHANNELS.generalSaveSettings, async (_, raw) => {
