@@ -13,7 +13,8 @@ export interface KickModerationOptions {
 /**
  * Kick public-API moderation surface.
  *
- * Required token scopes: `chat:write`, `moderation:read`, `moderation:write`.
+ * Required token scopes (per https://docs.kick.com/getting-started/scopes):
+ * `chat:write`, `channel:write`, `moderation:ban`, `moderation:chat_message:manage`.
  * Endpoints below follow the public REST surface documented at
  * https://docs.kick.com/apis/v1 — when an endpoint is missing the method is
  * intentionally omitted so capabilities can declare it unsupported.

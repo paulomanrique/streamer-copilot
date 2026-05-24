@@ -556,6 +556,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         }>;
         setToken: (token: KickAuthToken) => void;
         channels: { getChannels: () => Promise<Array<{ slug?: string; broadcaster_user_id?: number }> | { slug?: string; broadcaster_user_id?: number }> };
+        request: <T>(endpoint: string, options?: RequestInit) => Promise<T>;
       };
     }>;
     const module = await importer();
@@ -568,10 +569,15 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const kickClient = new KickClient({ clientId, clientSecret, redirectUri });
     const pkce = kickClient.generatePKCEParams();
     const expectedState = pkce.state ?? '';
-    // R2: extra scopes for Kick moderation API (ban/timeout/clear-chat/chat-settings/mods/vips).
+    // Scope names per https://docs.kick.com/getting-started/scopes. There is no
+    // `public` scope; `moderation:ban` covers ban/unban/timeout and
+    // `moderation:chat_message:manage` covers deleting chat messages. Requesting
+    // unknown scopes (the old `public` / `moderation:read` / `moderation:write`
+    // names) caused Kick to grant the token but reject every authenticated API
+    // call, so getChannels() and /users came back empty during OAuth.
     const authUrl = kickClient.getAuthorizationUrl(pkce, [
-      'public', 'channel:read', 'chat:write',
-      'moderation:read', 'moderation:write',
+      'user:read', 'channel:read', 'channel:write', 'chat:write',
+      'moderation:ban', 'moderation:chat_message:manage',
     ]);
 
     return new Promise((resolve, reject) => {
@@ -633,25 +639,65 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
           });
           kickClient.setToken(token);
           let channel: { slug?: string; broadcaster_user_id?: number } | null = null;
+          const diagnostics: string[] = [];
           try {
             const channelResponse = await kickClient.channels.getChannels();
             const channels = Array.isArray(channelResponse) ? channelResponse : [channelResponse];
             channel = channels.find((entry) => entry && typeof entry === 'object' && typeof entry.slug === 'string') ?? null;
-          } catch {
-            // Tokens granted only chat:write cannot read the authorized channel.
+            if (!channel?.slug) {
+              logService.warn('kick-oauth', 'getChannels returned no slug', { count: channels.length, sample: channels[0] });
+              diagnostics.push(`getChannels: empty (count=${channels.length}, keys=${channels[0] ? Object.keys(channels[0] as object).join(',') : 'n/a'})`);
+            }
+          } catch (cause) {
+            const msg = cause instanceof Error ? cause.message : String(cause);
+            logService.warn('kick-oauth', 'getChannels failed', { error: msg });
+            diagnostics.push(`getChannels: ${msg}`);
+          }
+          if (!channel?.slug) {
+            // /users with no params returns the authenticated user (requires
+            // user:read scope). Verified shape (2026-05):
+            //   { data: [{ user_id, name, email, profile_picture }] }
+            // `name` is the username with original casing — the channel slug
+            // is its lowercase form (Kick URLs are `kick.com/<lowercase>`).
+            // `user_id` is the broadcaster_user_id used by moderation endpoints.
+            // kickClient.request() already unwraps the `data` envelope.
+            try {
+              const usersResponse = await kickClient.request<
+                | Array<{ user_id?: number; name?: string }>
+                | { user_id?: number; name?: string }
+              >('/public/v1/users');
+              const me = Array.isArray(usersResponse) ? usersResponse[0] : usersResponse;
+              const name = typeof me?.name === 'string' ? me.name.trim() : '';
+              if (name) {
+                channel = {
+                  slug: name.toLowerCase(),
+                  broadcaster_user_id: typeof me?.user_id === 'number' ? me.user_id : undefined,
+                };
+              } else {
+                logService.warn('kick-oauth', '/users returned no name', { hasData: !!usersResponse, sample: usersResponse });
+                diagnostics.push(`/users: empty (keys=${me ? Object.keys(me as object).join(',') : 'n/a'})`);
+              }
+            } catch (cause) {
+              const msg = cause instanceof Error ? cause.message : String(cause);
+              logService.warn('kick-oauth', '/users fallback failed', { error: msg });
+              diagnostics.push(`/users: ${msg}`);
+            }
           }
           if (!channel?.slug && fallbackChannelSlug) {
             const fallbackChannel = await resolveKickChannelMetadata(fallbackChannelSlug, { clientId, clientSecret });
             channel = fallbackChannel
               ? { slug: fallbackChannel.slug, broadcaster_user_id: fallbackChannel.broadcasterUserId ?? undefined }
               : { slug: fallbackChannelSlug };
+          } else if (!channel?.slug && !fallbackChannelSlug) {
+            diagnostics.push('no fallback slug provided by wizard');
           }
           finished = true;
           cleanup();
           if (!channel?.slug) {
+            const detail = diagnostics.length ? ` (${diagnostics.join('; ')})` : '';
             res.writeHead(400, { 'Content-Type': 'text/html' });
             res.end('<!DOCTYPE html><html><body style="background:#0b1220;color:#fff;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh"><div>Kick connected, but no authorized channel was returned. You can close this tab.</div></body></html>');
-            reject(new Error('Kick OAuth succeeded but no authorized channel was returned'));
+            reject(new Error(`Kick OAuth succeeded but no authorized channel was returned${detail}`));
             return;
           }
           res.writeHead(200, { 'Content-Type': 'text/html' });
