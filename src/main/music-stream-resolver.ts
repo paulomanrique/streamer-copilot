@@ -1,92 +1,50 @@
-import { createRequire } from 'node:module';
+import { Innertube, ClientType } from 'youtubei.js';
 
 interface ResolvedStream {
   url: string;
   expiresAt: number; // ms epoch
 }
 
-interface YtdlFormat {
-  url: string;
-  hasAudio?: boolean;
-  hasVideo?: boolean;
-  audioBitrate?: number | null;
-  bitrate?: number | null;
-  contentLength?: string;
-}
-
-interface YtdlInfo {
-  formats?: YtdlFormat[];
-}
-
 /**
- * Forma simplificada do cookie aceito pelo `createAgent` do
- * `@distube/ytdl-core` — compatível com o que o `electron.session.cookies.get`
- * devolve (mesma família de campos).
+ * Formato simplificado de cookie aceito pelo Innertube.create({ cookie: '...' })
+ * — uma string `Cookie:` HTTP-style. Devolvido como nada (null) quando o
+ * streamer não fez login no YouTube via o fluxo /youtube:open-login.
  */
-export interface YtdlCookie {
-  name: string;
-  value: string;
-  domain?: string;
-  path?: string;
-  secure?: boolean;
-  httpOnly?: boolean;
-  sameSite?: string;
-  expirationDate?: number;
+export interface InnertubeCookieSource {
+  getYouTubeCookieHeader(): Promise<string | null>;
 }
-
-interface YtdlAgent {
-  // opaque — passamos pro getInfo como está
-  readonly __ytdlAgent?: true;
-}
-
-interface YtdlGetInfoOptions {
-  agent?: YtdlAgent;
-  /** Lista de player clients do ytdl-core a tentar em ordem. Default
-   *  da lib é WEB-only, que com frequência cai em "Failed to find any
-   *  playable formats" quando o WEB exige PoToken/visitorData não
-   *  resolvíveis sem o player JS no browser. */
-  playerClients?: string[];
-}
-
-interface YtdlModule {
-  getInfo: (videoId: string, options?: YtdlGetInfoOptions) => Promise<YtdlInfo>;
-  createAgent?: (cookies?: YtdlCookie[], opts?: unknown) => YtdlAgent;
-}
-
-/**
- * Ordens de player clients tentadas em sequência. Primeira que retornar
- * formats vence. Composta empiricamente do tracker do @distube/ytdl-core:
- *  - IOS frequentemente passa sem PoToken (mas pode ter URL com expire curto).
- *  - WEB_CREATOR + cookies autenticados é a tentativa "logada".
- *  - ANDROID / TV são fallbacks que costumam funcionar com vídeo "comum".
- *  - WEB_EMBEDDED já caiu em muitos casos por causa do anti-bot recente.
- */
-const PLAYER_CLIENT_ORDERS: readonly string[][] = [
-  ['IOS', 'WEB_CREATOR', 'ANDROID', 'TV'],
-  ['ANDROID', 'TV', 'WEB_EMBEDDED'],
-];
 
 interface MusicStreamResolverOptions {
-  /** Devolve os cookies da sessão do Electron para o youtube.com. Sem cookies,
-   *  o ytdl-core cai em fluxo anônimo e frequentemente falha com "Failed to
-   *  find any playable formats" pra vídeos com qualquer restrição leve
-   *  (anti-bot, age-gate, idade da conta). Quando o streamer está logado
-   *  no YouTube via /youtube:open-login (o mesmo cookie store que o scraper
-   *  e o sendMessage usam), os cookies do SAPISID/3PAPISID permitem que o
-   *  ytdl resolva o player do cliente WEB autenticado. */
-  getYouTubeCookies?: () => Promise<YtdlCookie[]>;
+  /** Devolve a string `cookie:` HTTP da sessão YouTube logada do Electron.
+   *  Usada como hint pro Innertube — não é estritamente necessária pra IOS
+   *  client (que opera anônimo), mas ajuda em vídeos com restrição de idade
+   *  ou região quando o usuário está logado. */
+  cookieSource?: InnertubeCookieSource;
+}
+
+interface AdaptiveFormat {
+  url?: string;
+  mime_type?: string;
+  bitrate?: number;
+  audio_quality?: string;
 }
 
 /**
- * R4: resolves a YouTube videoId to a directly-playable audio stream URL via
- * @distube/ytdl-core. URLs from YouTube embed an `expire` query parameter; we
- * cache up to that expiry and refresh on demand.
+ * R4: resolves a YouTube videoId to a directly-playable audio stream URL.
+ *
+ * Após o `@distube/ytdl-core` 4.16.x quebrar por causa do PoToken/anti-bot
+ * do YouTube (mesmo com cookies autenticados e player clients alternativos),
+ * mudamos pro `youtubei.js` que já é a lib do scraper de chat e tem
+ * tracking mais ativo. O cliente IOS retorna URLs diretas (sem signature
+ * cipher) e não exige PoToken — fluxo de menor atrito.
+ *
+ * URLs do YouTube têm `expire` no query; cacheamos até esse momento e
+ * resolvemos de novo na próxima request quando expirar.
  */
 export class MusicStreamResolver {
   private readonly cache = new Map<string, ResolvedStream>();
-  private ytdl: YtdlModule | null = null;
-  /** Cache do agent: invalidado se a quantidade de cookies muda (login/logout). */
-  private agentCache: { agent: YtdlAgent; cookieCount: number } | null = null;
+  private innertube: Innertube | null = null;
+  private innertubeCookieKey: string | null = null;
 
   constructor(private readonly options: MusicStreamResolverOptions = {}) {}
 
@@ -95,55 +53,22 @@ export class MusicStreamResolver {
     const cached = this.cache.get(videoId);
     if (cached && cached.expiresAt - now > 30_000) return cached.url;
 
-    const ytdl = this.loadYtdl();
-    if (!ytdl) throw new Error('ytdl-core is not installed; cannot resolve YouTube stream URL');
-
-    const agent = await this.buildAgent(ytdl);
-    const cookieCount = this.agentCache?.cookieCount ?? 0;
-    const attempts: { clients: string[]; error: string }[] = [];
-
-    // Tenta cada combinação de player clients até uma retornar formats.
-    // O erro final agrega todas as tentativas pra deixar o log diagnosticável.
-    let info: YtdlInfo | null = null;
-    for (const playerClients of PLAYER_CLIENT_ORDERS) {
-      try {
-        info = await ytdl.getInfo(videoId, {
-          ...(agent ? { agent } : {}),
-          playerClients,
-        });
-        if ((info.formats ?? []).length > 0) break;
-        attempts.push({ clients: playerClients, error: 'empty formats list' });
-        info = null;
-      } catch (cause) {
-        attempts.push({
-          clients: playerClients,
-          error: cause instanceof Error ? cause.message : String(cause),
-        });
-        info = null;
-      }
+    const yt = await this.getInnertube();
+    const info = await yt.getBasicInfo(videoId, { client: 'IOS' });
+    const formats = (info.streaming_data?.adaptive_formats ?? []) as AdaptiveFormat[];
+    const audioFormats = formats.filter((f) => f.mime_type?.startsWith('audio') && f.url);
+    if (audioFormats.length === 0) {
+      throw new Error(`No audio formats with direct URL for ${videoId} (IOS client returned ${formats.length} formats total)`);
     }
+    // Maior bitrate vence — IOS costuma devolver 2-5 audio formats (opus + aac).
+    audioFormats.sort((a, b) => (b.bitrate ?? 0) - (a.bitrate ?? 0));
+    const best = audioFormats[0];
+    const streamUrl = best.url!;
 
-    if (!info) {
-      const summary = attempts
-        .map((a) => `[${a.clients.join('+')}] ${a.error}`)
-        .join(' | ');
-      throw new Error(
-        `Failed to resolve ${videoId} (cookies=${cookieCount}); attempts: ${summary}`,
-      );
-    }
-
-    const formats = info.formats ?? [];
-    // Audio-only with the highest audio bitrate.
-    const audioOnly = formats
-      .filter((f) => f.hasAudio && !f.hasVideo)
-      .sort((a, b) => (b.audioBitrate ?? 0) - (a.audioBitrate ?? 0));
-    const best = audioOnly[0] ?? formats.find((f) => f.hasAudio);
-    if (!best?.url) throw new Error(`No playable audio format found for ${videoId} (cookies=${cookieCount})`);
-
-    // Try to read the expire timestamp from the URL; fall back to 4 minutes.
+    // Lê `expire` do URL pra cachear até pouco antes da expiração.
     let expiresAt = now + 4 * 60 * 1000;
     try {
-      const url = new URL(best.url);
+      const url = new URL(streamUrl);
       const expire = url.searchParams.get('expire');
       if (expire) {
         const seconds = Number(expire);
@@ -151,43 +76,34 @@ export class MusicStreamResolver {
       }
     } catch { /* ignore parse errors */ }
 
-    this.cache.set(videoId, { url: best.url, expiresAt });
-    return best.url;
+    this.cache.set(videoId, { url: streamUrl, expiresAt });
+    return streamUrl;
   }
 
   invalidate(videoId: string): void {
     this.cache.delete(videoId);
   }
 
-  private async buildAgent(ytdl: YtdlModule): Promise<YtdlAgent | null> {
-    if (!ytdl.createAgent || !this.options.getYouTubeCookies) return null;
-    let cookies: YtdlCookie[] = [];
-    try {
-      cookies = await this.options.getYouTubeCookies();
-    } catch {
-      return null;
-    }
-    if (cookies.length === 0) return null;
-    if (this.agentCache && this.agentCache.cookieCount === cookies.length) {
-      return this.agentCache.agent;
-    }
-    try {
-      const agent = ytdl.createAgent(cookies);
-      this.agentCache = { agent, cookieCount: cookies.length };
-      return agent;
-    } catch {
-      return null;
-    }
-  }
+  /**
+   * Lazy-singleton do Innertube. Se a string de cookies mudar (login/logout),
+   * recria a instância — o Innertube não tem método pra "atualizar cookies"
+   * depois de criado.
+   */
+  private async getInnertube(): Promise<Innertube> {
+    const cookieHeader = this.options.cookieSource
+      ? await this.options.cookieSource.getYouTubeCookieHeader().catch(() => null)
+      : null;
+    const cookieKey = cookieHeader ? `len:${cookieHeader.length}` : 'none';
+    if (this.innertube && this.innertubeCookieKey === cookieKey) return this.innertube;
 
-  private loadYtdl(): YtdlModule | null {
-    if (this.ytdl) return this.ytdl;
-    try {
-      const requireFn = createRequire(import.meta.url);
-      this.ytdl = requireFn('@distube/ytdl-core') as YtdlModule;
-      return this.ytdl;
-    } catch {
-      return null;
-    }
+    // `retrieve_player: false` pula o fetch do player JS (pesado e
+    // desnecessário pro IOS client que não usa signature cipher).
+    this.innertube = await Innertube.create({
+      retrieve_player: false,
+      client_type: ClientType.IOS,
+      ...(cookieHeader ? { cookie: cookieHeader } : {}),
+    });
+    this.innertubeCookieKey = cookieKey;
+    return this.innertube;
   }
 }

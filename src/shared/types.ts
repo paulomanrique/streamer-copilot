@@ -443,7 +443,7 @@ export interface MusicPlayerState {
   currentItem: MusicQueueItem | null;
   queue: MusicQueueItem[];
   isPlaying: boolean;
-  /** R4: streamable audio URL resolved on the main side via ytdl-core. */
+  /** R4: streamable audio URL resolved on the main side via youtubei.js. */
   streamUrl: string | null;
   /** R4: 0..1 volume the browser source should apply. */
   volume: number;
