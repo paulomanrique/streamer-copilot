@@ -6,7 +6,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
-import { BrowserWindow, Notification, app, dialog, ipcMain, net, shell } from 'electron';
+import { BrowserWindow, Notification, app, dialog, ipcMain, net, session, shell } from 'electron';
 import { parseFile as parseAudioFile } from 'music-metadata';
 
 import type { DatabaseHandle } from '../db/database.js';
@@ -1397,7 +1397,29 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
 
   // R4: now that overlayServer exists, build the music player + stream resolver.
-  const musicStreamResolver = new MusicStreamResolver();
+  // Cookies da sessão YouTube logada (mesmo store usado pelo scraper e
+  // sendMessage) reaproveitados pro ytdl-core — sem isso, vídeos com
+  // qualquer anti-bot leve do YouTube falham com "Failed to find any
+  // playable formats" mesmo em players autenticados localmente.
+  const musicStreamResolver = new MusicStreamResolver({
+    getYouTubeCookies: async () => {
+      try {
+        const cookies = await session.defaultSession.cookies.get({ url: 'https://www.youtube.com' });
+        return cookies.map((c) => ({
+          name: c.name,
+          value: c.value,
+          domain: c.domain,
+          path: c.path,
+          secure: c.secure,
+          httpOnly: c.httpOnly,
+          sameSite: c.sameSite,
+          expirationDate: c.expirationDate,
+        }));
+      } catch {
+        return [];
+      }
+    },
+  });
   musicPlayerRef = new MusicPlayer(
     overlayServer,
     musicStreamResolver,
