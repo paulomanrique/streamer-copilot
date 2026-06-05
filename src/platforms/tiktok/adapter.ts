@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 
-import type { ChatBadge, ChatMessage, StreamEvent, TikTokConnectionStatus } from '../../shared/types.js';
+import type { ChatBadge, ChatMessage, ChatMessageContentPart, StreamEvent, TikTokConnectionStatus } from '../../shared/types.js';
 import type { PlatformRole } from '../../shared/platform.js';
 import type { PlatformCapabilities } from '../../shared/moderation.js';
 import { resolveFromRole } from '../../modules/commands/permission-utils.js';
@@ -28,6 +28,16 @@ interface TikTokChatPayload {
   comment?: string;
   userIdentity?: TikTokUserIdentity;
   common?: { msgId?: string };
+  /** TikTok ships subscriber/custom emojis as a parallel array — `comment`
+   *  keeps the literal shortcodes (e.g. "[laughcry]") and `emotes` carries
+   *  the image URL to render in their place. Without this, the renderer
+   *  shows raw bracket text. */
+  emotes?: TikTokEmoteRef[];
+}
+
+interface TikTokEmoteRef {
+  placeInComment?: number;
+  emote?: { emoteId?: string; image?: { imageUrl?: string } };
 }
 
 interface TikTokGiftPayload {
@@ -171,11 +181,13 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
       const author = resolveAuthor(payload.user);
       if (!author) return;
       const role = roleFromIdentity(payload.userIdentity);
+      const contentParts = buildContentParts(payload.comment, payload.emotes);
       this.emitMsg({
         id: `tiktok-${payload.common?.msgId ?? Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         platform: 'tiktok',
         author,
         content: payload.comment,
+        ...(contentParts ? { contentParts } : {}),
         badges: badgesFromRole(role),
         timestampLabel: ts(),
         avatarUrl: avatarUrlFor(payload.user),
@@ -301,4 +313,51 @@ function badgesFromRole(role: PlatformRole): ChatBadge[] {
 
 function ts(): string {
   return new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date());
+}
+
+/**
+ * Turn TikTok's parallel (comment, emotes) channels into the unified
+ * `ChatMessageContentPart[]` the chat overlay + ChatFeed already render
+ * (chatOverlayJs's appendContent / ChatFeed's renderMessageContent).
+ *
+ * The comment field carries literal shortcodes like `[laughcry]`; emotes
+ * is a positionally-ordered list with the image URL for each one. We
+ * match shortcodes by iterating bracketed `[name]` runs in the comment
+ * and zip them with the emote list — robust against TikTok occasionally
+ * reordering `placeInComment` (which is also why we don't rely on it).
+ *
+ * Returns null when there's nothing to enrich — the renderer then falls
+ * back to plain `content` and behaves exactly as before.
+ */
+function buildContentParts(
+  comment: string | undefined,
+  emotes: TikTokEmoteRef[] | undefined,
+): ChatMessageContentPart[] | null {
+  if (!comment || !emotes || emotes.length === 0) return null;
+  const parts: ChatMessageContentPart[] = [];
+  const regex = /\[([^\]]+)\]/g;
+  let lastIndex = 0;
+  let emoteIdx = 0;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(comment)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ type: 'text', text: comment.slice(lastIndex, match.index) });
+    }
+    const ref = emotes[emoteIdx++];
+    const imageUrl = ref?.emote?.image?.imageUrl;
+    const name = match[1];
+    if (imageUrl) {
+      parts.push({ type: 'emote', name, imageUrl });
+    } else {
+      // No emote URL for this shortcode — keep the bracket text intact so
+      // nothing silently vanishes.
+      parts.push({ type: 'text', text: match[0] });
+    }
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex === 0) return null; // no shortcodes found; nothing to enrich
+  if (lastIndex < comment.length) {
+    parts.push({ type: 'text', text: comment.slice(lastIndex) });
+  }
+  return parts;
 }
