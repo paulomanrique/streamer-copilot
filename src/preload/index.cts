@@ -225,6 +225,9 @@ const IPC_CHANNELS = {
   accountsGetStatus: 'accounts:get-status',
   accountsStatus: 'accounts:status',
   overlayServerInfo: 'overlay:server-info',
+  overlayPrefsGet: 'overlay-prefs:get',
+  overlayPrefsSet: 'overlay-prefs:set',
+  overlayPrefsUpdate: 'overlay-prefs:update',
 } as const;
 
 const copilotApi: CopilotApi = {
@@ -509,6 +512,16 @@ const copilotApi: CopilotApi = {
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.accountsStatus, wrappedListener); };
   },
   getOverlayServerInfo: () => ipcRenderer.invoke(IPC_CHANNELS.overlayServerInfo),
+  getOverlayPreferences: () => ipcRenderer.invoke(IPC_CHANNELS.overlayPrefsGet),
+  setOverlayPreferences: (input) => ipcRenderer.invoke(IPC_CHANNELS.overlayPrefsSet, input),
+  onOverlayPreferencesUpdate: (listener) => {
+    const wrappedListener = (
+      _event: Electron.IpcRendererEvent,
+      payload: import('../shared/types.js').OverlayPreferencesMap,
+    ) => listener(payload);
+    ipcRenderer.on(IPC_CHANNELS.overlayPrefsUpdate, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.overlayPrefsUpdate, wrappedListener); };
+  },
 };
 
 contextBridge.exposeInMainWorld('copilot', copilotApi);

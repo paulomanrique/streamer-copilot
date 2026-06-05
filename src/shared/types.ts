@@ -634,12 +634,35 @@ export interface RaffleOverlayInfo {
 }
 
 export interface ChatOverlayInfo {
-  /** URL com defaults para Browser Source no OBS (transparente + escala ~1.5x). */
+  /** URL with defaults tuned for OBS Browser Source (transparent + ~1.5x scale). */
   overlayUrl: string;
-  /** URL com defaults para Custom Dock no OBS (opaca, escala 1x). */
+  /** URL with defaults tuned for OBS Custom Dock (opaque, 1x scale). */
   dockUrl: string;
   stateUrl: string;
 }
+
+/**
+ * Identifier of an overlay surface that can carry user preferences. The set
+ * is closed (vs. PlatformId's open shape) because each overlay's customization
+ * model is bespoke — the renderer registry of customization options is keyed
+ * on these literals.
+ */
+export type OverlayId = 'chat-overlay' | 'chat-dock' | 'now-playing' | 'raffles' | 'polls';
+
+/**
+ * Streamer-tunable preferences for a single overlay surface.
+ *
+ * Designed to grow: today only `opacity` is honored, but future fields
+ * (background color, font size, padding, etc.) get added here and consumed
+ * by the matching overlay's JS. Persisted per profile and pushed live over
+ * WebSocket so a connected OBS Browser Source updates without reload.
+ */
+export interface OverlayPreferences {
+  /** Whole-overlay opacity, 0..1. `undefined` means "use the overlay's default". */
+  opacity?: number;
+}
+
+export type OverlayPreferencesMap = Partial<Record<OverlayId, OverlayPreferences>>;
 
 export interface RaffleSnapshot {
   raffle: Raffle;

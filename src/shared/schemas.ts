@@ -468,6 +468,19 @@ export const moderationShoutoutSchema = z.object({
   userId: z.string().min(1).max(200),
 });
 
+// ── Overlay preferences ───────────────────────────────────────────────────────
+
+const overlayIdSchema = z.enum(['chat-overlay', 'chat-dock', 'now-playing', 'raffles', 'polls']);
+
+export const overlayPreferencesSchema = z.object({
+  opacity: z.number().min(0).max(1).optional(),
+}).strict();
+
+export const overlayPreferencesSetInputSchema = z.object({
+  id: overlayIdSchema,
+  prefs: overlayPreferencesSchema,
+});
+
 // ── User lists ────────────────────────────────────────────────────────────────
 
 export const userListMemberInputSchema = z.object({

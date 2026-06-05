@@ -18,6 +18,7 @@ import { LogRepository } from '../modules/logs/log-repository.js';
 import { LogService } from '../modules/logs/log-service.js';
 import { ObsService } from '../modules/obs/obs-service.js';
 import { ObsSettingsStore } from '../modules/obs/obs-settings-store.js';
+import { OverlayPreferencesStore } from '../modules/overlays/overlay-preferences-store.js';
 import { PollDeadlineRunner } from '../modules/polls/poll-deadline-runner.js';
 import { PollRepository } from '../modules/polls/poll-repository.js';
 import { PollService, formatPollResult } from '../modules/polls/poll-service.js';
@@ -123,6 +124,7 @@ import {
   tiktokSettingsSchema,
   twitchCredentialsSchema,
   subscriberTiersReplaceInputSchema,
+  overlayPreferencesSetInputSchema,
   userListCreateInputSchema,
   userListRenameInputSchema,
   userListIdInputSchema,
@@ -138,7 +140,7 @@ import {
   youtubeSettingsSchema,
   youtubeApiStartOAuthSchema,
 } from '../shared/schemas.js';
-import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, MusicRequestSettings, PlatformAccount, PlatformId, Raffle, SoundSettings, StreamEvent, StreamEventType, SubscriberTierCatalog, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, UserList, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
+import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, MusicRequestSettings, OverlayPreferencesMap, PlatformAccount, PlatformId, Raffle, SoundSettings, StreamEvent, StreamEventType, SubscriberTierCatalog, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, UserList, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
 
 const TWITCH_CLIENT_ID = 'vtwg8tzuv1nlip4qh9n6sxx2p76g0s';
 const TWITCH_REDIRECT_PORT = 32999;
@@ -241,6 +243,18 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }).catch(() => { /* best-effort */ });
   };
 
+  // Overlay preferences — kept in memory so renderChatHtml can inline the
+  // initial state into the boot script (avoids a fetch+flash on overlay load).
+  let overlayPreferencesCache: OverlayPreferencesMap = {};
+  const getOverlayPreferencesStore = (): OverlayPreferencesStore | null => {
+    if (!activeProfileDirectory) return null;
+    return new OverlayPreferencesStore(activeProfileDirectory);
+  };
+  const reloadOverlayPreferencesCache = async (): Promise<void> => {
+    const store = getOverlayPreferencesStore();
+    if (store) overlayPreferencesCache = await store.loadAll();
+  };
+
   // User lists — kept in memory so the permission evaluator can consult
   // them synchronously on the message hot path.
   let userListsCache: UserList[] = [];
@@ -337,6 +351,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   void reloadMusicSettingsCache();
   void activeProfileDirectoryReady.then(() => reloadSubscriberTiersCache());
   void activeProfileDirectoryReady.then(() => reloadUserListsCache());
+  void activeProfileDirectoryReady.then(async () => {
+    await reloadOverlayPreferencesCache();
+    overlayServer.setOverlayPreferences(overlayPreferencesCache);
+  });
 
   const schedulerService = new SchedulerService({
     source: {
@@ -2944,6 +2962,22 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         primaryChannel: null,
       },
     };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.overlayPrefsGet, async () => {
+    const store = getOverlayPreferencesStore();
+    if (store) overlayPreferencesCache = await store.loadAll();
+    return overlayPreferencesCache;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.overlayPrefsSet, async (_, raw) => {
+    const { id, prefs } = overlayPreferencesSetInputSchema.parse(raw);
+    const store = getOverlayPreferencesStore();
+    if (!store) throw new Error('No active profile');
+    overlayPreferencesCache = await store.setForOverlay(id, prefs);
+    overlayServer.setOverlayPreferences(overlayPreferencesCache);
+    options.stateHub.pushOverlayPreferences(overlayPreferencesCache);
+    return overlayPreferencesCache;
   });
 
   ipcMain.handle(IPC_CHANNELS.subscriberTiersGet, async () => {

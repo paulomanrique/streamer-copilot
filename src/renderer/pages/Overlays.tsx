@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 
 import type { OverlayServerInfo } from '../../shared/ipc.js';
-import type { GeneralSettings } from '../../shared/types.js';
+import type { GeneralSettings, OverlayId, OverlayPreferences, OverlayPreferencesMap } from '../../shared/types.js';
+import { CustomizeOverlayModal } from '../components/CustomizeOverlayModal.js';
 
 const REFRESH_INTERVAL_MS = 3000;
 const DEFAULT_PORT = 7842;
@@ -17,10 +18,18 @@ interface OverlayLinkProps {
   description: string;
   url: string | null;
   obsHints?: string[];
+  /** When set, a "Personalizar" button shows up and opens the customize modal
+   *  for this overlay id. */
+  customize?: {
+    overlayId: OverlayId;
+    prefs: OverlayPreferences;
+    onChange: (next: OverlayPreferences) => void;
+  };
 }
 
-function OverlayLink({ title, description, url, obsHints }: OverlayLinkProps) {
+function OverlayLink({ title, description, url, obsHints, customize }: OverlayLinkProps) {
   const [copied, setCopied] = useState(false);
+  const [customizeOpen, setCustomizeOpen] = useState(false);
 
   async function copy() {
     if (!url) return;
@@ -37,11 +46,22 @@ function OverlayLink({ title, description, url, obsHints }: OverlayLinkProps) {
     <div className="rounded-lg border border-gray-700 bg-gray-800/40 p-4">
       <div className="flex items-baseline justify-between gap-2">
         <h3 className="text-sm font-semibold text-gray-100">{title}</h3>
-        {url ? (
-          <button type="button" onClick={() => void copy()} className="text-xs text-violet-300 hover:text-violet-200">
-            {copied ? 'Copied!' : 'Copy URL'}
-          </button>
-        ) : null}
+        <div className="flex items-baseline gap-3">
+          {customize ? (
+            <button
+              type="button"
+              onClick={() => setCustomizeOpen(true)}
+              className="text-xs text-violet-300 hover:text-violet-200"
+            >
+              Personalizar
+            </button>
+          ) : null}
+          {url ? (
+            <button type="button" onClick={() => void copy()} className="text-xs text-violet-300 hover:text-violet-200">
+              {copied ? 'Copied!' : 'Copy URL'}
+            </button>
+          ) : null}
+        </div>
       </div>
       <p className="text-xs text-gray-500 mt-0.5">{description}</p>
       <div className="mt-2 font-mono text-xs text-gray-300 break-all">
@@ -52,6 +72,16 @@ function OverlayLink({ title, description, url, obsHints }: OverlayLinkProps) {
           {obsHints.map((hint, i) => <li key={i}>{hint}</li>)}
         </ul>
       )}
+      {customize ? (
+        <CustomizeOverlayModal
+          overlayId={customize.overlayId}
+          title={title}
+          open={customizeOpen}
+          onClose={() => setCustomizeOpen(false)}
+          initialPrefs={customize.prefs}
+          onChange={customize.onChange}
+        />
+      ) : null}
     </div>
   );
 }
@@ -63,6 +93,25 @@ export function OverlaysPage() {
   const [portStatus, setPortStatus] = useState<string | null>(null);
   const [portError, setPortError] = useState<string | null>(null);
   const [savingPort, setSavingPort] = useState(false);
+  const [overlayPrefs, setOverlayPrefs] = useState<OverlayPreferencesMap>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    void window.copilot.getOverlayPreferences().then((current) => {
+      if (!cancelled) setOverlayPrefs(current);
+    }).catch(() => undefined);
+    const unsub = window.copilot.onOverlayPreferencesUpdate((next) => {
+      if (!cancelled) setOverlayPrefs(next);
+    });
+    return () => { cancelled = true; unsub(); };
+  }, []);
+
+  function patchPrefs(id: OverlayId, next: OverlayPreferences) {
+    // Optimistic local update — server pushes the canonical state right back,
+    // but updating locally first keeps the slider responsive on slow IPC.
+    setOverlayPrefs((current) => ({ ...current, [id]: next }));
+    void window.copilot.setOverlayPreferences({ id, prefs: next }).catch(() => undefined);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -180,6 +229,11 @@ export function OverlaysPage() {
           'Ajuste fino opcional via query: ?scale=2 (mais grande), ?transparent=0 (forçar opaco).',
           'Já vem com fundo transparente — sem precisar mexer no Custom CSS.',
         ]}
+        customize={{
+          overlayId: 'chat-overlay',
+          prefs: overlayPrefs['chat-overlay'] ?? {},
+          onChange: (next) => patchPrefs('chat-overlay', next),
+        }}
       />
 
       <OverlayLink
@@ -191,6 +245,11 @@ export function OverlaysPage() {
           'Dá pra encaixar entre as outras docks ou flutuar no segundo monitor.',
           'Ajuste fino opcional via query: ?scale=1.2 (texto um pouco maior).',
         ]}
+        customize={{
+          overlayId: 'chat-dock',
+          prefs: overlayPrefs['chat-dock'] ?? {},
+          onChange: (next) => patchPrefs('chat-dock', next),
+        }}
       />
 
       <OverlayLink

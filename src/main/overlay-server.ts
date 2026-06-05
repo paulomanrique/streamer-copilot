@@ -6,7 +6,7 @@ import type { AddressInfo } from 'node:net';
 import { ANDROID_VR_USER_AGENT } from './music-stream-resolver.js';
 
 import type { RecentChatSnapshot } from '../shared/ipc.js';
-import type { ChatOverlayInfo, PollOverlayInfo, PollOverlayState, RaffleOverlayInfo, RaffleOverlayState } from '../shared/types.js';
+import type { ChatOverlayInfo, OverlayId, OverlayPreferencesMap, PollOverlayInfo, PollOverlayState, RaffleOverlayInfo, RaffleOverlayState } from '../shared/types.js';
 
 interface OverlayServerOptions {
   /** TCP port to listen on; comes from GeneralSettings.overlayServerPort. */
@@ -68,6 +68,13 @@ export class OverlayServer {
    * browser source (127.0.0.1:port), so no preflight.
    */
   private readonly audioSourceByVideoId = new Map<string, string>();
+  /**
+   * Latest overlay preferences seeded from the per-profile JSON store. The
+   * boot script of an overlay reads its slice via GET /overlay-prefs/state
+   * before subscribing to the WS topic, and `app-context` updates this map
+   * (then publishes) every time the streamer adjusts a value in the UI.
+   */
+  private overlayPreferences: OverlayPreferencesMap = {};
 
   constructor(private readonly options: OverlayServerOptions) {}
 
@@ -218,6 +225,17 @@ export class OverlayServer {
         return;
       }
 
+      if (path === '/overlay-prefs/state') {
+        const id = url.searchParams.get('id') as OverlayId | null;
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+          'Access-Control-Allow-Origin': '*',
+        });
+        res.end(JSON.stringify(id ? (this.overlayPreferences[id] ?? {}) : this.overlayPreferences));
+        return;
+      }
+
       if (path === '/now-playing/audio') {
         const videoId = url.searchParams.get('id');
         const source = videoId ? this.audioSourceByVideoId.get(videoId) : null;
@@ -342,6 +360,21 @@ export class OverlayServer {
     return { overlayUrl: `http://127.0.0.1:${this.port}/now-playing` };
   }
 
+  /** Replaces the in-memory overlay preferences map and broadcasts each
+   *  per-overlay slice on its WS topic so connected browser sources update
+   *  live without reloading. Idempotent — publishing the same payload again
+   *  is harmless (overlays apply state on every message). */
+  setOverlayPreferences(map: OverlayPreferencesMap): void {
+    this.overlayPreferences = { ...map };
+    for (const id of Object.keys(this.overlayPreferences) as OverlayId[]) {
+      this.publish(`overlay-prefs:${id}`, this.overlayPreferences[id] ?? {});
+    }
+  }
+
+  getOverlayPreferences(): OverlayPreferencesMap {
+    return this.overlayPreferences;
+  }
+
   /** Registers the actual googlevideo URL for a videoId and returns the
    *  same-origin URL the browser source should use as `<audio src>`. The
    *  proxy keeps only the most recent handful of videoIds so the map
@@ -394,9 +427,11 @@ export class OverlayServer {
     // transparent + 1.5x; dock = opaque + 1x) and honors per-URL overrides
     // (`?transparent=0`, `?scale=2`, etc.) for fine-tuning without touching
     // the server. Runs before the stylesheet to avoid a flash of dark
-    // background in overlay mode.
+    // background in overlay mode. Also exposes the overlay id so the runtime
+    // JS knows which preferences topic to subscribe to.
     const defaultTransparent = mode === 'overlay' ? '1' : '0';
     const defaultScale = mode === 'overlay' ? '1.5' : '1';
+    const overlayId = mode === 'overlay' ? 'chat-overlay' : 'chat-dock';
     const bootScript = `
       (function () {
         try {
@@ -408,6 +443,7 @@ export class OverlayServer {
           var scaleParam = params.get('scale');
           var scale = parseFloat(scaleParam === null ? '${defaultScale}' : scaleParam);
           if (isFinite(scale) && scale > 0) html.style.setProperty('--scale', String(scale));
+          window.__overlayId = '${overlayId}';
         } catch (e) { /* noop */ }
       })();
     `.trim();
@@ -531,7 +567,12 @@ html[data-transparent="1"], html[data-transparent="1"] body {
 
 /* Global scale — query param "?scale=N" (e.g. 1.5 = +50%).
  * Default 1 = current sizes; consumed via calc() below. */
-html { --scale: 1; }
+html { --scale: 1; --opacity: 1; }
+
+/* Whole-overlay opacity — controlled live from the app via the WS topic
+ * "overlay-prefs:chat-(overlay|dock)". The body fades together, which gives
+ * a ghost-text effect over the OBS scene. */
+body { opacity: var(--opacity, 1); transition: opacity 150ms ease; }
 
 .chat-overlay {
   width: 100vw;
@@ -706,6 +747,40 @@ html { --scale: 1; }
 
 const chatOverlayJs = `
 (function () {
+  // ── Overlay preferences live channel ──────────────────────────────────
+  // The boot script set window.__overlayId to the surface id ('chat-overlay'
+  // or 'chat-dock'). Fetch the initial slice synchronously, then subscribe to
+  // the WS topic so changes from the app's slider land instantly.
+  function applyPrefs(prefs) {
+    if (!prefs || typeof prefs !== 'object') return;
+    if (typeof prefs.opacity === 'number') {
+      document.documentElement.style.setProperty('--opacity', String(prefs.opacity));
+    }
+  }
+  (function bootPrefs() {
+    var id = window.__overlayId;
+    if (!id) return;
+    fetch('/overlay-prefs/state?id=' + encodeURIComponent(id), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : {}; })
+      .then(applyPrefs)
+      .catch(function () { /* noop — defaults already set in CSS */ });
+
+    function connectPrefs() {
+      var ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+      ws.addEventListener('open', function () {
+        ws.send(JSON.stringify({ type: 'subscribe', topic: 'overlay-prefs:' + id }));
+      });
+      ws.addEventListener('message', function (event) {
+        try {
+          var msg = JSON.parse(event.data);
+          if (msg.topic === 'overlay-prefs:' + id) applyPrefs(msg.payload);
+        } catch (e) { /* ignore */ }
+      });
+      ws.addEventListener('close', function () { setTimeout(connectPrefs, 1500); });
+    }
+    connectPrefs();
+  })();
+
   var listEl = document.getElementById('chat-list');
   var renderedIds = new Set();
   // Per-platform metadata for the chat overlay. The overlay runs in a

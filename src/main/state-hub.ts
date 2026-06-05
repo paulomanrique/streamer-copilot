@@ -13,6 +13,7 @@ import type {
   RaffleSnapshot,
   ScheduledStatusItem,
   SoundPlayPayload,
+  OverlayPreferencesMap,
   StreamEvent,
   SubscriberTierCatalog,
   SuggestionSnapshot,
@@ -85,6 +86,10 @@ export class StateHub {
 
   pushUserLists(payload: UserList[]): void {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.userListsUpdate, payload);
+  }
+
+  pushOverlayPreferences(payload: OverlayPreferencesMap): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.overlayPrefsUpdate, payload);
   }
 
   pushGoogleTtsAudio(payload: { base64: string }): void {

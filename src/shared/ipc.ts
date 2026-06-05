@@ -48,6 +48,9 @@ import type {
   TextCommand,
   TextCommandDeleteInput,
   TextCommandUpsertInput,
+  OverlayId,
+  OverlayPreferences,
+  OverlayPreferencesMap,
   StreamEvent,
   SubscriberTierCatalog,
   SubscriberTierEntry,
@@ -240,6 +243,9 @@ export const IPC_CHANNELS = {
   accountsGetStatus: 'accounts:get-status',
   accountsStatus: 'accounts:status',
   overlayServerInfo: 'overlay:server-info',
+  overlayPrefsGet: 'overlay-prefs:get',
+  overlayPrefsSet: 'overlay-prefs:set',
+  overlayPrefsUpdate: 'overlay-prefs:update',
 } as const;
 
 export interface RecentChatSnapshot {
@@ -460,6 +466,14 @@ export interface CopilotApi {
   accountsGetStatus: (input: { id: string }) => Promise<import('./types.js').PlatformAccountStatus | null>;
   onAccountStatus: (listener: (status: import('./types.js').PlatformAccountStatus) => void) => () => void;
   getOverlayServerInfo: () => Promise<OverlayServerInfo>;
+  /** Snapshot of customization preferences for every overlay surface. */
+  getOverlayPreferences: () => Promise<OverlayPreferencesMap>;
+  /** Replaces the preferences for a single overlay surface and pushes the
+   *  change to any connected Browser Source over WebSocket. */
+  setOverlayPreferences: (input: { id: OverlayId; prefs: OverlayPreferences }) => Promise<OverlayPreferencesMap>;
+  /** Async push when the preferences map changes (mirrors the broadcast that
+   *  goes out to the overlay clients themselves). */
+  onOverlayPreferencesUpdate: (listener: (payload: OverlayPreferencesMap) => void) => () => void;
 }
 
 export interface OverlayServerInfo {
