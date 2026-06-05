@@ -60,13 +60,14 @@ export class OverlayServer {
   private lastStatus: OverlayServerStatus = 'stopped';
   private lastError: string | null = null;
   /**
-   * Cache `videoId → googlevideo URL` para o proxy de áudio do now-playing.
+   * Cache `videoId → googlevideo URL` for the now-playing audio proxy.
    *
-   * Por que o proxy existe: o URL resolvido pelo IOS client tem `ip=...`
-   * embutido + restrição de User-Agent + sem CORS — `<audio src="...">`
-   * direto no browser falha com 403 ou CORS. O proxy busca do googlevideo
-   * com User-Agent IOS e a mesma origin do browser (127.0.0.1:port), sem
-   * preflight.
+   * Why the proxy exists: the URL we resolve has `ip=...` baked in and a
+   * strict User-Agent expectation, and googlevideo doesn't return
+   * `Access-Control-Allow-Origin`. A `<audio src="...">` pointing at it
+   * directly hits 403 or CORS. The proxy fetches from googlevideo with the
+   * matching User-Agent and forwards bytes from the same origin as the
+   * browser source (127.0.0.1:port), so no preflight.
    */
   private readonly audioSourceByVideoId = new Map<string, string>();
 
@@ -343,9 +344,10 @@ export class OverlayServer {
     return { overlayUrl: `http://127.0.0.1:${this.port}/now-playing` };
   }
 
-  /** Registra a URL real do googlevideo para um videoId, e devolve o URL
-   *  same-origin que o browser source deve usar como `<audio src>`. O
-   *  proxy mantém só o último handful de videoIds pra não acumular forever. */
+  /** Registers the actual googlevideo URL for a videoId and returns the
+   *  same-origin URL the browser source should use as `<audio src>`. The
+   *  proxy keeps only the most recent handful of videoIds so the map
+   *  doesn't grow unbounded. */
   setNowPlayingAudioSource(videoId: string, sourceUrl: string): string {
     this.audioSourceByVideoId.set(videoId, sourceUrl);
     if (this.audioSourceByVideoId.size > 16) {
@@ -390,11 +392,11 @@ export class OverlayServer {
   }
 
   private renderChatHtml(mode: 'overlay' | 'dock'): string {
-    // Inline boot script — sets defaults para o modo da rota (overlay =
-    // transparent + 1.5x; dock = opaco + 1x) e respeita override via query
-    // params (`?transparent=0`, `?scale=2`, etc) pra ajustes finos sem
-    // mexer no servidor. Roda antes do CSS pra evitar flash de fundo
-    // escuro em modo overlay.
+    // Inline boot script — sets defaults for the route's mode (overlay =
+    // transparent + 1.5x; dock = opaque + 1x) and honors per-URL overrides
+    // (`?transparent=0`, `?scale=2`, etc.) for fine-tuning without touching
+    // the server. Runs before the stylesheet to avoid a flash of dark
+    // background in overlay mode.
     const defaultTransparent = mode === 'overlay' ? '1' : '0';
     const defaultScale = mode === 'overlay' ? '1.5' : '1';
     const bootScript = `
@@ -523,14 +525,14 @@ html, body {
   overflow: hidden;
 }
 
-/* Modo overlay/transparente — query param "?transparent=1".
- * Mantém o fundo do cenário/jogo do OBS atrás do chat. */
+/* Overlay/transparent mode — query param "?transparent=1".
+ * Lets the OBS scene/game show through behind the chat. */
 html[data-transparent="1"], html[data-transparent="1"] body {
   background: transparent;
 }
 
-/* Escala global — query param "?scale=N" (ex: 1.5 = +50%).
- * Padrão 1 = tamanhos atuais; consumido via calc() abaixo. */
+/* Global scale — query param "?scale=N" (e.g. 1.5 = +50%).
+ * Default 1 = current sizes; consumed via calc() below. */
 html { --scale: 1; }
 
 .chat-overlay {
@@ -539,7 +541,7 @@ html { --scale: 1; }
   padding: 8px 0 8px 0;
   overflow-y: auto;
   overflow-x: hidden;
-  /* Manter scrollbar discreto para não competir com o cenário do OBS. */
+  /* Keep the scrollbar thin so it doesn't compete with the OBS scene. */
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 }
@@ -900,9 +902,9 @@ const chatOverlayJs = `
     if (lastIndex < content.length) container.appendChild(document.createTextNode(content.slice(lastIndex)));
   }
 
-  // Container que rola — usado pra detectar "estou no fundo?" antes de
-  // renderizar e re-encostar no fundo depois, sem brigar com o streamer
-  // que rolou pra cima pra ler histórico.
+  // Scrolling container — used to detect "am I at the bottom?" before
+  // rendering and re-stick to the bottom afterwards, without fighting the
+  // streamer who scrolled up to read history.
   var scrollEl = document.querySelector('.chat-overlay');
   function isNearBottom(el) {
     if (!el) return true;
@@ -1886,13 +1888,13 @@ const nowPlayingHtml = `<!DOCTYPE html>
       .title {
         font-size: 18px; font-weight: 700; margin: 0 0 4px;
         overflow: hidden; white-space: nowrap;
-        /* mask suaviza as bordas pra entrada/saída do marquee não cortar abruptamente */
+        /* mask softens the edges so the marquee doesn't clip abruptly when entering/leaving */
         -webkit-mask-image: linear-gradient(to right, transparent 0, #000 8px, #000 calc(100% - 8px), transparent 100%);
                 mask-image: linear-gradient(to right, transparent 0, #000 8px, #000 calc(100% - 8px), transparent 100%);
       }
       .title-inner { display: inline-block; will-change: transform; }
-      /* Ping-pong: pausa nas pontas + animação suave. --marquee-distance e
-         --marquee-duration são definidas via JS depois de medir o overflow. */
+      /* Ping-pong: pause at both ends + smooth easing. --marquee-distance and
+         --marquee-duration are set from JS after measuring the overflow. */
       .title-inner.marquee {
         animation: title-marquee var(--marquee-duration, 12s) cubic-bezier(0.4, 0, 0.2, 1) infinite;
       }
@@ -1968,10 +1970,10 @@ const nowPlayingJs = `
   }
 
   /**
-   * Mede o overflow do título e ativa o marquee (ping-pong) quando o texto
-   * é mais largo que a área visível. Sem overflow → animação removida e o
-   * título fica estático. Re-mede em ResizeObserver pra acompanhar mudança
-   * de largura da source no OBS sem precisar de novo título.
+   * Measures title overflow and toggles the ping-pong marquee when the text
+   * is wider than the visible area. No overflow -> animation removed, title
+   * stays static. Re-measures on ResizeObserver to follow OBS source width
+   * changes without needing a new title to come in.
    */
   function setTitle(text) {
     titleInnerEl.textContent = text;
@@ -2046,12 +2048,12 @@ const nowPlayingJs = `
 `;
 
 /**
- * Proxia uma resposta de googlevideo (audio/video) preservando o cabeçalho
- * Range que o `<audio>` manda pra seek e streaming progressivo.
+ * Proxies a googlevideo response (audio/video), preserving the Range header
+ * that `<audio>` uses for seek and progressive streaming.
  *
- * O User-Agent IOS é obrigatório: a URL foi assinada para o cliente IOS
- * (`c=IOS` no query) e o googlevideo devolve 403 se o UA não bater. Os
- * outros cabeçalhos são propagados em ambos sentidos.
+ * The User-Agent must match exactly the client that signed the URL —
+ * googlevideo cross-checks UA against the `c=` query param. Other relevant
+ * headers are forwarded in both directions.
  */
 function proxyAudio(sourceUrl: string, req: http.IncomingMessage, res: http.ServerResponse): void {
   let upstream: URL;
@@ -2063,15 +2065,17 @@ function proxyAudio(sourceUrl: string, req: http.IncomingMessage, res: http.Serv
     return;
   }
 
-  // googlevideo rejeita request SEM `Range` com 403 (verificado empiricamente:
-  // sem Range → 403, com qualquer Range → 206). O `<audio>` do Chromium
-  // costuma mandar a primeira request sem Range (pega arquivo todo), o que
-  // bate exatamente nesse 403. Forçar `bytes=0-` aqui faz o googlevideo
-  // devolver 206 desde a primeira request, e o `<audio>` lida com 206 OK.
+  // googlevideo rejects any request WITHOUT a `Range` header with 403
+  // (verified empirically: no Range -> 403, any Range -> 206). Chromium's
+  // `<audio>` typically issues the first request without a Range — it
+  // wants the whole file — which lands squarely on the 403. Forcing
+  // `bytes=0-` here makes googlevideo return 206 from the first request,
+  // and `<audio>` handles 206 fine.
   //
-  // User-Agent precisa bater EXATAMENTE com o cliente que assinou a URL —
-  // o resolver usa ANDROID_VR e o googlevideo cruza a UA com o `c=` do
-  // query. UA divergente em geral devolve 403 em URLs sensíveis a c=.
+  // User-Agent must EXACTLY match the client that signed the URL — the
+  // resolver uses ANDROID_VR and googlevideo cross-checks the UA against
+  // the `c=` query param. A mismatched UA tends to 403 on c=-sensitive
+  // URLs.
   const headers: http.OutgoingHttpHeaders = {
     'User-Agent': ANDROID_VR_USER_AGENT,
     Range: (req.headers.range as string | undefined) ?? 'bytes=0-',
@@ -2100,7 +2104,7 @@ function proxyAudio(sourceUrl: string, req: http.IncomingMessage, res: http.Serv
     }
   });
 
-  // Browser desistiu (track skip) — corta o upstream pra não desperdiçar banda.
+  // Browser gave up (track skip) — kill the upstream so we don't waste bandwidth.
   req.on('close', () => upstreamReq.destroy());
 
   upstreamReq.end();

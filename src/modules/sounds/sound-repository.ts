@@ -82,15 +82,15 @@ export class SoundCommandRepository {
 }
 
 /**
- * Aceita o JSON cru e devolve uma lista canônica de `SoundCommand`.
+ * Accepts the raw JSON and returns a canonical `SoundCommand[]`.
  *
- * Migra comandos com `permissions: string[]` (formato legado) para
- * `permissions: PermissionEntry[]` expandindo cada nível para todas as
- * plataformas conhecidas (ver `permissions-migration.ts`). Também derruba
- * o campo `minSubscriberTier` legado.
+ * Migrates commands with `permissions: string[]` (legacy shape) to
+ * `permissions: PermissionEntry[]`, expanding each level across every known
+ * platform (see `permissions-migration.ts`). Also strips the legacy
+ * `minSubscriberTier` field.
  *
- * `didChange` indica se o JSON precisa ser regravado para persistir a
- * migração — economiza um write em comandos já no formato novo.
+ * `didChange` indicates whether the JSON needs to be rewritten to persist
+ * the migration — saves a write when the file is already in the new shape.
  */
 function normalizeStoredCommands(raw: unknown[]): { migrated: SoundCommand[]; didChange: boolean } {
   let didChange = false;

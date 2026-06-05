@@ -36,9 +36,9 @@ export function resolvePermissionLevel(message: ChatMessage): PermissionLevel {
 }
 
 /**
- * Resolução padrão a partir da forma comum do papel. Adapters podem
- * usar como default ou aplicar regras próprias antes de chamar.
- * Maior precedência primeiro: broadcaster > moderator > vip > subscriber > follower.
+ * Default resolution from the common role shape. Adapters can use it as a
+ * baseline or apply their own rules before calling.
+ * Highest precedence first: broadcaster > moderator > vip > subscriber > follower.
  */
 export function resolveFromRole(role: PlatformRole): PermissionLevel {
   if (role.broadcaster) return 'broadcaster';
@@ -57,23 +57,23 @@ export function isPermissionAllowed(
 }
 
 /**
- * Avalia uma lista de `PermissionEntry` contra uma mensagem.
+ * Evaluates a list of `PermissionEntry` against a message.
  *
- * Semântica OR: o usuário passa se QUALQUER entry casar. As semânticas
- * individuais:
- *   - `platform-role`: a plataforma da mensagem precisa bater. Para roles
- *     hierárquicos (everyone, follower, subscriber, vip, moderator, broadcaster)
- *     o nível efetivo do usuário precisa ser >= ao requerido (PERMISSION_RANK).
- *     Para roles do tipo `tier:<id>`, o `subscriberTier` do usuário precisa
- *     ser exatamente igual ao id (sem hierarquia — selecionar Tier 2 não
- *     libera Tier 3 automaticamente; o streamer adiciona cada tier que quer
- *     permitir).
- *   - `list`: o par (platform, userId) da mensagem precisa estar entre os
- *     membros da lista referenciada. Lista inexistente = ignorada (não trava
- *     o gate inteiro — outras entries ainda podem liberar).
+ * OR semantics: the user passes if ANY entry matches. Per-entry rules:
+ *   - `platform-role`: message's platform must match. For hierarchical
+ *     roles (everyone, follower, subscriber, vip, moderator, broadcaster)
+ *     the user's effective level must be >= the required one
+ *     (`PERMISSION_RANK`). For `tier:<id>` roles, the user's
+ *     `subscriberTier` must equal the id exactly (no hierarchy — picking
+ *     Tier 2 does not implicitly grant Tier 3; the streamer adds every
+ *     tier they want to allow).
+ *   - `list`: the (platform, userId) pair from the message must appear in
+ *     the referenced list's members. A missing list is silently ignored
+ *     (the gate doesn't fail closed on a stale id — other entries may
+ *     still let the user through).
  *
- * `userId` ausente na mensagem nunca casa entries de lista (sem identidade
- * estável). Roles que não exigem identidade continuam funcionando.
+ * A message without `userId` never matches a list entry (no stable
+ * identity). Role-based entries still work without it.
  */
 export function isCommandAllowed(
   entries: PermissionEntry[],
@@ -105,15 +105,15 @@ function matchPlatformRole(
   subscriberTier: string | undefined,
 ): boolean {
   if (typeof role === 'string' && role.startsWith('tier:')) {
-    // Tier exato — sem hierarquia. Só passa quem está exatamente nesse tier.
+    // Tier match is exact — no hierarchy. Only that exact tier passes.
     if (actualLevel !== 'subscriber' && actualLevel !== 'vip' && actualLevel !== 'moderator' && actualLevel !== 'broadcaster') {
-      // Não-membros não passam tier gate.
+      // Non-members can't pass a tier gate.
       return false;
     }
     if (!subscriberTier) return false;
     return subscriberTier === role.slice('tier:'.length);
   }
-  // Roles hierárquicos clássicos.
+  // Classic hierarchical roles.
   const required = role as PermissionLevel;
   return PERMISSION_RANK[actualLevel] >= PERMISSION_RANK[required];
 }

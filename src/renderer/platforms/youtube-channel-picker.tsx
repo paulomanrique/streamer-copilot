@@ -3,13 +3,14 @@ import { useEffect, useState } from 'react';
 import type { PlatformAccount, YouTubeChatChannel, YouTubeSettings } from '../../shared/types.js';
 
 /**
- * Botão + modal que permite ao streamer trocar o canal usado pelo scraper
- * do YouTube como remetente das mensagens.
+ * Button + modal that lets the streamer pick which channel the YouTube
+ * scraper uses as the sender for outbound messages.
  *
- * Por que existe: depois de logar no Google, a conta cookie-based pode ter
- * múltiplos canais (brand accounts). O scraper precisa saber qual canal usa
- * pra enviar mensagens via InnerTube. Sem essa escolha o YouTubeChatAdapter
- * acaba pegando o primeiro da lista — que raramente é o canal de live.
+ * Why it exists: after signing into Google, a cookie-based account may
+ * have multiple channels (brand accounts). The scraper needs to know which
+ * channel to use for InnerTube `sendMessage`. Without an explicit choice
+ * `YouTubeChatAdapter` ends up picking the first one in the list — which
+ * is rarely the live channel.
  */
 export function YouTubeAccountActions({ account: _account }: { account: PlatformAccount }) {
   const [open, setOpen] = useState(false);

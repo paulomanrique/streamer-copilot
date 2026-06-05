@@ -42,9 +42,9 @@ export class SoundService implements CommandModule {
   }
 
   /** CommandModule entry point — called by CommandDispatcher. The
-   *  `_permissionLevel` arg is ignored; the new evaluator runs over the full
-   *  message + permission entries (which encode platform-specific roles and
-   *  list memberships). */
+   *  `_permissionLevel` arg is ignored; the new evaluator operates on the
+   *  full message + permission entries (which encode platform-specific
+   *  roles and list memberships). */
   handle(message: ChatMessage, _permissionLevel: PermissionLevel): void {
     this.handleMessage(message);
   }

@@ -241,8 +241,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }).catch(() => { /* best-effort */ });
   };
 
-  // User lists — cache em memória pra evaluator de permissões consultar
-  // sincronamente no hot path.
+  // User lists — kept in memory so the permission evaluator can consult
+  // them synchronously on the message hot path.
   let userListsCache: UserList[] = [];
   const getUserListsStore = (): UserListsStore | null => {
     if (!activeProfileDirectory) return null;
@@ -1397,9 +1397,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
 
   // R4: now that overlayServer exists, build the music player + stream resolver.
-  // Resolver é anônimo de propósito — passar cookies do session YouTube
-  // logado faz o Innertube enviar SAPISIDHASH no Authorization, o que o
-  // endpoint do cliente IOS rejeita com HTTP 400 INVALID_ARGUMENT.
+  // Resolver is anonymous on purpose — feeding the logged-in YouTube session
+  // cookies into Innertube makes it send a SAPISIDHASH Authorization header,
+  // which the mobile-client endpoints reject with HTTP 400 INVALID_ARGUMENT.
   const musicStreamResolver = new MusicStreamResolver();
   musicPlayerRef = new MusicPlayer(
     overlayServer,
@@ -1572,8 +1572,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         if (!self || message.author.toLowerCase() !== self) {
           welcomeService.handleMessage(message);
         }
-        // Aprende dinamicamente os tiers de membro pagos observados no chat.
-        // Twitch tem catálogo builtin; YouTube/Kick precisam aprender da experiência.
+        // Learn paid-membership tiers as we observe them in chat. Twitch has
+        // a built-in catalog; YouTube/Kick discover theirs from messages.
         const tier = message.role?.subscriberTier;
         if (tier && message.platform !== 'twitch') {
           upsertScrapedTier(message.platform, tier);

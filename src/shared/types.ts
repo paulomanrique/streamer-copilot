@@ -27,14 +27,14 @@ export interface ProfileSettings {
 export type PermissionLevel = 'everyone' | 'follower' | 'subscriber' | 'vip' | 'moderator' | 'broadcaster';
 
 /**
- * Papel hierárquico padrão por plataforma. `tier:<id>` é um caso especial
- * que casa exatamente com `message.role?.subscriberTier === id` — não tem
- * hierarquia (selecionar Tier 2 não libera Tier 3 automaticamente; o streamer
- * adiciona cada tier que quer permitir).
+ * Hierarchical platform role id. `tier:<id>` is a special case that matches
+ * exactly when `message.role?.subscriberTier === id` — no hierarchy
+ * (selecting Tier 2 does NOT implicitly grant Tier 3; the streamer adds
+ * every tier they want to allow).
  *
- * Os demais (everyone/follower/vip/moderator/broadcaster) respeitam a
- * hierarquia `PERMISSION_RANK` em `permission-utils.ts`: selecionar `vip`
- * libera VIP, Moderator e Broadcaster.
+ * The remaining values (everyone/follower/vip/moderator/broadcaster)
+ * follow the `PERMISSION_RANK` hierarchy in `permission-utils.ts`:
+ * selecting `vip` admits VIP, Moderator and Broadcaster.
  */
 export type PermissionRoleId =
   | 'everyone'
@@ -46,11 +46,11 @@ export type PermissionRoleId =
   | `tier:${string}`;
 
 /**
- * Entry individual numa lista de permissões. Pode ser:
- *  - Um papel de plataforma específica (`platform-role`): `{ kind, platform, role }`.
- *  - Uma referência a uma lista de usuários (`list`): `{ kind, listId }`.
+ * Single entry inside a permission list. Can be:
+ *  - A platform-specific role (`platform-role`): `{ kind, platform, role }`.
+ *  - A reference to a user list (`list`): `{ kind, listId }`.
  *
- * Avaliação OR: o usuário passa se QUALQUER entry casar.
+ * OR evaluation: the user passes if ANY entry matches.
  */
 export type PermissionEntry =
   | { kind: 'platform-role'; platform: PlatformId; role: PermissionRoleId }
@@ -62,10 +62,10 @@ export interface CommandPermission {
   userCooldownSeconds: number;
 }
 
-/** Entry de tier de membro num canal. `order` é crescente (1 = mais baixo).
- *  Continua sendo usado pelo catálogo + UI; o `order` não influencia mais o
- *  gate (a nova UI seleciona tiers individuais), mas mantém utilidade para
- *  display ordenado na configuração. */
+/** Tier entry for a channel's paid-membership catalog. `order` is
+ *  increasing (1 = lowest). Still used by the catalog + UI; `order` no
+ *  longer influences the permission gate (the new UI picks individual
+ *  tiers) but remains useful for ordered display in settings. */
 export interface SubscriberTierEntry {
   id: string;
   label: string;
@@ -77,8 +77,8 @@ export interface SubscriberTierCatalog {
   byPlatform: Partial<Record<PlatformId, SubscriberTierEntry[]>>;
 }
 
-/** Membro de uma lista de usuários — par (plataforma, userId nativo).
- *  `displayName` é cacheado pra exibição mas não participa do match. */
+/** Member of a user list — pair of (platform, native userId).
+ *  `displayName` is cached for the UI but doesn't participate in matching. */
 export interface UserListMember {
   platform: PlatformId;
   userId: string;
@@ -468,8 +468,8 @@ export interface MusicPlayerEvent {
   errorCode?: number;
   /** Mensagem humana com a causa do erro — propagada pro event log pra
    *  diagnosticar falhas de stream resolver (ytdl), CSP do OBS browser
-   *  source, autoplay bloqueado, etc. Sem isso, o log só mostra
-   *  `errorCode: -1` sem indicação do quê falhou. */
+   *  source, autoplay blocked, etc. Without it the event log only shows
+   *  `errorCode: -1` with no hint at what actually failed. */
   errorMessage?: string;
 }
 

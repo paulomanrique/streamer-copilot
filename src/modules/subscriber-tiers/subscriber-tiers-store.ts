@@ -3,7 +3,7 @@ import { JsonSettingsStore } from '../base/settings-store.js';
 
 const SETTINGS_FILE = 'subscriber-tiers.json';
 
-/** Twitch tiers são fixos pela plataforma — sempre presentes no catálogo. */
+/** Twitch tiers are platform-defined and fixed — always seeded. */
 const TWITCH_BUILTIN: SubscriberTierEntry[] = [
   { id: '1', label: 'Tier 1', order: 1, source: 'builtin' },
   { id: '2', label: 'Tier 2', order: 2, source: 'builtin' },
@@ -26,13 +26,14 @@ function isEntry(value: unknown): value is SubscriberTierEntry {
 }
 
 /**
- * Catálogo per-profile dos tiers de membro pagos por plataforma.
+ * Per-profile catalog of paid-subscriber tiers per platform.
  *
- * - Twitch: seed builtin de T1/T2/T3 — não muda em runtime.
- * - YouTube API: na conexão do adapter, chama `youtube.membershipsLevels.list`
- *   e substitui as entries `source: 'api'` (replaceForPlatform).
- * - YouTube scraper: cada mensagem com tier desconhecido faz upsert com
- *   `source: 'scraped'` (upsertScraped). O streamer reordena via UI.
+ * - Twitch: built-in seed (T1/T2/T3) — doesn't change at runtime.
+ * - YouTube API: on adapter connect, calls `youtube.membershipsLevels.list`
+ *   and replaces `source: 'api'` entries via `replaceForPlatform`.
+ * - YouTube scraper: every message with an unknown tier upserts into the
+ *   catalog with `source: 'scraped'` (via `upsertScraped`). The streamer
+ *   reorders through the management UI.
  */
 export class SubscriberTiersStore extends JsonSettingsStore<SubscriberTierCatalog> {
   constructor(profileDirectory: string) {
@@ -68,8 +69,8 @@ export class SubscriberTiersStore extends JsonSettingsStore<SubscriberTierCatalo
     return { byPlatform: out };
   }
 
-  /** Substitui todas as entries de uma plataforma. Usado pelo path da API
-   *  do YouTube (`membershipsLevels.list`) e pela UI de reordenação. */
+  /** Replaces every entry for a platform. Used by the YouTube API path
+   *  (`membershipsLevels.list`) and by the management UI's reorder action. */
   async replaceForPlatform(platform: PlatformId, entries: SubscriberTierEntry[]): Promise<SubscriberTierCatalog> {
     const current = await this.load();
     const next: SubscriberTierCatalog = {
@@ -78,8 +79,8 @@ export class SubscriberTiersStore extends JsonSettingsStore<SubscriberTierCatalo
     return this.save(next);
   }
 
-  /** Acrescenta um tier observado no chat se ainda não estiver catalogado.
-   *  Novo `order` = max(existing) + 1. Retorna `true` se algo mudou. */
+  /** Appends a tier observed in chat if not yet catalogued. New `order` is
+   *  `max(existing) + 1`. Returns `true` when something actually changed. */
   async upsertScraped(platform: PlatformId, tierId: string): Promise<boolean> {
     const id = tierId.trim();
     if (!id) return false;

@@ -43,12 +43,12 @@ interface AppStore extends ProfilesSnapshot {
   setPlatformLiveStats: (platformId: PlatformId, channelKey: string, stats: unknown | null) => void;
   /** Bulk loader for the initial snapshot delivered by `getPlatformStatuses`. */
   hydratePlatformStatuses: (snapshot: Partial<Record<PlatformId, { status: PlatformLinkStatus; primaryChannel: string | null }>>) => void;
-  /** Catálogo per-canal de tiers de membro pagos (Twitch builtin, YouTube
-   *  aprendido). Consumido por PermissionPicker (selectors de mín tier) e
-   *  ChatFeed (label do badge). */
+  /** Per-channel catalog of paid-membership tiers (Twitch built-in, YouTube
+   *  learned over time). Consumed by the PermissionListPicker (min-tier
+   *  selectors) and ChatFeed (badge label). */
   subscriberTiers: SubscriberTierCatalog;
   setSubscriberTiers: (catalog: SubscriberTierCatalog) => void;
-  /** Listas de usuários — usadas como entries de permissão e pelo right-click no chat. */
+  /** User lists — used as permission entries and by the right-click menu in chat. */
   userLists: UserList[];
   setUserLists: (lists: UserList[]) => void;
   setProfiles: (snapshot: ProfilesSnapshot) => void;

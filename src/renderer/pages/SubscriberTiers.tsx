@@ -5,17 +5,18 @@ import { listPlatformProviders } from '../platforms/registry.js';
 import { useAppStore } from '../store.js';
 
 /**
- * Página de gestão do catálogo de tiers de membro pagos por plataforma.
+ * Management page for the per-platform paid-membership tier catalog.
  *
- * Per-plataforma:
- *   - `source: 'builtin'` (Twitch T1/T2/T3) → read-only.
- *   - `source: 'api'` (YouTube via Data API) → read-only (a API define a ordem).
- *   - `source: 'scraped'` (YouTube via scraper, observado das mensagens) →
- *     reordenável + renomeável. A ordem definida aqui é o que o resolver de
- *     permissões usa pra comparar `minSubscriberTier`.
+ * Per platform:
+ *   - `source: 'builtin'` (Twitch T1/T2/T3): read-only.
+ *   - `source: 'api'` (YouTube via Data API): read-only — the API defines
+ *     the order.
+ *   - `source: 'scraped'` (YouTube via the chat scraper, observed from
+ *     messages): reorderable + renameable. The order defined here is what
+ *     the permission resolver uses when comparing against `minSubscriberTier`.
  *
- * Nenhum platform id é hardcoded — a página itera o registry e mostra só
- * plataformas cujo catálogo tem entries, alinhado com a regra de simetria.
+ * No platform id is hardcoded — the page iterates the registry and shows
+ * only platforms whose catalog has entries, in line with the symmetry rule.
  */
 export function SubscriberTiersPage() {
   const catalog = useAppStore((s) => s.subscriberTiers);

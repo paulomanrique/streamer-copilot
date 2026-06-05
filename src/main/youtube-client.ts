@@ -312,13 +312,14 @@ export class YTLiveClient implements YouTubeLiveClient {
   }
 
   /**
-   * Resolve o `PlatformRole` a partir das flags + badges do autor.
+   * Resolves a `PlatformRole` from the author's flags + badges.
    *
-   * `subscriberTier` vem do tooltip do badge de membro (youtubei.js expõe esse
-   * texto). Os tooltips do YouTube têm o formato `"<Nível> (<duração>)"` —
-   * "Member (2 months)", "Apoiador (1 year, 3 months)", etc. Extraímos o
-   * trecho antes do parêntese. Sem tooltip → sem tier (degradação graciosa,
-   * o gate por tier simplesmente nega).
+   * `subscriberTier` comes from the membership badge tooltip (youtubei.js
+   * exposes it). YouTube tooltips follow the format
+   * `"<level name> (<duration>)"` — "Member (2 months)",
+   * "Apoiador (1 year, 3 months)", etc. We grab the slice before the
+   * parenthesis. No tooltip -> no tier (graceful degradation: the
+   * tier-gated permission simply denies).
    */
   private static buildRole(author: any): PlatformRole | undefined {
     const moderator = Boolean(author?.is_moderator);

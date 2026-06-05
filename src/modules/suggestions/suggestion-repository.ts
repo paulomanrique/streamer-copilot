@@ -61,8 +61,9 @@ export class SuggestionRepository {
     const data = new JsonStore<SuggestionsFile>(this.filePath(), EMPTY_FILE).read();
     if (!data.lists) data.lists = [];
     if (!data.entries) data.entries = {};
-    // Migra `permissions: PermissionLevel[]` legado para o novo modelo de
-    // entries com plataforma. Persiste o resultado se houve mudança real.
+    // Migrate legacy `permissions: PermissionLevel[]` to the new
+    // platform-aware entries model. Persists the result only if something
+    // actually changed.
     let didMigrate = false;
     for (const list of data.lists) {
       const rawPerms = list.permissions as unknown;

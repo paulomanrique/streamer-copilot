@@ -46,18 +46,18 @@ export class YTApiClient implements YouTubeLiveClient {
   private stopped = false;
 
   /**
-   * Mapeamento per-canal do tier de membro observado.
+   * Per-channel cache of the observed membership tier.
    *
-   * A API do YouTube Data v3 só expõe `memberLevelName` em eventos
-   * `newSponsorEvent` / `memberMilestoneChatEvent`, nunca no `authorDetails`
-   * de uma mensagem de texto regular. Para gating de comandos, capturamos
-   * o tier sempre que um desses eventos passa e aplicamos a mensagens de
-   * texto subsequentes do mesmo `channelId`.
+   * The YouTube Data API v3 only exposes `memberLevelName` on
+   * `newSponsorEvent` / `memberMilestoneChatEvent` events — never on
+   * `authorDetails` of a regular text message. For command gating we
+   * capture the tier whenever one of those events comes through and
+   * apply it to subsequent text messages from the same `channelId`.
    *
-   * Limitação: um membro que assinou antes da sessão (e que não dispara
-   * nenhum evento durante a sessão) fica sem tier preenchido. O scraper
-   * driver não tem essa limitação porque os badges de tier vêm direto na
-   * mensagem de texto.
+   * Limitation: a member who subscribed before the session (and doesn't
+   * fire any milestone/sponsor event during it) gets no tier filled in.
+   * The scraper driver doesn't have this limitation because tier badges
+   * are exposed directly on text messages.
    */
   private readonly tierByChannel = new Map<string, string>();
 

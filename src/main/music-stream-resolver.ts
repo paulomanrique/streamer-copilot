@@ -1,9 +1,9 @@
 import { Innertube } from 'youtubei.js';
 
 /**
- * UA literal de `Constants.CLIENTS.ANDROID_VR.USER_AGENT` em youtubei.js@17.0.1.
- * Re-exportada pra que o proxy de áudio mande a UA correta na request
- * pro googlevideo. Manter alinhada quando atualizar a lib.
+ * Literal value of `Constants.CLIENTS.ANDROID_VR.USER_AGENT` from
+ * youtubei.js@17.0.1. Re-exported so the audio proxy can send the matching
+ * User-Agent on the videoplayback request. Keep aligned when bumping the lib.
  */
 export const ANDROID_VR_USER_AGENT = 'com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip';
 
@@ -22,23 +22,25 @@ interface AdaptiveFormat {
 /**
  * R4: resolves a YouTube videoId to a directly-playable audio stream URL.
  *
- * Usa `youtubei.js` (a mesma lib do scraper de chat).
+ * Uses `youtubei.js` (same lib as the chat scraper).
  *
- * Cliente: ANDROID_VR. Por quê? O anti-bot atual do YouTube faz IOS, WEB,
- * ANDROID e variantes devolverem ou URLs sem signature decifrável (precisam
- * de PoToken que não conseguimos sintetizar) ou 403 do googlevideo na
- * hora de pegar o áudio. O cliente ANDROID_VR (YouTube VR pra Oculus
- * Quest) ainda devolve URLs diretas, sem cipher, que o googlevideo
- * aceita com Range. Validado em 5 vídeos diferentes durante o desenvolvimento
- * desse módulo — todos retornaram 206 com a UA correspondente. Se um dia
- * o YouTube apertar isso também, próximos candidatos são TV_EMBEDDED com
- * OAuth ou bgutils-js dentro de uma WebContentsView pra gerar PoToken.
+ * Client: ANDROID_VR. Why? YouTube's current anti-bot makes IOS, WEB,
+ * ANDROID and friends either return URLs without a decipherable signature
+ * (they need a PoToken we can't synthesize) or 403 from googlevideo when
+ * the audio fetch hits the edge. The ANDROID_VR client (YouTube VR for
+ * Oculus Quest) still returns direct, decipher-free URLs that googlevideo
+ * accepts with a Range header. Verified on 5 different videos during the
+ * rework — all came back 206 with the matching User-Agent. If YouTube
+ * tightens ANDROID_VR too, the natural next steps are TV_EMBEDDED with
+ * OAuth, or running bgutils-js inside a hidden WebContentsView to generate
+ * a real PoToken.
  *
- * Anônimo de propósito: cookies autenticados disparam SAPISIDHASH no
- * Authorization e o endpoint do cliente mobile rejeita (HTTP 400).
+ * Anonymous on purpose: authenticated cookies trigger SAPISIDHASH on the
+ * Authorization header, and the mobile-client endpoints reject that (HTTP
+ * 400). Cookies were tried; they made things worse, not better.
  *
- * URLs do googlevideo têm `expire` no query; cacheamos até esse momento e
- * resolvemos de novo na próxima request.
+ * googlevideo URLs carry an `expire` query param; we cache the resolved
+ * URL until that timestamp and re-resolve on the next request after.
  */
 export class MusicStreamResolver {
   private readonly cache = new Map<string, ResolvedStream>();
@@ -77,8 +79,8 @@ export class MusicStreamResolver {
     this.cache.delete(videoId);
   }
 
-  /** Lazy-singleton do Innertube — anônimo, sem buscar player JS (URLs do
-   *  ANDROID_VR vêm já decifradas). */
+  /** Lazy-singleton Innertube — anonymous, no player JS fetched (ANDROID_VR
+   *  returns audio URLs already in deciphered form, so we don't need it). */
   private async getInnertube(): Promise<Innertube> {
     if (this.innertube) return this.innertube;
     this.innertube = await Innertube.create({

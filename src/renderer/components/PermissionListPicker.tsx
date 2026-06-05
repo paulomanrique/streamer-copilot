@@ -25,27 +25,27 @@ const ROLE_LABELS: Record<PermissionLevel, string> = {
 };
 
 /**
- * Picker de permissões em formato de lista + dropdown "Adicionar".
+ * Permission picker — chip list + an "Add" dropdown.
  *
- * O dropdown agrupa as opções em:
- *   1. Listas de usuários (com link "+ Nova lista..." que abre prompt).
- *   2. Para cada plataforma registrada: seus roles hierárquicos + tiers
- *      dinâmicos vindos do catálogo `subscriberTiers`.
+ * The dropdown groups options into:
+ *   1. User lists (with a "+ New list..." action).
+ *   2. Each registered platform: its hierarchical roles + the dynamic tiers
+ *      coming from the `subscriberTiers` catalog.
  *
- * Cada entry escolhida vira um chip removível na lista. Entries duplicadas
- * são bloqueadas no momento da seleção.
+ * Each chosen entry becomes a removable chip in the list. Duplicates are
+ * blocked at selection time.
  */
 export function PermissionListPicker({ value, onChange }: PermissionListPickerProps) {
   const subscriberTiers = useAppStore((s) => s.subscriberTiers);
   const userLists = useAppStore((s) => s.userLists);
   const providers = useMemo(() => listPlatformProviders(), []);
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  // window.prompt não funciona em Electron — usamos input inline dentro do
-  // dropdown para a opção "Nova lista".
+  // window.prompt is a silent no-op in Electron — use an inline input
+  // inside the dropdown for the "New list" option.
   const [newListMode, setNewListMode] = useState(false);
   const [newListName, setNewListName] = useState('');
   // Portal-based positioning: o dropdown precisa escapar do overflow-y-auto
-  // do modal pai (sem isso o conteúdo é clipado dentro do container do form).
+  // the parent modal's overflow:hidden (without this the content is clipped inside the form container).
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
@@ -204,8 +204,8 @@ export function PermissionListPicker({ value, onChange }: PermissionListPickerPr
                 <DropdownSection key={provider.id} title={provider.displayName}>
                   {provider.supportedRoles.map((role) => {
                     if (role === 'subscriber' && sortedTiers.length > 0) {
-                      // Quando há tiers explícitos, "Subscriber" genérico ainda é útil
-                      // (libera qualquer tier). Mostramos antes dos tiers específicos.
+                      // When explicit tiers exist, the generic "Subscriber" is still useful
+                      // (admits any tier). Render it before the tier-specific entries.
                       return (
                         <DropdownItem
                           key={role}

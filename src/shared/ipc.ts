@@ -438,12 +438,12 @@ export interface CopilotApi {
   }) => void) => () => void;
   /** Snapshot atual do catálogo de tiers de membro (todas as plataformas). */
   getSubscriberTiers: () => Promise<SubscriberTierCatalog>;
-  /** Substitui as entries de uma plataforma (usado pelo painel de gestão e
-   *  pelo path da API do YouTube na conexão). */
+  /** Replaces every entry for a platform (used by the management page and by
+   *  the YouTube Data API path on adapter connect). */
   replaceSubscriberTiers: (input: { platform: PlatformId; entries: SubscriberTierEntry[] }) => Promise<SubscriberTierCatalog>;
-  /** Push assíncrono quando o catálogo muda (ex: scraper aprende um nível novo). */
+  /** Async push when the catalog changes (e.g. the scraper learns a new tier). */
   onSubscriberTiersUpdate: (listener: (payload: SubscriberTierCatalog) => void) => () => void;
-  /** Listas de usuários — fundação para o seletor de permissões via right-click. */
+  /** User lists — foundation for the right-click-to-add permission selector. */
   listUserLists: () => Promise<UserList[]>;
   createUserList: (input: { name: string }) => Promise<UserList[]>;
   renameUserList: (input: { id: string; name: string }) => Promise<UserList[]>;

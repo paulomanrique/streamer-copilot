@@ -1,13 +1,12 @@
 import type { PermissionEntry, PermissionRoleId, PlatformId } from '../../shared/types.js';
 
 /**
- * Plataformas que recebem a expansão de PermissionLevel[] legado quando um
- * comando é carregado pela primeira vez no novo formato. Mantida hardcoded
- * por ser uma lista de migração — o objetivo é gerar entries equivalentes
- * ao comportamento pré-rework (qualquer usuário daquele nível, em qualquer
- * plataforma, passava). Adicionar uma plataforma nova ao app não precisa
- * mexer aqui: usuários daquela plataforma simplesmente terão `everyone` por
- * default se a configuração antiga for genérica.
+ * Platforms that receive the legacy `PermissionLevel[]` expansion when a
+ * command is loaded into the new shape for the first time. Hardcoded on
+ * purpose — the goal is to produce entries equivalent to the pre-rework
+ * behavior (any user of that level, on any platform, used to pass). Adding
+ * a new platform later doesn't require touching this list: users on that
+ * platform just default to `everyone` if the legacy config was generic.
  */
 const LEGACY_EXPANSION_PLATFORMS: PlatformId[] = ['twitch', 'youtube', 'youtube-api', 'kick', 'tiktok'];
 
@@ -21,15 +20,16 @@ const LEGACY_LEVELS = new Set<PermissionRoleId>([
 ]);
 
 /**
- * Aceita o `permissions` cru do JSON e devolve um `PermissionEntry[]` válido.
+ * Accepts the raw `permissions` value from the JSON store and returns a
+ * valid `PermissionEntry[]`.
  *
- * Casos:
- *   - Array de strings (formato legado, ex: `['everyone', 'moderator']`):
- *     expande cada nível para uma entry `platform-role` em cada plataforma
- *     conhecida. Preserva o comportamento "qualquer plataforma".
- *   - Array de objetos com a forma `{ kind: 'platform-role' | 'list', ... }`
- *     (formato novo): passa adiante, filtrando entries malformadas.
- *   - Qualquer outra coisa: retorna `[]` (chamador decide o que fazer).
+ * Cases:
+ *   - Array of strings (legacy shape, e.g. `['everyone', 'moderator']`):
+ *     expand each level to a `platform-role` entry across every known
+ *     platform. Preserves the "any platform" semantics of the old model.
+ *   - Array of objects shaped `{ kind: 'platform-role' | 'list', ... }`
+ *     (new shape): pass through, dropping malformed entries.
+ *   - Anything else: returns `[]` (caller decides what to do).
  */
 export function migratePermissions(raw: unknown): PermissionEntry[] {
   if (!Array.isArray(raw)) return [];

@@ -4,17 +4,18 @@ import { getPlatformProviderOrFallback } from '../platforms/registry.js';
 import { useAppStore } from '../store.js';
 
 /**
- * Página de gestão de listas de usuários.
+ * Management page for user lists.
  *
- * Streamer pode criar/renomear/apagar listas e remover membros. Adicionar
- * membro acontece pelo right-click no chat (com userId nativo garantido).
+ * The streamer can create/rename/delete lists and remove members. Adding a
+ * member happens via right-click in the chat feed (where we have the native
+ * userId on hand).
  */
 export function UserListsPage() {
   const lists = useAppStore((s) => s.userLists);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // window.prompt não funciona em Electron — usamos inputs inline.
+  // window.prompt is a silent no-op in Electron — use inline inputs.
   const [newListMode, setNewListMode] = useState(false);
   const [newListName, setNewListName] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);

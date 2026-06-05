@@ -33,12 +33,13 @@ function isList(value: unknown): value is UserList {
 }
 
 /**
- * Per-profile listas de usuários — coleções de pares (plataforma, userId)
- * que o streamer monta via right-click no chat (ou na página de gestão)
- * e usa nos comandos como entries de permissão.
+ * Per-profile user lists — collections of (platform, userId) pairs that the
+ * streamer builds via right-click in chat (or the management page) and
+ * references in commands as permission entries.
  *
- * Identidade é (platform, userId): username pode mudar no Twitch/YT mas o
- * userId nativo não. `displayName` é só cache pra exibição.
+ * Identity is (platform, userId): a Twitch/YouTube username can change but
+ * the native userId stays stable. `displayName` is a cached label for the UI,
+ * not part of the match.
  */
 export class UserListsStore extends JsonSettingsStore<FileShape> {
   constructor(profileDirectory: string) {
@@ -94,7 +95,8 @@ export class UserListsStore extends JsonSettingsStore<FileShape> {
     return next;
   }
 
-  /** Adiciona um membro à lista. No-op se já presente. Retorna `true` se mudou. */
+  /** Adds a member to the list. No-op when already present. Returns `true` if
+   *  something actually changed. */
   async addMember(
     listId: string,
     member: { platform: PlatformId; userId: string; displayName: string },
@@ -103,7 +105,7 @@ export class UserListsStore extends JsonSettingsStore<FileShape> {
     const list = data.lists.find((l) => l.id === listId);
     if (!list) return false;
     if (list.members.some((m) => m.platform === member.platform && m.userId === member.userId)) {
-      // Já presente — atualiza só o displayName se mudou.
+      // Already present — refresh displayName only if it changed.
       const existing = list.members.find((m) => m.platform === member.platform && m.userId === member.userId);
       if (existing && existing.displayName !== member.displayName) {
         const updated: UserList = {
