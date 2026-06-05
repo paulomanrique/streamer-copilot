@@ -42,6 +42,7 @@ import { TextSettingsStore } from '../modules/text/text-settings-store.js';
 import { WelcomeSettingsStore } from '../modules/welcome/welcome-settings-store.js';
 import { WelcomeService } from '../modules/welcome/welcome-service.js';
 import { MusicSettingsStore } from '../modules/music/music-settings-store.js';
+import { MusicQueueStore } from '../modules/music/music-queue-store.js';
 import { MusicRequestService } from '../modules/music/music-request-service.js';
 import { searchYouTube as scrapeYouTube } from '../modules/music/youtube-search.js';
 import { MusicPlayer } from './music-player.js';
@@ -140,7 +141,7 @@ import {
   youtubeSettingsSchema,
   youtubeApiStartOAuthSchema,
 } from '../shared/schemas.js';
-import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, MusicRequestSettings, OverlayPreferencesMap, PlatformAccount, PlatformId, Raffle, SoundSettings, StreamEvent, StreamEventType, SubscriberTierCatalog, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, UserList, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
+import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, MusicQueueItem, MusicRequestSettings, OverlayPreferencesMap, PlatformAccount, PlatformId, Raffle, SoundSettings, StreamEvent, StreamEventType, SubscriberTierCatalog, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, UserList, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
 
 const TWITCH_CLIENT_ID = 'vtwg8tzuv1nlip4qh9n6sxx2p76g0s';
 const TWITCH_REDIRECT_PORT = 32999;
@@ -406,6 +407,27 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   // it is wired below after the overlay server is constructed.
   let musicPlayerRef: MusicPlayer | null = null;
 
+  // Music queue persistence: a tiny in-memory write debouncer keeps disk I/O
+  // bounded under bursts of requests (each `!sr` triggers `pushState` which
+  // calls `persistQueue`). Errors are swallowed — the in-memory queue is
+  // authoritative; persistence is just so the streamer doesn't lose the list
+  // across app restarts.
+  let queueWriteTimer: ReturnType<typeof setTimeout> | null = null;
+  let pendingQueueSnapshot: MusicQueueItem[] | null = null;
+  const flushQueueWrite = async (): Promise<void> => {
+    if (!pendingQueueSnapshot || !activeProfileDirectory) return;
+    const snapshot = pendingQueueSnapshot;
+    pendingQueueSnapshot = null;
+    queueWriteTimer = null;
+    try {
+      await new MusicQueueStore(activeProfileDirectory).saveQueue(snapshot);
+    } catch (cause) {
+      logService.warn('music', 'Failed to persist queue', {
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
+    }
+  };
+
   const musicService = new MusicRequestService({
     getSettings: () => musicSettingsCache,
     getUserLists: () => userListsCache,
@@ -418,7 +440,18 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     logInfo: (message, metadata) => logService.info('music', message, metadata),
     logError: (message, metadata) => logService.error('music', message, metadata),
     isBrowserSourceConnected: () => musicPlayerRef?.hasBrowserSource() ?? false,
+    loadInitialQueue: async () => {
+      if (!activeProfileDirectory) return [];
+      return new MusicQueueStore(activeProfileDirectory).loadQueue();
+    },
+    persistQueue: (queue) => {
+      pendingQueueSnapshot = queue;
+      if (queueWriteTimer === null) {
+        queueWriteTimer = setTimeout(() => { void flushQueueWrite(); }, 300);
+      }
+    },
   });
+  void activeProfileDirectoryReady.then(() => musicService.loadPersistedQueue());
 
   let rendererSpeechSynthesisAvailable = process.platform !== 'linux';
   let isShuttingDown = false;

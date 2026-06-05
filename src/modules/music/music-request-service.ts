@@ -27,6 +27,16 @@ interface MusicRequestServiceOptions {
   logError: (message: string, metadata?: unknown) => void;
   /** R4: surfaces whether the /now-playing OBS browser source is connected. */
   isBrowserSourceConnected?: () => boolean;
+  /** Returns the queue persisted to disk (called once when `load()` runs).
+   *  Items become the initial in-memory queue — playback doesn't resume
+   *  automatically, but `playNext()` will pick the first item on the next
+   *  trigger (incoming !sr, skip, etc.). */
+  loadInitialQueue?: () => Promise<MusicQueueItem[]>;
+  /** Called on every queue mutation (add, skip, clear, ended, currentItem
+   *  change). Best-effort fire-and-forget — the in-memory queue is
+   *  authoritative; persistence is just so the streamer doesn't lose the
+   *  list across app restarts. */
+  persistQueue?: (queue: MusicQueueItem[]) => void;
   now?: () => number;
 }
 
@@ -284,6 +294,36 @@ export class MusicRequestService implements CommandModule {
 
   private pushState(): void {
     this.options.onStateUpdate(this.getState());
+    // Persist alongside the in-memory state. If something is playing we
+    // prepend it to the saved queue so on the next app start `playNext()`
+    // picks it up first — there's no auto-resume, but the order survives.
+    if (this.options.persistQueue) {
+      const toSave = this.currentItem ? [this.currentItem, ...this.queue] : [...this.queue];
+      this.options.persistQueue(toSave);
+    }
+  }
+
+  /** Loads the persisted queue (if any) into memory. Idempotent; safe to
+   *  call from `app-context` once the profile directory is known. */
+  async loadPersistedQueue(): Promise<void> {
+    if (!this.options.loadInitialQueue) return;
+    try {
+      const saved = await this.options.loadInitialQueue();
+      if (saved.length === 0) return;
+      // De-dupe by id in case the file contained the previously-current item
+      // *and* the queue redundantly listed it.
+      const seen = new Set<string>();
+      this.queue = saved.filter((item) => {
+        if (seen.has(item.id)) return false;
+        seen.add(item.id);
+        return true;
+      });
+      this.pushState();
+    } catch (cause) {
+      this.options.logError('Failed to load persisted music queue', {
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
+    }
   }
 
   private canRun(action: string, userId: string, settings: MusicRequestSettings): boolean {
