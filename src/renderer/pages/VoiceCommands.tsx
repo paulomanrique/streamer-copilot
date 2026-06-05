@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { PERMISSION_LEVELS } from '../../shared/constants.js';
-import type { MinSubscriberTier, PermissionLevel, VoiceCommand } from '../../shared/types.js';
-import { SubscriberTierPicker } from '../components/SubscriberTierPicker.js';
+import type { PermissionEntry, VoiceCommand } from '../../shared/types.js';
+import { PermissionListPicker } from '../components/PermissionListPicker.js';
 import { ToggleSwitch } from '../components/ToggleSwitch.js';
 
 const GOOGLE_TTS_LANGUAGES = [
@@ -40,15 +39,6 @@ const GOOGLE_TTS_LANGUAGES = [
   { code: 'fil', label: 'Filipino' },
 ];
 
-const PERMISSION_LABELS: Record<PermissionLevel, string> = {
-  everyone: 'Everyone',
-  follower: 'Followers',
-  subscriber: 'Subscribers',
-  vip: 'VIP',
-  moderator: 'Moderators',
-  broadcaster: 'Broadcaster',
-};
-
 interface VoiceCommandsPageProps {
   voiceRate: number;
   voiceVolume: number;
@@ -67,8 +57,7 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
   const [selectedVoiceName, setSelectedVoiceName] = useState('');
   const [characterLimit, setCharacterLimit] = useState(200);
   const [announceUsername, setAnnounceUsername] = useState(true);
-  const [permissions, setPermissions] = useState<PermissionLevel[]>(['everyone']);
-  const [minSubscriberTier, setMinSubscriberTier] = useState<MinSubscriberTier | undefined>(undefined);
+  const [permissions, setPermissions] = useState<PermissionEntry[]>([]);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [userCooldownSeconds, setUserCooldownSeconds] = useState(0);
 
@@ -103,7 +92,6 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
           setCharacterLimit(cmd.characterLimit);
           setAnnounceUsername(cmd.announceUsername);
           setPermissions(cmd.permissions);
-          setMinSubscriberTier(cmd.minSubscriberTier);
           setCooldownSeconds(cmd.cooldownSeconds);
           setUserCooldownSeconds(cmd.userCooldownSeconds);
         }
@@ -146,13 +134,12 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
     setStatusMessage(null);
   };
 
-  const buildInput = (overrides?: Partial<{ enabled: boolean; permissions: PermissionLevel[] }>) => ({
+  const buildInput = (overrides?: Partial<{ enabled: boolean; permissions: PermissionEntry[] }>) => ({
     id: commandId,
     trigger: trigger.trim(),
     template: null as null,
     language: selectedVoiceName,
     permissions: overrides?.permissions ?? permissions,
-    ...(minSubscriberTier ? { minSubscriberTier } : {}),
     cooldownSeconds,
     userCooldownSeconds,
     announceUsername,
@@ -160,7 +147,7 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
     enabled: overrides?.enabled ?? enabled,
   });
 
-  const save = async (overrides?: Partial<{ enabled: boolean; permissions: PermissionLevel[] }>) => {
+  const save = async (overrides?: Partial<{ enabled: boolean; permissions: PermissionEntry[] }>) => {
     const validationError = validateTrigger(trigger);
     if (validationError) {
       setTriggerError(validationError);
@@ -188,14 +175,6 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
   const handleToggle = (value: boolean) => {
     setEnabled(value);
     void save({ enabled: value });
-  };
-
-  const toggleLevel = (level: PermissionLevel) => {
-    const next = permissions.includes(level)
-      ? permissions.filter((l) => l !== level)
-      : [...permissions, level];
-    if (next.length === 0) return;
-    setPermissions(next);
   };
 
   const preview = async () => {
@@ -269,28 +248,8 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
 
         {/* Permissions */}
         <div className="px-5 py-4">
-          <label className="block text-sm text-gray-400 mb-2">Who can use</label>
-          <div className="flex flex-wrap gap-2">
-            {PERMISSION_LEVELS.map((level) => (
-              <button
-                key={level}
-                type="button"
-                onClick={() => toggleLevel(level)}
-                className={
-                  permissions.includes(level)
-                    ? 'px-3 py-1 text-xs rounded-full bg-violet-600 text-white'
-                    : 'px-3 py-1 text-xs rounded-full bg-gray-700 text-gray-400 hover:text-white'
-                }
-              >
-                {PERMISSION_LABELS[level]}
-              </button>
-            ))}
-          </div>
-          <SubscriberTierPicker
-            value={minSubscriberTier}
-            onChange={setMinSubscriberTier}
-            visible={permissions.includes('subscriber')}
-          />
+          <label className="block text-sm text-gray-400 mb-2">Quem pode usar</label>
+          <PermissionListPicker value={permissions} onChange={setPermissions} />
         </div>
 
         {/* Cooldowns */}

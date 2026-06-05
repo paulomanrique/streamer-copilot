@@ -9,7 +9,25 @@ import { z } from 'zod';
 const platformIdSchema = z.string().min(1).max(64).regex(/^[a-z0-9-]+$/);
 const scheduledTargetPlatformSchema = z.enum(['twitch', 'youtube', 'youtube-api']);
 const permissionLevelSchema = z.enum(['everyone', 'follower', 'subscriber', 'moderator', 'broadcaster']);
-const minSubscriberTierSchema = z.record(platformIdSchema, z.string().min(1).max(120)).optional();
+
+const permissionRoleIdSchema = z.union([
+  z.enum(['everyone', 'follower', 'subscriber', 'vip', 'moderator', 'broadcaster']),
+  z.string().regex(/^tier:.+$/).max(180),
+]);
+
+export const permissionEntrySchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('platform-role'),
+    platform: platformIdSchema,
+    role: permissionRoleIdSchema,
+  }),
+  z.object({
+    kind: z.literal('list'),
+    listId: z.string().min(1).max(120),
+  }),
+]);
+
+const permissionEntriesSchema = z.array(permissionEntrySchema).min(1).max(50);
 const eventLogLevelSchema = z.enum(['info', 'warn', 'error']);
 const raffleModeSchema = z.enum(['single-winner', 'survivor-final']);
 const raffleControlActionSchema = z.enum(['open_entries', 'close_entries', 'spin', 'finalize', 'cancel', 'reset']);
@@ -117,8 +135,7 @@ export const voiceCommandUpsertInputSchema = z.object({
   trigger: z.string().min(1).max(80),
   template: z.string().max(500).nullable(),
   language: z.string().min(2).max(200),
-  permissions: z.array(permissionLevelSchema).min(1),
-  minSubscriberTier: minSubscriberTierSchema,
+  permissions: permissionEntriesSchema,
   cooldownSeconds: z.number().int().min(0).max(3600),
   userCooldownSeconds: z.number().int().min(0).max(3600),
   announceUsername: z.boolean(),
@@ -145,7 +162,7 @@ export const textCommandUpsertInputSchema = z.object({
   name: z.string().min(1).max(80),
   trigger: z.string().max(80).nullable(),
   response: z.string().min(1).max(500),
-  permissions: z.array(permissionLevelSchema).min(1),
+  permissions: permissionEntriesSchema,
   cooldownSeconds: z.number().int().min(0).max(3600).nullable(),
   userCooldownSeconds: z.number().int().min(0).max(3600).nullable(),
   commandEnabled: z.boolean(),
@@ -187,8 +204,8 @@ export const musicRequestSettingsSchema = z.object({
   skipTrigger: z.string().min(1).max(80),
   queueTrigger: z.string().min(1).max(80),
   cancelTrigger: z.string().min(1).max(80),
-  requestPermissions: z.array(permissionLevelSchema).min(1),
-  skipPermissions: z.array(permissionLevelSchema).min(1),
+  requestPermissions: permissionEntriesSchema,
+  skipPermissions: permissionEntriesSchema,
   cooldownSeconds: z.number().int().min(0).max(3600),
   userCooldownSeconds: z.number().int().min(0).max(3600),
 });
@@ -209,8 +226,7 @@ export const soundCommandUpsertInputSchema = z.object({
   name: z.string().min(1).max(80),
   trigger: z.string().max(80).nullable(),
   filePath: z.string().min(1),
-  permissions: z.array(permissionLevelSchema).min(1),
-  minSubscriberTier: minSubscriberTierSchema,
+  permissions: permissionEntriesSchema,
   cooldownSeconds: z.number().int().min(0).max(3600).nullable(),
   userCooldownSeconds: z.number().int().min(0).max(3600).nullable(),
   commandEnabled: z.boolean(),
@@ -248,7 +264,7 @@ export const suggestionListUpsertInputSchema = z.object({
   feedbackTargetPlatforms: z.array(platformIdSchema).default([]),
   mode: z.enum(['global', 'session']),
   allowDuplicates: z.boolean(),
-  permissions: z.array(permissionLevelSchema).min(1),
+  permissions: permissionEntriesSchema,
   cooldownSeconds: z.number().int().min(0).max(3600),
   userCooldownSeconds: z.number().int().min(0).max(3600),
   enabled: z.boolean(),
@@ -447,6 +463,38 @@ export const moderationRaidSchema = z.object({
 });
 
 export const moderationShoutoutSchema = z.object({
+  platform: platformIdSchema,
+  userId: z.string().min(1).max(200),
+});
+
+// ── User lists ────────────────────────────────────────────────────────────────
+
+export const userListMemberInputSchema = z.object({
+  platform: platformIdSchema,
+  userId: z.string().min(1).max(200),
+  displayName: z.string().min(1).max(120),
+});
+
+export const userListCreateInputSchema = z.object({
+  name: z.string().min(1).max(80),
+});
+
+export const userListRenameInputSchema = z.object({
+  id: z.string().min(1).max(120),
+  name: z.string().min(1).max(80),
+});
+
+export const userListIdInputSchema = z.object({
+  id: z.string().min(1).max(120),
+});
+
+export const userListAddMemberInputSchema = z.object({
+  listId: z.string().min(1).max(120),
+  member: userListMemberInputSchema,
+});
+
+export const userListRemoveMemberInputSchema = z.object({
+  listId: z.string().min(1).max(120),
   platform: platformIdSchema,
   userId: z.string().min(1).max(200),
 });

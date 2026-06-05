@@ -1,9 +1,9 @@
 import type {
   ChatMessage,
-  MinSubscriberTier,
+  PermissionEntry,
   PermissionLevel,
-  PlatformId,
-  SubscriberTierCatalog,
+  PermissionRoleId,
+  UserList,
 } from '../../shared/types.js';
 import type { PlatformRole } from '../../shared/platform.js';
 
@@ -57,33 +57,63 @@ export function isPermissionAllowed(
 }
 
 /**
- * Extensão tier-aware do gate de permissão. Aplica-se quando o nível resolvido
- * é `'subscriber'` e o comando declarou um `minSubscriberTier` para a plataforma
- * de origem da mensagem. Para os demais níveis (mod/vip/broadcaster/everyone)
- * cai no comportamento de `isPermissionAllowed`.
+ * Avalia uma lista de `PermissionEntry` contra uma mensagem.
  *
- * Comparação por ordem no catálogo (1 = mais baixo). Quando o tier requerido
- * não existe no catálogo, o gate fecha (deny) — proteção contra catálogo
- * stale ou typos. Quando o tier do usuário não está catalogado, também fecha
- * (deny) — o scraper alimenta o catálogo via `upsertScraped`, então em fluxo
- * normal o tier estaria presente.
+ * Semântica OR: o usuário passa se QUALQUER entry casar. As semânticas
+ * individuais:
+ *   - `platform-role`: a plataforma da mensagem precisa bater. Para roles
+ *     hierárquicos (everyone, follower, subscriber, vip, moderator, broadcaster)
+ *     o nível efetivo do usuário precisa ser >= ao requerido (PERMISSION_RANK).
+ *     Para roles do tipo `tier:<id>`, o `subscriberTier` do usuário precisa
+ *     ser exatamente igual ao id (sem hierarquia — selecionar Tier 2 não
+ *     libera Tier 3 automaticamente; o streamer adiciona cada tier que quer
+ *     permitir).
+ *   - `list`: o par (platform, userId) da mensagem precisa estar entre os
+ *     membros da lista referenciada. Lista inexistente = ignorada (não trava
+ *     o gate inteiro — outras entries ainda podem liberar).
+ *
+ * `userId` ausente na mensagem nunca casa entries de lista (sem identidade
+ * estável). Roles que não exigem identidade continuam funcionando.
  */
-export function isCommandAllowedWithTier(
-  allowedLevels: PermissionLevel[],
-  minSubscriberTier: MinSubscriberTier | undefined,
-  actualLevel: PermissionLevel,
-  platform: PlatformId,
-  subscriberTier: string | undefined,
-  catalog: SubscriberTierCatalog,
+export function isCommandAllowed(
+  entries: PermissionEntry[],
+  message: ChatMessage,
+  userLists: UserList[],
 ): boolean {
-  if (!isPermissionAllowed(allowedLevels, actualLevel)) return false;
-  if (actualLevel !== 'subscriber') return true;
-  const required = minSubscriberTier?.[platform];
-  if (!required) return true;
-  const list = catalog.byPlatform[platform] ?? [];
-  const requiredEntry = list.find((e) => e.id === required);
-  if (!requiredEntry) return false;
-  const actualEntry = subscriberTier ? list.find((e) => e.id === subscriberTier) : undefined;
-  if (!actualEntry) return false;
-  return actualEntry.order >= requiredEntry.order;
+  if (entries.length === 0) return false;
+  const actualLevel = resolvePermissionLevel(message);
+  for (const entry of entries) {
+    if (entry.kind === 'platform-role') {
+      if (entry.platform !== message.platform) continue;
+      if (matchPlatformRole(entry.role, actualLevel, message.role?.subscriberTier)) return true;
+    } else if (entry.kind === 'list') {
+      const list = userLists.find((l) => l.id === entry.listId);
+      if (!list) continue;
+      if (!message.userId) continue;
+      const hit = list.members.some(
+        (m) => m.platform === message.platform && m.userId === message.userId,
+      );
+      if (hit) return true;
+    }
+  }
+  return false;
+}
+
+function matchPlatformRole(
+  role: PermissionRoleId,
+  actualLevel: PermissionLevel,
+  subscriberTier: string | undefined,
+): boolean {
+  if (typeof role === 'string' && role.startsWith('tier:')) {
+    // Tier exato — sem hierarquia. Só passa quem está exatamente nesse tier.
+    if (actualLevel !== 'subscriber' && actualLevel !== 'vip' && actualLevel !== 'moderator' && actualLevel !== 'broadcaster') {
+      // Não-membros não passam tier gate.
+      return false;
+    }
+    if (!subscriberTier) return false;
+    return subscriberTier === role.slice('tier:'.length);
+  }
+  // Roles hierárquicos clássicos.
+  const required = role as PermissionLevel;
+  return PERMISSION_RANK[actualLevel] >= PERMISSION_RANK[required];
 }

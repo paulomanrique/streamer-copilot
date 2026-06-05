@@ -1,18 +1,8 @@
 import { useEffect, useState } from 'react';
 
-import { PERMISSION_LEVELS } from '../../shared/constants.js';
-import type { MinSubscriberTier, PermissionLevel, SoundCommand, SoundCommandUpsertInput, SoundSettings } from '../../shared/types.js';
-import { SubscriberTierPicker } from './SubscriberTierPicker.js';
+import type { PermissionEntry, SoundCommand, SoundCommandUpsertInput, SoundSettings } from '../../shared/types.js';
+import { PermissionListPicker } from './PermissionListPicker.js';
 import { ToggleSwitch } from './ToggleSwitch.js';
-
-const PERMISSION_LABELS: Record<PermissionLevel, string> = {
-  everyone: 'Everyone',
-  follower: 'Followers',
-  subscriber: 'Subscribers',
-  vip: 'VIP',
-  moderator: 'Moderators',
-  broadcaster: 'Broadcaster',
-};
 
 function getFileName(filePath: string): string {
   return filePath.replace(/\\/g, '/').split('/').pop() ?? filePath;
@@ -36,8 +26,7 @@ export function SoundCommandModal({ open, onClose, onSave, initialData, settings
 
   const [commandEnabled, setCommandEnabled] = useState(true);
   const [trigger, setTrigger] = useState('!');
-  const [levels, setLevels] = useState<PermissionLevel[]>(['everyone']);
-  const [minSubscriberTier, setMinSubscriberTier] = useState<MinSubscriberTier | undefined>(undefined);
+  const [permissions, setPermissions] = useState<PermissionEntry[]>([]);
   const [useGlobalCooldown, setUseGlobalCooldown] = useState(true);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [userCooldownSeconds, setUserCooldownSeconds] = useState(0);
@@ -58,8 +47,7 @@ export function SoundCommandModal({ open, onClose, onSave, initialData, settings
       setFilePath(initialData.filePath);
       setCommandEnabled(initialData.commandEnabled);
       setTrigger(initialData.trigger ?? '!');
-      setLevels(initialData.permissions);
-      setMinSubscriberTier(initialData.minSubscriberTier);
+      setPermissions(initialData.permissions);
       const isGlobal = initialData.cooldownSeconds === null && initialData.userCooldownSeconds === null;
       setUseGlobalCooldown(isGlobal);
       setCooldownSeconds(initialData.cooldownSeconds ?? settings.defaultCooldownSeconds);
@@ -73,8 +61,7 @@ export function SoundCommandModal({ open, onClose, onSave, initialData, settings
       setFilePath('');
       setCommandEnabled(true);
       setTrigger('!');
-      setLevels(['everyone']);
-      setMinSubscriberTier(undefined);
+      setPermissions([]);
       setUseGlobalCooldown(true);
       setCooldownSeconds(settings.defaultCooldownSeconds);
       setUserCooldownSeconds(settings.defaultUserCooldownSeconds);
@@ -99,16 +86,6 @@ export function SoundCommandModal({ open, onClose, onSave, initialData, settings
     } catch { /* non-critical */ }
   };
 
-  const toggleLevel = (level: PermissionLevel) => {
-    setLevels((current) => {
-      if (current.includes(level)) {
-        const next = current.filter((l) => l !== level);
-        return next.length > 0 ? next : ['everyone'];
-      }
-      return [...current, level];
-    });
-  };
-
   const handleContinue = () => {
     if (!filePath) { setError('Choose a sound file to continue'); return; }
     if (!name.trim()) { setError('Give the command a name to continue'); return; }
@@ -119,6 +96,10 @@ export function SoundCommandModal({ open, onClose, onSave, initialData, settings
   const handleSave = async () => {
     if (!commandEnabled && !scheduleEnabled) {
       setError('Enable at least one trigger type');
+      return;
+    }
+    if (commandEnabled && permissions.length === 0) {
+      setError('Adicione pelo menos uma permissão para que o comando possa ser usado');
       return;
     }
     if (commandEnabled) {
@@ -140,8 +121,7 @@ export function SoundCommandModal({ open, onClose, onSave, initialData, settings
         name: name.trim(),
         trigger: commandEnabled ? trigger.trim() : null,
         filePath,
-        permissions: levels,
-        ...(minSubscriberTier ? { minSubscriberTier } : {}),
+        permissions,
         cooldownSeconds: useGlobalCooldown ? null : cooldownSeconds,
         userCooldownSeconds: useGlobalCooldown ? null : userCooldownSeconds,
         commandEnabled,
@@ -253,29 +233,8 @@ export function SoundCommandModal({ open, onClose, onSave, initialData, settings
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-400 mb-1.5">Permissions</label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {PERMISSION_LEVELS.map((level) => {
-                          const active = levels.includes(level);
-                          return (
-                            <button
-                              key={level}
-                              type="button"
-                              onClick={() => toggleLevel(level)}
-                              className={active
-                                ? 'px-2.5 py-1 rounded-full bg-violet-600 text-white text-xs font-medium'
-                                : 'px-2.5 py-1 rounded-full bg-gray-800 border border-gray-700 text-gray-300 text-xs'}
-                            >
-                              {PERMISSION_LABELS[level]}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <SubscriberTierPicker
-                        value={minSubscriberTier}
-                        onChange={setMinSubscriberTier}
-                        visible={levels.includes('subscriber')}
-                      />
+                      <label className="block text-xs text-gray-400 mb-1.5">Permissões</label>
+                      <PermissionListPicker value={permissions} onChange={setPermissions} />
                     </div>
                     <div>
                       <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer mb-2">

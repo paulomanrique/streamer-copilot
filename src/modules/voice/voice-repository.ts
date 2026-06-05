@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { VoiceCommand, VoiceCommandUpsertInput } from '../../shared/types.js';
 import { JsonStore } from '../../db/json-store.js';
 import { PROFILE_CONFIG_FILES } from '../../shared/constants.js';
+import { migratePermissions } from '../commands/permissions-migration.js';
 
 export class VoiceCommandRepository {
   private cache: { dir: string; data: VoiceCommand[] } | null = null;
@@ -17,9 +18,13 @@ export class VoiceCommandRepository {
   private readAll(): VoiceCommand[] {
     const dir = this.getDirectory();
     if (this.cache?.dir === dir) return this.cache.data;
-    const data = new JsonStore<VoiceCommand[]>(this.filePath(), []).read();
-    this.cache = { dir, data };
-    return data;
+    const raw = new JsonStore<unknown[]>(this.filePath(), []).read();
+    const { migrated, didChange } = normalizeStoredCommands(raw);
+    if (didChange) {
+      new JsonStore<VoiceCommand[]>(this.filePath(), []).write(migrated);
+    }
+    this.cache = { dir, data: migrated };
+    return migrated;
   }
 
   private writeAll(data: VoiceCommand[]): void {
@@ -40,7 +45,6 @@ export class VoiceCommandRepository {
       template: input.template,
       language: input.language,
       permissions: input.permissions,
-      ...(input.minSubscriberTier ? { minSubscriberTier: input.minSubscriberTier } : {}),
       cooldownSeconds: input.cooldownSeconds,
       userCooldownSeconds: input.userCooldownSeconds,
       announceUsername: input.announceUsername,
@@ -58,4 +62,24 @@ export class VoiceCommandRepository {
     this.writeAll(next);
     return next;
   }
+}
+
+function normalizeStoredCommands(raw: unknown[]): { migrated: VoiceCommand[]; didChange: boolean } {
+  let didChange = false;
+  const out: VoiceCommand[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const obj = item as Record<string, unknown> & Partial<VoiceCommand>;
+    const rawPerms = obj.permissions as unknown;
+    const migratedPerms = migratePermissions(rawPerms);
+    const wasLegacy = !Array.isArray(rawPerms)
+      || rawPerms.length > 0 && typeof (rawPerms as unknown[])[0] === 'string';
+    if (wasLegacy) didChange = true;
+    if ('minSubscriberTier' in obj) {
+      didChange = true;
+      delete (obj as Record<string, unknown>).minSubscriberTier;
+    }
+    out.push({ ...(obj as VoiceCommand), permissions: migratedPerms });
+  }
+  return { migrated: out, didChange };
 }

@@ -141,7 +141,10 @@ export function ConnectedAccounts() {
                       </span>
                     </div>
                   </div>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 items-center">
+                    {provider?.AccountActions ? (
+                      <provider.AccountActions account={account} />
+                    ) : null}
                     {provider?.login ? (
                       <button
                         type="button"

@@ -51,6 +51,7 @@ import type {
   StreamEvent,
   SubscriberTierCatalog,
   SubscriberTierEntry,
+  UserList,
   ScheduledMessage,
   ScheduledMessageDeleteInput,
   ScheduledMessageUpsertInput,
@@ -223,6 +224,13 @@ export const IPC_CHANNELS = {
   subscriberTiersGet: 'subscriber-tiers:get',
   subscriberTiersReplace: 'subscriber-tiers:replace',
   subscriberTiersUpdate: 'subscriber-tiers:update',
+  userListsList: 'user-lists:list',
+  userListsCreate: 'user-lists:create',
+  userListsRename: 'user-lists:rename',
+  userListsDelete: 'user-lists:delete',
+  userListsAddMember: 'user-lists:add-member',
+  userListsRemoveMember: 'user-lists:remove-member',
+  userListsUpdate: 'user-lists:update',
   accountsList: 'accounts:list',
   accountsCreate: 'accounts:create',
   accountsUpdate: 'accounts:update',
@@ -435,6 +443,14 @@ export interface CopilotApi {
   replaceSubscriberTiers: (input: { platform: PlatformId; entries: SubscriberTierEntry[] }) => Promise<SubscriberTierCatalog>;
   /** Push assíncrono quando o catálogo muda (ex: scraper aprende um nível novo). */
   onSubscriberTiersUpdate: (listener: (payload: SubscriberTierCatalog) => void) => () => void;
+  /** Listas de usuários — fundação para o seletor de permissões via right-click. */
+  listUserLists: () => Promise<UserList[]>;
+  createUserList: (input: { name: string }) => Promise<UserList[]>;
+  renameUserList: (input: { id: string; name: string }) => Promise<UserList[]>;
+  deleteUserList: (input: { id: string }) => Promise<UserList[]>;
+  addUserListMember: (input: { listId: string; member: { platform: PlatformId; userId: string; displayName: string } }) => Promise<UserList[]>;
+  removeUserListMember: (input: { listId: string; platform: PlatformId; userId: string }) => Promise<UserList[]>;
+  onUserListsUpdate: (listener: (payload: UserList[]) => void) => () => void;
   accountsList: () => Promise<import('./types.js').PlatformAccount[]>;
   accountsCreate: (input: AccountCreateInput) => Promise<import('./types.js').PlatformAccount>;
   accountsUpdate: (input: AccountUpdateInput) => Promise<import('./types.js').PlatformAccount>;

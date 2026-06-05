@@ -32,6 +32,7 @@ import { SoundCommandRepository } from '../modules/sounds/sound-repository.js';
 import { SoundService } from '../modules/sounds/sound-service.js';
 import { SoundSettingsStore } from '../modules/sounds/sound-settings-store.js';
 import { SubscriberTiersStore } from '../modules/subscriber-tiers/subscriber-tiers-store.js';
+import { UserListsStore } from '../modules/user-lists/user-lists-store.js';
 import { SuggestionRepository } from '../modules/suggestions/suggestion-repository.js';
 import { SuggestionService } from '../modules/suggestions/suggestion-service.js';
 import { TextCommandRepository } from '../modules/text/text-repository.js';
@@ -122,6 +123,11 @@ import {
   tiktokSettingsSchema,
   twitchCredentialsSchema,
   subscriberTiersReplaceInputSchema,
+  userListCreateInputSchema,
+  userListRenameInputSchema,
+  userListIdInputSchema,
+  userListAddMemberInputSchema,
+  userListRemoveMemberInputSchema,
   voiceCommandDeleteInputSchema,
   voiceCommandUpsertInputSchema,
   voiceSpeakPayloadSchema,
@@ -132,7 +138,7 @@ import {
   youtubeSettingsSchema,
   youtubeApiStartOAuthSchema,
 } from '../shared/schemas.js';
-import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, MusicRequestSettings, PlatformAccount, PlatformId, Raffle, SoundSettings, StreamEvent, StreamEventType, SubscriberTierCatalog, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
+import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, MusicRequestSettings, PlatformAccount, PlatformId, Raffle, SoundSettings, StreamEvent, StreamEventType, SubscriberTierCatalog, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, UserList, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
 
 const TWITCH_CLIENT_ID = 'vtwg8tzuv1nlip4qh9n6sxx2p76g0s';
 const TWITCH_REDIRECT_PORT = 32999;
@@ -235,6 +241,22 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }).catch(() => { /* best-effort */ });
   };
 
+  // User lists — cache em memória pra evaluator de permissões consultar
+  // sincronamente no hot path.
+  let userListsCache: UserList[] = [];
+  const getUserListsStore = (): UserListsStore | null => {
+    if (!activeProfileDirectory) return null;
+    return new UserListsStore(activeProfileDirectory);
+  };
+  const reloadUserListsCache = async (): Promise<void> => {
+    const store = getUserListsStore();
+    if (store) userListsCache = await store.listAll();
+  };
+  const pushUserListsAndCache = async (next: UserList[]): Promise<void> => {
+    userListsCache = next;
+    options.stateHub.pushUserLists(next);
+  };
+
   // Sound settings: file-based, per-profile. Cached in memory for synchronous access in canRun().
   let soundSettingsCache: SoundSettings = { defaultCooldownSeconds: 0, defaultUserCooldownSeconds: 0 };
 
@@ -284,7 +306,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   let musicSettingsCache: MusicRequestSettings = {
     enabled: false, volume: 0.5, maxQueueSize: 20, maxDurationSeconds: 600,
     requestTrigger: '!sr', skipTrigger: '!skip', queueTrigger: '!queue', cancelTrigger: '!cancel',
-    requestPermissions: ['everyone'], skipPermissions: ['moderator', 'broadcaster'],
+    requestPermissions: [], skipPermissions: [],
     cooldownSeconds: 5, userCooldownSeconds: 30,
   };
 
@@ -314,6 +336,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   void reloadWelcomeSettingsCache();
   void reloadMusicSettingsCache();
   void activeProfileDirectoryReady.then(() => reloadSubscriberTiersCache());
+  void activeProfileDirectoryReady.then(() => reloadUserListsCache());
 
   const schedulerService = new SchedulerService({
     source: {
@@ -327,12 +350,13 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const soundService = new SoundService({
     repository: soundRepository,
     getSettings: () => soundSettingsCache,
-    getSubscriberTierCatalog: () => subscriberTiersCache,
+    getUserLists: () => userListsCache,
     onPlay: (payload) => options.stateHub.pushSoundPlay(payload),
   });
   const textService = new TextService({
     repository: textRepository,
     getSettings: () => textSettingsCache,
+    getUserLists: () => userListsCache,
     onRespond: async (payload) => {
       try {
         await sendPlatformMessage(payload.platform, payload.content);
@@ -366,6 +390,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   const musicService = new MusicRequestService({
     getSettings: () => musicSettingsCache,
+    getUserLists: () => userListsCache,
     searchYouTube,
     onPlay: (cmd) => void musicPlayerRef?.play(cmd),
     onStop: () => musicPlayerRef?.stop(),
@@ -381,7 +406,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   let isShuttingDown = false;
   const voiceService = new VoiceService({
     repository: voiceRepository,
-    getSubscriberTierCatalog: () => subscriberTiersCache,
+    getUserLists: () => userListsCache,
     onSpeak: (payload) => {
       // Google TTS: lang field starts with "google:"
       if (payload.lang.startsWith('google:')) {
@@ -400,6 +425,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
   const suggestionService = new SuggestionService({
     repository: suggestionRepository,
+    getUserLists: () => userListsCache,
     onState: (payload) => options.stateHub.pushSuggestionState(payload),
     onFeedback: async (payload) => {
       if (!payload.content) return;
@@ -1771,7 +1797,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   ipcMain.handle(IPC_CHANNELS.textList, async () => textService.list());
   ipcMain.handle(IPC_CHANNELS.textUpsert, async (_, raw) => {
-    const result = textService.upsert(textCommandUpsertInputSchema.parse(raw));
+    const result = textService.upsert(textCommandUpsertInputSchema.parse(raw) as import('../shared/types.js').TextCommandUpsertInput);
     schedulerService.refreshStatus();
     return result;
   });
@@ -1793,7 +1819,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
 
   ipcMain.handle(IPC_CHANNELS.voiceList, async () => voiceService.list());
-  ipcMain.handle(IPC_CHANNELS.voiceUpsert, async (_, raw) => voiceService.upsert(voiceCommandUpsertInputSchema.parse(raw)));
+  ipcMain.handle(IPC_CHANNELS.voiceUpsert, async (_, raw) => voiceService.upsert(voiceCommandUpsertInputSchema.parse(raw) as import('../shared/types.js').VoiceCommandUpsertInput));
   ipcMain.handle(IPC_CHANNELS.voiceDelete, async (_, raw) => voiceService.delete(voiceCommandDeleteInputSchema.parse(raw).id));
   ipcMain.handle(IPC_CHANNELS.voicePreviewSpeak, async (_, raw) => voiceService.previewSpeak(voiceSpeakPayloadSchema.parse(raw)));
   ipcMain.handle(IPC_CHANNELS.voiceSetRendererCapabilities, async (_, raw) => { rendererSpeechSynthesisAvailable = rendererVoiceCapabilitiesSchema.parse(raw).speechSynthesisAvailable; });
@@ -1813,7 +1839,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         // Keep original path if rename fails (e.g. file already at destination)
       }
     }
-    const result = soundService.upsert({ ...input, filePath: finalFilePath });
+    const result = soundService.upsert({ ...input, filePath: finalFilePath } as import('../shared/types.js').SoundCommandUpsertInput);
     schedulerService.refreshStatus();
     return result;
   });
@@ -1873,7 +1899,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.musicSaveSettings, async (_, raw) => {
     const store = await getMusicSettingsStore();
     if (!store) throw new Error('No active profile');
-    const saved = await store.save(musicRequestSettingsSchema.parse(raw));
+    const saved = await store.save(musicRequestSettingsSchema.parse(raw) as MusicRequestSettings);
     musicSettingsCache = saved;
     musicPlayerRef?.setVolume(saved.volume);
     return saved;
@@ -1936,7 +1962,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   // Suggestions Handlers
   ipcMain.handle(IPC_CHANNELS.suggestionsList, async () => suggestionService.listLists());
-  ipcMain.handle(IPC_CHANNELS.suggestionsUpsert, async (_, raw) => suggestionService.upsertList(suggestionListUpsertInputSchema.parse(raw)));
+  ipcMain.handle(IPC_CHANNELS.suggestionsUpsert, async (_, raw) => suggestionService.upsertList(suggestionListUpsertInputSchema.parse(raw) as import('../shared/types.js').SuggestionListUpsertInput));
   ipcMain.handle(IPC_CHANNELS.suggestionsDelete, async (_, raw) => suggestionService.deleteList(suggestionListDeleteInputSchema.parse(raw).id));
   ipcMain.handle(IPC_CHANNELS.suggestionsEntries, async (_, listId) => suggestionService.getEntries(String(listId ?? '')));
   ipcMain.handle(IPC_CHANNELS.suggestionsClearEntries, async (_, listId) => suggestionService.clearEntries(String(listId ?? '')));
@@ -2930,6 +2956,59 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     subscriberTiersCache = await store.replaceForPlatform(platform, entries);
     options.stateHub.pushSubscriberTiers(subscriberTiersCache);
     return subscriberTiersCache;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.userListsList, async () => {
+    const store = getUserListsStore();
+    if (store) userListsCache = await store.listAll();
+    return userListsCache;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.userListsCreate, async (_, raw) => {
+    const { name } = userListCreateInputSchema.parse(raw);
+    const store = getUserListsStore();
+    if (!store) throw new Error('No active profile');
+    await store.create(name);
+    const next = await store.listAll();
+    await pushUserListsAndCache(next);
+    return next;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.userListsRename, async (_, raw) => {
+    const { id, name } = userListRenameInputSchema.parse(raw);
+    const store = getUserListsStore();
+    if (!store) throw new Error('No active profile');
+    const next = await store.rename(id, name);
+    await pushUserListsAndCache(next);
+    return next;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.userListsDelete, async (_, raw) => {
+    const { id } = userListIdInputSchema.parse(raw);
+    const store = getUserListsStore();
+    if (!store) throw new Error('No active profile');
+    const next = await store.delete(id);
+    await pushUserListsAndCache(next);
+    return next;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.userListsAddMember, async (_, raw) => {
+    const { listId, member } = userListAddMemberInputSchema.parse(raw);
+    const store = getUserListsStore();
+    if (!store) throw new Error('No active profile');
+    await store.addMember(listId, member);
+    const next = await store.listAll();
+    await pushUserListsAndCache(next);
+    return next;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.userListsRemoveMember, async (_, raw) => {
+    const { listId, platform, userId } = userListRemoveMemberInputSchema.parse(raw);
+    const store = getUserListsStore();
+    if (!store) throw new Error('No active profile');
+    const next = await store.removeMember(listId, platform, userId);
+    await pushUserListsAndCache(next);
+    return next;
   });
 
   ipcMain.handle(IPC_CHANNELS.accountsList, async () => {

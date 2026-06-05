@@ -6,13 +6,15 @@ import type {
   SuggestionListUpsertInput,
   SuggestionSnapshot,
   TextCommandResponsePayload,
+  UserList,
 } from '../../shared/types.js';
 import type { CommandModule } from '../commands/command-dispatcher.js';
-import { isPermissionAllowed } from '../commands/permission-utils.js';
+import { isCommandAllowed } from '../commands/permission-utils.js';
 import type { SuggestionRepository } from './suggestion-repository.js';
 
 interface SuggestionServiceOptions {
   repository: SuggestionRepository;
+  getUserLists: () => UserList[];
   onState: (payload: SuggestionSnapshot) => void;
   onFeedback: (payload: TextCommandResponsePayload) => void | Promise<void>;
   onPlaySound?: (payload: { filePath: string }) => void;
@@ -51,8 +53,9 @@ export class SuggestionService implements CommandModule {
     this.options.repository.clearSessionEntries();
   }
 
-  handle(message: ChatMessage, permissionLevel: PermissionLevel): void {
+  handle(message: ChatMessage, _permissionLevel: PermissionLevel): void {
     const lists = this.options.repository.listLists();
+    const userLists = this.options.getUserLists();
     const timestamp = this.now();
 
     for (const list of lists) {
@@ -67,7 +70,7 @@ export class SuggestionService implements CommandModule {
       const content = afterTrigger.trim();
       if (!content) continue;
 
-      if (!isPermissionAllowed(list.permissions, permissionLevel)) continue;
+      if (!isCommandAllowed(list.permissions, message, userLists)) continue;
       if (!this.canRun(list, message.author, timestamp)) continue;
 
       const userKey = `${message.platform}:${message.author.toLowerCase()}`;

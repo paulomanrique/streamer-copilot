@@ -1,32 +1,21 @@
 import type {
   ChatMessage,
   PermissionLevel,
-  PlatformId,
   SoundCommand,
   SoundPlayPayload,
   SoundSettings,
-  SubscriberTierCatalog,
+  UserList,
 } from '../../shared/types.js';
 import type { CommandModule } from '../commands/command-dispatcher.js';
-import { isCommandAllowedWithTier, isPermissionAllowed } from '../commands/permission-utils.js';
+import { isCommandAllowed } from '../commands/permission-utils.js';
 import { SoundCommandRepository } from './sound-repository.js';
 
 interface SoundServiceOptions {
   repository: SoundCommandRepository;
   getSettings: () => SoundSettings;
-  getSubscriberTierCatalog: () => SubscriberTierCatalog;
+  getUserLists: () => UserList[];
   onPlay: (payload: SoundPlayPayload) => void;
   now?: () => number;
-}
-
-interface ChatPermissionContext {
-  permissionLevel: PermissionLevel;
-  userId: string;
-  /** Platform de origem da mensagem; necessário para o gate por tier.
-   *  Quando ausente (caminho de testes legados), tier gating é pulado e o
-   *  comando aceita qualquer assinante, igual ao comportamento pré-tier. */
-  platform?: PlatformId;
-  subscriberTier?: string;
 }
 
 export class SoundService implements CommandModule {
@@ -52,43 +41,31 @@ export class SoundService implements CommandModule {
     this.options.onPlay(payload);
   }
 
-  /** CommandModule entry point — called by CommandDispatcher with resolved permission. */
-  handle(message: ChatMessage, permissionLevel: PermissionLevel): void {
-    this.handleChatMessage(message.content, {
-      permissionLevel,
-      userId: message.author,
-      platform: message.platform,
-      subscriberTier: message.role?.subscriberTier,
-    });
+  /** CommandModule entry point — called by CommandDispatcher. The
+   *  `_permissionLevel` arg is ignored; the new evaluator runs over the full
+   *  message + permission entries (which encode platform-specific roles and
+   *  list memberships). */
+  handle(message: ChatMessage, _permissionLevel: PermissionLevel): void {
+    this.handleMessage(message);
   }
 
-  handleChatMessage(content: string, context: ChatPermissionContext): SoundPlayPayload | null {
+  handleMessage(message: ChatMessage): SoundPlayPayload | null {
     const commands = this.options.repository.list();
-    const catalog = this.options.getSubscriberTierCatalog();
+    const userLists = this.options.getUserLists();
+    const content = message.content;
+    const userId = message.author;
 
     for (const command of commands) {
       const timestamp = this.now();
       if (!command.enabled) continue;
       if (command.commandEnabled === false || !command.trigger) continue;
       if (!content.startsWith(command.trigger)) continue;
-      // Tier gating só se aplica quando o caller informou a plataforma.
-      // Sem plataforma (testes), cai no gate base sem tier.
-      const allowed = context.platform
-        ? isCommandAllowedWithTier(
-            command.permissions,
-            command.minSubscriberTier,
-            context.permissionLevel,
-            context.platform,
-            context.subscriberTier,
-            catalog,
-          )
-        : isPermissionAllowed(command.permissions, context.permissionLevel);
-      if (!allowed) continue;
-      if (!this.canRun(command, context.userId, timestamp)) continue;
+      if (!isCommandAllowed(command.permissions, message, userLists)) continue;
+      if (!this.canRun(command, userId, timestamp)) continue;
 
       const payload = { filePath: command.filePath };
       this.commandCooldowns.set(command.id, timestamp);
-      this.userCooldowns.set(this.buildUserKey(command.id, context.userId), timestamp);
+      this.userCooldowns.set(this.buildUserKey(command.id, userId), timestamp);
       this.options.onPlay(payload);
       return payload;
     }

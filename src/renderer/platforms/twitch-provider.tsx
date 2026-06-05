@@ -74,6 +74,8 @@ registerPlatformProvider({
   subscriberBadge: 'subscriber',
   authorAtPrefix: false,
   hasNativeBadgeUrls: true,
+  supportedRoles: ['everyone', 'follower', 'subscriber', 'vip', 'moderator', 'broadcaster'],
+  hasSubscriberTiers: true,
   profileUrl: (handle) => {
     const username = handle.replace(/^@+/, '').trim();
     return username ? `https://twitch.tv/${encodeURIComponent(username)}` : '';

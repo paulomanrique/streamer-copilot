@@ -26,18 +26,46 @@ export interface ProfileSettings {
 
 export type PermissionLevel = 'everyone' | 'follower' | 'subscriber' | 'vip' | 'moderator' | 'broadcaster';
 
-/** Tier mínimo de assinante exigido, por plataforma. Só aplicado quando `'subscriber'`
- *  está em `allowedLevels`. Plataforma ausente do mapa = aceita qualquer tier. */
-export type MinSubscriberTier = Partial<Record<PlatformId, string>>;
+/**
+ * Papel hierárquico padrão por plataforma. `tier:<id>` é um caso especial
+ * que casa exatamente com `message.role?.subscriberTier === id` — não tem
+ * hierarquia (selecionar Tier 2 não libera Tier 3 automaticamente; o streamer
+ * adiciona cada tier que quer permitir).
+ *
+ * Os demais (everyone/follower/vip/moderator/broadcaster) respeitam a
+ * hierarquia `PERMISSION_RANK` em `permission-utils.ts`: selecionar `vip`
+ * libera VIP, Moderator e Broadcaster.
+ */
+export type PermissionRoleId =
+  | 'everyone'
+  | 'follower'
+  | 'subscriber'
+  | 'vip'
+  | 'moderator'
+  | 'broadcaster'
+  | `tier:${string}`;
+
+/**
+ * Entry individual numa lista de permissões. Pode ser:
+ *  - Um papel de plataforma específica (`platform-role`): `{ kind, platform, role }`.
+ *  - Uma referência a uma lista de usuários (`list`): `{ kind, listId }`.
+ *
+ * Avaliação OR: o usuário passa se QUALQUER entry casar.
+ */
+export type PermissionEntry =
+  | { kind: 'platform-role'; platform: PlatformId; role: PermissionRoleId }
+  | { kind: 'list'; listId: string };
 
 export interface CommandPermission {
-  allowedLevels: PermissionLevel[];
+  entries: PermissionEntry[];
   cooldownSeconds: number;
   userCooldownSeconds: number;
-  minSubscriberTier?: MinSubscriberTier;
 }
 
-/** Entry de tier de membro num canal. `order` é crescente (1 = mais baixo). */
+/** Entry de tier de membro num canal. `order` é crescente (1 = mais baixo).
+ *  Continua sendo usado pelo catálogo + UI; o `order` não influencia mais o
+ *  gate (a nova UI seleciona tiers individuais), mas mantém utilidade para
+ *  display ordenado na configuração. */
 export interface SubscriberTierEntry {
   id: string;
   label: string;
@@ -47,6 +75,24 @@ export interface SubscriberTierEntry {
 
 export interface SubscriberTierCatalog {
   byPlatform: Partial<Record<PlatformId, SubscriberTierEntry[]>>;
+}
+
+/** Membro de uma lista de usuários — par (plataforma, userId nativo).
+ *  `displayName` é cacheado pra exibição mas não participa do match. */
+export interface UserListMember {
+  platform: PlatformId;
+  userId: string;
+  displayName: string;
+  /** ISO timestamp de quando foi adicionado. */
+  addedAt: string;
+}
+
+export interface UserList {
+  id: string;
+  name: string;
+  members: UserListMember[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface LanguageOption {
@@ -280,8 +326,7 @@ export interface VoiceCommand {
   trigger: string;
   template: string | null;
   language: string;
-  permissions: PermissionLevel[];
-  minSubscriberTier?: MinSubscriberTier;
+  permissions: PermissionEntry[];
   cooldownSeconds: number;
   userCooldownSeconds: number;
   announceUsername: boolean;
@@ -294,8 +339,7 @@ export interface VoiceCommandUpsertInput {
   trigger: string;
   template: string | null;
   language: string;
-  permissions: PermissionLevel[];
-  minSubscriberTier?: MinSubscriberTier;
+  permissions: PermissionEntry[];
   cooldownSeconds: number;
   userCooldownSeconds: number;
   announceUsername: boolean;
@@ -322,7 +366,7 @@ export interface TextCommand {
   name: string;
   trigger: string | null;
   response: string;
-  permissions: PermissionLevel[];
+  permissions: PermissionEntry[];
   cooldownSeconds: number | null;
   userCooldownSeconds: number | null;
   commandEnabled: boolean;
@@ -335,7 +379,7 @@ export interface TextCommandUpsertInput {
   name: string;
   trigger: string | null;
   response: string;
-  permissions: PermissionLevel[];
+  permissions: PermissionEntry[];
   cooldownSeconds: number | null;
   userCooldownSeconds: number | null;
   commandEnabled: boolean;
@@ -378,8 +422,8 @@ export interface MusicRequestSettings {
   skipTrigger: string;
   queueTrigger: string;
   cancelTrigger: string;
-  requestPermissions: PermissionLevel[];
-  skipPermissions: PermissionLevel[];
+  requestPermissions: PermissionEntry[];
+  skipPermissions: PermissionEntry[];
   cooldownSeconds: number;
   userCooldownSeconds: number;
 }
@@ -434,8 +478,7 @@ export interface SoundCommand {
   name: string;
   trigger: string | null;
   filePath: string;
-  permissions: PermissionLevel[];
-  minSubscriberTier?: MinSubscriberTier;
+  permissions: PermissionEntry[];
   cooldownSeconds: number | null;
   userCooldownSeconds: number | null;
   commandEnabled: boolean;
@@ -448,8 +491,7 @@ export interface SoundCommandUpsertInput {
   name: string;
   trigger: string | null;
   filePath: string;
-  permissions: PermissionLevel[];
-  minSubscriberTier?: MinSubscriberTier;
+  permissions: PermissionEntry[];
   cooldownSeconds: number | null;
   userCooldownSeconds: number | null;
   commandEnabled: boolean;
@@ -732,7 +774,7 @@ export interface SuggestionList {
   feedbackTargetPlatforms: PlatformId[];
   mode: SuggestionListMode;
   allowDuplicates: boolean;
-  permissions: PermissionLevel[];
+  permissions: PermissionEntry[];
   cooldownSeconds: number;
   userCooldownSeconds: number;
   enabled: boolean;
@@ -758,7 +800,7 @@ export interface SuggestionListUpsertInput {
   feedbackTargetPlatforms: PlatformId[];
   mode: SuggestionListMode;
   allowDuplicates: boolean;
-  permissions: PermissionLevel[];
+  permissions: PermissionEntry[];
   cooldownSeconds: number;
   userCooldownSeconds: number;
   enabled: boolean;

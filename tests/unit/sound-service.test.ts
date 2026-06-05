@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { SoundCommand, SoundSettings } from '../../src/shared/types.js';
+import type { ChatMessage, PermissionEntry, SoundCommand, SoundSettings } from '../../src/shared/types.js';
+import type { PermissionLevel } from '../../src/shared/types.js';
+import type { PlatformRole } from '../../src/shared/platform.js';
 import { SoundService } from '../../src/modules/sounds/sound-service.js';
 
 interface RepositoryLike {
@@ -29,10 +31,33 @@ function buildService(
   return new SoundService({
     repository: createRepository(commands) as never,
     getSettings: () => options?.settings ?? DEFAULT_SETTINGS,
-    getSubscriberTierCatalog: () => ({ byPlatform: {} }),
+    getUserLists: () => [],
     onPlay: options?.onPlay ?? vi.fn(),
     now: options?.now,
   });
+}
+
+const TWITCH_EVERYONE: PermissionEntry[] = [{ kind: 'platform-role', platform: 'twitch', role: 'everyone' }];
+const TWITCH_SUBSCRIBER: PermissionEntry[] = [{ kind: 'platform-role', platform: 'twitch', role: 'subscriber' }];
+const TWITCH_MODERATOR: PermissionEntry[] = [{ kind: 'platform-role', platform: 'twitch', role: 'moderator' }];
+
+function makeMsg(level: PermissionLevel, userId: string, content: string): ChatMessage {
+  const role: PlatformRole = {};
+  if (level === 'broadcaster') role.broadcaster = true;
+  if (level === 'moderator') role.moderator = true;
+  if (level === 'vip') role.vip = true;
+  if (level === 'subscriber') role.subscriber = true;
+  if (level === 'follower') role.follower = true;
+  return {
+    id: 'm-1',
+    platform: 'twitch',
+    author: userId,
+    content,
+    badges: [],
+    timestampLabel: '00:00',
+    role,
+    userId,
+  };
 }
 
 describe('SoundService', () => {
@@ -41,44 +66,30 @@ describe('SoundService', () => {
     const service = buildService(
       [
         {
-          id: 'sound-1',
-          trigger: '!airhorn',
-          filePath: '/tmp/airhorn.wav',
-          permissions: ['subscriber'],
-          cooldownSeconds: 0,
-          userCooldownSeconds: null,
-          commandEnabled: true,
-          schedule: null,
-          enabled: true,
+          id: 'sound-1', name: 'airhorn', trigger: '!airhorn', filePath: '/tmp/airhorn.wav',
+          permissions: TWITCH_SUBSCRIBER,
+          cooldownSeconds: 0, userCooldownSeconds: null,
+          commandEnabled: true, schedule: null, enabled: true,
         },
       ],
       { onPlay },
     );
 
-    expect(service.handleChatMessage('!airhorn', { permissionLevel: 'moderator', userId: 'u-1' })).toEqual({
-      filePath: '/tmp/airhorn.wav',
-    });
+    expect(service.handleMessage(makeMsg('moderator', 'u-1', '!airhorn'))).toEqual({ filePath: '/tmp/airhorn.wav' });
     expect(onPlay).toHaveBeenCalledWith({ filePath: '/tmp/airhorn.wav' });
   });
 
   it('always allows broadcaster override', () => {
     const service = buildService([
       {
-        id: 'sound-1',
-        trigger: '!airhorn',
-        filePath: '/tmp/airhorn.wav',
-        permissions: ['moderator'],
-        cooldownSeconds: 0,
-        userCooldownSeconds: null,
-        commandEnabled: true,
-        schedule: null,
-        enabled: true,
+        id: 'sound-1', name: 'airhorn', trigger: '!airhorn', filePath: '/tmp/airhorn.wav',
+        permissions: TWITCH_MODERATOR,
+        cooldownSeconds: 0, userCooldownSeconds: null,
+        commandEnabled: true, schedule: null, enabled: true,
       },
     ]);
 
-    expect(service.handleChatMessage('!airhorn', { permissionLevel: 'broadcaster', userId: 'owner' })).toEqual({
-      filePath: '/tmp/airhorn.wav',
-    });
+    expect(service.handleMessage(makeMsg('broadcaster', 'owner', '!airhorn'))).toEqual({ filePath: '/tmp/airhorn.wav' });
   });
 
   it('enforces global cooldowns between different users', () => {
@@ -87,33 +98,18 @@ describe('SoundService', () => {
     const service = buildService(
       [
         {
-          id: 'sound-1',
-          trigger: '!airhorn',
-          filePath: '/tmp/airhorn.wav',
-          permissions: ['everyone'],
-          cooldownSeconds: 5,
-          userCooldownSeconds: null,
-          commandEnabled: true,
-          schedule: null,
-          enabled: true,
+          id: 'sound-1', name: 'airhorn', trigger: '!airhorn', filePath: '/tmp/airhorn.wav',
+          permissions: TWITCH_EVERYONE,
+          cooldownSeconds: 5, userCooldownSeconds: null,
+          commandEnabled: true, schedule: null, enabled: true,
         },
       ],
-      {
-        now: () => {
-          const timestamp = timestamps[Math.min(index, timestamps.length - 1)];
-          index += 1;
-          return timestamp;
-        },
-      },
+      { now: () => timestamps[Math.min(index++, timestamps.length - 1)] },
     );
 
-    expect(service.handleChatMessage('!airhorn', { permissionLevel: 'everyone', userId: 'u-1' })).toEqual({
-      filePath: '/tmp/airhorn.wav',
-    });
-    expect(service.handleChatMessage('!airhorn', { permissionLevel: 'everyone', userId: 'u-2' })).toBeNull();
-    expect(service.handleChatMessage('!airhorn', { permissionLevel: 'everyone', userId: 'u-2' })).toEqual({
-      filePath: '/tmp/airhorn.wav',
-    });
+    expect(service.handleMessage(makeMsg('everyone', 'u-1', '!airhorn'))).toEqual({ filePath: '/tmp/airhorn.wav' });
+    expect(service.handleMessage(makeMsg('everyone', 'u-2', '!airhorn'))).toBeNull();
+    expect(service.handleMessage(makeMsg('everyone', 'u-2', '!airhorn'))).toEqual({ filePath: '/tmp/airhorn.wav' });
   });
 
   it('tracks per-user cooldowns independently', () => {
@@ -122,36 +118,19 @@ describe('SoundService', () => {
     const service = buildService(
       [
         {
-          id: 'sound-1',
-          trigger: '!airhorn',
-          filePath: '/tmp/airhorn.wav',
-          permissions: ['everyone'],
-          cooldownSeconds: 5,
-          userCooldownSeconds: 5,
-          commandEnabled: true,
-          schedule: null,
-          enabled: true,
+          id: 'sound-1', name: 'airhorn', trigger: '!airhorn', filePath: '/tmp/airhorn.wav',
+          permissions: TWITCH_EVERYONE,
+          cooldownSeconds: 5, userCooldownSeconds: 5,
+          commandEnabled: true, schedule: null, enabled: true,
         },
       ],
-      {
-        now: () => {
-          const timestamp = timestamps[Math.min(index, timestamps.length - 1)];
-          index += 1;
-          return timestamp;
-        },
-      },
+      { now: () => timestamps[Math.min(index++, timestamps.length - 1)] },
     );
 
-    expect(service.handleChatMessage('!airhorn', { permissionLevel: 'everyone', userId: 'u-1' })).toEqual({
-      filePath: '/tmp/airhorn.wav',
-    });
-    expect(service.handleChatMessage('!airhorn', { permissionLevel: 'everyone', userId: 'u-2' })).toEqual({
-      filePath: '/tmp/airhorn.wav',
-    });
-    expect(service.handleChatMessage('!airhorn', { permissionLevel: 'everyone', userId: 'u-2' })).toBeNull();
-    expect(service.handleChatMessage('!airhorn', { permissionLevel: 'everyone', userId: 'u-2' })).toEqual({
-      filePath: '/tmp/airhorn.wav',
-    });
+    expect(service.handleMessage(makeMsg('everyone', 'u-1', '!airhorn'))).toEqual({ filePath: '/tmp/airhorn.wav' });
+    expect(service.handleMessage(makeMsg('everyone', 'u-2', '!airhorn'))).toEqual({ filePath: '/tmp/airhorn.wav' });
+    expect(service.handleMessage(makeMsg('everyone', 'u-2', '!airhorn'))).toBeNull();
+    expect(service.handleMessage(makeMsg('everyone', 'u-2', '!airhorn'))).toEqual({ filePath: '/tmp/airhorn.wav' });
   });
 
   it('uses global default cooldown when command values are null', () => {
@@ -161,37 +140,18 @@ describe('SoundService', () => {
     const service = buildService(
       [
         {
-          id: 'sound-1',
-          trigger: '!airhorn',
-          filePath: '/tmp/airhorn.wav',
-          permissions: ['everyone'],
-          cooldownSeconds: null,
-          userCooldownSeconds: null,
-          commandEnabled: true,
-          schedule: null,
-          enabled: true,
+          id: 'sound-1', name: 'airhorn', trigger: '!airhorn', filePath: '/tmp/airhorn.wav',
+          permissions: TWITCH_EVERYONE,
+          cooldownSeconds: null, userCooldownSeconds: null,
+          commandEnabled: true, schedule: null, enabled: true,
         },
       ],
-      {
-        settings,
-        now: () => {
-          const timestamp = timestamps[Math.min(index, timestamps.length - 1)];
-          index += 1;
-          return timestamp;
-        },
-      },
+      { settings, now: () => timestamps[Math.min(index++, timestamps.length - 1)] },
     );
 
-    // First call succeeds
-    expect(service.handleChatMessage('!airhorn', { permissionLevel: 'everyone', userId: 'u-1' })).toEqual({
-      filePath: '/tmp/airhorn.wav',
-    });
-    // Second call at 2s blocked by global 10s cooldown
-    expect(service.handleChatMessage('!airhorn', { permissionLevel: 'everyone', userId: 'u-2' })).toBeNull();
-    // Third call at 12s succeeds (past 10s cooldown)
-    expect(service.handleChatMessage('!airhorn', { permissionLevel: 'everyone', userId: 'u-2' })).toEqual({
-      filePath: '/tmp/airhorn.wav',
-    });
+    expect(service.handleMessage(makeMsg('everyone', 'u-1', '!airhorn'))).toEqual({ filePath: '/tmp/airhorn.wav' });
+    expect(service.handleMessage(makeMsg('everyone', 'u-2', '!airhorn'))).toBeNull();
+    expect(service.handleMessage(makeMsg('everyone', 'u-2', '!airhorn'))).toEqual({ filePath: '/tmp/airhorn.wav' });
   });
 
   it('uses command-specific cooldown when set, ignoring global defaults', () => {
@@ -201,80 +161,39 @@ describe('SoundService', () => {
     const service = buildService(
       [
         {
-          id: 'sound-1',
-          trigger: '!airhorn',
-          filePath: '/tmp/airhorn.wav',
-          permissions: ['everyone'],
-          cooldownSeconds: 3,
-          userCooldownSeconds: 3,
-          commandEnabled: true,
-          schedule: null,
-          enabled: true,
+          id: 'sound-1', name: 'airhorn', trigger: '!airhorn', filePath: '/tmp/airhorn.wav',
+          permissions: TWITCH_EVERYONE,
+          cooldownSeconds: 3, userCooldownSeconds: 3,
+          commandEnabled: true, schedule: null, enabled: true,
         },
       ],
-      {
-        settings,
-        now: () => {
-          const timestamp = timestamps[Math.min(index, timestamps.length - 1)];
-          index += 1;
-          return timestamp;
-        },
-      },
+      { settings, now: () => timestamps[Math.min(index++, timestamps.length - 1)] },
     );
 
-    // First call succeeds
-    expect(service.handleChatMessage('!airhorn', { permissionLevel: 'everyone', userId: 'u-1' })).toEqual({
-      filePath: '/tmp/airhorn.wav',
-    });
-    // Second call at 2s blocked by custom 3s cooldown
-    expect(service.handleChatMessage('!airhorn', { permissionLevel: 'everyone', userId: 'u-1' })).toBeNull();
-    // Third call at 5s succeeds (past custom 3s cooldown, despite global being 10s)
-    expect(service.handleChatMessage('!airhorn', { permissionLevel: 'everyone', userId: 'u-1' })).toEqual({
-      filePath: '/tmp/airhorn.wav',
-    });
+    expect(service.handleMessage(makeMsg('everyone', 'u-1', '!airhorn'))).toEqual({ filePath: '/tmp/airhorn.wav' });
+    expect(service.handleMessage(makeMsg('everyone', 'u-1', '!airhorn'))).toBeNull();
+    expect(service.handleMessage(makeMsg('everyone', 'u-1', '!airhorn'))).toEqual({ filePath: '/tmp/airhorn.wav' });
   });
 
   it('differentiates global cooldown from per-user cooldown', () => {
-    // global cooldown = 2s (blocks all users), per-user = 10s (blocks same user)
     const timestamps = [1_000, 4_000, 4_500, 12_000];
     let index = 0;
     const service = buildService(
       [
         {
-          id: 'sound-1',
-          trigger: '!airhorn',
-          filePath: '/tmp/airhorn.wav',
-          permissions: ['everyone'],
-          cooldownSeconds: 2,
-          userCooldownSeconds: 10,
-          commandEnabled: true,
-          schedule: null,
-          enabled: true,
+          id: 'sound-1', name: 'airhorn', trigger: '!airhorn', filePath: '/tmp/airhorn.wav',
+          permissions: TWITCH_EVERYONE,
+          cooldownSeconds: 2, userCooldownSeconds: 10,
+          commandEnabled: true, schedule: null, enabled: true,
         },
       ],
-      {
-        now: () => {
-          const timestamp = timestamps[Math.min(index, timestamps.length - 1)];
-          index += 1;
-          return timestamp;
-        },
-      },
+      { now: () => timestamps[Math.min(index++, timestamps.length - 1)] },
     );
 
-    // u-1 triggers at 1s
-    expect(service.handleChatMessage('!airhorn', { permissionLevel: 'everyone', userId: 'u-1' })).toEqual({
-      filePath: '/tmp/airhorn.wav',
-    });
-    // u-2 at 4s: global cooldown (2s) passed, and u-2 has no user cooldown yet → succeeds
-    expect(service.handleChatMessage('!airhorn', { permissionLevel: 'everyone', userId: 'u-2' })).toEqual({
-      filePath: '/tmp/airhorn.wav',
-    });
-    // u-1 at 4.5s: global cooldown just set at 4s → blocked (only 0.5s passed)
-    expect(service.handleChatMessage('!airhorn', { permissionLevel: 'everyone', userId: 'u-1' })).toBeNull();
-    // u-1 at 12s: global cooldown passed, per-user cooldown for u-1 (set at 1s, need 10s) → 12-1=11s > 10s → succeeds
-    expect(service.handleChatMessage('!airhorn', { permissionLevel: 'everyone', userId: 'u-1' })).toEqual({
-      filePath: '/tmp/airhorn.wav',
-    });
+    expect(service.handleMessage(makeMsg('everyone', 'u-1', '!airhorn'))).toEqual({ filePath: '/tmp/airhorn.wav' });
+    expect(service.handleMessage(makeMsg('everyone', 'u-2', '!airhorn'))).toEqual({ filePath: '/tmp/airhorn.wav' });
+    expect(service.handleMessage(makeMsg('everyone', 'u-1', '!airhorn'))).toBeNull();
+    expect(service.handleMessage(makeMsg('everyone', 'u-1', '!airhorn'))).toEqual({ filePath: '/tmp/airhorn.wav' });
   });
 
   it('uses global default for per-user cooldown when only userCooldownSeconds is null', () => {
@@ -284,36 +203,17 @@ describe('SoundService', () => {
     const service = buildService(
       [
         {
-          id: 'sound-1',
-          trigger: '!airhorn',
-          filePath: '/tmp/airhorn.wav',
-          permissions: ['everyone'],
-          cooldownSeconds: 0,
-          userCooldownSeconds: null,
-          commandEnabled: true,
-          schedule: null,
-          enabled: true,
+          id: 'sound-1', name: 'airhorn', trigger: '!airhorn', filePath: '/tmp/airhorn.wav',
+          permissions: TWITCH_EVERYONE,
+          cooldownSeconds: 0, userCooldownSeconds: null,
+          commandEnabled: true, schedule: null, enabled: true,
         },
       ],
-      {
-        settings,
-        now: () => {
-          const timestamp = timestamps[Math.min(index, timestamps.length - 1)];
-          index += 1;
-          return timestamp;
-        },
-      },
+      { settings, now: () => timestamps[Math.min(index++, timestamps.length - 1)] },
     );
 
-    // First call succeeds (no cooldowns active)
-    expect(service.handleChatMessage('!airhorn', { permissionLevel: 'everyone', userId: 'u-1' })).toEqual({
-      filePath: '/tmp/airhorn.wav',
-    });
-    // Same user at 8s: global cd = 0 (pass), user cd = 10s default (8-1=7 < 10) → blocked
-    expect(service.handleChatMessage('!airhorn', { permissionLevel: 'everyone', userId: 'u-1' })).toBeNull();
-    // Same user at 12s: user cd = 10s (12-1=11 > 10) → succeeds
-    expect(service.handleChatMessage('!airhorn', { permissionLevel: 'everyone', userId: 'u-1' })).toEqual({
-      filePath: '/tmp/airhorn.wav',
-    });
+    expect(service.handleMessage(makeMsg('everyone', 'u-1', '!airhorn'))).toEqual({ filePath: '/tmp/airhorn.wav' });
+    expect(service.handleMessage(makeMsg('everyone', 'u-1', '!airhorn'))).toBeNull();
+    expect(service.handleMessage(makeMsg('everyone', 'u-1', '!airhorn'))).toEqual({ filePath: '/tmp/airhorn.wav' });
   });
 });

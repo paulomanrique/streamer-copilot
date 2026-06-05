@@ -4,22 +4,18 @@ import type {
   TextCommand,
   TextCommandResponsePayload,
   TextSettings,
+  UserList,
 } from '../../shared/types.js';
 import type { CommandModule } from '../commands/command-dispatcher.js';
-import { isPermissionAllowed } from '../commands/permission-utils.js';
+import { isCommandAllowed } from '../commands/permission-utils.js';
 import { TextCommandRepository } from './text-repository.js';
 
 interface TextServiceOptions {
   repository: TextCommandRepository;
   getSettings: () => TextSettings;
+  getUserLists: () => UserList[];
   onRespond: (payload: TextCommandResponsePayload) => void | Promise<void>;
   now?: () => number;
-}
-
-interface ChatPermissionContext {
-  permissionLevel: PermissionLevel;
-  userId: string;
-  platform: ChatMessage['platform'];
 }
 
 export class TextService implements CommandModule {
@@ -41,32 +37,31 @@ export class TextService implements CommandModule {
     return this.options.repository.delete(id);
   }
 
-  handle(message: ChatMessage, permissionLevel: PermissionLevel): void {
-    this.handleChatMessage(message.content, {
-      permissionLevel,
-      userId: message.author,
-      platform: message.platform,
-    });
+  handle(message: ChatMessage, _permissionLevel: PermissionLevel): void {
+    this.handleMessage(message);
   }
 
-  handleChatMessage(content: string, context: ChatPermissionContext): TextCommandResponsePayload | null {
+  handleMessage(message: ChatMessage): TextCommandResponsePayload | null {
     const commands = this.options.repository.list();
+    const userLists = this.options.getUserLists();
+    const content = message.content;
+    const userId = message.author;
 
     for (const command of commands) {
       const timestamp = this.now();
       if (!command.enabled) continue;
       if (command.commandEnabled === false || !command.trigger) continue;
       if (!content.startsWith(command.trigger)) continue;
-      if (!isPermissionAllowed(command.permissions, context.permissionLevel)) continue;
-      if (!this.canRun(command, context.userId, timestamp)) continue;
+      if (!isCommandAllowed(command.permissions, message, userLists)) continue;
+      if (!this.canRun(command, userId, timestamp)) continue;
 
       const payload: TextCommandResponsePayload = {
-        platform: context.platform,
+        platform: message.platform,
         content: command.response,
       };
 
       this.commandCooldowns.set(command.id, timestamp);
-      this.userCooldowns.set(this.buildUserKey(command.id, context.userId), timestamp);
+      this.userCooldowns.set(this.buildUserKey(command.id, userId), timestamp);
       void this.options.onRespond(payload);
       return payload;
     }

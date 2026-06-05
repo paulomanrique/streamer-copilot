@@ -9,12 +9,14 @@ import type {
   MusicRequestSettings,
   PermissionLevel,
   PlatformId,
+  UserList,
 } from '../../shared/types.js';
 import type { CommandModule } from '../commands/command-dispatcher.js';
-import { isPermissionAllowed } from '../commands/permission-utils.js';
+import { isCommandAllowed } from '../commands/permission-utils.js';
 
 interface MusicRequestServiceOptions {
   getSettings: () => MusicRequestSettings;
+  getUserLists: () => UserList[];
   searchYouTube: (query: string) => Promise<{ videoId: string; title: string; durationSeconds: number; thumbnailUrl: string | null } | null>;
   onPlay: (cmd: MusicPlayCommand & { thumbnailUrl: string | null; requestedBy: string; durationSeconds: number }) => void;
   onStop: () => void;
@@ -45,7 +47,7 @@ export class MusicRequestService implements CommandModule {
 
   constructor(private readonly options: MusicRequestServiceOptions) {}
 
-  handle(message: ChatMessage, permissionLevel: PermissionLevel): void {
+  handle(message: ChatMessage, _permissionLevel: PermissionLevel): void {
     const settings = this.options.getSettings();
     if (!settings.enabled) return;
 
@@ -55,13 +57,13 @@ export class MusicRequestService implements CommandModule {
     if (content.startsWith(settings.requestTrigger + ' ') || content === settings.requestTrigger) {
       const query = content.slice(settings.requestTrigger.length).trim();
       if (!query) return;
-      void this.handleRequest(message, permissionLevel, query, settings);
+      void this.handleRequest(message, query, settings);
       return;
     }
 
     // Skip trigger
     if (content === settings.skipTrigger || content.startsWith(settings.skipTrigger + ' ')) {
-      this.handleSkip(message, permissionLevel, settings);
+      this.handleSkip(message, settings);
       return;
     }
 
@@ -80,11 +82,10 @@ export class MusicRequestService implements CommandModule {
 
   private async handleRequest(
     message: ChatMessage,
-    permissionLevel: PermissionLevel,
     query: string,
     settings: MusicRequestSettings,
   ): Promise<void> {
-    if (!isPermissionAllowed(settings.requestPermissions, permissionLevel)) return;
+    if (!isCommandAllowed(settings.requestPermissions, message, this.options.getUserLists())) return;
     if (!this.canRun('request', message.author, settings)) return;
 
     if (this.queue.length >= settings.maxQueueSize) {
@@ -141,8 +142,8 @@ export class MusicRequestService implements CommandModule {
     }
   }
 
-  private handleSkip(message: ChatMessage, permissionLevel: PermissionLevel, settings: MusicRequestSettings): void {
-    if (!isPermissionAllowed(settings.skipPermissions, permissionLevel)) return;
+  private handleSkip(message: ChatMessage, settings: MusicRequestSettings): void {
+    if (!isCommandAllowed(settings.skipPermissions, message, this.options.getUserLists())) return;
 
     if (!this.isPlaying && !this.currentItem) {
       void this.options.sendMessage(message.platform, '❌ Nothing is playing').catch(() => {});

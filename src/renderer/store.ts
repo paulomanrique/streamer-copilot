@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import type { ChatMessage, ObsStatsSnapshot, PlatformId, PlatformLinkStatus, ProfilesSnapshot, StreamEvent, SubscriberTierCatalog } from '../shared/types.js';
+import type { ChatMessage, ObsStatsSnapshot, PlatformId, PlatformLinkStatus, ProfilesSnapshot, StreamEvent, SubscriberTierCatalog, UserList } from '../shared/types.js';
 
 const DEFAULT_OBS_STATS: ObsStatsSnapshot = {
   connected: false,
@@ -48,6 +48,9 @@ interface AppStore extends ProfilesSnapshot {
    *  ChatFeed (label do badge). */
   subscriberTiers: SubscriberTierCatalog;
   setSubscriberTiers: (catalog: SubscriberTierCatalog) => void;
+  /** Listas de usuários — usadas como entries de permissão e pelo right-click no chat. */
+  userLists: UserList[];
+  setUserLists: (lists: UserList[]) => void;
   setProfiles: (snapshot: ProfilesSnapshot) => void;
   setObsStats: (stats: ObsStatsSnapshot | ((current: ObsStatsSnapshot) => ObsStatsSnapshot)) => void;
   setChatSnapshot: (snapshot: { messages: ChatMessage[]; events: StreamEvent[] }) => void;
@@ -70,6 +73,8 @@ export const useAppStore = create<AppStore>((set) => ({
   platformLiveStats: {},
   subscriberTiers: { byPlatform: {} },
   setSubscriberTiers: (catalog) => set({ subscriberTiers: catalog }),
+  userLists: [],
+  setUserLists: (lists) => set({ userLists: lists }),
   setProfiles: (snapshot) =>
     set({
       activeProfileId: snapshot.activeProfileId,

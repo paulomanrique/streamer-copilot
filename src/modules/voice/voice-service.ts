@@ -1,28 +1,19 @@
 import type {
   ChatMessage,
   PermissionLevel,
-  PlatformId,
-  SubscriberTierCatalog,
+  UserList,
   VoiceCommand,
   VoiceSpeakPayload,
 } from '../../shared/types.js';
 import type { CommandModule } from '../commands/command-dispatcher.js';
-import { isCommandAllowedWithTier, isPermissionAllowed } from '../commands/permission-utils.js';
+import { isCommandAllowed } from '../commands/permission-utils.js';
 import { VoiceCommandRepository } from './voice-repository.js';
 
 interface VoiceServiceOptions {
   repository: VoiceCommandRepository;
-  getSubscriberTierCatalog: () => SubscriberTierCatalog;
+  getUserLists: () => UserList[];
   onSpeak: (payload: VoiceSpeakPayload) => void;
   now?: () => number;
-}
-
-interface ChatPermissionContext {
-  permissionLevel: PermissionLevel;
-  /** Platform de origem da mensagem; necessário para o gate por tier.
-   *  Quando ausente (caminho de testes legados), tier gating é pulado. */
-  platform?: PlatformId;
-  subscriberTier?: string;
 }
 
 export class VoiceService implements CommandModule {
@@ -48,35 +39,21 @@ export class VoiceService implements CommandModule {
     this.options.onSpeak(payload);
   }
 
-  /** CommandModule entry point — called by CommandDispatcher with resolved permission. */
-  handle(message: ChatMessage, permissionLevel: PermissionLevel): void {
-    this.handleChatMessage(message.content, {
-      permissionLevel,
-      author: message.author,
-      platform: message.platform,
-      subscriberTier: message.role?.subscriberTier,
-    });
+  handle(message: ChatMessage, _permissionLevel: PermissionLevel): void {
+    this.handleMessage(message);
   }
 
-  handleChatMessage(content: string, context: ChatPermissionContext & { author?: string }): VoiceSpeakPayload | null {
+  handleMessage(message: ChatMessage): VoiceSpeakPayload | null {
     const commands = this.options.repository.list();
-    const catalog = this.options.getSubscriberTierCatalog();
+    const userLists = this.options.getUserLists();
+    const content = message.content;
+    const author = message.author;
 
     for (const command of commands) {
       if (!command.enabled) continue;
       if (!content.startsWith(command.trigger)) continue;
-      const allowed = context.platform
-        ? isCommandAllowedWithTier(
-            command.permissions,
-            command.minSubscriberTier,
-            context.permissionLevel,
-            context.platform,
-            context.subscriberTier,
-            catalog,
-          )
-        : isPermissionAllowed(command.permissions, context.permissionLevel);
-      if (!allowed) continue;
-      if (!this.canRun(command, context.author)) continue;
+      if (!isCommandAllowed(command.permissions, message, userLists)) continue;
+      if (!this.canRun(command, author)) continue;
 
       let extractedText = command.template ?? content.slice(command.trigger.length).trim();
       if (!extractedText) return null;
@@ -85,14 +62,14 @@ export class VoiceService implements CommandModule {
         extractedText = extractedText.slice(0, command.characterLimit);
       }
 
-      if (command.announceUsername && context.author) {
-        extractedText = `${context.author} disse: ${extractedText}`;
+      if (command.announceUsername && author) {
+        extractedText = `${author} disse: ${extractedText}`;
       }
 
       const payload = { text: extractedText, lang: command.language };
 
       this.commandCooldowns.set(command.id, this.now());
-      if (context.author) this.userCooldowns.set(`${command.id}:${context.author}`, this.now());
+      if (author) this.userCooldowns.set(`${command.id}:${author}`, this.now());
       this.options.onSpeak(payload);
       return payload;
     }

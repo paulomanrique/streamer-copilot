@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react';
 
-import type { PlatformAccount } from '../../shared/types.js';
+import type { PermissionLevel, PlatformAccount } from '../../shared/types.js';
 
 export interface AuthStepProps {
   /** Current draft of providerData being built up by the wizard. */
@@ -76,6 +76,15 @@ export interface PlatformBehavior {
    *  shows a synthesized avatar slot instead, and renders a textual `MOD`
    *  label for moderators since no badge image is available. */
   hasNativeBadgeUrls: boolean;
+  /** Papéis hierárquicos suportados por esta plataforma, na ordem em que
+   *  aparecem no dropdown de permissões. NÃO inclui tiers de assinante
+   *  dinâmicos (que vêm do catálogo `subscriberTiers` no store). Plataformas
+   *  sem o conceito de follower/vip omitem o item. */
+  supportedRoles: PermissionLevel[];
+  /** True quando a plataforma usa tiers de assinante (Twitch builtin, YouTube
+   *  via catálogo). O dropdown intercala os tiers entre 'subscriber' e 'vip'
+   *  na ordem do catálogo. False para plataformas sem tier (Kick, TikTok). */
+  hasSubscriberTiers: boolean;
 }
 
 export interface PlatformProvider extends PlatformVisuals, PlatformBehavior {
@@ -97,6 +106,11 @@ export interface PlatformProvider extends PlatformVisuals, PlatformBehavior {
   AuthStep?: ComponentType<AuthStepProps>;
   /** Renders the inline card for an existing connected account (status, controls). */
   AccountCard?: ComponentType<{ account: PlatformAccount; onDelete: () => void; onConnect: () => void; onDisconnect: () => void }>;
+  /** Botões extra renderizados no card de conta — antes do Login/Connect/Disconnect.
+   *  Cada provider declara aqui ações específicas que não cabem na barra
+   *  comum (ex: YouTube precisa de "Trocar canal" pra escolher o canal de
+   *  envio de mensagens dentro da conta Google). */
+  AccountActions?: ComponentType<{ account: PlatformAccount }>;
   /** Returns null if valid, otherwise an error message. */
   validate?(channel: string, providerData: Record<string, unknown>): string | null;
   /** Default label suggestion when user hasn't typed one. */
@@ -167,6 +181,8 @@ const FALLBACK_PROVIDER: PlatformProvider = {
   authorAtPrefix: false,
   profileUrl: () => '',
   hasNativeBadgeUrls: false,
+  supportedRoles: ['everyone', 'broadcaster'],
+  hasSubscriberTiers: false,
 };
 
 /** Returns the provider matching `id`, or a gray fallback when the id is

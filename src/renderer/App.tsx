@@ -42,6 +42,7 @@ export default function App() {
     setChatSnapshot,
     hydratePlatformStatuses,
     setSubscriberTiers,
+    setUserLists,
   } = useAppStore();
 
   // Per-platform views, derived from the symmetric store. This local
@@ -85,7 +86,6 @@ export default function App() {
   const [generalSettings, setGeneralSettings] = useState<GeneralSettings>(DEFAULT_GENERAL_SETTINGS);
   const [appLanguage, setAppLanguage] = useState<AppLanguage>(DEFAULT_APP_LANGUAGE);
   const [languageCode, setLanguageCode] = useState('en-US');
-  const [permissionLevels, setPermissionLevels] = useState<PermissionLevel[]>(['everyone', 'moderator']);
   const [voiceRate, setVoiceRate] = useState(1);
   const [voiceVolume, setVoiceVolume] = useState(0.8);
 
@@ -116,13 +116,14 @@ export default function App() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [info, snapshot, recentChat, nextGeneralSettings, platformStatuses, tiers] = await Promise.all([
+        const [info, snapshot, recentChat, nextGeneralSettings, platformStatuses, tiers, lists] = await Promise.all([
           window.copilot.getAppInfo(),
           window.copilot.listProfiles(),
           window.copilot.getRecentChat(),
           window.copilot.getGeneralSettings(),
           window.copilot.getPlatformStatuses(),
           window.copilot.getSubscriberTiers(),
+          window.copilot.listUserLists(),
         ]);
         setAppInfo(info);
         setProfiles(snapshot);
@@ -131,6 +132,7 @@ export default function App() {
         setGeneralSettings(nextGeneralSettings);
         hydratePlatformStatuses(platformStatuses);
         setSubscriberTiers(tiers);
+        setUserLists(lists);
         setSelectorProfileId(snapshot.activeProfileId);
         setRememberProfileSelection(snapshot.autoSelectActiveProfile);
         // Smart skip: don't bother prompting when there's only one profile,
@@ -155,7 +157,7 @@ export default function App() {
     };
 
     void load();
-  }, [setChatSnapshot, setProfiles, hydratePlatformStatuses, setSubscriberTiers]);
+  }, [setChatSnapshot, setProfiles, hydratePlatformStatuses, setSubscriberTiers, setUserLists]);
 
   useEffect(() => {
     if (!isLoading && !activeProfileId) {
@@ -419,9 +421,7 @@ export default function App() {
             appLanguage={appLanguage}
             onSaveProfileSettings={saveProfileSettings}
             languageCode={languageCode}
-            permissionLevels={permissionLevels}
             onChangeLanguageCode={setLanguageCode}
-            onChangePermissionLevels={setPermissionLevels}
             voiceRate={voiceRate}
             voiceVolume={voiceVolume}
             onChangeVoiceRate={setVoiceRate}

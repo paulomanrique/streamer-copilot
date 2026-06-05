@@ -209,6 +209,13 @@ const IPC_CHANNELS = {
   subscriberTiersGet: 'subscriber-tiers:get',
   subscriberTiersReplace: 'subscriber-tiers:replace',
   subscriberTiersUpdate: 'subscriber-tiers:update',
+  userListsList: 'user-lists:list',
+  userListsCreate: 'user-lists:create',
+  userListsRename: 'user-lists:rename',
+  userListsDelete: 'user-lists:delete',
+  userListsAddMember: 'user-lists:add-member',
+  userListsRemoveMember: 'user-lists:remove-member',
+  userListsUpdate: 'user-lists:update',
   accountsList: 'accounts:list',
   accountsCreate: 'accounts:create',
   accountsUpdate: 'accounts:update',
@@ -474,6 +481,20 @@ const copilotApi: CopilotApi = {
     ) => listener(payload);
     ipcRenderer.on(IPC_CHANNELS.subscriberTiersUpdate, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.subscriberTiersUpdate, wrappedListener); };
+  },
+  listUserLists: () => ipcRenderer.invoke(IPC_CHANNELS.userListsList),
+  createUserList: (input) => ipcRenderer.invoke(IPC_CHANNELS.userListsCreate, input),
+  renameUserList: (input) => ipcRenderer.invoke(IPC_CHANNELS.userListsRename, input),
+  deleteUserList: (input) => ipcRenderer.invoke(IPC_CHANNELS.userListsDelete, input),
+  addUserListMember: (input) => ipcRenderer.invoke(IPC_CHANNELS.userListsAddMember, input),
+  removeUserListMember: (input) => ipcRenderer.invoke(IPC_CHANNELS.userListsRemoveMember, input),
+  onUserListsUpdate: (listener) => {
+    const wrappedListener = (
+      _event: Electron.IpcRendererEvent,
+      payload: import('../shared/types.js').UserList[],
+    ) => listener(payload);
+    ipcRenderer.on(IPC_CHANNELS.userListsUpdate, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.userListsUpdate, wrappedListener); };
   },
   accountsList: () => ipcRenderer.invoke(IPC_CHANNELS.accountsList),
   accountsCreate: (input) => ipcRenderer.invoke(IPC_CHANNELS.accountsCreate, input),

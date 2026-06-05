@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { PERMISSION_LEVELS } from '../../shared/constants.js';
-import type { PermissionLevel, PlatformId, SuggestionEntry, SuggestionList, SuggestionListMode, SuggestionListUpsertInput } from '../../shared/types.js';
+import type { PermissionEntry, PlatformId, SuggestionEntry, SuggestionList, SuggestionListMode, SuggestionListUpsertInput } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
+import { PermissionListPicker } from '../components/PermissionListPicker.js';
 
 const FEEDBACK_PLATFORMS: { id: PlatformId; label: string }[] = [
   { id: 'twitch', label: 'Twitch' },
@@ -18,7 +18,7 @@ const EMPTY_FORM: SuggestionListUpsertInput = {
   feedbackTargetPlatforms: [],
   mode: 'session',
   allowDuplicates: false,
-  permissions: ['everyone'],
+  permissions: [],
   cooldownSeconds: 0,
   userCooldownSeconds: 0,
   enabled: true,
@@ -29,15 +29,6 @@ function getFileName(filePath: string): string {
   const parts = normalized.split('/');
   return parts[parts.length - 1] || filePath;
 }
-
-const PERMISSION_LABELS: Record<PermissionLevel, string> = {
-  everyone: 'Everyone',
-  follower: 'Followers',
-  subscriber: 'Subscribers',
-  vip: 'VIP',
-  moderator: 'Moderators',
-  broadcaster: 'Broadcaster',
-};
 
 const MODE_LABELS: Record<SuggestionListMode, string> = {
   global: 'Global (persistent)',
@@ -59,7 +50,7 @@ export function SuggestionsPage() {
   const [feedbackTemplate, setFeedbackTemplate] = useState(EMPTY_FORM.feedbackTemplate);
   const [mode, setMode] = useState<SuggestionListMode>(EMPTY_FORM.mode);
   const [allowDuplicates, setAllowDuplicates] = useState(EMPTY_FORM.allowDuplicates);
-  const [levels, setLevels] = useState<PermissionLevel[]>(EMPTY_FORM.permissions);
+  const [permissions, setPermissions] = useState<PermissionEntry[]>(EMPTY_FORM.permissions);
   const [cooldownSeconds, setCooldownSeconds] = useState(EMPTY_FORM.cooldownSeconds);
   const [userCooldownSeconds, setUserCooldownSeconds] = useState(EMPTY_FORM.userCooldownSeconds);
   const [enabled, setEnabled] = useState(EMPTY_FORM.enabled);
@@ -100,7 +91,7 @@ export function SuggestionsPage() {
     setFeedbackTemplate(EMPTY_FORM.feedbackTemplate);
     setMode(EMPTY_FORM.mode);
     setAllowDuplicates(EMPTY_FORM.allowDuplicates);
-    setLevels([...EMPTY_FORM.permissions]);
+    setPermissions([...EMPTY_FORM.permissions]);
     setCooldownSeconds(EMPTY_FORM.cooldownSeconds);
     setUserCooldownSeconds(EMPTY_FORM.userCooldownSeconds);
     setEnabled(EMPTY_FORM.enabled);
@@ -122,7 +113,7 @@ export function SuggestionsPage() {
     setFeedbackTemplate(list.feedbackTemplate);
     setMode(list.mode);
     setAllowDuplicates(list.allowDuplicates);
-    setLevels([...list.permissions]);
+    setPermissions([...list.permissions]);
     setCooldownSeconds(list.cooldownSeconds);
     setUserCooldownSeconds(list.userCooldownSeconds);
     setEnabled(list.enabled);
@@ -143,8 +134,8 @@ export function SuggestionsPage() {
       setError('Title is required');
       return;
     }
-    if (levels.length === 0) {
-      setError('Select at least one permission level');
+    if (permissions.length === 0) {
+      setError('Adicione pelo menos uma permissão');
       return;
     }
 
@@ -160,7 +151,7 @@ export function SuggestionsPage() {
         feedbackTargetPlatforms,
         mode,
         allowDuplicates,
-        permissions: levels,
+        permissions,
         cooldownSeconds,
         userCooldownSeconds,
         enabled,
@@ -234,12 +225,6 @@ export function SuggestionsPage() {
     if (feedbackSoundPath) await window.copilot.previewPlay({ filePath: feedbackSoundPath });
   };
 
-  const toggleLevel = (level: PermissionLevel) => {
-    setLevels((prev) =>
-      prev.includes(level) ? prev.filter((l) => l !== level) : [...prev, level],
-    );
-  };
-
   return (
     <div className="p-6 max-w-4xl">
       <div className="flex items-center justify-between mb-6">
@@ -298,7 +283,7 @@ export function SuggestionsPage() {
                     {entryCounts[list.id] ?? 0} entries
                     {list.allowDuplicates ? '' : ' · unique per user'}
                     {' · '}
-                    {list.permissions.map((p) => t(PERMISSION_LABELS[p] || p)).join(', ')}
+                    {list.permissions.length} {list.permissions.length === 1 ? 'permissão' : 'permissões'}
                   </div>
                 </div>
 
@@ -505,23 +490,8 @@ export function SuggestionsPage() {
 
               {/* Permissions */}
               <div>
-                <label className="block text-sm text-gray-300 mb-1">Who can suggest</label>
-                <div className="flex flex-wrap gap-2">
-                  {PERMISSION_LEVELS.map((level) => (
-                    <button
-                      key={level}
-                      type="button"
-                      onClick={() => toggleLevel(level)}
-                      className={
-                        levels.includes(level)
-                          ? 'px-3 py-1 text-xs rounded-full bg-purple-600 text-white'
-                          : 'px-3 py-1 text-xs rounded-full bg-gray-700 text-gray-400 hover:text-white'
-                      }
-                    >
-                      {t(PERMISSION_LABELS[level])}
-                    </button>
-                  ))}
-                </div>
+                <label className="block text-sm text-gray-300 mb-2">Quem pode sugerir</label>
+                <PermissionListPicker value={permissions} onChange={setPermissions} />
               </div>
 
               {/* Cooldowns */}

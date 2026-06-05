@@ -1,7 +1,23 @@
-import type { MusicRequestSettings } from '../../shared/types.js';
+import type { MusicRequestSettings, PermissionEntry, PlatformId } from '../../shared/types.js';
 import { JsonSettingsStore } from '../base/settings-store.js';
+import { migratePermissions } from '../commands/permissions-migration.js';
 
 const SETTINGS_FILE = 'music-request-settings.json';
+
+const ALL_PLATFORMS: PlatformId[] = ['twitch', 'youtube', 'youtube-api', 'kick', 'tiktok'];
+
+function defaultRequestPermissions(): PermissionEntry[] {
+  return ALL_PLATFORMS.map((platform) => ({ kind: 'platform-role', platform, role: 'everyone' }));
+}
+
+function defaultSkipPermissions(): PermissionEntry[] {
+  const entries: PermissionEntry[] = [];
+  for (const platform of ALL_PLATFORMS) {
+    entries.push({ kind: 'platform-role', platform, role: 'moderator' });
+    entries.push({ kind: 'platform-role', platform, role: 'broadcaster' });
+  }
+  return entries;
+}
 
 const DEFAULT_SETTINGS: MusicRequestSettings = {
   enabled: false,
@@ -12,8 +28,8 @@ const DEFAULT_SETTINGS: MusicRequestSettings = {
   skipTrigger: '!skip',
   queueTrigger: '!queue',
   cancelTrigger: '!cancel',
-  requestPermissions: ['everyone'],
-  skipPermissions: ['moderator', 'broadcaster'],
+  requestPermissions: defaultRequestPermissions(),
+  skipPermissions: defaultSkipPermissions(),
   cooldownSeconds: 5,
   userCooldownSeconds: 30,
 };
@@ -49,14 +65,14 @@ export class MusicSettingsStore extends JsonSettingsStore<MusicRequestSettings> 
         typeof raw.cancelTrigger === 'string' && raw.cancelTrigger.trim()
           ? (raw.cancelTrigger as string)
           : DEFAULT_SETTINGS.cancelTrigger,
-      requestPermissions:
-        Array.isArray(raw.requestPermissions) && raw.requestPermissions.length > 0
-          ? (raw.requestPermissions as MusicRequestSettings['requestPermissions'])
-          : DEFAULT_SETTINGS.requestPermissions,
-      skipPermissions:
-        Array.isArray(raw.skipPermissions) && raw.skipPermissions.length > 0
-          ? (raw.skipPermissions as MusicRequestSettings['skipPermissions'])
-          : DEFAULT_SETTINGS.skipPermissions,
+      requestPermissions: (() => {
+        const migrated = migratePermissions(raw.requestPermissions);
+        return migrated.length > 0 ? migrated : defaultRequestPermissions();
+      })(),
+      skipPermissions: (() => {
+        const migrated = migratePermissions(raw.skipPermissions);
+        return migrated.length > 0 ? migrated : defaultSkipPermissions();
+      })(),
       cooldownSeconds: typeof raw.cooldownSeconds === 'number' ? raw.cooldownSeconds : DEFAULT_SETTINGS.cooldownSeconds,
       userCooldownSeconds: typeof raw.userCooldownSeconds === 'number' ? raw.userCooldownSeconds : DEFAULT_SETTINGS.userCooldownSeconds,
     };

@@ -14,6 +14,7 @@ export function useIpcListeners(): void {
   const setPlatformStatus = useAppStore((s) => s.setPlatformStatus);
   const setPlatformLiveStats = useAppStore((s) => s.setPlatformLiveStats);
   const setSubscriberTiers = useAppStore((s) => s.setSubscriberTiers);
+  const setUserLists = useAppStore((s) => s.setUserLists);
 
   // OBS listeners
   useEffect(() => {
@@ -59,4 +60,11 @@ export function useIpcListeners(): void {
       setSubscriberTiers(catalog);
     });
   }, [setSubscriberTiers]);
+
+  // User lists: kicks in when a list is created/renamed/deleted or members change.
+  useEffect(() => {
+    return window.copilot.onUserListsUpdate((lists) => {
+      setUserLists(lists);
+    });
+  }, [setUserLists]);
 }

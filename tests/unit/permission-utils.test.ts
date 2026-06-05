@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import {
   PERMISSION_RANK,
-  isCommandAllowedWithTier,
+  isCommandAllowed,
   isPermissionAllowed,
   resolveFromRole,
   resolvePermissionLevel,
 } from '../../src/modules/commands/permission-utils.js';
-import type { ChatMessage, SubscriberTierCatalog } from '../../src/shared/types.js';
+import { migratePermissions } from '../../src/modules/commands/permissions-migration.js';
+import type { ChatMessage, PermissionEntry, UserList } from '../../src/shared/types.js';
 
 function makeMessage(extra: Partial<ChatMessage> = {}): ChatMessage {
   return {
@@ -91,62 +92,136 @@ describe('PERMISSION_RANK ordering', () => {
   });
 });
 
-describe('isCommandAllowedWithTier', () => {
-  const catalog: SubscriberTierCatalog = {
-    byPlatform: {
-      twitch: [
-        { id: '1', label: 'Tier 1', order: 1, source: 'builtin' },
-        { id: '2', label: 'Tier 2', order: 2, source: 'builtin' },
-        { id: '3', label: 'Tier 3', order: 3, source: 'builtin' },
+describe('isCommandAllowed', () => {
+  const NO_LISTS: UserList[] = [];
+
+  it('lista vazia nunca passa', () => {
+    expect(isCommandAllowed([], makeMessage(), NO_LISTS)).toBe(false);
+  });
+
+  it('platform-role só casa quando a plataforma da mensagem bate', () => {
+    const entries: PermissionEntry[] = [
+      { kind: 'platform-role', platform: 'youtube', role: 'everyone' },
+    ];
+    expect(isCommandAllowed(entries, makeMessage({ platform: 'twitch' }), NO_LISTS)).toBe(false);
+    expect(isCommandAllowed(entries, makeMessage({ platform: 'youtube' }), NO_LISTS)).toBe(true);
+  });
+
+  it('roles hierárquicos: vip libera mod/broadcaster (hierarquia)', () => {
+    const entries: PermissionEntry[] = [
+      { kind: 'platform-role', platform: 'twitch', role: 'vip' },
+    ];
+    expect(isCommandAllowed(entries, makeMessage({ role: { vip: true } }), NO_LISTS)).toBe(true);
+    expect(isCommandAllowed(entries, makeMessage({ role: { moderator: true } }), NO_LISTS)).toBe(true);
+    expect(isCommandAllowed(entries, makeMessage({ role: { broadcaster: true } }), NO_LISTS)).toBe(true);
+    expect(isCommandAllowed(entries, makeMessage({ role: { subscriber: true } }), NO_LISTS)).toBe(false);
+  });
+
+  it('tier:N é match exato — Tier 2 não libera Tier 3', () => {
+    const entries: PermissionEntry[] = [
+      { kind: 'platform-role', platform: 'twitch', role: 'tier:2' },
+    ];
+    expect(isCommandAllowed(entries, makeMessage({ role: { subscriber: true, subscriberTier: '2' } }), NO_LISTS)).toBe(true);
+    expect(isCommandAllowed(entries, makeMessage({ role: { subscriber: true, subscriberTier: '3' } }), NO_LISTS)).toBe(false);
+    expect(isCommandAllowed(entries, makeMessage({ role: { subscriber: true, subscriberTier: '1' } }), NO_LISTS)).toBe(false);
+  });
+
+  it('tier:N nega usuários sem tier', () => {
+    const entries: PermissionEntry[] = [
+      { kind: 'platform-role', platform: 'twitch', role: 'tier:2' },
+    ];
+    expect(isCommandAllowed(entries, makeMessage({ role: { subscriber: true } }), NO_LISTS)).toBe(false);
+  });
+
+  it('múltiplas entries são OR — qualquer match libera', () => {
+    const entries: PermissionEntry[] = [
+      { kind: 'platform-role', platform: 'twitch', role: 'tier:2' },
+      { kind: 'platform-role', platform: 'twitch', role: 'tier:3' },
+    ];
+    expect(isCommandAllowed(entries, makeMessage({ role: { subscriber: true, subscriberTier: '2' } }), NO_LISTS)).toBe(true);
+    expect(isCommandAllowed(entries, makeMessage({ role: { subscriber: true, subscriberTier: '3' } }), NO_LISTS)).toBe(true);
+    expect(isCommandAllowed(entries, makeMessage({ role: { subscriber: true, subscriberTier: '1' } }), NO_LISTS)).toBe(false);
+  });
+
+  it('entry de lista libera quando (platform, userId) está nos membros', () => {
+    const list: UserList = {
+      id: 'l1',
+      name: 'VIPs',
+      members: [
+        { platform: 'twitch', userId: '12345', displayName: 'joe', addedAt: '2026-01-01T00:00:00Z' },
       ],
-      youtube: [
-        { id: 'Member', label: 'Member', order: 1, source: 'scraped' },
-        { id: 'Apoiador', label: 'Apoiador', order: 2, source: 'scraped' },
-        { id: 'Super fã', label: 'Super fã', order: 3, source: 'scraped' },
-      ],
-    },
-  };
-
-  it('passa quando não há minSubscriberTier configurado', () => {
-    expect(isCommandAllowedWithTier(['subscriber'], undefined, 'subscriber', 'twitch', '1', catalog)).toBe(true);
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    };
+    const entries: PermissionEntry[] = [{ kind: 'list', listId: 'l1' }];
+    expect(isCommandAllowed(entries, makeMessage({ platform: 'twitch', userId: '12345' }), [list])).toBe(true);
+    expect(isCommandAllowed(entries, makeMessage({ platform: 'twitch', userId: '99999' }), [list])).toBe(false);
+    // Cross-platform: mesmo userId mas plataforma diferente não casa.
+    expect(isCommandAllowed(entries, makeMessage({ platform: 'youtube', userId: '12345' }), [list])).toBe(false);
   });
 
-  it('passa quando a plataforma do remetente não está no mapa', () => {
-    expect(isCommandAllowedWithTier(['subscriber'], { twitch: '2' }, 'subscriber', 'youtube', 'Member', catalog)).toBe(true);
+  it('lista referenciada que não existe simplesmente não casa (não trava outras entries)', () => {
+    const entries: PermissionEntry[] = [
+      { kind: 'list', listId: 'lista-deletada' },
+      { kind: 'platform-role', platform: 'twitch', role: 'everyone' },
+    ];
+    expect(isCommandAllowed(entries, makeMessage({ platform: 'twitch' }), NO_LISTS)).toBe(true);
   });
 
-  it('passa quando o tier do usuário >= tier requerido', () => {
-    expect(isCommandAllowedWithTier(['subscriber'], { twitch: '2' }, 'subscriber', 'twitch', '3', catalog)).toBe(true);
-    expect(isCommandAllowedWithTier(['subscriber'], { youtube: 'Apoiador' }, 'subscriber', 'youtube', 'Super fã', catalog)).toBe(true);
+  it('mensagem sem userId nunca casa entries de lista', () => {
+    const list: UserList = {
+      id: 'l1', name: 'X', members: [
+        { platform: 'twitch', userId: '12345', displayName: 'joe', addedAt: '2026-01-01T00:00:00Z' },
+      ], createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
+    };
+    const entries: PermissionEntry[] = [{ kind: 'list', listId: 'l1' }];
+    expect(isCommandAllowed(entries, makeMessage({ platform: 'twitch', userId: undefined }), [list])).toBe(false);
+  });
+});
+
+describe('migratePermissions', () => {
+  it('expande PermissionLevel[] legado para entries em todas as plataformas conhecidas', () => {
+    const migrated = migratePermissions(['everyone']);
+    expect(migrated).toEqual(expect.arrayContaining([
+      { kind: 'platform-role', platform: 'twitch', role: 'everyone' },
+      { kind: 'platform-role', platform: 'youtube', role: 'everyone' },
+      { kind: 'platform-role', platform: 'youtube-api', role: 'everyone' },
+      { kind: 'platform-role', platform: 'kick', role: 'everyone' },
+      { kind: 'platform-role', platform: 'tiktok', role: 'everyone' },
+    ]));
   });
 
-  it('bloqueia quando o tier do usuário < tier requerido', () => {
-    expect(isCommandAllowedWithTier(['subscriber'], { twitch: '2' }, 'subscriber', 'twitch', '1', catalog)).toBe(false);
-    expect(isCommandAllowedWithTier(['subscriber'], { youtube: 'Apoiador' }, 'subscriber', 'youtube', 'Member', catalog)).toBe(false);
+  it('expande múltiplos níveis', () => {
+    const migrated = migratePermissions(['moderator', 'broadcaster']);
+    const platforms = new Set(migrated.map((e) => (e.kind === 'platform-role' ? e.platform : '')));
+    expect(platforms.size).toBe(5);
+    expect(migrated.filter((e) => e.kind === 'platform-role' && e.role === 'moderator').length).toBe(5);
+    expect(migrated.filter((e) => e.kind === 'platform-role' && e.role === 'broadcaster').length).toBe(5);
   });
 
-  it('bloqueia quando o tier do usuário não está catalogado', () => {
-    expect(isCommandAllowedWithTier(['subscriber'], { twitch: '1' }, 'subscriber', 'twitch', undefined, catalog)).toBe(false);
-    expect(isCommandAllowedWithTier(['subscriber'], { twitch: '1' }, 'subscriber', 'twitch', '99', catalog)).toBe(false);
+  it('passa entries no formato novo sem alteração', () => {
+    const input: PermissionEntry[] = [
+      { kind: 'platform-role', platform: 'twitch', role: 'tier:2' },
+      { kind: 'list', listId: 'abc' },
+    ];
+    expect(migratePermissions(input)).toEqual(input);
   });
 
-  it('bloqueia quando o tier requerido não existe no catálogo (proteção contra config stale)', () => {
-    expect(isCommandAllowedWithTier(['subscriber'], { youtube: 'NívelInexistente' }, 'subscriber', 'youtube', 'Member', catalog)).toBe(false);
+  it('descarta input não-array', () => {
+    expect(migratePermissions(null)).toEqual([]);
+    expect(migratePermissions('everyone')).toEqual([]);
   });
 
-  it('bloqueia quando a plataforma não tem catálogo', () => {
-    expect(isCommandAllowedWithTier(['subscriber'], { kick: '1' }, 'subscriber', 'kick', '1', catalog)).toBe(false);
-  });
-
-  it('moderator passa direto ignorando minSubscriberTier', () => {
-    expect(isCommandAllowedWithTier(['subscriber'], { twitch: '3' }, 'moderator', 'twitch', undefined, catalog)).toBe(true);
-  });
-
-  it('broadcaster passa direto ignorando minSubscriberTier', () => {
-    expect(isCommandAllowedWithTier(['subscriber'], { twitch: '3' }, 'broadcaster', 'twitch', undefined, catalog)).toBe(true);
-  });
-
-  it('respeita o gate base de allowedLevels antes do tier check', () => {
-    expect(isCommandAllowedWithTier(['moderator'], { twitch: '1' }, 'subscriber', 'twitch', '3', catalog)).toBe(false);
+  it('descarta entradas malformadas mas mantém as válidas', () => {
+    const input = [
+      'everyone',
+      { kind: 'platform-role', platform: 'twitch', role: 'moderator' },
+      { kind: 'list' }, // sem listId
+      42,
+    ];
+    const out = migratePermissions(input);
+    expect(out.length).toBeGreaterThan(0);
+    expect(out.some((e) => e.kind === 'platform-role' && e.platform === 'twitch' && e.role === 'moderator')).toBe(true);
+    expect(out.some((e) => e.kind === 'list')).toBe(false);
   });
 });

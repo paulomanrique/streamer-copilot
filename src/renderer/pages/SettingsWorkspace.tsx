@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { ReactElement } from 'react';
 
-import type { AppLanguage, GeneralSettings, PermissionLevel, ProfileSettings, ProfileSummary } from '../../shared/types.js';
+import type { AppLanguage, GeneralSettings, ProfileSettings, ProfileSummary } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
 import { PlatformsSettingsPage } from './PlatformsSettings.js';
 import { SettingsProfilesPanel } from '../components/SettingsProfilesPanel.js';
@@ -32,9 +32,7 @@ interface SettingsWorkspaceProps {
   appLanguage: AppLanguage;
   onSaveProfileSettings: (settings: ProfileSettings) => Promise<ProfileSettings>;
   languageCode: string;
-  permissionLevels: PermissionLevel[];
   onChangeLanguageCode: (code: string) => void;
-  onChangePermissionLevels: (levels: PermissionLevel[]) => void;
   voiceRate: number;
   voiceVolume: number;
   onChangeVoiceRate: (value: number) => void;

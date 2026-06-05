@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 
-import type { MusicPlayerState, MusicRequestSettings, PermissionLevel } from '../../shared/types.js';
+import type { MusicPlayerState, MusicRequestSettings, PermissionEntry } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
-import { PermissionPicker } from '../components/PermissionPicker.js';
+import { PermissionListPicker } from '../components/PermissionListPicker.js';
 import { ToggleSwitch } from '../components/ToggleSwitch.js';
 
 const copilot = (window as unknown as { copilot: import('../../shared/ipc.js').CopilotApi }).copilot;
@@ -16,8 +16,8 @@ const DEFAULT_SETTINGS: MusicRequestSettings = {
   skipTrigger: '!skip',
   queueTrigger: '!queue',
   cancelTrigger: '!cancel',
-  requestPermissions: ['everyone'],
-  skipPermissions: ['moderator', 'broadcaster'],
+  requestPermissions: [],
+  skipPermissions: [],
   cooldownSeconds: 5,
   userCooldownSeconds: 30,
 };
@@ -177,17 +177,21 @@ export function MusicRequestPage() {
           </div>
 
           {/* Permissions */}
-          <div className="bg-gray-800/40 rounded-xl border border-gray-700 p-5 space-y-3">
-            <PermissionPicker
-              label={t('Request permissions')}
-              selectedLevels={draft.requestPermissions}
-              onChange={(levels: PermissionLevel[]) => updateDraft({ requestPermissions: levels })}
-            />
-            <PermissionPicker
-              label={t('Skip permissions')}
-              selectedLevels={draft.skipPermissions}
-              onChange={(levels: PermissionLevel[]) => updateDraft({ skipPermissions: levels })}
-            />
+          <div className="bg-gray-800/40 rounded-xl border border-gray-700 p-5 space-y-4">
+            <div>
+              <h3 className="text-sm font-medium text-gray-200 mb-2">{t('Request permissions')}</h3>
+              <PermissionListPicker
+                value={draft.requestPermissions}
+                onChange={(next: PermissionEntry[]) => updateDraft({ requestPermissions: next })}
+              />
+            </div>
+            <div>
+              <h3 className="text-sm font-medium text-gray-200 mb-2">{t('Skip permissions')}</h3>
+              <PermissionListPicker
+                value={draft.skipPermissions}
+                onChange={(next: PermissionEntry[]) => updateDraft({ skipPermissions: next })}
+              />
+            </div>
           </div>
 
           {/* Limits & Cooldowns */}

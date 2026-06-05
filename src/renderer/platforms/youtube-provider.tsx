@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import { registerPlatformProvider, type AuthStepProps } from './registry.js';
+import { YouTubeAccountActions } from './youtube-channel-picker.js';
 import { YOUTUBE_ICON, youtubeProfileUrl } from './youtube-shared.js';
 
 function YouTubeAuthStep({ channel, setChannel, setError }: AuthStepProps) {
@@ -77,6 +78,8 @@ registerPlatformProvider({
   subscriberBadge: 'member',
   authorAtPrefix: true,
   hasNativeBadgeUrls: false,
+  supportedRoles: ['everyone', 'subscriber', 'moderator', 'broadcaster'],
+  hasSubscriberTiers: true,
   profileUrl: youtubeProfileUrl,
   AuthStep: YouTubeAuthStep,
   validate(channel) {
@@ -88,4 +91,5 @@ registerPlatformProvider({
     await window.copilot.youtubeOpenLogin();
     return { message: 'Logado com sucesso' };
   },
+  AccountActions: YouTubeAccountActions,
 });

@@ -16,6 +16,7 @@ import type {
   StreamEvent,
   SubscriberTierCatalog,
   SuggestionSnapshot,
+  UserList,
   PlatformId,
   PlatformLinkStatus,
   VoiceSpeakPayload,
@@ -80,6 +81,10 @@ export class StateHub {
 
   pushSubscriberTiers(payload: SubscriberTierCatalog): void {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.subscriberTiersUpdate, payload);
+  }
+
+  pushUserLists(payload: UserList[]): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.userListsUpdate, payload);
   }
 
   pushGoogleTtsAudio(payload: { base64: string }): void {

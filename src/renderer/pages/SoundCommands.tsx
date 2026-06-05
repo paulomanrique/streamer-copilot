@@ -228,13 +228,9 @@ export function SoundCommandsPage() {
                   </td>
                   <td className="px-4 py-3 text-gray-400 text-xs">{getFileName(row.filePath)}</td>
                   <td className="px-4 py-3">
-                    <div className="flex gap-1 flex-wrap">
-                      {row.permissions.map((level) => (
-                        <span key={level} className="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">
-                          {level}
-                        </span>
-                      ))}
-                    </div>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">
+                      {row.permissions.length} {row.permissions.length === 1 ? 'permissão' : 'permissões'}
+                    </span>
                   </td>
                   <td className="px-4 py-3 text-gray-400 text-sm">
                     {row.cooldownSeconds === null && row.userCooldownSeconds === null ? (

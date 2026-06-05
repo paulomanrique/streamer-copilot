@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 
-import type { PermissionLevel, PlatformId, SuggestionEntry, SuggestionList, SuggestionListUpsertInput } from '../../shared/types.js';
+import type { PermissionEntry, PlatformId, SuggestionEntry, SuggestionList, SuggestionListUpsertInput } from '../../shared/types.js';
 import { JsonStore } from '../../db/json-store.js';
 import { PROFILE_CONFIG_FILES } from '../../shared/constants.js';
+import { migratePermissions } from '../commands/permissions-migration.js';
 
 interface SuggestionsFile {
   lists: SuggestionListRecord[];
@@ -19,7 +20,7 @@ interface SuggestionListRecord {
   feedbackTargetPlatforms: PlatformId[];
   mode: 'global' | 'session';
   allowDuplicates: boolean;
-  permissions: PermissionLevel[];
+  permissions: PermissionEntry[];
   cooldownSeconds: number;
   userCooldownSeconds: number;
   enabled: boolean;
@@ -60,6 +61,18 @@ export class SuggestionRepository {
     const data = new JsonStore<SuggestionsFile>(this.filePath(), EMPTY_FILE).read();
     if (!data.lists) data.lists = [];
     if (!data.entries) data.entries = {};
+    // Migra `permissions: PermissionLevel[]` legado para o novo modelo de
+    // entries com plataforma. Persiste o resultado se houve mudança real.
+    let didMigrate = false;
+    for (const list of data.lists) {
+      const rawPerms = list.permissions as unknown;
+      const wasLegacy = Array.isArray(rawPerms) && rawPerms.length > 0 && typeof rawPerms[0] === 'string';
+      if (wasLegacy) {
+        list.permissions = migratePermissions(rawPerms);
+        didMigrate = true;
+      }
+    }
+    if (didMigrate) new JsonStore<SuggestionsFile>(this.filePath(), EMPTY_FILE).write(data);
     this.cache = { dir, data };
     return data;
   }

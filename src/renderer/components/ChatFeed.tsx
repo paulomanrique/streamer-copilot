@@ -167,6 +167,12 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState>({
     visible: false, x: 0, y: 0, platform: '', author: '',
   });
+  const userLists = useAppStore((s) => s.userLists);
+  // window.prompt não funciona em Electron — usamos um input inline dentro do
+  // próprio menu de contexto quando o streamer clica em "Nova lista".
+  const [newListMode, setNewListMode] = useState(false);
+  const [newListName, setNewListName] = useState('');
+  const newListInputRef = useRef<HTMLInputElement | null>(null);
   // Detect platforms with more than one distinct stream/channel from observed
   // messages. When a platform has 2+ distinct `streamLabel`s, each row's badge
   // shows the channel name instead of the generic platform name. Generic over
@@ -269,7 +275,11 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
   }, [items]);
 
   // ── close context menu on outside click / Escape ───────────────────
-  const hideMenu = useCallback(() => setCtxMenu((c) => ({ ...c, visible: false })), []);
+  const hideMenu = useCallback(() => {
+    setCtxMenu((c) => ({ ...c, visible: false }));
+    setNewListMode(false);
+    setNewListName('');
+  }, []);
 
   // ── moderation capabilities cache, lazy-loaded per platform ────────
   const [capabilitiesByPlatform, setCapabilitiesByPlatform] =
@@ -637,6 +647,101 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
             </svg>
             {t('Copy username')}
           </button>
+
+          {/* Add to list — quando temos userId estável (sem ele, lista quebra) */}
+          {ctxMenu.userId ? (
+            <>
+              <div className="border-t border-gray-700 my-1" />
+              <div className="px-3 py-1 text-[10px] uppercase tracking-wide text-gray-500 font-semibold">Adicionar a lista</div>
+              {userLists.length === 0 ? (
+                <div className="px-3 py-1.5 text-[11px] text-gray-500 italic">Nenhuma lista ainda</div>
+              ) : (
+                userLists.map((list) => (
+                  <button
+                    key={list.id}
+                    type="button"
+                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-violet-600/20 text-gray-200 flex items-center gap-2"
+                    onClick={() => {
+                      const platform = ctxMenu.platform as PlatformId;
+                      const userId = ctxMenu.userId!;
+                      void window.copilot.addUserListMember({
+                        listId: list.id,
+                        member: { platform, userId, displayName: ctxMenu.author },
+                      });
+                      hideMenu();
+                    }}
+                  >
+                    <svg className="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                    {list.name}
+                    <span className="ml-auto text-[10px] text-gray-500">{list.members.length}</span>
+                  </button>
+                ))
+              )}
+              {newListMode ? (
+                <form
+                  className="px-3 py-1.5 flex items-center gap-1"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const trimmed = newListName.trim();
+                    if (!trimmed) return;
+                    const platform = ctxMenu.platform as PlatformId;
+                    const userId = ctxMenu.userId!;
+                    const author = ctxMenu.author;
+                    void (async () => {
+                      const lists = await window.copilot.createUserList({ name: trimmed });
+                      const created = lists.find((l) => l.name === trimmed);
+                      if (created) {
+                        await window.copilot.addUserListMember({
+                          listId: created.id,
+                          member: { platform, userId, displayName: author },
+                        });
+                      }
+                    })();
+                    setNewListMode(false);
+                    setNewListName('');
+                    hideMenu();
+                  }}
+                >
+                  <input
+                    ref={newListInputRef}
+                    type="text"
+                    value={newListName}
+                    onChange={(e) => setNewListName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setNewListMode(false);
+                        setNewListName('');
+                      }
+                    }}
+                    placeholder="Nome da lista"
+                    autoFocus
+                    className="flex-1 bg-gray-800 border border-gray-600 rounded text-xs text-gray-200 px-2 py-1 focus:outline-none focus:border-violet-500"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!newListName.trim()}
+                    className="px-2 py-1 rounded bg-violet-600 hover:bg-violet-500 text-xs text-white disabled:opacity-40"
+                  >
+                    OK
+                  </button>
+                </form>
+              ) : (
+                <button
+                  type="button"
+                  className="w-full text-left px-3 py-1.5 text-sm hover:bg-violet-600/20 text-violet-300 flex items-center gap-2"
+                  onClick={() => { setNewListMode(true); setNewListName(''); }}
+                >
+                  <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  + Nova lista...
+                </button>
+              )}
+            </>
+          ) : null}
 
           {/* Moderation actions — only when the platform supports them */}
           {(ctxCapabilities?.canDeleteMessage || ctxCapabilities?.canTimeoutUser || ctxCapabilities?.canBanUser) ? (

@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 
-import { PERMISSION_LEVELS } from '../../shared/constants.js';
 import type {
-  PermissionLevel,
+  PermissionEntry,
   PlatformId,
   ScheduledAvailableTargets,
   TextCommand,
@@ -10,16 +9,8 @@ import type {
   TextSettings,
 } from '../../shared/types.js';
 import { getPlatformProviderOrFallback } from '../platforms/registry.js';
+import { PermissionListPicker } from './PermissionListPicker.js';
 import { ToggleSwitch } from './ToggleSwitch.js';
-
-const PERMISSION_LABELS: Record<PermissionLevel, string> = {
-  everyone: 'Everyone',
-  follower: 'Followers',
-  subscriber: 'Subscribers',
-  vip: 'VIP',
-  moderator: 'Moderators',
-  broadcaster: 'Broadcaster',
-};
 
 interface TextCommandModalProps {
   open: boolean;
@@ -49,7 +40,7 @@ export function TextCommandModal({
 
   const [commandEnabled, setCommandEnabled] = useState(true);
   const [trigger, setTrigger] = useState('!');
-  const [levels, setLevels] = useState<PermissionLevel[]>(['everyone']);
+  const [permissions, setPermissions] = useState<PermissionEntry[]>([]);
   const [useGlobalCooldown, setUseGlobalCooldown] = useState(true);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [userCooldownSeconds, setUserCooldownSeconds] = useState(0);
@@ -71,7 +62,7 @@ export function TextCommandModal({
       setResponse(initialData.response);
       setCommandEnabled(initialData.commandEnabled);
       setTrigger(initialData.trigger ?? '!');
-      setLevels(initialData.permissions);
+      setPermissions(initialData.permissions);
       const isGlobal = initialData.cooldownSeconds === null && initialData.userCooldownSeconds === null;
       setUseGlobalCooldown(isGlobal);
       setCooldownSeconds(initialData.cooldownSeconds ?? settings.defaultCooldownSeconds);
@@ -91,7 +82,7 @@ export function TextCommandModal({
       setResponse('');
       setCommandEnabled(true);
       setTrigger('!');
-      setLevels(['everyone']);
+      setPermissions([]);
       setUseGlobalCooldown(true);
       setCooldownSeconds(settings.defaultCooldownSeconds);
       setUserCooldownSeconds(settings.defaultUserCooldownSeconds);
@@ -102,16 +93,6 @@ export function TextCommandModal({
       setEnabled(true);
     }
   }, [open, initialData, settings, availableTargets]);
-
-  const toggleLevel = (level: PermissionLevel) => {
-    setLevels((current) => {
-      if (current.includes(level)) {
-        const next = current.filter((l) => l !== level);
-        return next.length > 0 ? next : ['everyone'];
-      }
-      return [...current, level];
-    });
-  };
 
   const toggleSchedulePlatform = (platform: PlatformId) => {
     setSchedulePlatforms((current) =>
@@ -142,6 +123,10 @@ export function TextCommandModal({
         setError('This trigger is already used by another command');
         return;
       }
+      if (permissions.length === 0) {
+        setError('Adicione pelo menos uma permissão');
+        return;
+      }
     }
     if (scheduleEnabled && schedulePlatforms.length === 0) {
       setError('Select at least one schedule target');
@@ -159,7 +144,7 @@ export function TextCommandModal({
         name: name.trim(),
         trigger: commandEnabled ? trigger.trim() : null,
         response: response.trim(),
-        permissions: levels,
+        permissions,
         cooldownSeconds: useGlobalCooldown ? null : cooldownSeconds,
         userCooldownSeconds: useGlobalCooldown ? null : userCooldownSeconds,
         commandEnabled,
@@ -257,24 +242,8 @@ export function TextCommandModal({
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-400 mb-1.5">Permissions</label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {PERMISSION_LEVELS.map((level) => {
-                          const active = levels.includes(level);
-                          return (
-                            <button
-                              key={level}
-                              type="button"
-                              onClick={() => toggleLevel(level)}
-                              className={active
-                                ? 'px-2.5 py-1 rounded-full bg-violet-600 text-white text-xs font-medium'
-                                : 'px-2.5 py-1 rounded-full bg-gray-800 border border-gray-700 text-gray-300 text-xs'}
-                            >
-                              {PERMISSION_LABELS[level]}
-                            </button>
-                          );
-                        })}
-                      </div>
+                      <label className="block text-xs text-gray-400 mb-1.5">Permissões</label>
+                      <PermissionListPicker value={permissions} onChange={setPermissions} />
                     </div>
                     <div>
                       <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer mb-2">
