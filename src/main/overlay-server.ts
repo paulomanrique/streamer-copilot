@@ -567,12 +567,7 @@ html[data-transparent="1"], html[data-transparent="1"] body {
 
 /* Global scale — query param "?scale=N" (e.g. 1.5 = +50%).
  * Default 1 = current sizes; consumed via calc() below. */
-html { --scale: 1; --opacity: 1; }
-
-/* Whole-overlay opacity — controlled live from the app via the WS topic
- * "overlay-prefs:chat-(overlay|dock)". The body fades together, which gives
- * a ghost-text effect over the OBS scene. */
-body { opacity: var(--opacity, 1); transition: opacity 150ms ease; }
+html { --scale: 1; --opacity: 0; }
 
 .chat-overlay {
   width: 100vw;
@@ -605,11 +600,16 @@ body { opacity: var(--opacity, 1); transition: opacity 150ms ease; }
   display: flex;
   gap: 6px;
   min-width: 0;
-  padding: 6px 8px 6px 2px;
+  padding: 6px 8px 6px 6px;
   border-left: 2px solid rgba(168, 85, 247, 0.2);
+  /* Backdrop behind each row — alpha driven by --opacity (set via WS by the
+   * customize modal). Default 0 = transparent (text alone over the scene);
+   * higher values darken the row for legibility on busy scenes. */
+  background-color: rgba(0, 0, 0, var(--opacity, 0));
+  border-radius: 4px;
   cursor: default;
   user-select: text;
-  transition: background 75ms ease;
+  transition: background 150ms ease;
   animation: enter 160ms ease-out both;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.72);
 }
@@ -1116,16 +1116,21 @@ const overlayCss = `
   --text: #f1f5f9;
   --text-dim: #64748b;
   --r: 18px;
+  /* Backdrop alpha — controlled live via the WS topic overlay-prefs:raffles.
+   * Default 0 keeps the OBS scene fully visible behind the wheel; raising it
+   * adds a dark layer behind the overlay for legibility on busy scenes. */
+  --opacity: 0;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body {
   min-height: 100vh;
-  background: var(--bg);
+  background-color: rgba(0, 0, 0, var(--opacity, 0));
   font-family: "DM Sans", sans-serif;
   color: var(--text);
   -webkit-font-smoothing: antialiased;
+  transition: background-color 150ms ease;
 }
 
 .overlay {
@@ -1481,6 +1486,37 @@ html, body {
 const overlayJs = `
 'use strict';
 
+// Overlay preferences live channel — same pattern as the chat / now-playing
+// overlays. Hydrates from GET /overlay-prefs/state, subscribes to the WS
+// topic so the customize-modal slider applies immediately.
+(function () {
+  function applyPrefs(prefs) {
+    if (!prefs || typeof prefs !== 'object') return;
+    if (typeof prefs.opacity === 'number') {
+      document.documentElement.style.setProperty('--opacity', String(prefs.opacity));
+    }
+  }
+  var id = 'raffles';
+  fetch('/overlay-prefs/state?id=' + encodeURIComponent(id), { cache: 'no-store' })
+    .then(function (r) { return r.ok ? r.json() : {}; })
+    .then(applyPrefs)
+    .catch(function () { /* noop */ });
+  function connectPrefs() {
+    var ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+    ws.addEventListener('open', function () {
+      ws.send(JSON.stringify({ type: 'subscribe', topic: 'overlay-prefs:' + id }));
+    });
+    ws.addEventListener('message', function (event) {
+      try {
+        var msg = JSON.parse(event.data);
+        if (msg.topic === 'overlay-prefs:' + id) applyPrefs(msg.payload);
+      } catch (e) { /* ignore */ }
+    });
+    ws.addEventListener('close', function () { setTimeout(connectPrefs, 1500); });
+  }
+  connectPrefs();
+})();
+
 var PALETTE = [
   '#e63946', '#4361ee', '#f4a261', '#7b2d8b',
   '#2ec4b6', '#e76f51', '#1982c4', '#f9c74f',
@@ -1785,9 +1821,19 @@ const pollsOverlayCss = `
   --accent: #7c5cff;
   --accent-2: #22d3ee;
   --winner: #f0c020;
+  /* Backdrop alpha — controlled live via overlay-prefs:polls. Adds a dark
+   * layer behind the entire viewport (the poll card already has its own
+   * background); useful when the scene behind the overlay is too busy. */
+  --opacity: 0;
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; background: transparent; font-family: "DM Sans", sans-serif; color: var(--text); }
+html, body {
+  height: 100%;
+  background-color: rgba(0, 0, 0, var(--opacity, 0));
+  font-family: "DM Sans", sans-serif;
+  color: var(--text);
+  transition: background-color 150ms ease;
+}
 .poll-overlay {
   width: min(560px, 100%);
   margin: 24px;
@@ -1851,6 +1897,36 @@ html, body { height: 100%; background: transparent; font-family: "DM Sans", sans
 
 const pollsOverlayJs = `
 'use strict';
+
+// Overlay preferences live channel — same pattern as the other overlays.
+(function () {
+  function applyPrefs(prefs) {
+    if (!prefs || typeof prefs !== 'object') return;
+    if (typeof prefs.opacity === 'number') {
+      document.documentElement.style.setProperty('--opacity', String(prefs.opacity));
+    }
+  }
+  var id = 'polls';
+  fetch('/overlay-prefs/state?id=' + encodeURIComponent(id), { cache: 'no-store' })
+    .then(function (r) { return r.ok ? r.json() : {}; })
+    .then(applyPrefs)
+    .catch(function () { /* noop */ });
+  function connectPrefs() {
+    var ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+    ws.addEventListener('open', function () {
+      ws.send(JSON.stringify({ type: 'subscribe', topic: 'overlay-prefs:' + id }));
+    });
+    ws.addEventListener('message', function (event) {
+      try {
+        var msg = JSON.parse(event.data);
+        if (msg.topic === 'overlay-prefs:' + id) applyPrefs(msg.payload);
+      } catch (e) { /* ignore */ }
+    });
+    ws.addEventListener('close', function () { setTimeout(connectPrefs, 1500); });
+  }
+  connectPrefs();
+})();
+
 (function () {
   var rootEl = document.getElementById('root');
   var titleEl = document.getElementById('poll-title');
@@ -1952,9 +2028,12 @@ const nowPlayingHtml = `<!DOCTYPE html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Now Playing</title>
     <style>
-      :root { color-scheme: dark; }
+      :root { color-scheme: dark; --opacity: 0; }
       html, body { margin: 0; padding: 0; height: 100%; background: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #f1f5f9; }
-      .root { display: flex; align-items: center; gap: 16px; padding: 16px; max-width: 540px; }
+      /* Backdrop behind the card — alpha driven by --opacity (set via WS).
+       * Default 0 = transparent (only thumb/text float over the scene);
+       * higher values darken the card box for legibility. */
+      .root { display: flex; align-items: center; gap: 16px; padding: 16px; max-width: 540px; background-color: rgba(0, 0, 0, var(--opacity, 0)); border-radius: 12px; transition: background-color 150ms ease; }
       .root.idle { opacity: 0.0; }
       .thumb { width: 96px; height: 96px; border-radius: 12px; object-fit: cover; background: #1f2937; box-shadow: 0 8px 24px rgba(0,0,0,0.45); flex-shrink: 0; }
       .info { flex: 1; min-width: 0; }
@@ -1998,6 +2077,37 @@ const nowPlayingJs = `
 'use strict';
 
 (function () {
+  // Overlay preferences live channel — same pattern as the chat overlay.
+  // Hydrates from GET /overlay-prefs/state, then subscribes to the WS topic
+  // so slider drags in the app apply immediately.
+  function applyPrefs(prefs) {
+    if (!prefs || typeof prefs !== 'object') return;
+    if (typeof prefs.opacity === 'number') {
+      document.documentElement.style.setProperty('--opacity', String(prefs.opacity));
+    }
+  }
+  (function bootPrefs() {
+    var id = 'now-playing';
+    fetch('/overlay-prefs/state?id=' + encodeURIComponent(id), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : {}; })
+      .then(applyPrefs)
+      .catch(function () { /* noop */ });
+    function connectPrefs() {
+      var ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+      ws.addEventListener('open', function () {
+        ws.send(JSON.stringify({ type: 'subscribe', topic: 'overlay-prefs:' + id }));
+      });
+      ws.addEventListener('message', function (event) {
+        try {
+          var msg = JSON.parse(event.data);
+          if (msg.topic === 'overlay-prefs:' + id) applyPrefs(msg.payload);
+        } catch (e) { /* ignore */ }
+      });
+      ws.addEventListener('close', function () { setTimeout(connectPrefs, 1500); });
+    }
+    connectPrefs();
+  })();
+
   var rootEl = document.getElementById('root');
   var thumbEl = document.getElementById('thumb');
   var titleEl = document.getElementById('title');

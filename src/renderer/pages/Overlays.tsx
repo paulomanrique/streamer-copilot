@@ -217,6 +217,11 @@ export function OverlaysPage() {
           'Audio Properties → Track: 2 (or any track other than 1).',
           'Audio Monitoring: "Monitor and Output" — you hear it via OBS, Twitch live (track 1) does not.',
         ]}
+        customize={{
+          overlayId: 'now-playing',
+          prefs: overlayPrefs['now-playing'] ?? {},
+          onChange: (next) => patchPrefs('now-playing', next),
+        }}
       />
 
       <OverlayLink
@@ -245,23 +250,28 @@ export function OverlaysPage() {
           'Dá pra encaixar entre as outras docks ou flutuar no segundo monitor.',
           'Ajuste fino opcional via query: ?scale=1.2 (texto um pouco maior).',
         ]}
-        customize={{
-          overlayId: 'chat-dock',
-          prefs: overlayPrefs['chat-dock'] ?? {},
-          onChange: (next) => patchPrefs('chat-dock', next),
-        }}
       />
 
       <OverlayLink
         title="Raffle"
         description="Visual wheel + status of the active raffle."
         url={info?.urls.raffles ?? null}
+        customize={{
+          overlayId: 'raffles',
+          prefs: overlayPrefs.raffles ?? {},
+          onChange: (next) => patchPrefs('raffles', next),
+        }}
       />
 
       <OverlayLink
         title="Polls"
         description="Live poll bars + countdown for the currently active poll."
         url={info?.urls.polls ?? null}
+        customize={{
+          overlayId: 'polls',
+          prefs: overlayPrefs.polls ?? {},
+          onChange: (next) => patchPrefs('polls', next),
+        }}
       />
     </div>
   );

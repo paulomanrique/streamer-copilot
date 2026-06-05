@@ -46,7 +46,10 @@ export function CustomizeOverlayModal({
     onChange(next);
   };
 
-  const hasOpacity = overlayId === 'chat-overlay' || overlayId === 'chat-dock';
+  // Backdrop opacity applies to every overlay that's meant to sit on top of
+  // the OBS scene. The chat dock is intentionally excluded — it's a full
+  // opaque dock for the streamer to read messages, not a scene element.
+  const hasOpacity = overlayId !== 'chat-dock';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -62,7 +65,7 @@ export function CustomizeOverlayModal({
         <div className="p-5 space-y-5">
           {hasOpacity ? (
             <OpacityField
-              value={prefs.opacity ?? 1}
+              value={prefs.opacity ?? 0}
               onChange={(opacity) => updatePrefs({ opacity })}
             />
           ) : (
@@ -91,7 +94,7 @@ function OpacityField({ value, onChange }: { value: number; onChange: (next: num
   return (
     <div>
       <div className="flex items-baseline justify-between mb-1">
-        <label className="text-sm text-gray-300">Opacidade</label>
+        <label className="text-sm text-gray-300">Opacidade do fundo</label>
         <span className="text-xs text-gray-400 font-mono">{percent}%</span>
       </div>
       <input
@@ -104,7 +107,9 @@ function OpacityField({ value, onChange }: { value: number; onChange: (next: num
         className="w-full accent-violet-500"
       />
       <p className="text-xs text-gray-600 mt-1">
-        0% deixa o overlay invisível; 100% é totalmente opaco.
+        Escurece um painel atrás do conteúdo pra deixar o overlay mais legível
+        sobre cenas com muito movimento. 0% mantém o cenário do OBS limpo;
+        100% deixa o painel totalmente opaco. O texto/imagem sempre fica nítido.
       </p>
     </div>
   );
