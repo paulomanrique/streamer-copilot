@@ -14,7 +14,7 @@ interface OverlayServerOptions {
   getChatSnapshot: () => RecentChatSnapshot;
 }
 
-const CHAT_OVERLAY_VERSION = 'chat-feed-v3';
+const CHAT_OVERLAY_VERSION = 'chat-feed-v4';
 
 interface WsLikeServer {
   handleUpgrade(request: unknown, socket: unknown, head: Buffer, callback: (ws: WsLikeClient) => void): void;
@@ -461,15 +461,24 @@ html, body {
 .chat-overlay {
   width: 100vw;
   height: 100vh;
-  display: flex;
-  align-items: flex-end;
   padding: 8px 0 8px 0;
   overflow-y: auto;
   overflow-x: hidden;
+  /* Manter scrollbar discreto para não competir com o cenário do OBS. */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 }
+
+.chat-overlay::-webkit-scrollbar { width: 6px; }
+.chat-overlay::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+.chat-overlay::-webkit-scrollbar-track { background: transparent; }
 
 .chat-list {
   width: 100%;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -494,19 +503,6 @@ html, body {
 .chat-message.kick { border-left-color: rgba(34, 197, 94, 0.2); }
 .chat-message.tiktok { border-left-color: rgba(236, 72, 153, 0.2); }
 .chat-message.command { background: rgba(139, 92, 246, 0.05); }
-
-.time {
-  flex: 0 0 40px;
-  width: 40px;
-  margin-top: 2px;
-  color: var(--text-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
-  line-height: 1.25;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
 
 .body {
   flex: 1 1 auto;
@@ -829,22 +825,23 @@ const chatOverlayJs = `
     if (lastIndex < content.length) container.appendChild(document.createTextNode(content.slice(lastIndex)));
   }
 
-  function toTwentyFourHourTime(label) {
-    var raw = String(label || '').trim();
-    var match = raw.match(/^(\\d{1,2}):(\\d{2})(?::\\d{2})?\\s*([AP]M)?$/i);
-    if (!match) return raw.replace(/\\s*[AP]M\\s*$/i, '');
-
-    var hour = Number(match[1]);
-    var minute = match[2];
-    var period = match[3] ? match[3].toUpperCase() : '';
-    if (period === 'PM' && hour < 12) hour += 12;
-    if (period === 'AM' && hour === 12) hour = 0;
-    return String(hour).padStart(2, '0') + ':' + minute;
+  // Container que rola — usado pra detectar "estou no fundo?" antes de
+  // renderizar e re-encostar no fundo depois, sem brigar com o streamer
+  // que rolou pra cima pra ler histórico.
+  var scrollEl = document.querySelector('.chat-overlay');
+  function isNearBottom(el) {
+    if (!el) return true;
+    return (el.scrollHeight - el.clientHeight - el.scrollTop) < 24;
+  }
+  function scrollToBottom(el) {
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
   }
 
   function render(messages) {
     if (!listEl) return;
     var latest = messages.slice(-100);
+    var stickToBottom = isNearBottom(scrollEl);
 
     if (latest.length === 0) {
       if (!listEl.querySelector('.empty')) {
@@ -854,6 +851,7 @@ const chatOverlayJs = `
         empty.textContent = 'Aguardando mensagens do chat...';
         listEl.appendChild(empty);
       }
+      if (stickToBottom) scrollToBottom(scrollEl);
       return;
     }
 
@@ -876,11 +874,6 @@ const chatOverlayJs = `
       var authorColor = resolveAuthorColor(message);
       row.className = 'chat-message ' + platform + (isCommand ? ' command' : '');
       row.setAttribute('data-id', message.id);
-
-      var time = document.createElement('span');
-      time.className = 'time';
-      time.textContent = toTwentyFourHourTime(message.timestampLabel);
-      row.appendChild(time);
 
       var body = document.createElement('div');
       body.className = 'body';
@@ -935,6 +928,8 @@ const chatOverlayJs = `
     renderedIds.forEach(function (id) {
       if (!latestIds.has(id)) renderedIds.delete(id);
     });
+
+    if (stickToBottom) scrollToBottom(scrollEl);
   }
 
   async function refresh() {
