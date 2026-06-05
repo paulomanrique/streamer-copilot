@@ -62,8 +62,14 @@ export class MusicPlayer {
     try {
       streamUrl = await this.resolver.resolveAudioUrl(cmd.videoId);
     } catch (cause) {
-      console.warn('[music-player] Failed to resolve stream URL', cause);
-      this.onEvent({ type: 'error', itemId: cmd.itemId, errorCode: -1 });
+      const detail = cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause);
+      console.warn(`[music-player] Failed to resolve stream URL for ${cmd.videoId}: ${detail}`, cause);
+      this.onEvent({
+        type: 'error',
+        itemId: cmd.itemId,
+        errorCode: -1,
+        errorMessage: `Stream resolver failed for ${cmd.videoId}: ${detail}`,
+      });
       return;
     }
 

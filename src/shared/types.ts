@@ -466,6 +466,11 @@ export interface MusicPlayerEvent {
   type: 'ended' | 'error';
   itemId: string;
   errorCode?: number;
+  /** Mensagem humana com a causa do erro — propagada pro event log pra
+   *  diagnosticar falhas de stream resolver (ytdl), CSP do OBS browser
+   *  source, autoplay bloqueado, etc. Sem isso, o log só mostra
+   *  `errorCode: -1` sem indicação do quê falhou. */
+  errorMessage?: string;
 }
 
 export interface SoundSettings {

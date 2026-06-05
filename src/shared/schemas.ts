@@ -214,6 +214,7 @@ export const musicPlayerEventSchema = z.object({
   type: z.enum(['ended', 'error']),
   itemId: z.string().min(1),
   errorCode: z.number().optional(),
+  errorMessage: z.string().max(500).optional(),
 });
 
 export const soundSettingsSchema = z.object({

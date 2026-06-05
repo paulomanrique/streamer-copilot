@@ -231,7 +231,11 @@ export class MusicRequestService implements CommandModule {
     if (event.type === 'ended') {
       this.options.logInfo('Music ended', { itemId: event.itemId });
     } else {
-      this.options.logError('Music playback error', { itemId: event.itemId, errorCode: event.errorCode });
+      this.options.logError('Music playback error', {
+        itemId: event.itemId,
+        errorCode: event.errorCode,
+        ...(event.errorMessage ? { errorMessage: event.errorMessage } : {}),
+      });
     }
     this.playNext();
   }
