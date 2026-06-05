@@ -22,11 +22,15 @@ interface PreviewTile {
  * them shouldn't scrub a chat-list or interact with the wheel.
  */
 export function OverlayPreviewGrid({ info }: OverlayPreviewGridProps) {
+  // `?preview=1` tells each overlay it's running inside the editor iframe
+  // (today only the now-playing overlay reads it — to silence audio and
+  // render a placeholder card when nothing's queued — but every preview
+  // gets the flag for consistency as we add more in-app cues).
   const tiles: PreviewTile[] = [
-    { label: 'Chat — Overlay', url: info?.urls.chat ?? null, aspect: 'aspect-[3/4]' },
-    { label: 'Now playing', url: info?.urls.nowPlaying ?? null, aspect: 'aspect-[16/7]' },
-    { label: 'Sorteio', url: info?.urls.raffles ?? null, aspect: 'aspect-[16/9]' },
-    { label: 'Enquete', url: info?.urls.polls ?? null, aspect: 'aspect-[16/9]' },
+    { label: 'Chat — Overlay', url: withPreviewFlag(info?.urls.chat), aspect: 'aspect-[3/4]' },
+    { label: 'Now playing', url: withPreviewFlag(info?.urls.nowPlaying), aspect: 'aspect-[16/7]' },
+    { label: 'Sorteio', url: withPreviewFlag(info?.urls.raffles), aspect: 'aspect-[16/9]' },
+    { label: 'Enquete', url: withPreviewFlag(info?.urls.polls), aspect: 'aspect-[16/9]' },
   ];
 
   return (
@@ -44,6 +48,11 @@ export function OverlayPreviewGrid({ info }: OverlayPreviewGridProps) {
       </div>
     </section>
   );
+}
+
+function withPreviewFlag(url: string | null | undefined): string | null {
+  if (!url) return null;
+  return url.includes('?') ? `${url}&preview=1` : `${url}?preview=1`;
 }
 
 function PreviewTile({ tile }: { tile: PreviewTile }) {

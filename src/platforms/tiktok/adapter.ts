@@ -316,26 +316,64 @@ function ts(): string {
 }
 
 /**
+ * TikTok renders its built-in emojis (the ones every viewer can use:
+ * [laughcry], [heart], [rose], etc.) client-side from a known table —
+ * the server only ships the literal shortcode in `comment`, never an
+ * image URL in `emotes`. The map below covers the ~80 stock shortcodes
+ * with their closest Unicode equivalents, so we can substitute them
+ * inline without depending on TikTok's CDN.
+ *
+ * Subscriber/custom emojis still come through the `emotes` array with
+ * a real `imageUrl` — those are handled in the emotes branch of
+ * `buildContentParts` and take priority over this table.
+ */
+const TIKTOK_BUILTIN_EMOJI: Record<string, string> = {
+  smile: '😊', happy: '😊', smileface: '😀', joyful: '😄', laugh: '😄',
+  laughcry: '😂', hehe: '😁', blink: '😉', smileeyes: '😌', proud: '😎',
+  cool: '😎', funnyface: '😜', evil: '😈', angel: '😇', witty: '😏',
+  loveface: '🥰', lovely: '🥰', heart: '❤️', kiss: '😚', poh: '😘',
+  yummy: '😋', drool: '🤤', greedy: '🤑', excited: '🤩', wow: '😮',
+  shock: '😱', scream: '😱', astonish: '😲', stun: '😵', speechless: '😐',
+  confused: '😕', embarrassed: '😅', sweat: '😓', thinking: '🤔',
+  sad: '😞', tears: '😢', cry: '😭', angry: '😠', rage: '😡',
+  sleep: '😴', nap: '😪', dizzy: '😵', sick: '🤢', vomit: '🤮',
+  fever: '🤒', hurt: '🤕', mask: '😷', nerd: '🤓', monocle: '🧐',
+  cowboy: '🤠', clown: '🤡', party: '🥳', hot: '🥵', cold: '🥶',
+  pleading: '🥺', hush: '🤫', zip: '🤐', shh: '🤫', yawn: '🥱',
+  hi: '👋', wave: '👋', thumbsup: '👍', thumbsdown: '👎', clap: '👏',
+  ok: '👌', pray: '🙏', muscle: '💪', rose: '🌹', flower: '🌸',
+  fire: '🔥', star: '⭐', sparkles: '✨', sun: '☀️', moon: '🌙',
+  cake: '🎂', gift: '🎁', balloon: '🎈', music: '🎵', notes: '🎶',
+  rocket: '🚀', cool2: '😎', kissing: '😘', wink: '😉', tongue: '😛',
+  innocent: '😇', smirk: '😏', sunglasses: '😎',
+};
+
+/**
  * Turn TikTok's parallel (comment, emotes) channels into the unified
  * `ChatMessageContentPart[]` the chat overlay + ChatFeed already render
  * (chatOverlayJs's appendContent / ChatFeed's renderMessageContent).
  *
- * The comment field carries literal shortcodes like `[laughcry]`; emotes
- * is a positionally-ordered list with the image URL for each one. We
- * match shortcodes by iterating bracketed `[name]` runs in the comment
- * and zip them with the emote list — robust against TikTok occasionally
- * reordering `placeInComment` (which is also why we don't rely on it).
+ * Two emoji sources to merge:
+ *   1. `emotes` array — subscriber/custom emotes from the live, each with
+ *      a real `imageUrl` we can render as an <img>.
+ *   2. `TIKTOK_BUILTIN_EMOJI` — built-in stock emojis the server only
+ *      references by shortcode (no URL); we substitute Unicode.
  *
- * Returns null when there's nothing to enrich — the renderer then falls
- * back to plain `content` and behaves exactly as before.
+ * Walk the comment scanning every `[name]` run; the Nth bracketed run
+ * pulls the Nth entry from `emotes` if present and gives it priority,
+ * otherwise we try the built-in map, otherwise we keep the literal text.
+ *
+ * Returns null when the comment carries no brackets — the renderer then
+ * falls back to plain `content` and behaves exactly as before.
  */
 function buildContentParts(
   comment: string | undefined,
   emotes: TikTokEmoteRef[] | undefined,
 ): ChatMessageContentPart[] | null {
-  if (!comment || !emotes || emotes.length === 0) return null;
+  if (!comment) return null;
   const parts: ChatMessageContentPart[] = [];
-  const regex = /\[([^\]]+)\]/g;
+  const regex = /\[([^\]\s]+)\]/g;
+  const emoteList = emotes ?? [];
   let lastIndex = 0;
   let emoteIdx = 0;
   let match: RegExpExecArray | null;
@@ -343,15 +381,21 @@ function buildContentParts(
     if (match.index > lastIndex) {
       parts.push({ type: 'text', text: comment.slice(lastIndex, match.index) });
     }
-    const ref = emotes[emoteIdx++];
-    const imageUrl = ref?.emote?.image?.imageUrl;
     const name = match[1];
+    const ref = emoteList[emoteIdx];
+    const imageUrl = ref?.emote?.image?.imageUrl;
     if (imageUrl) {
       parts.push({ type: 'emote', name, imageUrl });
+      emoteIdx += 1;
     } else {
-      // No emote URL for this shortcode — keep the bracket text intact so
-      // nothing silently vanishes.
-      parts.push({ type: 'text', text: match[0] });
+      const unicode = TIKTOK_BUILTIN_EMOJI[name.toLowerCase()];
+      if (unicode) {
+        parts.push({ type: 'text', text: unicode });
+      } else {
+        // Unknown shortcode — keep the bracket text intact so nothing
+        // silently vanishes.
+        parts.push({ type: 'text', text: match[0] });
+      }
     }
     lastIndex = match.index + match[0].length;
   }

@@ -804,7 +804,13 @@ html { --scale: 1; --opacity: 0; }
 .chat-message.youtube { border-left-color: rgba(239, 68, 68, 0.2); }
 .chat-message.kick { border-left-color: rgba(34, 197, 94, 0.2); }
 .chat-message.tiktok { border-left-color: rgba(236, 72, 153, 0.2); }
-.chat-message.command { background: rgba(139, 92, 246, 0.05); }
+/* Layer the command-row tint OVER the universal backdrop — the shorthand
+ * `background` used to live here, but it clobbered background-color and
+ * left command rows looking transparent whenever the streamer raised
+ * --opacity on the visual editor. */
+.chat-message.command {
+  background-image: linear-gradient(rgba(139, 92, 246, 0.05), rgba(139, 92, 246, 0.05));
+}
 
 .body {
   flex: 1 1 auto;
@@ -2206,6 +2212,12 @@ const nowPlayingJs = `
 ${buildOverlayStyleScript('now-playing')}
 
 (function () {
+  // Preview mode (`?preview=1` from OverlayPreviewGrid) silences audio
+  // and renders a mock card when idle. The same overlay HTML is used in
+  // OBS (audio routed via the Browser Source) and in the app's editor
+  // preview iframe (where audio would leak into the streamer's speakers).
+  var IS_PREVIEW = new URLSearchParams(location.search).get('preview') === '1';
+
   var rootEl = document.getElementById('root');
   var thumbEl = document.getElementById('thumb');
   var titleEl = document.getElementById('title');
@@ -2213,6 +2225,11 @@ ${buildOverlayStyleScript('now-playing')}
   var artistEl = document.getElementById('artist');
   var canvasEl = document.getElementById('spectrum');
   var audioEl = document.getElementById('audio');
+
+  if (IS_PREVIEW) {
+    audioEl.muted = true;
+    audioEl.removeAttribute('autoplay');
+  }
 
   var ctx = canvasEl.getContext('2d');
   var audioCtx = null;
@@ -2283,6 +2300,16 @@ ${buildOverlayStyleScript('now-playing')}
 
   function applyState(state) {
     if (!state || !state.currentItem) {
+      if (IS_PREVIEW) {
+        // Render a placeholder card so the streamer can see the layout
+        // (and the visual editor's effect on it) without needing an
+        // active song request.
+        rootEl.classList.remove('idle');
+        setTitle('Música de exemplo');
+        artistEl.textContent = 'Solicitada por @viewer';
+        thumbEl.style.display = 'none';
+        return;
+      }
       rootEl.classList.add('idle');
       audioEl.pause();
       audioEl.removeAttribute('src');
@@ -2298,6 +2325,7 @@ ${buildOverlayStyleScript('now-playing')}
     } else {
       thumbEl.style.display = 'none';
     }
+    if (IS_PREVIEW) return; // skip audio plumbing entirely in the preview iframe
     if (state.streamUrl && state.streamUrl !== lastSrc) {
       lastSrc = state.streamUrl;
       audioEl.src = state.streamUrl;
@@ -2309,6 +2337,11 @@ ${buildOverlayStyleScript('now-playing')}
     }
     if (state.isPlaying === false) audioEl.pause();
   }
+
+  // Kick off the placeholder render immediately in preview mode so the
+  // iframe doesn't sit blank until a state push (which may never come
+  // when no song is queued).
+  if (IS_PREVIEW) applyState(null);
 
   function connect() {
     var ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
