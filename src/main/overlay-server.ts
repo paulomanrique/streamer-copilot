@@ -1883,7 +1883,24 @@ const nowPlayingHtml = `<!DOCTYPE html>
       .root.idle { opacity: 0.0; }
       .thumb { width: 96px; height: 96px; border-radius: 12px; object-fit: cover; background: #1f2937; box-shadow: 0 8px 24px rgba(0,0,0,0.45); flex-shrink: 0; }
       .info { flex: 1; min-width: 0; }
-      .title { font-size: 18px; font-weight: 700; margin: 0 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .title {
+        font-size: 18px; font-weight: 700; margin: 0 0 4px;
+        overflow: hidden; white-space: nowrap;
+        /* mask suaviza as bordas pra entrada/saída do marquee não cortar abruptamente */
+        -webkit-mask-image: linear-gradient(to right, transparent 0, #000 8px, #000 calc(100% - 8px), transparent 100%);
+                mask-image: linear-gradient(to right, transparent 0, #000 8px, #000 calc(100% - 8px), transparent 100%);
+      }
+      .title-inner { display: inline-block; will-change: transform; }
+      /* Ping-pong: pausa nas pontas + animação suave. --marquee-distance e
+         --marquee-duration são definidas via JS depois de medir o overflow. */
+      .title-inner.marquee {
+        animation: title-marquee var(--marquee-duration, 12s) cubic-bezier(0.4, 0, 0.2, 1) infinite;
+      }
+      @keyframes title-marquee {
+        0%, 15%   { transform: translateX(0); }
+        50%, 65%  { transform: translateX(var(--marquee-distance, 0px)); }
+        100%      { transform: translateX(0); }
+      }
       .artist { font-size: 13px; color: #94a3b8; margin: 0 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       canvas { display: block; width: 100%; height: 28px; opacity: 0.75; }
     </style>
@@ -1892,7 +1909,7 @@ const nowPlayingHtml = `<!DOCTYPE html>
     <div id="root" class="root idle">
       <img id="thumb" class="thumb" alt="" />
       <div class="info">
-        <h1 id="title" class="title">—</h1>
+        <h1 id="title" class="title"><span id="title-inner" class="title-inner">—</span></h1>
         <p id="artist" class="artist">Waiting for the player to start…</p>
         <canvas id="spectrum" width="400" height="28"></canvas>
       </div>
@@ -1909,6 +1926,7 @@ const nowPlayingJs = `
   var rootEl = document.getElementById('root');
   var thumbEl = document.getElementById('thumb');
   var titleEl = document.getElementById('title');
+  var titleInnerEl = document.getElementById('title-inner');
   var artistEl = document.getElementById('artist');
   var canvasEl = document.getElementById('spectrum');
   var audioEl = document.getElementById('audio');
@@ -1949,6 +1967,35 @@ const nowPlayingJs = `
     requestAnimationFrame(drawFrame);
   }
 
+  /**
+   * Mede o overflow do título e ativa o marquee (ping-pong) quando o texto
+   * é mais largo que a área visível. Sem overflow → animação removida e o
+   * título fica estático. Re-mede em ResizeObserver pra acompanhar mudança
+   * de largura da source no OBS sem precisar de novo título.
+   */
+  function setTitle(text) {
+    titleInnerEl.textContent = text;
+    requestAnimationFrame(function () {
+      var overflow = titleInnerEl.scrollWidth - titleEl.clientWidth;
+      if (overflow > 4) {
+        titleInnerEl.style.setProperty('--marquee-distance', '-' + overflow + 'px');
+        var duration = Math.max(8, Math.round(overflow * 0.024 + 4));
+        titleInnerEl.style.setProperty('--marquee-duration', duration + 's');
+        titleInnerEl.classList.add('marquee');
+      } else {
+        titleInnerEl.classList.remove('marquee');
+        titleInnerEl.style.removeProperty('--marquee-distance');
+        titleInnerEl.style.removeProperty('--marquee-duration');
+      }
+    });
+  }
+
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(function () {
+      if (titleInnerEl.textContent) setTitle(titleInnerEl.textContent);
+    }).observe(titleEl);
+  }
+
   function applyState(state) {
     if (!state || !state.currentItem) {
       rootEl.classList.add('idle');
@@ -1958,7 +2005,7 @@ const nowPlayingJs = `
       return;
     }
     rootEl.classList.remove('idle');
-    titleEl.textContent = state.currentItem.title || 'Untitled';
+    setTitle(state.currentItem.title || 'Untitled');
     artistEl.textContent = state.currentItem.requestedBy ? 'Requested by ' + state.currentItem.requestedBy : '';
     if (state.currentItem.thumbnailUrl) {
       thumbEl.src = state.currentItem.thumbnailUrl;
