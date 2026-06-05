@@ -2257,6 +2257,24 @@ ${buildOverlayStyleScript('now-playing')}
     requestAnimationFrame(drawFrame);
   }
 
+  // Cached RGB triplet so we don't re-parse the CSS var on every frame
+  // (60 Hz × bar count would be wasteful). Invalidated each frame against
+  // the current computed value — the editor / WS push can change
+  // --accent-color any time and we want the bars to follow.
+  var lastAccentHex = '';
+  var accentRgb = '124, 92, 255';
+  function resolveAccentRgb() {
+    var hex = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
+    if (hex === lastAccentHex) return accentRgb;
+    lastAccentHex = hex;
+    var m = /^#([0-9a-fA-F]{6})$/.exec(hex);
+    if (m) {
+      var n = parseInt(m[1], 16);
+      accentRgb = ((n >> 16) & 0xff) + ', ' + ((n >> 8) & 0xff) + ', ' + (n & 0xff);
+    }
+    return accentRgb;
+  }
+
   function drawFrame() {
     if (!analyser) return;
     var bufferLength = analyser.frequencyBinCount;
@@ -2264,10 +2282,11 @@ ${buildOverlayStyleScript('now-playing')}
     analyser.getByteFrequencyData(data);
     ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
     var barWidth = canvasEl.width / bufferLength * 2.5;
+    var rgb = resolveAccentRgb();
     var x = 0;
     for (var i = 0; i < bufferLength; i++) {
       var height = (data[i] / 255) * canvasEl.height;
-      ctx.fillStyle = 'rgba(124, 92, 255, ' + (0.4 + (data[i] / 255) * 0.5) + ')';
+      ctx.fillStyle = 'rgba(' + rgb + ', ' + (0.4 + (data[i] / 255) * 0.5) + ')';
       ctx.fillRect(x, canvasEl.height - height, barWidth, height);
       x += barWidth + 1;
     }
