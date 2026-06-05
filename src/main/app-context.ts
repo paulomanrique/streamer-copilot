@@ -1397,23 +1397,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
 
   // R4: now that overlayServer exists, build the music player + stream resolver.
-  // Cookies da sessão YouTube logada (mesmo store usado pelo scraper e
-  // sendMessage) reaproveitados pro youtubei.js — ajuda em vídeos com
-  // restrição de idade/região quando o streamer está logado. O resolver
-  // usa o cliente IOS do Innertube que dispensa PoToken pra player URL.
-  const musicStreamResolver = new MusicStreamResolver({
-    cookieSource: {
-      async getYouTubeCookieHeader() {
-        try {
-          const cookies = await session.defaultSession.cookies.get({ url: 'https://www.youtube.com' });
-          if (cookies.length === 0) return null;
-          return cookies.map((c) => `${c.name}=${c.value}`).join('; ');
-        } catch {
-          return null;
-        }
-      },
-    },
-  });
+  // Resolver é anônimo de propósito — passar cookies do session YouTube
+  // logado faz o Innertube enviar SAPISIDHASH no Authorization, o que o
+  // endpoint do cliente IOS rejeita com HTTP 400 INVALID_ARGUMENT.
+  const musicStreamResolver = new MusicStreamResolver();
   musicPlayerRef = new MusicPlayer(
     overlayServer,
     musicStreamResolver,

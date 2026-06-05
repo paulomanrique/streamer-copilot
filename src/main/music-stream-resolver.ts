@@ -5,23 +5,6 @@ interface ResolvedStream {
   expiresAt: number; // ms epoch
 }
 
-/**
- * Formato simplificado de cookie aceito pelo Innertube.create({ cookie: '...' })
- * — uma string `Cookie:` HTTP-style. Devolvido como nada (null) quando o
- * streamer não fez login no YouTube via o fluxo /youtube:open-login.
- */
-export interface InnertubeCookieSource {
-  getYouTubeCookieHeader(): Promise<string | null>;
-}
-
-interface MusicStreamResolverOptions {
-  /** Devolve a string `cookie:` HTTP da sessão YouTube logada do Electron.
-   *  Usada como hint pro Innertube — não é estritamente necessária pra IOS
-   *  client (que opera anônimo), mas ajuda em vídeos com restrição de idade
-   *  ou região quando o usuário está logado. */
-  cookieSource?: InnertubeCookieSource;
-}
-
 interface AdaptiveFormat {
   url?: string;
   mime_type?: string;
@@ -32,21 +15,25 @@ interface AdaptiveFormat {
 /**
  * R4: resolves a YouTube videoId to a directly-playable audio stream URL.
  *
- * Após o `@distube/ytdl-core` 4.16.x quebrar por causa do PoToken/anti-bot
- * do YouTube (mesmo com cookies autenticados e player clients alternativos),
- * mudamos pro `youtubei.js` que já é a lib do scraper de chat e tem
- * tracking mais ativo. O cliente IOS retorna URLs diretas (sem signature
- * cipher) e não exige PoToken — fluxo de menor atrito.
+ * Usa `youtubei.js` (a mesma lib do scraper de chat). O cliente IOS do
+ * InnerTube devolve URLs diretas (sem signature cipher) e não exige
+ * PoToken — fluxo de menor atrito.
+ *
+ * Por que SEM cookies autenticados: passar a string de cookies do session
+ * YouTube logado faz o `youtubei.js` calcular `SAPISIDHASH` e enviar
+ * `Authorization:` no request. O endpoint do IOS rejeita esse header
+ * com HTTP 400 ("INVALID_ARGUMENT") porque o cliente IOS autentica via
+ * OAuth, não via cookies de browser. Anônimo é o caminho confiável —
+ * vídeos age-restricted falham, mas a maioria dos pedidos de música do
+ * chat são de vídeos públicos. Se aparecer demanda real por age-restricted
+ * adicionamos um fallback (cliente TV com cookies, PoToken, etc).
  *
  * URLs do YouTube têm `expire` no query; cacheamos até esse momento e
- * resolvemos de novo na próxima request quando expirar.
+ * resolvemos de novo na próxima request.
  */
 export class MusicStreamResolver {
   private readonly cache = new Map<string, ResolvedStream>();
   private innertube: Innertube | null = null;
-  private innertubeCookieKey: string | null = null;
-
-  constructor(private readonly options: MusicStreamResolverOptions = {}) {}
 
   async resolveAudioUrl(videoId: string): Promise<string> {
     const now = Date.now();
@@ -58,14 +45,11 @@ export class MusicStreamResolver {
     const formats = (info.streaming_data?.adaptive_formats ?? []) as AdaptiveFormat[];
     const audioFormats = formats.filter((f) => f.mime_type?.startsWith('audio') && f.url);
     if (audioFormats.length === 0) {
-      throw new Error(`No audio formats with direct URL for ${videoId} (IOS client returned ${formats.length} formats total)`);
+      throw new Error(`No audio formats with direct URL for ${videoId} (IOS returned ${formats.length} formats total)`);
     }
-    // Maior bitrate vence — IOS costuma devolver 2-5 audio formats (opus + aac).
     audioFormats.sort((a, b) => (b.bitrate ?? 0) - (a.bitrate ?? 0));
-    const best = audioFormats[0];
-    const streamUrl = best.url!;
+    const streamUrl = audioFormats[0].url!;
 
-    // Lê `expire` do URL pra cachear até pouco antes da expiração.
     let expiresAt = now + 4 * 60 * 1000;
     try {
       const url = new URL(streamUrl);
@@ -84,26 +68,14 @@ export class MusicStreamResolver {
     this.cache.delete(videoId);
   }
 
-  /**
-   * Lazy-singleton do Innertube. Se a string de cookies mudar (login/logout),
-   * recria a instância — o Innertube não tem método pra "atualizar cookies"
-   * depois de criado.
-   */
+  /** Lazy-singleton do Innertube — anônimo e sem buscar player JS (não
+   *  precisamos do player pro cliente IOS que devolve URLs já decifradas). */
   private async getInnertube(): Promise<Innertube> {
-    const cookieHeader = this.options.cookieSource
-      ? await this.options.cookieSource.getYouTubeCookieHeader().catch(() => null)
-      : null;
-    const cookieKey = cookieHeader ? `len:${cookieHeader.length}` : 'none';
-    if (this.innertube && this.innertubeCookieKey === cookieKey) return this.innertube;
-
-    // `retrieve_player: false` pula o fetch do player JS (pesado e
-    // desnecessário pro IOS client que não usa signature cipher).
+    if (this.innertube) return this.innertube;
     this.innertube = await Innertube.create({
       retrieve_player: false,
       client_type: ClientType.IOS,
-      ...(cookieHeader ? { cookie: cookieHeader } : {}),
     });
-    this.innertubeCookieKey = cookieKey;
     return this.innertube;
   }
 }
