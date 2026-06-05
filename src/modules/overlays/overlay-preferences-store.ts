@@ -1,5 +1,6 @@
 import type { OverlayId, OverlayPreferences, OverlayPreferencesMap } from '../../shared/types.js';
 import { JsonSettingsStore } from '../base/settings-store.js';
+import { sanitizeOverlayPreferences } from './overlay-style-sanitize.js';
 
 const SETTINGS_FILE = 'overlay-preferences.json';
 
@@ -9,25 +10,14 @@ function isOverlayId(value: unknown): value is OverlayId {
   return typeof value === 'string' && (KNOWN_IDS as string[]).includes(value);
 }
 
-function sanitizePrefs(raw: unknown): OverlayPreferences {
-  if (!raw || typeof raw !== 'object') return {};
-  const obj = raw as Record<string, unknown>;
-  const prefs: OverlayPreferences = {};
-  if (typeof obj.opacity === 'number' && obj.opacity >= 0 && obj.opacity <= 1) {
-    prefs.opacity = obj.opacity;
-  }
-  return prefs;
-}
-
 /**
  * Per-profile store for overlay customization preferences.
  *
  * Each overlay surface (chat overlay, chat dock, now-playing, etc.) gets
- * its own `OverlayPreferences` slot. The streamer tunes options through the
- * app and the values are persisted here + broadcast over WebSocket so a
- * connected OBS Browser Source updates without reload.
- *
- * Today only `opacity` is honored; the schema is designed to grow.
+ * its own `OverlayPreferences` slot used as a per-overlay override of the
+ * global `OverlayDefaults`. Set fields win over the defaults; unset fields
+ * inherit. Persisted here + broadcast over WebSocket so a connected OBS
+ * Browser Source updates without reload.
  */
 export class OverlayPreferencesStore extends JsonSettingsStore<OverlayPreferencesMap> {
   constructor(profileDirectory: string) {
@@ -42,7 +32,7 @@ export class OverlayPreferencesStore extends JsonSettingsStore<OverlayPreference
     const out: OverlayPreferencesMap = {};
     for (const [id, prefs] of Object.entries(raw)) {
       if (!isOverlayId(id)) continue;
-      out[id] = sanitizePrefs(prefs);
+      out[id] = sanitizeOverlayPreferences(prefs);
     }
     return out;
   }
@@ -56,7 +46,7 @@ export class OverlayPreferencesStore extends JsonSettingsStore<OverlayPreference
   /** Replaces the preferences slot for a single overlay. */
   async setForOverlay(id: OverlayId, prefs: OverlayPreferences): Promise<OverlayPreferencesMap> {
     const current = await this.load();
-    const next: OverlayPreferencesMap = { ...current, [id]: sanitizePrefs(prefs) };
+    const next: OverlayPreferencesMap = { ...current, [id]: sanitizeOverlayPreferences(prefs) };
     return this.save(next);
   }
 }

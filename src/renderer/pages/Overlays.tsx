@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 import type { OverlayServerInfo } from '../../shared/ipc.js';
 import type { GeneralSettings, OverlayId, OverlayPreferences, OverlayPreferencesMap } from '../../shared/types.js';
 import { CustomizeOverlayModal } from '../components/CustomizeOverlayModal.js';
+import { OverlayDefaultsEditor } from '../components/OverlayDefaultsEditor.js';
+import { OverlayPreviewGrid } from '../components/OverlayPreviewGrid.js';
 
 const REFRESH_INTERVAL_MS = 3000;
 const DEFAULT_PORT = 7842;
@@ -164,12 +166,14 @@ export function OverlaysPage() {
   const portDirty = settings ? portDraft !== (settings.overlayServerPort ?? DEFAULT_PORT) : false;
 
   return (
-    <div className="min-h-full p-6 max-w-2xl space-y-5">
+    <div className="min-h-full p-6 space-y-5">
       <header>
         <h2 className="text-base font-semibold mb-0.5">Overlays</h2>
         <p className="text-sm text-gray-500">Browser sources to add to OBS. The server runs locally — only your machine has access.</p>
       </header>
 
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-6">
+        <div className="space-y-5">
       <section className="rounded-lg border border-gray-700 bg-gray-800/40 px-4 py-3 flex items-center gap-3">
         <span className={['inline-flex items-center gap-1.5 text-xs font-medium', style.text].join(' ')}>
           <span className={['w-2 h-2 rounded-full', style.dot].join(' ')} />
@@ -273,6 +277,13 @@ export function OverlaysPage() {
           onChange: (next) => patchPrefs('polls', next),
         }}
       />
+        </div>
+
+        <div className="space-y-5">
+          <OverlayDefaultsEditor />
+          <OverlayPreviewGrid info={info} />
+        </div>
+      </div>
     </div>
   );
 }

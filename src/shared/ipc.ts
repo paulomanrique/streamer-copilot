@@ -48,6 +48,7 @@ import type {
   TextCommand,
   TextCommandDeleteInput,
   TextCommandUpsertInput,
+  OverlayDefaults,
   OverlayId,
   OverlayPreferences,
   OverlayPreferencesMap,
@@ -246,6 +247,9 @@ export const IPC_CHANNELS = {
   overlayPrefsGet: 'overlay-prefs:get',
   overlayPrefsSet: 'overlay-prefs:set',
   overlayPrefsUpdate: 'overlay-prefs:update',
+  overlayDefaultsGet: 'overlay-defaults:get',
+  overlayDefaultsSet: 'overlay-defaults:set',
+  overlayDefaultsUpdate: 'overlay-defaults:update',
 } as const;
 
 export interface RecentChatSnapshot {
@@ -474,6 +478,13 @@ export interface CopilotApi {
   /** Async push when the preferences map changes (mirrors the broadcast that
    *  goes out to the overlay clients themselves). */
   onOverlayPreferencesUpdate: (listener: (payload: OverlayPreferencesMap) => void) => () => void;
+  /** Snapshot of the global default visual style applied to every overlay. */
+  getOverlayDefaults: () => Promise<OverlayDefaults>;
+  /** Replaces the global default visual style and pushes the change to every
+   *  connected Browser Source over WebSocket. */
+  setOverlayDefaults: (input: OverlayDefaults) => Promise<OverlayDefaults>;
+  /** Async push when the global defaults change. */
+  onOverlayDefaultsUpdate: (listener: (payload: OverlayDefaults) => void) => () => void;
 }
 
 export interface OverlayServerInfo {

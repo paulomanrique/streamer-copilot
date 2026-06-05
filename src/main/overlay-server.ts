@@ -5,8 +5,9 @@ import { createRequire } from 'node:module';
 import type { AddressInfo } from 'node:net';
 import { ANDROID_VR_USER_AGENT } from './music-stream-resolver.js';
 
+import { OVERLAY_FONTS } from '../shared/constants.js';
 import type { RecentChatSnapshot } from '../shared/ipc.js';
-import type { ChatOverlayInfo, OverlayId, OverlayPreferencesMap, PollOverlayInfo, PollOverlayState, RaffleOverlayInfo, RaffleOverlayState } from '../shared/types.js';
+import type { ChatOverlayInfo, OverlayDefaults, OverlayId, OverlayPreferencesMap, PollOverlayInfo, PollOverlayState, RaffleOverlayInfo, RaffleOverlayState } from '../shared/types.js';
 
 interface OverlayServerOptions {
   /** TCP port to listen on; comes from GeneralSettings.overlayServerPort. */
@@ -75,6 +76,13 @@ export class OverlayServer {
    * (then publishes) every time the streamer adjusts a value in the UI.
    */
   private overlayPreferences: OverlayPreferencesMap = {};
+  /**
+   * Latest global default visual style seeded from the per-profile JSON store.
+   * Read once at boot via `GET /overlay-defaults/state` and re-pushed over WS
+   * (topic `overlay-defaults`) whenever the streamer changes it in the UI.
+   * Each overlay merges this with its per-overlay override slice.
+   */
+  private overlayDefaults: OverlayDefaults = {};
 
   constructor(private readonly options: OverlayServerOptions) {}
 
@@ -236,6 +244,16 @@ export class OverlayServer {
         return;
       }
 
+      if (path === '/overlay-defaults/state') {
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+          'Access-Control-Allow-Origin': '*',
+        });
+        res.end(JSON.stringify(this.overlayDefaults));
+        return;
+      }
+
       if (path === '/now-playing/audio') {
         const videoId = url.searchParams.get('id');
         const source = videoId ? this.audioSourceByVideoId.get(videoId) : null;
@@ -375,6 +393,18 @@ export class OverlayServer {
     return this.overlayPreferences;
   }
 
+  /** Replaces the global default visual style and broadcasts it on the
+   *  `overlay-defaults` topic. Each overlay client merges defaults with its
+   *  per-overlay override slice before applying CSS vars. */
+  setOverlayDefaults(defaults: OverlayDefaults): void {
+    this.overlayDefaults = { ...defaults };
+    this.publish('overlay-defaults', this.overlayDefaults);
+  }
+
+  getOverlayDefaults(): OverlayDefaults {
+    return this.overlayDefaults;
+  }
+
   /** Registers the actual googlevideo URL for a videoId and returns the
    *  same-origin URL the browser source should use as `<audio src>`. The
    *  proxy keeps only the most recent handful of videoIds so the map
@@ -453,7 +483,7 @@ export class OverlayServer {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Chat — Overlay</title>
-    <script>${bootScript}</script>
+    <script>${bootScript}</script>${buildGoogleFontsLink()}
     <link rel="stylesheet" href="/chat/overlay/overlay.css" />
   </head>
   <body>
@@ -471,10 +501,7 @@ export class OverlayServer {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sorteio — Overlay</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet" />
+    <title>Sorteio — Overlay</title>${buildGoogleFontsLink()}
     <link rel="stylesheet" href="/raffles/overlay/overlay.css" />
   </head>
   <body>
@@ -522,6 +549,152 @@ export class OverlayServer {
   }
 }
 
+/**
+ * Builds the inline JS that an overlay's boot script uses to subscribe to
+ * the live visual-style channels (global `overlay-defaults` + per-overlay
+ * `overlay-prefs:<id>`), merge them, and apply the result as CSS variables.
+ *
+ * Each overlay calls this once at boot — the snippet is self-contained
+ * (no shared globals across overlays, since each runs in its own popup
+ * window). `overlayId` may be the string id or `'window'` to read it from
+ * `window.__overlayId` (used by chat, which can be 'chat-overlay' or
+ * 'chat-dock' depending on the route).
+ *
+ * The CSS vars set match the universal style block in each overlay's CSS:
+ * `--bg-color-rgb` (R,G,B triplet for use inside rgba()), `--opacity`,
+ * `--border-radius`, `--border-color`, `--border-width`, `--font`,
+ * `--text-color`, `--accent-color`. Unset fields are deliberately not
+ * cleared on the document — they fall back to the per-overlay CSS default.
+ *
+ * `--scale` (chat overlay only) is also multiplied by `fontSize / 14` so
+ * the editor's font-size knob scales every text element proportionally
+ * without having to refactor every `calc(N * var(--scale))` in the stylesheet.
+ */
+function buildOverlayStyleScript(overlayId: string | 'window'): string {
+  const idExpr = overlayId === 'window'
+    ? 'window.__overlayId'
+    : JSON.stringify(overlayId);
+  const fontStacks = OVERLAY_FONTS.reduce<Record<string, string>>((acc, font) => {
+    acc[font.key] = font.stack;
+    return acc;
+  }, {});
+  return `
+(function () {
+  var ID = ${idExpr};
+  if (!ID) return;
+  var FONT_STACKS = ${JSON.stringify(fontStacks)};
+  var defaults = {};
+  var prefs = {};
+  // chat overlay sets --scale from the URL ?scale param (default 1.5 for
+  // overlay route, 1 for dock); we remember the base so the font-size knob
+  // can multiply into it instead of clobbering the per-route scale.
+  var baseScale = parseFloat(document.documentElement.style.getPropertyValue('--scale')) || 1;
+
+  function hexToRgbTriplet(hex) {
+    if (typeof hex !== 'string') return null;
+    var m = /^#([0-9a-fA-F]{6})$/.exec(hex);
+    if (!m) return null;
+    var n = parseInt(m[1], 16);
+    return ((n >> 16) & 0xff) + ', ' + ((n >> 8) & 0xff) + ', ' + (n & 0xff);
+  }
+
+  function merge() {
+    var d = defaults || {};
+    var p = prefs || {};
+    var root = document.documentElement.style;
+
+    var bg = p.backgroundColor || d.backgroundColor;
+    var bgRgb = hexToRgbTriplet(bg);
+    if (bgRgb) root.setProperty('--bg-color-rgb', bgRgb);
+
+    // 'opacity' is the legacy single-knob alias for backgroundOpacity.
+    var opacity = (typeof p.backgroundOpacity === 'number') ? p.backgroundOpacity
+      : (typeof p.opacity === 'number') ? p.opacity
+      : (typeof d.backgroundOpacity === 'number') ? d.backgroundOpacity
+      : null;
+    if (opacity !== null) root.setProperty('--opacity', String(opacity));
+
+    var br = (typeof p.borderRadius === 'number') ? p.borderRadius
+      : (typeof d.borderRadius === 'number') ? d.borderRadius : null;
+    if (br !== null) root.setProperty('--border-radius', br + 'px');
+
+    var bc = p.borderColor || d.borderColor;
+    if (bc) root.setProperty('--border-color', bc);
+
+    var bw = (typeof p.borderWidth === 'number') ? p.borderWidth
+      : (typeof d.borderWidth === 'number') ? d.borderWidth : null;
+    if (bw !== null) root.setProperty('--border-width', bw + 'px');
+
+    var fontKey = p.fontFamily || d.fontFamily;
+    if (fontKey && FONT_STACKS[fontKey]) root.setProperty('--font', FONT_STACKS[fontKey]);
+
+    var tc = p.fontColor || d.fontColor;
+    if (tc) root.setProperty('--text-color', tc);
+
+    var fs = (typeof p.fontSize === 'number') ? p.fontSize
+      : (typeof d.fontSize === 'number') ? d.fontSize : null;
+    // Reset --scale to the route's base on every merge so unsetting fontSize
+    // returns the overlay to its hand-tuned size instead of sticking at the
+    // last computed multiplier.
+    root.setProperty('--scale', String(fs !== null ? (baseScale * (fs / 14)) : baseScale));
+    if (fs !== null) root.setProperty('--font-size-base', fs + 'px');
+
+    var ac = p.accentColor || d.accentColor;
+    if (ac) root.setProperty('--accent-color', ac);
+  }
+
+  function onDefaults(payload) { defaults = payload || {}; merge(); }
+  function onPrefs(payload) { prefs = payload || {}; merge(); }
+
+  fetch('/overlay-defaults/state', { cache: 'no-store' })
+    .then(function (r) { return r.ok ? r.json() : {}; })
+    .then(onDefaults)
+    .catch(function () { /* noop */ });
+  fetch('/overlay-prefs/state?id=' + encodeURIComponent(ID), { cache: 'no-store' })
+    .then(function (r) { return r.ok ? r.json() : {}; })
+    .then(onPrefs)
+    .catch(function () { /* noop */ });
+
+  function connect() {
+    var ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+    ws.addEventListener('open', function () {
+      ws.send(JSON.stringify({ type: 'subscribe', topic: 'overlay-defaults' }));
+      ws.send(JSON.stringify({ type: 'subscribe', topic: 'overlay-prefs:' + ID }));
+    });
+    ws.addEventListener('message', function (event) {
+      try {
+        var msg = JSON.parse(event.data);
+        if (msg.topic === 'overlay-defaults') onDefaults(msg.payload);
+        else if (msg.topic === 'overlay-prefs:' + ID) onPrefs(msg.payload);
+      } catch (e) { /* ignore */ }
+    });
+    ws.addEventListener('close', function () { setTimeout(connect, 1500); });
+  }
+  connect();
+})();
+`;
+}
+
+/**
+ * Builds the Google Fonts `<link>` block used by every overlay HTML page.
+ *
+ * Joins every entry from `OVERLAY_FONTS` that has a `google` family spec into
+ * one css2 URL — the streamer pays one network round-trip and any font can
+ * be swapped live via the editor without reloading the page. Preconnects to
+ * fonts.googleapis.com / fonts.gstatic.com keep the first paint snappy.
+ */
+function buildGoogleFontsLink(): string {
+  const families = OVERLAY_FONTS
+    .map((entry) => entry.google)
+    .filter((google): google is string => Boolean(google))
+    .map((google) => `family=${google}`)
+    .join('&');
+  return `
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?${families}&display=swap" rel="stylesheet" />`;
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -545,6 +718,15 @@ const chatOverlayCss = `
   --kick-text: #86efac;
   --tiktok: rgba(236, 72, 153, 0.2);
   --tiktok-text: #f9a8d4;
+  /* Live-customizable visual style — vars below are written by the merge
+   * JS (defaults ⊕ per-overlay prefs). Falling back to the per-overlay
+   * look when the streamer leaves a field unset. */
+  --bg-color-rgb: 0, 0, 0;
+  --border-radius: 4px;
+  --border-color: transparent;
+  --border-width: 0px;
+  --text-color: #d1d5db;
+  --accent-color: #c4b5fd;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -554,7 +736,7 @@ html, body {
   min-height: 100%;
   margin: 0;
   background: #000000;
-  color: var(--text-main);
+  color: var(--text-color);
   font-family: var(--font);
   overflow: hidden;
 }
@@ -602,11 +784,15 @@ html { --scale: 1; --opacity: 0; }
   min-width: 0;
   padding: 6px 8px 6px 6px;
   border-left: 2px solid rgba(168, 85, 247, 0.2);
-  /* Backdrop behind each row — alpha driven by --opacity (set via WS by the
-   * customize modal). Default 0 = transparent (text alone over the scene);
-   * higher values darken the row for legibility on busy scenes. */
-  background-color: rgba(0, 0, 0, var(--opacity, 0));
-  border-radius: 4px;
+  /* Backdrop behind each row — color from --bg-color-rgb (RGB triplet) and
+   * alpha from --opacity. Default 0,0,0/0 = transparent (text alone over
+   * the scene); the editor's bg color + opacity slider tints/darkens the
+   * row for legibility on busy scenes. */
+  background-color: rgba(var(--bg-color-rgb), var(--opacity, 0));
+  border-radius: var(--border-radius);
+  /* Outer outline driven by the visual editor; uses box-shadow so it
+   * doesn't fight the per-platform border-left accent above. */
+  box-shadow: 0 0 0 var(--border-width) var(--border-color);
   cursor: default;
   user-select: text;
   transition: background 150ms ease;
@@ -707,14 +893,14 @@ html { --scale: 1; --opacity: 0; }
 
 .content {
   margin: 2px 0 0;
-  color: var(--text-main);
+  color: var(--text-color);
   font-size: calc(14px * var(--scale));
   line-height: 1.375;
   overflow-wrap: anywhere;
 }
 
 .content.command {
-  color: var(--command);
+  color: var(--accent-color);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
@@ -746,41 +932,9 @@ html { --scale: 1; --opacity: 0; }
 `;
 
 const chatOverlayJs = `
+${buildOverlayStyleScript('window')}
+
 (function () {
-  // ── Overlay preferences live channel ──────────────────────────────────
-  // The boot script set window.__overlayId to the surface id ('chat-overlay'
-  // or 'chat-dock'). Fetch the initial slice synchronously, then subscribe to
-  // the WS topic so changes from the app's slider land instantly.
-  function applyPrefs(prefs) {
-    if (!prefs || typeof prefs !== 'object') return;
-    if (typeof prefs.opacity === 'number') {
-      document.documentElement.style.setProperty('--opacity', String(prefs.opacity));
-    }
-  }
-  (function bootPrefs() {
-    var id = window.__overlayId;
-    if (!id) return;
-    fetch('/overlay-prefs/state?id=' + encodeURIComponent(id), { cache: 'no-store' })
-      .then(function (r) { return r.ok ? r.json() : {}; })
-      .then(applyPrefs)
-      .catch(function () { /* noop — defaults already set in CSS */ });
-
-    function connectPrefs() {
-      var ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
-      ws.addEventListener('open', function () {
-        ws.send(JSON.stringify({ type: 'subscribe', topic: 'overlay-prefs:' + id }));
-      });
-      ws.addEventListener('message', function (event) {
-        try {
-          var msg = JSON.parse(event.data);
-          if (msg.topic === 'overlay-prefs:' + id) applyPrefs(msg.payload);
-        } catch (e) { /* ignore */ }
-      });
-      ws.addEventListener('close', function () { setTimeout(connectPrefs, 1500); });
-    }
-    connectPrefs();
-  })();
-
   var listEl = document.getElementById('chat-list');
   var renderedIds = new Set();
   // Per-platform metadata for the chat overlay. The overlay runs in a
@@ -1100,25 +1254,36 @@ const chatOverlayJs = `
 
 const overlayCss = `
 :root {
+  /* Live-customizable visual style — vars below are written by the merge
+   * JS (defaults ⊕ per-overlay prefs). Each existing design token below
+   * (--surface, --r, --text, --rose) derives from one of them so the
+   * editor reskins the whole raffle in one shot. */
+  --bg-color-rgb: 11, 14, 28;
+  --border-radius: 18px;
+  --border-color: rgba(255, 255, 255, 0.07);
+  --border-width: 1px;
+  --text-color: #f1f5f9;
+  --accent-color: #ff6b6b;
+  --font: "DM Sans", sans-serif;
   --bg: #ffffff;
-  --surface: #0b0e1c;
-  --surface-2: #111527;
-  --border: rgba(255, 255, 255, 0.07);
+  --surface: rgba(var(--bg-color-rgb), 1);
+  --surface-2: rgba(var(--bg-color-rgb), 0.75);
+  --border: var(--border-color);
   --gold: #f0c020;
   --gold-glow: rgba(240, 192, 32, 0.22);
   --blue-glow: rgba(77, 171, 247, 0.18);
   --green: #40c057;
   --green-glow: rgba(64, 192, 87, 0.16);
-  --rose: #ff6b6b;
+  --rose: var(--accent-color);
   --rose-glow: rgba(255, 107, 107, 0.16);
   --cyan: #22d3ee;
   --cyan-glow: rgba(34, 211, 238, 0.18);
-  --text: #f1f5f9;
+  --text: var(--text-color);
   --text-dim: #64748b;
-  --r: 18px;
+  --r: var(--border-radius);
   /* Backdrop alpha — controlled live via the WS topic overlay-prefs:raffles.
    * Default 0 keeps the OBS scene fully visible behind the wheel; raising it
-   * adds a dark layer behind the overlay for legibility on busy scenes. */
+   * adds a (tinted) layer behind the overlay for legibility on busy scenes. */
   --opacity: 0;
 }
 
@@ -1126,8 +1291,8 @@ const overlayCss = `
 
 html, body {
   min-height: 100vh;
-  background-color: rgba(0, 0, 0, var(--opacity, 0));
-  font-family: "DM Sans", sans-serif;
+  background-color: rgba(var(--bg-color-rgb), var(--opacity, 0));
+  font-family: var(--font);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   transition: background-color 150ms ease;
@@ -1145,7 +1310,7 @@ html, body {
 
 .header {
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: var(--border-width) solid var(--border);
   border-radius: var(--r);
   padding: 14px 22px;
   display: flex;
@@ -1363,7 +1528,7 @@ html, body {
 
 .info-card {
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: var(--border-width) solid var(--border);
   border-radius: var(--r);
   padding: 16px 18px;
   position: relative;
@@ -1485,37 +1650,7 @@ html, body {
 
 const overlayJs = `
 'use strict';
-
-// Overlay preferences live channel — same pattern as the chat / now-playing
-// overlays. Hydrates from GET /overlay-prefs/state, subscribes to the WS
-// topic so the customize-modal slider applies immediately.
-(function () {
-  function applyPrefs(prefs) {
-    if (!prefs || typeof prefs !== 'object') return;
-    if (typeof prefs.opacity === 'number') {
-      document.documentElement.style.setProperty('--opacity', String(prefs.opacity));
-    }
-  }
-  var id = 'raffles';
-  fetch('/overlay-prefs/state?id=' + encodeURIComponent(id), { cache: 'no-store' })
-    .then(function (r) { return r.ok ? r.json() : {}; })
-    .then(applyPrefs)
-    .catch(function () { /* noop */ });
-  function connectPrefs() {
-    var ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
-    ws.addEventListener('open', function () {
-      ws.send(JSON.stringify({ type: 'subscribe', topic: 'overlay-prefs:' + id }));
-    });
-    ws.addEventListener('message', function (event) {
-      try {
-        var msg = JSON.parse(event.data);
-        if (msg.topic === 'overlay-prefs:' + id) applyPrefs(msg.payload);
-      } catch (e) { /* ignore */ }
-    });
-    ws.addEventListener('close', function () { setTimeout(connectPrefs, 1500); });
-  }
-  connectPrefs();
-})();
+${buildOverlayStyleScript('raffles')}
 
 var PALETTE = [
   '#e63946', '#4361ee', '#f4a261', '#7b2d8b',
@@ -1787,10 +1922,7 @@ const pollsOverlayHtml = `<!DOCTYPE html>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Enquete — Overlay</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet" />
+    <title>Enquete — Overlay</title>${buildGoogleFontsLink()}
     <link rel="stylesheet" href="/polls/overlay/overlay.css" />
   </head>
   <body>
@@ -1813,24 +1945,34 @@ const pollsOverlayHtml = `<!DOCTYPE html>
 const pollsOverlayCss = `
 :root {
   color-scheme: dark;
+  /* Live-customizable visual style — see chat overlay for the same pattern.
+   * Existing tokens below derive from these so the visual editor reskins
+   * the poll card by changing the universal vars only. */
+  --bg-color-rgb: 17, 21, 39;
+  --border-radius: 18px;
+  --border-color: rgba(255,255,255,0.08);
+  --border-width: 1px;
+  --text-color: #f1f5f9;
+  --accent-color: #7c5cff;
+  --font: "DM Sans", sans-serif;
   --bg: #0b0e1c;
-  --surface: rgba(17, 21, 39, 0.92);
-  --border: rgba(255,255,255,0.08);
-  --text: #f1f5f9;
+  --surface: rgba(var(--bg-color-rgb), 0.92);
+  --border: var(--border-color);
+  --text: var(--text-color);
   --text-dim: #94a3b8;
-  --accent: #7c5cff;
+  --accent: var(--accent-color);
   --accent-2: #22d3ee;
   --winner: #f0c020;
-  /* Backdrop alpha — controlled live via overlay-prefs:polls. Adds a dark
-   * layer behind the entire viewport (the poll card already has its own
-   * background); useful when the scene behind the overlay is too busy. */
+  /* Backdrop alpha — controlled live via overlay-prefs:polls. Adds a
+   * (tinted) layer behind the entire viewport; useful when the scene
+   * behind the overlay is too busy. */
   --opacity: 0;
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body {
   height: 100%;
-  background-color: rgba(0, 0, 0, var(--opacity, 0));
-  font-family: "DM Sans", sans-serif;
+  background-color: rgba(var(--bg-color-rgb), var(--opacity, 0));
+  font-family: var(--font);
   color: var(--text);
   transition: background-color 150ms ease;
 }
@@ -1839,8 +1981,8 @@ html, body {
   margin: 24px;
   padding: 22px 24px;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 18px;
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--border-radius);
   box-shadow: 0 24px 70px rgba(0,0,0,0.5);
   backdrop-filter: blur(8px);
   transition: opacity 240ms ease;
@@ -1849,7 +1991,7 @@ html, body {
 .poll-header { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
 .poll-tag {
   font-size: 11px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;
-  color: var(--accent-2);
+  color: var(--accent);
 }
 .poll-title {
   font-family: "Bebas Neue", sans-serif;
@@ -1864,7 +2006,7 @@ html, body {
   position: relative;
   display: flex; align-items: center; justify-content: space-between;
   padding: 12px 14px;
-  border: 1px solid var(--border);
+  border: var(--border-width) solid var(--border);
   border-radius: 12px;
   background: rgba(255,255,255,0.04);
   overflow: hidden;
@@ -1897,35 +2039,7 @@ html, body {
 
 const pollsOverlayJs = `
 'use strict';
-
-// Overlay preferences live channel — same pattern as the other overlays.
-(function () {
-  function applyPrefs(prefs) {
-    if (!prefs || typeof prefs !== 'object') return;
-    if (typeof prefs.opacity === 'number') {
-      document.documentElement.style.setProperty('--opacity', String(prefs.opacity));
-    }
-  }
-  var id = 'polls';
-  fetch('/overlay-prefs/state?id=' + encodeURIComponent(id), { cache: 'no-store' })
-    .then(function (r) { return r.ok ? r.json() : {}; })
-    .then(applyPrefs)
-    .catch(function () { /* noop */ });
-  function connectPrefs() {
-    var ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
-    ws.addEventListener('open', function () {
-      ws.send(JSON.stringify({ type: 'subscribe', topic: 'overlay-prefs:' + id }));
-    });
-    ws.addEventListener('message', function (event) {
-      try {
-        var msg = JSON.parse(event.data);
-        if (msg.topic === 'overlay-prefs:' + id) applyPrefs(msg.payload);
-      } catch (e) { /* ignore */ }
-    });
-    ws.addEventListener('close', function () { setTimeout(connectPrefs, 1500); });
-  }
-  connectPrefs();
-})();
+${buildOverlayStyleScript('polls')}
 
 (function () {
   var rootEl = document.getElementById('root');
@@ -2026,19 +2140,33 @@ const nowPlayingHtml = `<!DOCTYPE html>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Now Playing</title>
+    <title>Now Playing</title>${buildGoogleFontsLink()}
     <style>
-      :root { color-scheme: dark; --opacity: 0; }
-      html, body { margin: 0; padding: 0; height: 100%; background: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #f1f5f9; }
-      /* Backdrop behind the card — alpha driven by --opacity (set via WS).
-       * Default 0 = transparent (only thumb/text float over the scene);
-       * higher values darken the card box for legibility. */
-      .root { display: flex; align-items: center; gap: 16px; padding: 16px; max-width: 540px; background-color: rgba(0, 0, 0, var(--opacity, 0)); border-radius: 12px; transition: background-color 150ms ease; }
+      :root {
+        color-scheme: dark;
+        --opacity: 0;
+        /* Live-customizable visual style — see chat/raffles/polls for the
+         * same vars. Fields the streamer leaves unset fall back to the
+         * now-playing defaults below. */
+        --bg-color-rgb: 0, 0, 0;
+        --border-radius: 12px;
+        --border-color: transparent;
+        --border-width: 0px;
+        --text-color: #f1f5f9;
+        --accent-color: #f1f5f9;
+        --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      html, body { margin: 0; padding: 0; height: 100%; background: transparent; font-family: var(--font); color: var(--text-color); }
+      /* Backdrop behind the card — color from --bg-color-rgb (RGB triplet)
+       * and alpha from --opacity (set via WS). Default 0 = transparent
+       * (only thumb/text float over the scene); higher values tint/darken
+       * the card box for legibility. */
+      .root { display: flex; align-items: center; gap: 16px; padding: 16px; max-width: 540px; background-color: rgba(var(--bg-color-rgb), var(--opacity, 0)); border: var(--border-width) solid var(--border-color); border-radius: var(--border-radius); transition: background-color 150ms ease; }
       .root.idle { opacity: 0.0; }
       .thumb { width: 96px; height: 96px; border-radius: 12px; object-fit: cover; background: #1f2937; box-shadow: 0 8px 24px rgba(0,0,0,0.45); flex-shrink: 0; }
       .info { flex: 1; min-width: 0; }
       .title {
-        font-size: 18px; font-weight: 700; margin: 0 0 4px;
+        font-size: 18px; font-weight: 700; margin: 0 0 4px; color: var(--accent-color);
         overflow: hidden; white-space: nowrap;
         /* mask softens the edges so the marquee doesn't clip abruptly when entering/leaving */
         -webkit-mask-image: linear-gradient(to right, transparent 0, #000 8px, #000 calc(100% - 8px), transparent 100%);
@@ -2075,39 +2203,9 @@ const nowPlayingHtml = `<!DOCTYPE html>
 
 const nowPlayingJs = `
 'use strict';
+${buildOverlayStyleScript('now-playing')}
 
 (function () {
-  // Overlay preferences live channel — same pattern as the chat overlay.
-  // Hydrates from GET /overlay-prefs/state, then subscribes to the WS topic
-  // so slider drags in the app apply immediately.
-  function applyPrefs(prefs) {
-    if (!prefs || typeof prefs !== 'object') return;
-    if (typeof prefs.opacity === 'number') {
-      document.documentElement.style.setProperty('--opacity', String(prefs.opacity));
-    }
-  }
-  (function bootPrefs() {
-    var id = 'now-playing';
-    fetch('/overlay-prefs/state?id=' + encodeURIComponent(id), { cache: 'no-store' })
-      .then(function (r) { return r.ok ? r.json() : {}; })
-      .then(applyPrefs)
-      .catch(function () { /* noop */ });
-    function connectPrefs() {
-      var ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
-      ws.addEventListener('open', function () {
-        ws.send(JSON.stringify({ type: 'subscribe', topic: 'overlay-prefs:' + id }));
-      });
-      ws.addEventListener('message', function (event) {
-        try {
-          var msg = JSON.parse(event.data);
-          if (msg.topic === 'overlay-prefs:' + id) applyPrefs(msg.payload);
-        } catch (e) { /* ignore */ }
-      });
-      ws.addEventListener('close', function () { setTimeout(connectPrefs, 1500); });
-    }
-    connectPrefs();
-  })();
-
   var rootEl = document.getElementById('root');
   var thumbEl = document.getElementById('thumb');
   var titleEl = document.getElementById('title');

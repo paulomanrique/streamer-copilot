@@ -472,7 +472,28 @@ export const moderationShoutoutSchema = z.object({
 
 const overlayIdSchema = z.enum(['chat-overlay', 'chat-dock', 'now-playing', 'raffles', 'polls']);
 
-export const overlayPreferencesSchema = z.object({
+const hexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/);
+// Permissive font-key shape — the canonical whitelist lives in
+// `OVERLAY_FONTS` (constants.ts) and the renderer enforces it visually,
+// but the IPC layer just rejects clearly-malformed values.
+const fontKeySchema = z.string().min(1).max(40).regex(/^[a-z0-9-]+$/);
+
+export const overlayVisualStyleSchema = z.object({
+  backgroundColor: hexColorSchema.optional(),
+  backgroundOpacity: z.number().min(0).max(1).optional(),
+  borderRadius: z.number().int().min(0).max(48).optional(),
+  borderColor: hexColorSchema.optional(),
+  borderWidth: z.number().int().min(0).max(12).optional(),
+  fontFamily: fontKeySchema.optional(),
+  fontColor: hexColorSchema.optional(),
+  fontSize: z.number().int().min(8).max(48).optional(),
+  accentColor: hexColorSchema.optional(),
+});
+
+export const overlayDefaultsSchema = overlayVisualStyleSchema.strict();
+
+export const overlayPreferencesSchema = overlayVisualStyleSchema.extend({
+  /** Legacy single-knob field kept for older profile files. */
   opacity: z.number().min(0).max(1).optional(),
 }).strict();
 

@@ -228,6 +228,9 @@ const IPC_CHANNELS = {
   overlayPrefsGet: 'overlay-prefs:get',
   overlayPrefsSet: 'overlay-prefs:set',
   overlayPrefsUpdate: 'overlay-prefs:update',
+  overlayDefaultsGet: 'overlay-defaults:get',
+  overlayDefaultsSet: 'overlay-defaults:set',
+  overlayDefaultsUpdate: 'overlay-defaults:update',
 } as const;
 
 const copilotApi: CopilotApi = {
@@ -521,6 +524,16 @@ const copilotApi: CopilotApi = {
     ) => listener(payload);
     ipcRenderer.on(IPC_CHANNELS.overlayPrefsUpdate, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.overlayPrefsUpdate, wrappedListener); };
+  },
+  getOverlayDefaults: () => ipcRenderer.invoke(IPC_CHANNELS.overlayDefaultsGet),
+  setOverlayDefaults: (input) => ipcRenderer.invoke(IPC_CHANNELS.overlayDefaultsSet, input),
+  onOverlayDefaultsUpdate: (listener) => {
+    const wrappedListener = (
+      _event: Electron.IpcRendererEvent,
+      payload: import('../shared/types.js').OverlayDefaults,
+    ) => listener(payload);
+    ipcRenderer.on(IPC_CHANNELS.overlayDefaultsUpdate, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.overlayDefaultsUpdate, wrappedListener); };
   },
 };
 

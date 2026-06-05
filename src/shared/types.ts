@@ -650,15 +650,48 @@ export interface ChatOverlayInfo {
 export type OverlayId = 'chat-overlay' | 'chat-dock' | 'now-playing' | 'raffles' | 'polls';
 
 /**
- * Streamer-tunable preferences for a single overlay surface.
+ * Streamer-tunable visual style — shared between the global defaults
+ * (`OverlayDefaults`, applied to every overlay surface) and the per-overlay
+ * override slot (`OverlayPreferences`).
  *
- * Designed to grow: today only `opacity` is honored, but future fields
- * (background color, font size, padding, etc.) get added here and consumed
- * by the matching overlay's JS. Persisted per profile and pushed live over
- * WebSocket so a connected OBS Browser Source updates without reload.
+ * Every field is optional. Resolution at the overlay client is:
+ *   per-overlay-prefs[field] ?? global-defaults[field] ?? CSS fallback.
+ *
+ * Persisted per profile and pushed live over WebSocket so a connected OBS
+ * Browser Source updates without reload.
  */
-export interface OverlayPreferences {
-  /** Whole-overlay opacity, 0..1. `undefined` means "use the overlay's default". */
+export interface OverlayVisualStyle {
+  /** "#RRGGBB" hex. */
+  backgroundColor?: string;
+  /** 0..1; controls the backdrop alpha, not the text. */
+  backgroundOpacity?: number;
+  /** px; 0 = square corners, higher = more rounded. */
+  borderRadius?: number;
+  /** "#RRGGBB" hex. */
+  borderColor?: string;
+  /** px; 0 = no visible border. */
+  borderWidth?: number;
+  /** Key from `OVERLAY_FONTS` in `src/shared/constants.ts`. */
+  fontFamily?: string;
+  /** "#RRGGBB" hex for body text. */
+  fontColor?: string;
+  /** px base font size (overlay-internal scale still applies on top). */
+  fontSize?: number;
+  /** "#RRGGBB" hex for highlight elements (command names, links, badges). */
+  accentColor?: string;
+}
+
+/** Global visual defaults applied to every overlay. */
+export type OverlayDefaults = OverlayVisualStyle;
+
+/**
+ * Per-overlay overrides. Each field, when set, supersedes the matching
+ * `OverlayDefaults` value for that overlay only. Legacy field `opacity` is
+ * kept for backward compatibility — old `overlay-preferences.json` files
+ * stored only this single slider and still apply to the backdrop alpha.
+ */
+export interface OverlayPreferences extends OverlayVisualStyle {
+  /** Legacy alias for `backgroundOpacity` — older profiles persisted only this field. */
   opacity?: number;
 }
 
