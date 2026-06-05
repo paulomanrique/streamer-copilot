@@ -119,6 +119,13 @@ export class MusicPlayer {
       catch { url = null; }
     }
 
+    // Registra a URL no proxy do overlay server (resolve CORS + 403 do
+    // googlevideo) e emite o URL same-origin que o `<audio>` consegue tocar.
+    let publishedUrl: string | null = null;
+    if (url && this.currentVideoId) {
+      publishedUrl = this.overlayServer.setNowPlayingAudioSource(this.currentVideoId, url);
+    }
+
     this.overlayServer.publish('now-playing', {
       currentItem: {
         id: this.currentItemId,
@@ -128,7 +135,7 @@ export class MusicPlayer {
         requestedBy: this.currentRequestedBy,
         durationSeconds: this.currentDurationSeconds,
       },
-      streamUrl: url ?? null,
+      streamUrl: publishedUrl,
       volume: this.currentVolume,
       isPlaying: state === 'playing',
     });

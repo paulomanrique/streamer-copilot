@@ -1,4 +1,5 @@
 import http from 'node:http';
+import https from 'node:https';
 import { createRequire } from 'node:module';
 
 import type { AddressInfo } from 'node:net';
@@ -57,6 +58,16 @@ export class OverlayServer {
   private startPromise: Promise<void> | null = null;
   private lastStatus: OverlayServerStatus = 'stopped';
   private lastError: string | null = null;
+  /**
+   * Cache `videoId → googlevideo URL` para o proxy de áudio do now-playing.
+   *
+   * Por que o proxy existe: o URL resolvido pelo IOS client tem `ip=...`
+   * embutido + restrição de User-Agent + sem CORS — `<audio src="...">`
+   * direto no browser falha com 403 ou CORS. O proxy busca do googlevideo
+   * com User-Agent IOS e a mesma origin do browser (127.0.0.1:port), sem
+   * preflight.
+   */
+  private readonly audioSourceByVideoId = new Map<string, string>();
 
   constructor(private readonly options: OverlayServerOptions) {}
 
@@ -207,6 +218,18 @@ export class OverlayServer {
         return;
       }
 
+      if (path === '/now-playing/audio') {
+        const videoId = url.searchParams.get('id');
+        const source = videoId ? this.audioSourceByVideoId.get(videoId) : null;
+        if (!source) {
+          res.writeHead(404, { 'Content-Type': 'text/plain' });
+          res.end('Unknown audio source');
+          return;
+        }
+        proxyAudio(source, req, res);
+        return;
+      }
+
       if (path === '/now-playing' || path === '/now-playing/') {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
         res.end(nowPlayingHtml);
@@ -317,6 +340,18 @@ export class OverlayServer {
   getNowPlayingInfo(): { overlayUrl: string } | null {
     if (!this.server || this.port === 0) return null;
     return { overlayUrl: `http://127.0.0.1:${this.port}/now-playing` };
+  }
+
+  /** Registra a URL real do googlevideo para um videoId, e devolve o URL
+   *  same-origin que o browser source deve usar como `<audio src>`. O
+   *  proxy mantém só o último handful de videoIds pra não acumular forever. */
+  setNowPlayingAudioSource(videoId: string, sourceUrl: string): string {
+    this.audioSourceByVideoId.set(videoId, sourceUrl);
+    if (this.audioSourceByVideoId.size > 16) {
+      const oldest = this.audioSourceByVideoId.keys().next().value;
+      if (oldest) this.audioSourceByVideoId.delete(oldest);
+    }
+    return `/now-playing/audio?id=${encodeURIComponent(videoId)}`;
   }
 
   getOverlayInfo(): RaffleOverlayInfo {
@@ -1961,4 +1996,56 @@ const nowPlayingJs = `
   connect();
 })();
 `;
+
+/**
+ * Proxia uma resposta de googlevideo (audio/video) preservando o cabeçalho
+ * Range que o `<audio>` manda pra seek e streaming progressivo.
+ *
+ * O User-Agent IOS é obrigatório: a URL foi assinada para o cliente IOS
+ * (`c=IOS` no query) e o googlevideo devolve 403 se o UA não bater. Os
+ * outros cabeçalhos são propagados em ambos sentidos.
+ */
+function proxyAudio(sourceUrl: string, req: http.IncomingMessage, res: http.ServerResponse): void {
+  let upstream: URL;
+  try {
+    upstream = new URL(sourceUrl);
+  } catch {
+    res.writeHead(502, { 'Content-Type': 'text/plain' });
+    res.end('Bad source URL');
+    return;
+  }
+
+  const headers: http.OutgoingHttpHeaders = {
+    'User-Agent': 'com.google.ios.youtube/19.45.4 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)',
+  };
+  if (req.headers.range) headers.Range = req.headers.range;
+  if (req.headers['accept-encoding']) headers['Accept-Encoding'] = req.headers['accept-encoding'] as string;
+
+  const transport = upstream.protocol === 'http:' ? http : https;
+  const upstreamReq = transport.request({
+    method: req.method,
+    protocol: upstream.protocol,
+    hostname: upstream.hostname,
+    port: upstream.port || (upstream.protocol === 'https:' ? 443 : 80),
+    path: upstream.pathname + upstream.search,
+    headers,
+  }, (upstreamRes) => {
+    res.writeHead(upstreamRes.statusCode ?? 502, upstreamRes.headers);
+    upstreamRes.pipe(res);
+  });
+
+  upstreamReq.on('error', (err) => {
+    if (!res.headersSent) {
+      res.writeHead(502, { 'Content-Type': 'text/plain' });
+      res.end(`Upstream error: ${err.message}`);
+    } else {
+      res.destroy();
+    }
+  });
+
+  // Browser desistiu (track skip) — corta o upstream pra não desperdiçar banda.
+  req.on('close', () => upstreamReq.destroy());
+
+  upstreamReq.end();
+}
 
