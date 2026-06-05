@@ -132,12 +132,19 @@ export class OverlayServer {
       const path = url.pathname;
 
       if (path === '/chat/overlay/state') {
+        const snapshot = this.options.getChatSnapshot();
+        const isPreview = url.searchParams.get('preview') === '1';
+        // Mock the snapshot only when there are no real messages — if the
+        // streamer is actually chatting, the preview shows the live feed.
+        const payload = isPreview && (!snapshot.messages || snapshot.messages.length === 0)
+          ? DUMMY_CHAT_SNAPSHOT
+          : snapshot;
         res.writeHead(200, {
           'Content-Type': 'application/json',
           'Cache-Control': 'no-store',
           'Access-Control-Allow-Origin': '*',
         });
-        res.end(JSON.stringify(this.options.getChatSnapshot()));
+        res.end(JSON.stringify(payload));
         return;
       }
 
@@ -754,6 +761,68 @@ const DUMMY_RAFFLE_STATE = {
   updatedAt: '2025-01-01T00:00:00.000Z',
 };
 
+/**
+ * Mock chat snapshot served when the chat overlay/dock is loaded in
+ * preview mode AND no real messages have been received. Mixes platforms,
+ * a follower/sub badge, a command row, and TikTok-style shortcodes so the
+ * streamer can spot-check every visual treatment in the editor without
+ * waiting for real chatter. Older messages first; the chat container
+ * scrolls to the bottom so the newest land at the foot of the list.
+ */
+const DUMMY_CHAT_SNAPSHOT = {
+  messages: [
+    {
+      id: 'preview-1',
+      platform: 'twitch',
+      author: 'lurking_owl',
+      content: 'first time catching the stream!',
+      badges: [],
+      timestampLabel: '20:14',
+      color: '#22d3ee',
+    },
+    {
+      id: 'preview-2',
+      platform: 'youtube',
+      author: 'jamie.codes',
+      content: 'love the new overlay 🔥',
+      badges: ['member'],
+      timestampLabel: '20:14',
+      color: '#fca5a5',
+    },
+    {
+      id: 'preview-3',
+      platform: 'kick',
+      author: 'rocco42',
+      content: '!sr streets of rage 2 ost',
+      badges: [],
+      timestampLabel: '20:15',
+      color: '#86efac',
+    },
+    {
+      id: 'preview-4',
+      platform: 'tiktok',
+      author: 'mariana.p',
+      content: 'que som bom 😂😂',
+      contentParts: [
+        { type: 'text' as const, text: 'que som bom 😂😂' },
+      ],
+      badges: ['moderator'],
+      timestampLabel: '20:15',
+      color: '#f9a8d4',
+    },
+    {
+      id: 'preview-5',
+      platform: 'twitch',
+      author: 'sirVH',
+      content: 'subbed for 6 months — keep it up!',
+      badges: ['subscriber'],
+      timestampLabel: '20:16',
+      color: '#d8b4fe',
+    },
+  ],
+  events: [] as unknown[],
+};
+
 // `closesAt` is dynamic so the countdown reads as a believable 45s window
 // each time the iframe (re)loads; the rest of the payload is fixed.
 function buildDummyPollState() {
@@ -1324,9 +1393,15 @@ ${buildOverlayStyleScript('window')}
     if (stickToBottom) scrollToBottom(scrollEl);
   }
 
+  // ?preview=1 (passed by the in-app builder iframe) tells the server to
+  // hand us a mock chat snapshot when no real messages are flowing — same
+  // mechanism the raffles / polls / now-playing overlays use.
+  var IS_PREVIEW = new URLSearchParams(location.search).get('preview') === '1';
+  var STATE_URL = '/chat/overlay/state' + (IS_PREVIEW ? '?preview=1' : '');
+
   async function refresh() {
     try {
-      var response = await fetch('/chat/overlay/state', { cache: 'no-store' });
+      var response = await fetch(STATE_URL, { cache: 'no-store' });
       if (!response.ok) throw new Error('HTTP ' + response.status);
       var snapshot = await response.json();
       render(Array.isArray(snapshot.messages) ? snapshot.messages : []);
