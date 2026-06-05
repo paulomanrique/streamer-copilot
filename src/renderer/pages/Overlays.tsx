@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react';
 
 import type { OverlayServerInfo } from '../../shared/ipc.js';
-import type { GeneralSettings, OverlayId, OverlayPreferences, OverlayPreferencesMap } from '../../shared/types.js';
-import { CustomizeOverlayModal } from '../components/CustomizeOverlayModal.js';
-import { OverlayDefaultsEditor } from '../components/OverlayDefaultsEditor.js';
-import { OverlayPreviewGrid } from '../components/OverlayPreviewGrid.js';
+import type { GeneralSettings, OverlayId } from '../../shared/types.js';
+import { OverlayVisualBuilder, type BuilderMode } from '../components/OverlayVisualBuilder.js';
 
 const REFRESH_INTERVAL_MS = 3000;
 const DEFAULT_PORT = 7842;
@@ -15,23 +13,29 @@ const STATUS_STYLE = {
   failed: { dot: 'bg-rose-400', text: 'text-rose-300', label: 'Failed' },
 } as const;
 
+/**
+ * Two-mode page:
+ *   - `cards`: lists the overlay URLs + a "Editar visual padrão" CTA and a
+ *     "Personalizar" button on each card.
+ *   - `builder`: full-page OverlayVisualBuilder, either scoped to global
+ *     defaults or a single overlay. Activated by the CTA / per-card buttons.
+ *
+ * No router — same switch-on-state pattern used by SettingsWorkspace.
+ */
+type EditorMode = { kind: 'cards' } | { kind: 'builder'; mode: BuilderMode };
+
 interface OverlayLinkProps {
   title: string;
   description: string;
   url: string | null;
   obsHints?: string[];
-  /** When set, a "Personalizar" button shows up and opens the customize modal
-   *  for this overlay id. */
-  customize?: {
-    overlayId: OverlayId;
-    prefs: OverlayPreferences;
-    onChange: (next: OverlayPreferences) => void;
-  };
+  /** When set, a "Personalizar" button shows up and switches the parent
+   *  page into the builder scoped to this overlay. */
+  customize?: { overlayId: OverlayId; onCustomize: (id: OverlayId) => void };
 }
 
 function OverlayLink({ title, description, url, obsHints, customize }: OverlayLinkProps) {
   const [copied, setCopied] = useState(false);
-  const [customizeOpen, setCustomizeOpen] = useState(false);
 
   async function copy() {
     if (!url) return;
@@ -52,7 +56,7 @@ function OverlayLink({ title, description, url, obsHints, customize }: OverlayLi
           {customize ? (
             <button
               type="button"
-              onClick={() => setCustomizeOpen(true)}
+              onClick={() => customize.onCustomize(customize.overlayId)}
               className="text-xs text-violet-300 hover:text-violet-200"
             >
               Personalizar
@@ -74,16 +78,6 @@ function OverlayLink({ title, description, url, obsHints, customize }: OverlayLi
           {obsHints.map((hint, i) => <li key={i}>{hint}</li>)}
         </ul>
       )}
-      {customize ? (
-        <CustomizeOverlayModal
-          overlayId={customize.overlayId}
-          title={title}
-          open={customizeOpen}
-          onClose={() => setCustomizeOpen(false)}
-          initialPrefs={customize.prefs}
-          onChange={customize.onChange}
-        />
-      ) : null}
     </div>
   );
 }
@@ -95,25 +89,7 @@ export function OverlaysPage() {
   const [portStatus, setPortStatus] = useState<string | null>(null);
   const [portError, setPortError] = useState<string | null>(null);
   const [savingPort, setSavingPort] = useState(false);
-  const [overlayPrefs, setOverlayPrefs] = useState<OverlayPreferencesMap>({});
-
-  useEffect(() => {
-    let cancelled = false;
-    void window.copilot.getOverlayPreferences().then((current) => {
-      if (!cancelled) setOverlayPrefs(current);
-    }).catch(() => undefined);
-    const unsub = window.copilot.onOverlayPreferencesUpdate((next) => {
-      if (!cancelled) setOverlayPrefs(next);
-    });
-    return () => { cancelled = true; unsub(); };
-  }, []);
-
-  function patchPrefs(id: OverlayId, next: OverlayPreferences) {
-    // Optimistic local update — server pushes the canonical state right back,
-    // but updating locally first keeps the slider responsive on slow IPC.
-    setOverlayPrefs((current) => ({ ...current, [id]: next }));
-    void window.copilot.setOverlayPreferences({ id, prefs: next }).catch(() => undefined);
-  }
+  const [editor, setEditor] = useState<EditorMode>({ kind: 'cards' });
 
   useEffect(() => {
     let cancelled = false;
@@ -161,19 +137,37 @@ export function OverlaysPage() {
     }
   }
 
+  if (editor.kind === 'builder') {
+    return (
+      <OverlayVisualBuilder
+        mode={editor.mode}
+        info={info}
+        onBack={() => setEditor({ kind: 'cards' })}
+      />
+    );
+  }
+
   const status = info?.status ?? 'stopped';
   const style = STATUS_STYLE[status];
   const portDirty = settings ? portDraft !== (settings.overlayServerPort ?? DEFAULT_PORT) : false;
+  const openOverlayBuilder = (id: OverlayId) => setEditor({ kind: 'builder', mode: { kind: 'overlay', id } });
 
   return (
-    <div className="min-h-full p-6 space-y-5">
-      <header>
-        <h2 className="text-base font-semibold mb-0.5">Overlays</h2>
-        <p className="text-sm text-gray-500">Browser sources to add to OBS. The server runs locally — only your machine has access.</p>
+    <div className="min-h-full p-6 max-w-2xl space-y-5">
+      <header className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold mb-0.5">Overlays</h2>
+          <p className="text-sm text-gray-500">Browser sources to add to OBS. The server runs locally — only your machine has access.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setEditor({ kind: 'builder', mode: { kind: 'defaults' } })}
+          className="shrink-0 px-3 py-2 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors"
+        >
+          Editar visual padrão
+        </button>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-6">
-        <div className="space-y-5">
       <section className="rounded-lg border border-gray-700 bg-gray-800/40 px-4 py-3 flex items-center gap-3">
         <span className={['inline-flex items-center gap-1.5 text-xs font-medium', style.text].join(' ')}>
           <span className={['w-2 h-2 rounded-full', style.dot].join(' ')} />
@@ -221,11 +215,7 @@ export function OverlaysPage() {
           'Audio Properties → Track: 2 (or any track other than 1).',
           'Audio Monitoring: "Monitor and Output" — you hear it via OBS, Twitch live (track 1) does not.',
         ]}
-        customize={{
-          overlayId: 'now-playing',
-          prefs: overlayPrefs['now-playing'] ?? {},
-          onChange: (next) => patchPrefs('now-playing', next),
-        }}
+        customize={{ overlayId: 'now-playing', onCustomize: openOverlayBuilder }}
       />
 
       <OverlayLink
@@ -238,11 +228,7 @@ export function OverlaysPage() {
           'Ajuste fino opcional via query: ?scale=2 (mais grande), ?transparent=0 (forçar opaco).',
           'Já vem com fundo transparente — sem precisar mexer no Custom CSS.',
         ]}
-        customize={{
-          overlayId: 'chat-overlay',
-          prefs: overlayPrefs['chat-overlay'] ?? {},
-          onChange: (next) => patchPrefs('chat-overlay', next),
-        }}
+        customize={{ overlayId: 'chat-overlay', onCustomize: openOverlayBuilder }}
       />
 
       <OverlayLink
@@ -260,30 +246,15 @@ export function OverlaysPage() {
         title="Raffle"
         description="Visual wheel + status of the active raffle."
         url={info?.urls.raffles ?? null}
-        customize={{
-          overlayId: 'raffles',
-          prefs: overlayPrefs.raffles ?? {},
-          onChange: (next) => patchPrefs('raffles', next),
-        }}
+        customize={{ overlayId: 'raffles', onCustomize: openOverlayBuilder }}
       />
 
       <OverlayLink
         title="Polls"
         description="Live poll bars + countdown for the currently active poll."
         url={info?.urls.polls ?? null}
-        customize={{
-          overlayId: 'polls',
-          prefs: overlayPrefs.polls ?? {},
-          onChange: (next) => patchPrefs('polls', next),
-        }}
+        customize={{ overlayId: 'polls', onCustomize: openOverlayBuilder }}
       />
-        </div>
-
-        <div className="space-y-5">
-          <OverlayDefaultsEditor />
-          <OverlayPreviewGrid info={info} />
-        </div>
-      </div>
     </div>
   );
 }

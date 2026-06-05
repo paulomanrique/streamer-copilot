@@ -167,7 +167,17 @@ export class OverlayServer {
 
       if (path === '/raffles/overlay/state') {
         const state = this.options.getOverlayState();
+        const isPreview = url.searchParams.get('preview') === '1';
         if (!state) {
+          if (isPreview) {
+            res.writeHead(200, {
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-store',
+              'Access-Control-Allow-Origin': '*',
+            });
+            res.end(JSON.stringify(DUMMY_RAFFLE_STATE));
+            return;
+          }
           res.writeHead(404, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'No active raffle' }));
           return;
@@ -201,7 +211,17 @@ export class OverlayServer {
 
       if (path === '/polls/overlay/state') {
         const state = this.options.getPollsOverlayState();
+        const isPreview = url.searchParams.get('preview') === '1';
         if (!state) {
+          if (isPreview) {
+            res.writeHead(200, {
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-store',
+              'Access-Control-Allow-Origin': '*',
+            });
+            res.end(JSON.stringify(buildDummyPollState()));
+            return;
+          }
           res.writeHead(404, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'No active poll' }));
           return;
@@ -640,7 +660,15 @@ function buildOverlayStyleScript(overlayId: string | 'window'): string {
     if (fs !== null) root.setProperty('--font-size-base', fs + 'px');
 
     var ac = p.accentColor || d.accentColor;
-    if (ac) root.setProperty('--accent-color', ac);
+    if (ac) {
+      root.setProperty('--accent-color', ac);
+      // Several overlays (raffles winner glow, header shine, hub border)
+      // need an rgba() alpha variant of the same color — set the RGB
+      // triplet alongside so those rules read it directly without a
+      // computed-style + hex-parse on every paint.
+      var acRgb = hexToRgbTriplet(ac);
+      if (acRgb) root.setProperty('--accent-color-rgb', acRgb);
+    }
   }
 
   function onDefaults(payload) { defaults = payload || {}; merge(); }
@@ -695,6 +723,56 @@ function buildGoogleFontsLink(): string {
     <link href="https://fonts.googleapis.com/css2?${families}&display=swap" rel="stylesheet" />`;
 }
 
+/**
+ * Fixed sample state served when the raffle/polls overlays are opened
+ * with `?preview=1` AND no real session is active. Lets the visual editor
+ * show what the overlay looks like at full fidelity (with participants /
+ * vote bars) without requiring the streamer to bootstrap a real raffle
+ * just to tweak colors. The flag is only set from the in-app preview
+ * iframe — OBS Browser Sources never carry it.
+ */
+const DUMMY_RAFFLE_STATE = {
+  raffleId: 'preview',
+  title: 'Sorteio de exemplo',
+  mode: 'single-winner' as const,
+  status: 'ready_to_spin' as const,
+  sessionId: null,
+  totalEntries: 5,
+  activeEntries: [
+    { id: 'p1', label: 'Alice' },
+    { id: 'p2', label: 'Bob' },
+    { id: 'p3', label: 'Charlie' },
+    { id: 'p4', label: 'Diana' },
+    { id: 'p5', label: 'Eve' },
+  ],
+  highlightedEntryId: null,
+  highlightedEntryLabel: null,
+  top2EntryIds: [],
+  top2Labels: [],
+  round: 0,
+  animation: { targetEntryId: null, targetRotationDeg: 0, durationMs: 4000, startedAt: null },
+  updatedAt: '2025-01-01T00:00:00.000Z',
+};
+
+// `closesAt` is dynamic so the countdown reads as a believable 45s window
+// each time the iframe (re)loads; the rest of the payload is fixed.
+function buildDummyPollState() {
+  return {
+    pollId: 'preview',
+    title: 'Qual recurso de overlay você mais curte?',
+    status: 'active' as const,
+    totalVotes: 247,
+    tally: [
+      { optionId: 'o1', index: 1, label: 'Editor visual', votes: 142, percent: 57.5 },
+      { optionId: 'o2', index: 2, label: 'Preview ao vivo', votes: 89, percent: 36.0 },
+      { optionId: 'o3', index: 3, label: 'Cor de destaque', votes: 16, percent: 6.5 },
+    ],
+    winner: null,
+    closesAt: new Date(Date.now() + 45_000).toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -727,6 +805,7 @@ const chatOverlayCss = `
   --border-width: 0px;
   --text-color: #d1d5db;
   --accent-color: #c4b5fd;
+  --accent-color-rgb: 196, 181, 253;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -1273,13 +1352,18 @@ const overlayCss = `
   --border-width: 1px;
   --text-color: #f1f5f9;
   --accent-color: #ff6b6b;
+  --accent-color-rgb: 255, 107, 107;
   --font: "DM Sans", sans-serif;
   --bg: #ffffff;
   --surface: rgba(var(--bg-color-rgb), 1);
   --surface-2: rgba(var(--bg-color-rgb), 0.75);
   --border: var(--border-color);
-  --gold: #f0c020;
-  --gold-glow: rgba(240, 192, 32, 0.22);
+  /* Gold used to be a separate token (#f0c020 — wheel needle, hub, badges,
+   * winner glow). Decided to fold it into the unified --accent-color so the
+   * visual editor reskins the whole raffle in one go. All the rgba()
+   * variants below use --accent-color-rgb for the alpha channel. */
+  --gold: var(--accent-color);
+  --gold-glow: rgba(var(--accent-color-rgb), 0.22);
   --blue-glow: rgba(77, 171, 247, 0.18);
   --green: #40c057;
   --green-glow: rgba(64, 192, 87, 0.16);
@@ -1334,7 +1418,7 @@ html, body {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, rgba(240,192,32,0.04) 0%, transparent 50%);
+  background: linear-gradient(135deg, rgba(var(--accent-color-rgb),0.04) 0%, transparent 50%);
   pointer-events: none;
 }
 
@@ -1409,13 +1493,13 @@ html, body {
 .status-badge.is-top2 {
   background: var(--gold-glow);
   color: #fde68a;
-  border-color: rgba(240, 192, 32, 0.38);
+  border-color: rgba(var(--accent-color-rgb),0.38);
 }
 
 .status-badge.is-completed {
   background: var(--gold-glow);
   color: var(--gold);
-  border-color: rgba(240, 192, 32, 0.42);
+  border-color: rgba(var(--accent-color-rgb),0.42);
   box-shadow: 0 0 16px var(--gold-glow);
 }
 
@@ -1460,7 +1544,7 @@ html, body {
   box-shadow:
     0 0 0 10px rgba(255,255,255,0.02),
     0 40px 100px rgba(0,0,0,0.55),
-    0 0 70px rgba(240,192,32,0.05);
+    0 0 70px rgba(var(--accent-color-rgb),0.05);
 }
 
 .wheel {
@@ -1487,7 +1571,7 @@ html, body {
   border-right: 17px solid transparent;
   border-top: 32px solid var(--gold);
   z-index: 10;
-  filter: drop-shadow(0 4px 14px rgba(240,192,32,0.75));
+  filter: drop-shadow(0 4px 14px rgba(var(--accent-color-rgb),0.75));
 }
 
 .wheel-hub {
@@ -1496,10 +1580,10 @@ html, body {
   aspect-ratio: 1;
   border-radius: 50%;
   background: var(--surface);
-  border: 2px solid rgba(240,192,32,0.28);
+  border: 2px solid rgba(var(--accent-color-rgb),0.28);
   box-shadow:
     0 0 0 4px rgba(255,255,255,0.025),
-    0 0 24px rgba(240,192,32,0.14),
+    0 0 24px rgba(var(--accent-color-rgb),0.14),
     inset 0 0 20px rgba(0,0,0,0.4);
   z-index: 5;
   display: grid;
@@ -1511,12 +1595,12 @@ html, body {
   aspect-ratio: 1;
   border-radius: 50%;
   background: linear-gradient(145deg, var(--gold), #a87900);
-  box-shadow: 0 4px 20px rgba(240,192,32,0.38);
+  box-shadow: 0 4px 20px rgba(var(--accent-color-rgb),0.38);
 }
 
 .round-badge {
   background: var(--surface);
-  border: 1px solid rgba(240,192,32,0.22);
+  border: 1px solid rgba(var(--accent-color-rgb),0.22);
   color: var(--gold);
   padding: 6px 18px;
   border-radius: 999px;
@@ -1581,8 +1665,8 @@ html, body {
 }
 
 .result-card.is-winner {
-  border-color: rgba(240,192,32,0.32);
-  box-shadow: 0 0 28px rgba(240,192,32,0.08);
+  border-color: rgba(var(--accent-color-rgb),0.32);
+  box-shadow: 0 0 28px rgba(var(--accent-color-rgb),0.08);
 }
 
 .result-card.is-winner::before {
@@ -1608,8 +1692,8 @@ html, body {
 }
 
 @keyframes winner-glow {
-  0%, 100% { text-shadow: 0 0 18px rgba(240,192,32,0.3); }
-  50% { text-shadow: 0 0 48px rgba(240,192,32,0.65), 0 0 80px rgba(240,192,32,0.18); }
+  0%, 100% { text-shadow: 0 0 18px rgba(var(--accent-color-rgb),0.3); }
+  50% { text-shadow: 0 0 48px rgba(var(--accent-color-rgb),0.65), 0 0 80px rgba(var(--accent-color-rgb),0.18); }
 }
 
 .result-caption {
@@ -1904,8 +1988,15 @@ function applyState(state) {
   }
 }
 
+// Preview iframes (rendered by the renderer's OverlayVisualBuilder) carry
+// ?preview=1; the server uses it to serve a dummy raffle state when no
+// real session is running so the streamer can see what the overlay looks
+// like with participants before bootstrapping a raffle.
+var IS_PREVIEW = new URLSearchParams(location.search).get('preview') === '1';
+var STATE_URL = '/raffles/overlay/state' + (IS_PREVIEW ? '?preview=1' : '');
+
 async function fetchState() {
-  var response = await fetch('/raffles/overlay/state', { cache: 'no-store' });
+  var response = await fetch(STATE_URL, { cache: 'no-store' });
   if (!response.ok) throw new Error('Erro ao buscar estado (' + response.status + ')');
   return response.json();
 }
@@ -1963,6 +2054,7 @@ const pollsOverlayCss = `
   --border-width: 1px;
   --text-color: #f1f5f9;
   --accent-color: #7c5cff;
+  --accent-color-rgb: 124, 92, 255;
   --font: "DM Sans", sans-serif;
   --bg: #0b0e1c;
   --surface: rgba(var(--bg-color-rgb), 0.92);
@@ -2026,7 +2118,7 @@ html, body {
   width: 0%;
   transition: width 480ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.poll-option.winner .bar { background: linear-gradient(90deg, rgba(240,192,32,0.5), rgba(240,192,32,0.18)); }
+.poll-option.winner .bar { background: linear-gradient(90deg, rgba(var(--accent-color-rgb),0.5), rgba(var(--accent-color-rgb),0.18)); }
 .poll-option .label {
   position: relative; z-index: 1;
   display: flex; align-items: center; gap: 10px;
@@ -2040,7 +2132,7 @@ html, body {
   font-size: 16px;
   background: rgba(124,92,255,0.18); color: #cdb8ff;
 }
-.poll-option.winner .index { background: rgba(240,192,32,0.2); color: var(--winner); }
+.poll-option.winner .index { background: rgba(var(--accent-color-rgb),0.2); color: var(--winner); }
 .poll-option .stats { position: relative; z-index: 1; font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 .poll-option .stats strong { color: var(--text); margin-left: 6px; }
 .poll-status { margin-top: 12px; font-size: 12px; color: var(--text-dim); text-align: center; }
@@ -2125,9 +2217,14 @@ ${buildOverlayStyleScript('polls')}
     timerEl.textContent = fmtCountdown(current);
   }
 
+  // See raffle overlay JS for the rationale — ?preview=1 makes the server
+  // hand us a dummy poll when none is active.
+  var IS_PREVIEW = new URLSearchParams(location.search).get('preview') === '1';
+  var STATE_URL = '/polls/overlay/state' + (IS_PREVIEW ? '?preview=1' : '');
+
   async function fetchState() {
     try {
-      var res = await fetch('/polls/overlay/state', { cache: 'no-store' });
+      var res = await fetch(STATE_URL, { cache: 'no-store' });
       if (res.status === 404) { applyState(null); return; }
       if (!res.ok) throw new Error('HTTP ' + res.status);
       applyState(await res.json());
@@ -2163,6 +2260,7 @@ const nowPlayingHtml = `<!DOCTYPE html>
         --border-width: 0px;
         --text-color: #f1f5f9;
         --accent-color: #f1f5f9;
+        --accent-color-rgb: 241, 245, 249;
         --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
       html, body { margin: 0; padding: 0; height: 100%; background: transparent; font-family: var(--font); color: var(--text-color); }
@@ -2257,24 +2355,6 @@ ${buildOverlayStyleScript('now-playing')}
     requestAnimationFrame(drawFrame);
   }
 
-  // Cached RGB triplet so we don't re-parse the CSS var on every frame
-  // (60 Hz × bar count would be wasteful). Invalidated each frame against
-  // the current computed value — the editor / WS push can change
-  // --accent-color any time and we want the bars to follow.
-  var lastAccentHex = '';
-  var accentRgb = '124, 92, 255';
-  function resolveAccentRgb() {
-    var hex = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
-    if (hex === lastAccentHex) return accentRgb;
-    lastAccentHex = hex;
-    var m = /^#([0-9a-fA-F]{6})$/.exec(hex);
-    if (m) {
-      var n = parseInt(m[1], 16);
-      accentRgb = ((n >> 16) & 0xff) + ', ' + ((n >> 8) & 0xff) + ', ' + (n & 0xff);
-    }
-    return accentRgb;
-  }
-
   function drawFrame() {
     if (!analyser) return;
     var bufferLength = analyser.frequencyBinCount;
@@ -2282,7 +2362,10 @@ ${buildOverlayStyleScript('now-playing')}
     analyser.getByteFrequencyData(data);
     ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
     var barWidth = canvasEl.width / bufferLength * 2.5;
-    var rgb = resolveAccentRgb();
+    // Read the precomputed RGB triplet that buildOverlayStyleScript keeps
+    // in sync with the visual editor's accent color — same source the
+    // raffle/poll CSS uses for its rgba() variants.
+    var rgb = getComputedStyle(document.documentElement).getPropertyValue('--accent-color-rgb').trim() || '124, 92, 255';
     var x = 0;
     for (var i = 0; i < bufferLength; i++) {
       var height = (data[i] / 255) * canvasEl.height;
@@ -2332,7 +2415,18 @@ ${buildOverlayStyleScript('now-playing')}
     titleInnerEl.textContent = 'Música de exemplo';
     titleInnerEl.classList.remove('marquee');
     artistEl.textContent = 'Solicitada por @viewer';
-    thumbEl.style.display = 'none';
+    // Inline SVG (data URL) keeps the thumb visible in the editor preview
+    // so the layout matches the real "song playing" state — dark card
+    // with a play-icon glyph in the same slot the YouTube thumbnail will
+    // occupy. No network request, no asset to bundle.
+    thumbEl.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">' +
+      '<rect width="96" height="96" fill="#0f172a"/>' +
+      '<circle cx="48" cy="48" r="22" fill="none" stroke="#64748b" stroke-width="2"/>' +
+      '<polygon points="42,38 42,58 60,48" fill="#94a3b8"/>' +
+      '</svg>'
+    );
+    thumbEl.style.display = 'block';
   }
 
   function applyState(state) {
