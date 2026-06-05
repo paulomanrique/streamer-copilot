@@ -2177,7 +2177,11 @@ const nowPlayingHtml = `<!DOCTYPE html>
       .title {
         font-size: 18px; font-weight: 700; margin: 0 0 4px; color: var(--accent-color);
         overflow: hidden; white-space: nowrap;
-        /* mask softens the edges so the marquee doesn't clip abruptly when entering/leaving */
+      }
+      /* Soft-fade the edges ONLY when the marquee is actually running —
+       * otherwise a static title (placeholder, short song name) shows a
+       * pointless semi-transparent left edge for no benefit. */
+      .title:has(.title-inner.marquee) {
         -webkit-mask-image: linear-gradient(to right, transparent 0, #000 8px, #000 calc(100% - 8px), transparent 100%);
                 mask-image: linear-gradient(to right, transparent 0, #000 8px, #000 calc(100% - 8px), transparent 100%);
       }
