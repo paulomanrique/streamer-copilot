@@ -39,10 +39,32 @@ interface YtdlAgent {
   readonly __ytdlAgent?: true;
 }
 
+interface YtdlGetInfoOptions {
+  agent?: YtdlAgent;
+  /** Lista de player clients do ytdl-core a tentar em ordem. Default
+   *  da lib é WEB-only, que com frequência cai em "Failed to find any
+   *  playable formats" quando o WEB exige PoToken/visitorData não
+   *  resolvíveis sem o player JS no browser. */
+  playerClients?: string[];
+}
+
 interface YtdlModule {
-  getInfo: (videoId: string, options?: { agent?: YtdlAgent }) => Promise<YtdlInfo>;
+  getInfo: (videoId: string, options?: YtdlGetInfoOptions) => Promise<YtdlInfo>;
   createAgent?: (cookies?: YtdlCookie[], opts?: unknown) => YtdlAgent;
 }
+
+/**
+ * Ordens de player clients tentadas em sequência. Primeira que retornar
+ * formats vence. Composta empiricamente do tracker do @distube/ytdl-core:
+ *  - IOS frequentemente passa sem PoToken (mas pode ter URL com expire curto).
+ *  - WEB_CREATOR + cookies autenticados é a tentativa "logada".
+ *  - ANDROID / TV são fallbacks que costumam funcionar com vídeo "comum".
+ *  - WEB_EMBEDDED já caiu em muitos casos por causa do anti-bot recente.
+ */
+const PLAYER_CLIENT_ORDERS: readonly string[][] = [
+  ['IOS', 'WEB_CREATOR', 'ANDROID', 'TV'],
+  ['ANDROID', 'TV', 'WEB_EMBEDDED'],
+];
 
 interface MusicStreamResolverOptions {
   /** Devolve os cookies da sessão do Electron para o youtube.com. Sem cookies,
@@ -77,14 +99,46 @@ export class MusicStreamResolver {
     if (!ytdl) throw new Error('ytdl-core is not installed; cannot resolve YouTube stream URL');
 
     const agent = await this.buildAgent(ytdl);
-    const info = await ytdl.getInfo(videoId, agent ? { agent } : undefined);
+    const cookieCount = this.agentCache?.cookieCount ?? 0;
+    const attempts: { clients: string[]; error: string }[] = [];
+
+    // Tenta cada combinação de player clients até uma retornar formats.
+    // O erro final agrega todas as tentativas pra deixar o log diagnosticável.
+    let info: YtdlInfo | null = null;
+    for (const playerClients of PLAYER_CLIENT_ORDERS) {
+      try {
+        info = await ytdl.getInfo(videoId, {
+          ...(agent ? { agent } : {}),
+          playerClients,
+        });
+        if ((info.formats ?? []).length > 0) break;
+        attempts.push({ clients: playerClients, error: 'empty formats list' });
+        info = null;
+      } catch (cause) {
+        attempts.push({
+          clients: playerClients,
+          error: cause instanceof Error ? cause.message : String(cause),
+        });
+        info = null;
+      }
+    }
+
+    if (!info) {
+      const summary = attempts
+        .map((a) => `[${a.clients.join('+')}] ${a.error}`)
+        .join(' | ');
+      throw new Error(
+        `Failed to resolve ${videoId} (cookies=${cookieCount}); attempts: ${summary}`,
+      );
+    }
+
     const formats = info.formats ?? [];
     // Audio-only with the highest audio bitrate.
     const audioOnly = formats
       .filter((f) => f.hasAudio && !f.hasVideo)
       .sort((a, b) => (b.audioBitrate ?? 0) - (a.audioBitrate ?? 0));
     const best = audioOnly[0] ?? formats.find((f) => f.hasAudio);
-    if (!best?.url) throw new Error(`No playable audio format found for ${videoId}`);
+    if (!best?.url) throw new Error(`No playable audio format found for ${videoId} (cookies=${cookieCount})`);
 
     // Try to read the expire timestamp from the URL; fall back to 4 minutes.
     let expiresAt = now + 4 * 60 * 1000;
