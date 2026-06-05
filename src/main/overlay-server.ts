@@ -16,8 +16,6 @@ interface OverlayServerOptions {
   getChatSnapshot: () => RecentChatSnapshot;
 }
 
-const CHAT_OVERLAY_VERSION = 'chat-feed-v6';
-
 interface WsLikeServer {
   handleUpgrade(request: unknown, socket: unknown, head: Buffer, callback: (ws: WsLikeClient) => void): void;
   emit(event: string, ws: WsLikeClient, request: unknown): void;
@@ -385,9 +383,9 @@ export class OverlayServer {
     }
 
     return {
-      overlayUrl: `http://127.0.0.1:${this.port}/chat/overlay?v=${CHAT_OVERLAY_VERSION}`,
-      dockUrl: `http://127.0.0.1:${this.port}/chat/dock?v=${CHAT_OVERLAY_VERSION}`,
-      stateUrl: `http://127.0.0.1:${this.port}/chat/overlay/state?v=${CHAT_OVERLAY_VERSION}`,
+      overlayUrl: `http://127.0.0.1:${this.port}/chat/overlay`,
+      dockUrl: `http://127.0.0.1:${this.port}/chat/dock`,
+      stateUrl: `http://127.0.0.1:${this.port}/chat/overlay/state`,
     };
   }
 
@@ -420,13 +418,13 @@ export class OverlayServer {
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Chat — Overlay</title>
     <script>${bootScript}</script>
-    <link rel="stylesheet" href="/chat/overlay/overlay.css?v=${CHAT_OVERLAY_VERSION}" />
+    <link rel="stylesheet" href="/chat/overlay/overlay.css" />
   </head>
   <body>
     <main class="chat-overlay" aria-live="polite">
       <div id="chat-list" class="chat-list"></div>
     </main>
-    <script src="/chat/overlay/overlay.js?v=${CHAT_OVERLAY_VERSION}"></script>
+    <script src="/chat/overlay/overlay.js"></script>
   </body>
 </html>`;
   }
@@ -1011,7 +1009,7 @@ const chatOverlayJs = `
 
   async function refresh() {
     try {
-      var response = await fetch('/chat/overlay/state?v=${CHAT_OVERLAY_VERSION}', { cache: 'no-store' });
+      var response = await fetch('/chat/overlay/state', { cache: 'no-store' });
       if (!response.ok) throw new Error('HTTP ' + response.status);
       var snapshot = await response.json();
       render(Array.isArray(snapshot.messages) ? snapshot.messages : []);
@@ -1981,7 +1979,9 @@ const nowPlayingJs = `
       var overflow = titleInnerEl.scrollWidth - titleEl.clientWidth;
       if (overflow > 4) {
         titleInnerEl.style.setProperty('--marquee-distance', '-' + overflow + 'px');
-        var duration = Math.max(8, Math.round(overflow * 0.024 + 4));
+        // ~120ms per overflow-pixel + 20s baseline (5x slower than the
+        // original tuning — the original felt frantic at common title widths).
+        var duration = Math.max(40, Math.round(overflow * 0.12 + 20));
         titleInnerEl.style.setProperty('--marquee-duration', duration + 's');
         titleInnerEl.classList.add('marquee');
       } else {
