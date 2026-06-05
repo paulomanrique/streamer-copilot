@@ -757,6 +757,15 @@ html { --scale: 1; --opacity: 0; }
   padding: 8px 0 8px 0;
   overflow-y: auto;
   overflow-x: hidden;
+  /* Backdrop + border + rounding are applied to the chat CONTAINER (not
+   * each row) so the editor's bg / border / corner sliders frame the
+   * whole OBS Browser Source as one shape, the way the streamer expects.
+   * Color from --bg-color-rgb (RGB triplet) + alpha from --opacity. */
+  background-color: rgba(var(--bg-color-rgb), var(--opacity, 0));
+  border-radius: var(--border-radius);
+  /* box-shadow rather than border so it doesn't shift the layout when
+   * the streamer cranks the border-width slider. */
+  box-shadow: 0 0 0 var(--border-width) var(--border-color);
   /* Keep the scrollbar thin so it doesn't compete with the OBS scene. */
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
@@ -784,19 +793,13 @@ html { --scale: 1; --opacity: 0; }
   min-width: 0;
   padding: 6px 8px 6px 6px;
   border-left: 2px solid rgba(168, 85, 247, 0.2);
-  /* Backdrop behind each row — color from --bg-color-rgb (RGB triplet) and
-   * alpha from --opacity. Default 0,0,0/0 = transparent (text alone over
-   * the scene); the editor's bg color + opacity slider tints/darkens the
-   * row for legibility on busy scenes. */
-  background-color: rgba(var(--bg-color-rgb), var(--opacity, 0));
-  border-radius: var(--border-radius);
-  /* Outer outline driven by the visual editor; uses box-shadow so it
-   * doesn't fight the per-platform border-left accent above. */
-  box-shadow: 0 0 0 var(--border-width) var(--border-color);
   cursor: default;
   user-select: text;
-  transition: background 150ms ease;
   animation: enter 160ms ease-out both;
+  /* Backdrop + border + corner rounding live on the container (.chat-overlay)
+   * — the editor frames the whole Browser Source as one shape rather than
+   * rendering every row as its own pill. Keep the platform border-left
+   * accent here since that's a per-row affordance. */
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.72);
 }
 
@@ -2298,16 +2301,24 @@ ${buildOverlayStyleScript('now-playing')}
     }).observe(titleEl);
   }
 
+  function renderPlaceholder() {
+    rootEl.classList.remove('idle');
+    // Bypass setTitle's overflow measurement here — at boot the iframe may
+    // not have committed a layout yet and clientWidth reads 0, which
+    // throws off the marquee math. Direct textContent always sticks.
+    titleInnerEl.textContent = 'Música de exemplo';
+    titleInnerEl.classList.remove('marquee');
+    artistEl.textContent = 'Solicitada por @viewer';
+    thumbEl.style.display = 'none';
+  }
+
   function applyState(state) {
     if (!state || !state.currentItem) {
       if (IS_PREVIEW) {
         // Render a placeholder card so the streamer can see the layout
         // (and the visual editor's effect on it) without needing an
         // active song request.
-        rootEl.classList.remove('idle');
-        setTitle('Música de exemplo');
-        artistEl.textContent = 'Solicitada por @viewer';
-        thumbEl.style.display = 'none';
+        renderPlaceholder();
         return;
       }
       rootEl.classList.add('idle');
@@ -2340,8 +2351,9 @@ ${buildOverlayStyleScript('now-playing')}
 
   // Kick off the placeholder render immediately in preview mode so the
   // iframe doesn't sit blank until a state push (which may never come
-  // when no song is queued).
-  if (IS_PREVIEW) applyState(null);
+  // when no song is queued — music-player.ts only re-publishes on
+  // subscribe when there's an active item).
+  if (IS_PREVIEW) renderPlaceholder();
 
   function connect() {
     var ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
