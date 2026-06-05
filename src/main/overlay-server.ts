@@ -2015,10 +2015,18 @@ function proxyAudio(sourceUrl: string, req: http.IncomingMessage, res: http.Serv
     return;
   }
 
+  // googlevideo rejeita request SEM `Range` com 403 (verificado empiricamente:
+  // sem Range → 403, com qualquer Range → 206). O `<audio>` do Chromium
+  // costuma mandar a primeira request sem Range (pega arquivo todo), o que
+  // bate exatamente nesse 403. Forçar `bytes=0-` aqui faz o googlevideo
+  // devolver 206 desde a primeira request, e o `<audio>` lida com 206 OK.
+  //
+  // User-Agent literal de `Constants.CLIENTS.IOS.USER_AGENT` em
+  // youtubei.js@17.0.1; manter alinhado quando a lib atualizar.
   const headers: http.OutgoingHttpHeaders = {
-    'User-Agent': 'com.google.ios.youtube/19.45.4 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)',
+    'User-Agent': 'com.google.ios.youtube/20.11.6 (iPhone10,4; U; CPU iOS 16_7_7 like Mac OS X)',
+    Range: (req.headers.range as string | undefined) ?? 'bytes=0-',
   };
-  if (req.headers.range) headers.Range = req.headers.range;
   if (req.headers['accept-encoding']) headers['Accept-Encoding'] = req.headers['accept-encoding'] as string;
 
   const transport = upstream.protocol === 'http:' ? http : https;
