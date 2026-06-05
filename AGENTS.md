@@ -267,4 +267,15 @@ Milestones:
 
 ## Commits
 
-After every code change, a commit and push must be made.
+After every relevant code change, a commit and push **must** be made — **without asking for permission**. This includes:
+
+- New features, bug fixes, refactors, dependency updates, schema changes, test additions.
+- Any change that leaves the working tree in a coherent state (tsc/lint/tests OK).
+
+Do **not** batch unrelated changes into one commit. If a session produced multiple logically-separate changes (e.g. bug fix + new feature), commit them separately, in order. The default cadence is "one focused chunk = one commit + push".
+
+Skip the commit only when:
+- The work is incomplete and would leave the tree broken (tsc errors, failing tests).
+- The user is mid-conversation about the design and the change is exploratory.
+
+Do not ask "posso commitar?" / "want me to commit?" — just commit and push, and report the SHA in the response.
