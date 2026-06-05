@@ -3,6 +3,7 @@ import https from 'node:https';
 import { createRequire } from 'node:module';
 
 import type { AddressInfo } from 'node:net';
+import { ANDROID_VR_USER_AGENT } from './music-stream-resolver.js';
 
 import type { RecentChatSnapshot } from '../shared/ipc.js';
 import type { ChatOverlayInfo, PollOverlayInfo, PollOverlayState, RaffleOverlayInfo, RaffleOverlayState } from '../shared/types.js';
@@ -2021,10 +2022,11 @@ function proxyAudio(sourceUrl: string, req: http.IncomingMessage, res: http.Serv
   // bate exatamente nesse 403. Forçar `bytes=0-` aqui faz o googlevideo
   // devolver 206 desde a primeira request, e o `<audio>` lida com 206 OK.
   //
-  // User-Agent literal de `Constants.CLIENTS.IOS.USER_AGENT` em
-  // youtubei.js@17.0.1; manter alinhado quando a lib atualizar.
+  // User-Agent precisa bater EXATAMENTE com o cliente que assinou a URL —
+  // o resolver usa ANDROID_VR e o googlevideo cruza a UA com o `c=` do
+  // query. UA divergente em geral devolve 403 em URLs sensíveis a c=.
   const headers: http.OutgoingHttpHeaders = {
-    'User-Agent': 'com.google.ios.youtube/20.11.6 (iPhone10,4; U; CPU iOS 16_7_7 like Mac OS X)',
+    'User-Agent': ANDROID_VR_USER_AGENT,
     Range: (req.headers.range as string | undefined) ?? 'bytes=0-',
   };
   if (req.headers['accept-encoding']) headers['Accept-Encoding'] = req.headers['accept-encoding'] as string;
