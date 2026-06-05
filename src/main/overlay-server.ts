@@ -807,10 +807,10 @@ html { --scale: 1; --opacity: 0; }
 .chat-message.youtube { border-left-color: rgba(239, 68, 68, 0.2); }
 .chat-message.kick { border-left-color: rgba(34, 197, 94, 0.2); }
 .chat-message.tiktok { border-left-color: rgba(236, 72, 153, 0.2); }
-/* Layer the command-row tint OVER the universal backdrop — the shorthand
- * `background` used to live here, but it clobbered background-color and
- * left command rows looking transparent whenever the streamer raised
- * --opacity on the visual editor. */
+/* Layer the command-row tint OVER the universal backdrop — the 'background'
+ * shorthand used to live here, but it clobbered background-color and left
+ * command rows looking transparent whenever the streamer raised --opacity
+ * on the visual editor. */
 .chat-message.command {
   background-image: linear-gradient(rgba(139, 92, 246, 0.05), rgba(139, 92, 246, 0.05));
 }
@@ -2215,10 +2215,10 @@ const nowPlayingJs = `
 ${buildOverlayStyleScript('now-playing')}
 
 (function () {
-  // Preview mode (`?preview=1` from OverlayPreviewGrid) silences audio
-  // and renders a mock card when idle. The same overlay HTML is used in
-  // OBS (audio routed via the Browser Source) and in the app's editor
-  // preview iframe (where audio would leak into the streamer's speakers).
+  // Preview mode (?preview=1 from OverlayPreviewGrid) silences audio and
+  // renders a mock card when idle. The same overlay HTML is used in OBS
+  // (audio routed via the Browser Source) and in the app editor preview
+  // iframe (where audio would leak into the streamer's speakers).
   var IS_PREVIEW = new URLSearchParams(location.search).get('preview') === '1';
 
   var rootEl = document.getElementById('root');
