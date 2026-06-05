@@ -171,13 +171,25 @@ export function OverlaysPage() {
       />
 
       <OverlayLink
-        title="Chat feed"
-        description="Unified chat overlay aggregating all connected platforms (Twitch, YouTube, Kick, TikTok)."
+        title="Chat — Overlay (em tela)"
+        description="Para Browser Source no OBS — fundo transparente e fonte 1.5× maior por padrão, pra mostrar o chat sobre o cenário/jogo."
         url={info?.urls.chat ?? null}
         obsHints={[
-          'Add as Browser Source in OBS.',
-          'Recommended size: 360 × 720 (or as wide as the column you want).',
-          'Set background to transparent in OBS Browser Source settings.',
+          'Add as Browser Source no OBS.',
+          'Tamanho recomendado: 480 × 720 (coluna lateral) ou ajuste pro seu cenário.',
+          'Ajuste fino opcional via query: ?scale=2 (mais grande), ?transparent=0 (forçar opaco).',
+          'Já vem com fundo transparente — sem precisar mexer no Custom CSS.',
+        ]}
+      />
+
+      <OverlayLink
+        title="Chat — Dock (painel)"
+        description="Para Custom Browser Dock no OBS — fundo opaco e fonte em tamanho normal, pra ler o chat enquanto você apresenta."
+        url={info?.urls.chatDock ?? null}
+        obsHints={[
+          'OBS → Docks → Custom Browser Docks → Add: cole a URL.',
+          'Dá pra encaixar entre as outras docks ou flutuar no segundo monitor.',
+          'Ajuste fino opcional via query: ?scale=1.2 (texto um pouco maior).',
         ]}
       />
 

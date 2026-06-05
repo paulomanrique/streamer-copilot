@@ -3213,16 +3213,21 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.overlayServerInfo, async () => {
     const status = overlayServer.getStatus();
     let chat: string | null = null;
+    let chatDock: string | null = null;
     let raffles: string | null = null;
     let polls: string | null = null;
     let nowPlaying: string | null = null;
     if (status.status === 'running') {
-      try { chat = overlayServer.getChatOverlayInfo().overlayUrl; } catch { chat = null; }
+      try {
+        const info = overlayServer.getChatOverlayInfo();
+        chat = info.overlayUrl;
+        chatDock = info.dockUrl;
+      } catch { chat = null; chatDock = null; }
       try { raffles = overlayServer.getOverlayInfo().overlayUrl; } catch { raffles = null; }
       try { polls = overlayServer.getPollsOverlayInfo().overlayUrl; } catch { polls = null; }
       try { nowPlaying = overlayServer.getNowPlayingInfo()?.overlayUrl ?? null; } catch { nowPlaying = null; }
     }
-    return { ...status, urls: { chat, raffles, polls, nowPlaying } };
+    return { ...status, urls: { chat, chatDock, raffles, polls, nowPlaying } };
   });
 
   void overlayServer.start().catch((cause) => {

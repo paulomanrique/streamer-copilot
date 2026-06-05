@@ -468,6 +468,7 @@ export interface OverlayServerInfo {
   error: string | null;
   urls: {
     chat: string | null;
+    chatDock: string | null;
     raffles: string | null;
     polls: string | null;
     nowPlaying: string | null;

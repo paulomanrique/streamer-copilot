@@ -634,7 +634,10 @@ export interface RaffleOverlayInfo {
 }
 
 export interface ChatOverlayInfo {
+  /** URL com defaults para Browser Source no OBS (transparente + escala ~1.5x). */
   overlayUrl: string;
+  /** URL com defaults para Custom Dock no OBS (opaca, escala 1x). */
+  dockUrl: string;
   stateUrl: string;
 }
 

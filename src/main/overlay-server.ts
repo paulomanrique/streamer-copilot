@@ -14,7 +14,7 @@ interface OverlayServerOptions {
   getChatSnapshot: () => RecentChatSnapshot;
 }
 
-const CHAT_OVERLAY_VERSION = 'chat-feed-v4';
+const CHAT_OVERLAY_VERSION = 'chat-feed-v6';
 
 interface WsLikeServer {
   handleUpgrade(request: unknown, socket: unknown, head: Buffer, callback: (ws: WsLikeClient) => void): void;
@@ -129,7 +129,13 @@ export class OverlayServer {
 
       if (path === '/chat/overlay' || path === '/chat/overlay/') {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-        res.end(this.renderChatHtml());
+        res.end(this.renderChatHtml('overlay'));
+        return;
+      }
+
+      if (path === '/chat/dock' || path === '/chat/dock/') {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(this.renderChatHtml('dock'));
         return;
       }
 
@@ -342,17 +348,40 @@ export class OverlayServer {
 
     return {
       overlayUrl: `http://127.0.0.1:${this.port}/chat/overlay?v=${CHAT_OVERLAY_VERSION}`,
+      dockUrl: `http://127.0.0.1:${this.port}/chat/dock?v=${CHAT_OVERLAY_VERSION}`,
       stateUrl: `http://127.0.0.1:${this.port}/chat/overlay/state?v=${CHAT_OVERLAY_VERSION}`,
     };
   }
 
-  private renderChatHtml(): string {
+  private renderChatHtml(mode: 'overlay' | 'dock'): string {
+    // Inline boot script — sets defaults para o modo da rota (overlay =
+    // transparent + 1.5x; dock = opaco + 1x) e respeita override via query
+    // params (`?transparent=0`, `?scale=2`, etc) pra ajustes finos sem
+    // mexer no servidor. Roda antes do CSS pra evitar flash de fundo
+    // escuro em modo overlay.
+    const defaultTransparent = mode === 'overlay' ? '1' : '0';
+    const defaultScale = mode === 'overlay' ? '1.5' : '1';
+    const bootScript = `
+      (function () {
+        try {
+          var params = new URLSearchParams(location.search);
+          var html = document.documentElement;
+          var transparent = params.get('transparent');
+          if (transparent === null) transparent = '${defaultTransparent}';
+          if (transparent === '1') html.setAttribute('data-transparent', '1');
+          var scaleParam = params.get('scale');
+          var scale = parseFloat(scaleParam === null ? '${defaultScale}' : scaleParam);
+          if (isFinite(scale) && scale > 0) html.style.setProperty('--scale', String(scale));
+        } catch (e) { /* noop */ }
+      })();
+    `.trim();
     return `<!DOCTYPE html>
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Chat — Overlay</title>
+    <script>${bootScript}</script>
     <link rel="stylesheet" href="/chat/overlay/overlay.css?v=${CHAT_OVERLAY_VERSION}" />
   </head>
   <body>
@@ -458,6 +487,16 @@ html, body {
   overflow: hidden;
 }
 
+/* Modo overlay/transparente — query param "?transparent=1".
+ * Mantém o fundo do cenário/jogo do OBS atrás do chat. */
+html[data-transparent="1"], html[data-transparent="1"] body {
+  background: transparent;
+}
+
+/* Escala global — query param "?scale=N" (ex: 1.5 = +50%).
+ * Padrão 1 = tamanhos atuais; consumido via calc() abaixo. */
+html { --scale: 1; }
+
 .chat-overlay {
   width: 100vw;
   height: 100vh;
@@ -524,14 +563,14 @@ html, body {
   flex: 0 0 auto;
   padding: 2px 6px;
   border-radius: 4px;
-  font-size: 10px;
+  font-size: calc(10px * var(--scale));
   line-height: 1;
   font-weight: 800;
 }
 
 .platform-badge svg {
-  width: 10px;
-  height: 10px;
+  width: calc(10px * var(--scale));
+  height: calc(10px * var(--scale));
 }
 
 .platform-badge.twitch { background: var(--twitch); color: var(--twitch-text); }
@@ -541,8 +580,8 @@ html, body {
 
 .avatar,
 .avatar-fallback {
-  width: 20px;
-  height: 20px;
+  width: calc(20px * var(--scale));
+  height: calc(20px * var(--scale));
   border-radius: 999px;
   flex: 0 0 auto;
   object-fit: cover;
@@ -555,13 +594,13 @@ html, body {
 }
 
 .avatar-fallback svg {
-  width: 12px;
-  height: 12px;
+  width: calc(12px * var(--scale));
+  height: calc(12px * var(--scale));
 }
 
 .twitch-badge {
-  width: 16px;
-  height: 16px;
+  width: calc(16px * var(--scale));
+  height: calc(16px * var(--scale));
   border-radius: 2px;
   flex: 0 0 auto;
   object-fit: contain;
@@ -569,12 +608,12 @@ html, body {
 
 .member-star {
   color: #facc15;
-  font-size: 12px;
+  font-size: calc(12px * var(--scale));
   line-height: 1;
 }
 
 .author {
-  font-size: 14px;
+  font-size: calc(14px * var(--scale));
   line-height: 1.25;
   font-weight: 600;
   overflow: hidden;
@@ -584,7 +623,7 @@ html, body {
 
 .mod {
   color: #34d399;
-  font-size: 12px;
+  font-size: calc(12px * var(--scale));
   line-height: 1;
   font-weight: 700;
 }
@@ -592,7 +631,7 @@ html, body {
 .content {
   margin: 2px 0 0;
   color: var(--text-main);
-  font-size: 14px;
+  font-size: calc(14px * var(--scale));
   line-height: 1.375;
   overflow-wrap: anywhere;
 }
@@ -609,7 +648,7 @@ html, body {
 }
 
 .emote {
-  height: 20px;
+  height: calc(20px * var(--scale));
   max-width: none;
   object-fit: contain;
   vertical-align: text-bottom;
