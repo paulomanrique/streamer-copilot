@@ -17,9 +17,12 @@ interface OverlayVisualBuilderProps {
   info: OverlayServerInfo | null;
 }
 
+// chat-dock is intentionally excluded — it's an opaque in-app dock for the
+// streamer to read messages, not a scene element, so the visual editor
+// doesn't affect it. Keep it out of the dropdown so the streamer doesn't
+// expect changes to land there.
 const OVERLAY_OPTIONS: Array<{ id: OverlayId; label: string }> = [
   { id: 'chat-overlay', label: 'Chat — Overlay' },
-  { id: 'chat-dock', label: 'Chat — Dock' },
   { id: 'now-playing', label: 'Now playing' },
   { id: 'raffles', label: 'Sorteio' },
   { id: 'polls', label: 'Enquete' },
