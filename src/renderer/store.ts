@@ -51,6 +51,15 @@ interface AppStore extends ProfilesSnapshot {
   /** User lists — used as permission entries and by the right-click menu in chat. */
   userLists: UserList[];
   setUserLists: (lists: UserList[]) => void;
+  /**
+   * Id of the chat message currently shown by the highlight-message overlay,
+   * pushed from the main process via `onHighlightedMessageChange`. Used by
+   * `ChatFeed` to paint the corresponding row differently — fed by the
+   * server so both the main window and any open OBS dock agree on which
+   * message is being highlighted.
+   */
+  highlightedMessageId: string | null;
+  setHighlightedMessageId: (messageId: string | null) => void;
   setProfiles: (snapshot: ProfilesSnapshot) => void;
   setObsStats: (stats: ObsStatsSnapshot | ((current: ObsStatsSnapshot) => ObsStatsSnapshot)) => void;
   setChatSnapshot: (snapshot: { messages: ChatMessage[]; events: StreamEvent[] }) => void;
@@ -75,6 +84,8 @@ export const useAppStore = create<AppStore>((set) => ({
   setSubscriberTiers: (catalog) => set({ subscriberTiers: catalog }),
   userLists: [],
   setUserLists: (lists) => set({ userLists: lists }),
+  highlightedMessageId: null,
+  setHighlightedMessageId: (messageId) => set({ highlightedMessageId: messageId }),
   setProfiles: (snapshot) =>
     set({
       activeProfileId: snapshot.activeProfileId,

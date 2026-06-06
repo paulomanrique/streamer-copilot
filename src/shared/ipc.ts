@@ -250,6 +250,9 @@ export const IPC_CHANNELS = {
   overlayDefaultsGet: 'overlay-defaults:get',
   overlayDefaultsSet: 'overlay-defaults:set',
   overlayDefaultsUpdate: 'overlay-defaults:update',
+  highlightMessageSet: 'highlight-message:set',
+  highlightMessageClear: 'highlight-message:clear',
+  highlightMessageUpdate: 'highlight-message:update',
 } as const;
 
 export interface RecentChatSnapshot {
@@ -485,6 +488,14 @@ export interface CopilotApi {
   setOverlayDefaults: (input: OverlayDefaults) => Promise<OverlayDefaults>;
   /** Async push when the global defaults change. */
   onOverlayDefaultsUpdate: (listener: (payload: OverlayDefaults) => void) => () => void;
+  /** Publishes a chat message to the highlight-message overlay (and to any
+   *  connected OBS Browser Source via WebSocket). Pass `null` to clear. */
+  highlightChatMessage: (input: { message: ChatMessage | null }) => Promise<void>;
+  /** Convenience clear. Same effect as `highlightChatMessage({ message: null })`. */
+  clearHighlightedMessage: () => Promise<void>;
+  /** Async push so every renderer window stays in sync with the currently
+   *  highlighted message id (used by ChatFeed to paint the row differently). */
+  onHighlightedMessageChange: (listener: (payload: { messageId: string | null }) => void) => () => void;
 }
 
 export interface OverlayServerInfo {
@@ -497,6 +508,7 @@ export interface OverlayServerInfo {
     raffles: string | null;
     polls: string | null;
     nowPlaying: string | null;
+    highlightMessage: string | null;
   };
 }
 

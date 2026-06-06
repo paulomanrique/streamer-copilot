@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { OVERLAY_FONTS } from '../../shared/constants.js';
 import type { OverlayServerInfo } from '../../shared/ipc.js';
-import type { OverlayDefaults, OverlayId, OverlayPreferences } from '../../shared/types.js';
+import type { HighlightMessagePosition, OverlayDefaults, OverlayId, OverlayPreferences } from '../../shared/types.js';
 import {
   ColorField, Group, OverrideField, SelectField, SliderField,
 } from './OverlayStyleControls.js';
@@ -23,9 +23,23 @@ interface OverlayVisualBuilderProps {
 // expect changes to land there.
 const OVERLAY_OPTIONS: Array<{ id: OverlayId; label: string }> = [
   { id: 'chat-overlay', label: 'Chat — Overlay' },
+  { id: 'highlight-message', label: 'Destaque de mensagem' },
   { id: 'now-playing', label: 'Now playing' },
   { id: 'raffles', label: 'Sorteio' },
   { id: 'polls', label: 'Enquete' },
+];
+
+const HIGHLIGHT_DEFAULTS = {
+  maxWidthPx: 520,
+  position: 'top-left' as HighlightMessagePosition,
+  autoHideSeconds: 15,
+};
+
+const HIGHLIGHT_POSITION_OPTIONS: Array<{ value: HighlightMessagePosition; label: string }> = [
+  { value: 'top-left', label: 'Sup. esq.' },
+  { value: 'top-right', label: 'Sup. dir.' },
+  { value: 'bottom-left', label: 'Inf. esq.' },
+  { value: 'bottom-right', label: 'Inf. dir.' },
 ];
 
 const DEFAULT_VALUES = {
@@ -50,6 +64,7 @@ function urlFor(info: OverlayServerInfo | null, id: OverlayId): string | null {
     case 'now-playing': return info.urls.nowPlaying;
     case 'raffles': return info.urls.raffles;
     case 'polls': return info.urls.polls;
+    case 'highlight-message': return info.urls.highlightMessage;
   }
 }
 
@@ -142,6 +157,35 @@ export function OverlayVisualBuilder({ mode, onBack, info }: OverlayVisualBuilde
   function reset() {
     if (isDefaults) persistDefaults({});
     else persistPrefs({});
+  }
+
+  // Per-overlay extras live in the same OverlayPreferences slot but aren't in
+  // the shared DEFAULT_VALUES map (they're meaningful only to one overlay).
+  // setHighlightField writes them directly; clearHighlightField deletes the
+  // key so the overlay falls back to the hard-coded baseline.
+  type HighlightField = 'maxWidthPx' | 'position' | 'autoHideSeconds';
+  function setHighlightField<K extends HighlightField>(key: K, value: OverlayPreferences[K] | undefined) {
+    if (mode.kind !== 'overlay') return;
+    const next: OverlayPreferences = { ...prefs };
+    if (value === undefined) delete next[key];
+    else (next[key] as OverlayPreferences[K]) = value;
+    persistPrefs(next);
+  }
+  function isHighlightFieldActive(key: HighlightField): boolean {
+    return prefs[key] !== undefined;
+  }
+  function wrapHighlight(key: HighlightField, control: React.ReactNode) {
+    return (
+      <OverrideField
+        active={isHighlightFieldActive(key)}
+        onToggleActive={(next) => {
+          if (next) setHighlightField(key, HIGHLIGHT_DEFAULTS[key] as OverlayPreferences[typeof key]);
+          else setHighlightField(key, undefined);
+        }}
+      >
+        {control}
+      </OverrideField>
+    );
   }
 
   const fields = {
@@ -275,9 +319,43 @@ export function OverlayVisualBuilder({ mode, onBack, info }: OverlayVisualBuilde
               <ColorField label="Accent" value={fields.accentColor} onChange={(v) => setField('accentColor', v)} />
             ))}
             <p className="text-xs text-gray-500">
-              Tinge: nome de comando no chat, tag "AO VIVO" + ponteiro + hub + glow do vencedor no sorteio, tag "ENQUETE", título do player de música e barras do analisador de espectro.
+              Tinge: nome de comando no chat, tag "AO VIVO" + ponteiro + hub + glow do vencedor no sorteio, tag "ENQUETE", título do player de música, barras do analisador de espectro e a pílula do @autor no destaque de mensagem.
             </p>
           </Group>
+
+          {mode.kind === 'overlay' && mode.id === 'highlight-message' ? (
+            <Group title="Destaque de mensagem">
+              {wrapHighlight('maxWidthPx', (
+                <SliderField
+                  label="Largura máxima"
+                  value={prefs.maxWidthPx ?? HIGHLIGHT_DEFAULTS.maxWidthPx}
+                  min={320} max={960} step={10}
+                  format={(v) => `${v}px`}
+                  onChange={(v) => setHighlightField('maxWidthPx', v)}
+                />
+              ))}
+              {wrapHighlight('position', (
+                <SelectField
+                  label="Posição"
+                  value={prefs.position ?? HIGHLIGHT_DEFAULTS.position}
+                  options={HIGHLIGHT_POSITION_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                  onChange={(v) => setHighlightField('position', v as HighlightMessagePosition)}
+                />
+              ))}
+              {wrapHighlight('autoHideSeconds', (
+                <SliderField
+                  label="Sumir após"
+                  value={prefs.autoHideSeconds ?? HIGHLIGHT_DEFAULTS.autoHideSeconds}
+                  min={0} max={120} step={1}
+                  format={(v) => (v === 0 ? 'manual' : `${v}s`)}
+                  onChange={(v) => setHighlightField('autoHideSeconds', v)}
+                />
+              ))}
+              <p className="text-xs text-gray-500">
+                Duplo-clique numa mensagem do chat (ou item "Highlight" no menu de contexto) envia ela para esse overlay. Mesma mensagem clicada de novo limpa o destaque.
+              </p>
+            </Group>
+          ) : null}
 
           <div className="pt-2 border-t border-gray-700">
             <button

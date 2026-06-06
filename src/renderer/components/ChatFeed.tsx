@@ -162,7 +162,10 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
   const [sendError, setSendError] = useState<string | null>(null);
   const [avatarCache,   setAvatarCache]   = useState<Map<string, string>>(new Map());
   const requestedAvatarsRef = useRef<Set<string>>(new Set());
-  const [highlighted,   setHighlighted]   = useState<string | null>(null);
+  // Highlighted message id flows from main → store via onHighlightedMessageChange
+  // (useIpcListeners). The component never owns this state directly so the
+  // chat-dock POST path and the main-window click path stay in sync.
+  const highlightedMessageId = useAppStore((s) => s.highlightedMessageId);
   const [isAtBottom,    setIsAtBottom]    = useState(true);
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState>({
     visible: false, x: 0, y: 0, platform: '', author: '',
@@ -394,6 +397,10 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
     setCtxMenu({ visible: true, x: e.clientX, y: e.clientY, platform, author, userId, messageId });
   }, []);
 
+  const highlightMessage = useCallback((message: ChatMessage) => {
+    void window.copilot.highlightChatMessage({ message }).catch(() => undefined);
+  }, []);
+
   const renderItem = useCallback(
     ({ item }: { item: ChatFeedRow }) =>
       item.kind === 'event' ? (
@@ -402,13 +409,13 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
         <ChatMessageRow
           message={item.message}
           avatarUrl={avatarCache.get(item.message.author.toLowerCase()) || undefined}
-          highlighted={highlighted === item.message.author}
+          highlighted={highlightedMessageId === item.message.id}
           showStreamLabel={multiStreamPlatforms.has(item.message.platform)}
-          onReplyTo={replyTo}
+          onHighlight={highlightMessage}
           onContextMenuRequest={handleContextMenu}
         />
       ),
-    [avatarCache, handleContextMenu, multiStreamPlatforms, highlighted, replyTo],
+    [avatarCache, handleContextMenu, multiStreamPlatforms, highlightedMessageId, highlightMessage],
   );
 
   const selectSuggestionList = async (listId: string) => {
@@ -604,10 +611,19 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
             <span className="text-xs text-gray-500">@{ctxMenu.author}</span>
           </div>
 
-          {/* Highlight */}
+          {/* Highlight — sends the message to the highlight-message overlay.
+              Re-selecting the same message via the menu clears it (the server
+              implements the toggle, so the dock click path matches). */}
           <button type="button"
             className="w-full text-left px-3 py-1.5 text-sm hover:bg-yellow-500/20 text-yellow-300 flex items-center gap-2"
-            onClick={() => { setHighlighted((h) => h === ctxMenu.author ? null : ctxMenu.author); hideMenu(); }}>
+            onClick={() => {
+              // Look up the full message at click time from the store so the
+              // menu callback never closes over a stale array. The store id
+              // is the renderer-side ChatMessage.id (matches the dock cache).
+              const target = useAppStore.getState().chatMessages.find((m) => m.id === ctxMenu.messageId);
+              if (target) void window.copilot.highlightChatMessage({ message: target }).catch(() => undefined);
+              hideMenu();
+            }}>
             <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.95a1 1 0 00.95.69h4.153c.969 0 1.371 1.24.588 1.81l-3.36 2.44a1 1 0 00-.364 1.118l1.285 3.95c.3.922-.755 1.688-1.54 1.118l-3.359-2.44a1 1 0 00-1.176 0l-3.36 2.44c-.783.57-1.838-.196-1.539-1.118l1.285-3.95a1 1 0 00-.364-1.118l-3.36-2.44c-.782-.57-.38-1.81.588-1.81h4.154a1 1 0 00.95-.69l1.286-3.95z"/>
             </svg>
@@ -823,11 +839,13 @@ interface ChatMessageRowProps {
    *  streamLabel in flight — the row swaps its badge text for the channel
    *  label so multi-account setups stay distinguishable. */
   showStreamLabel: boolean;
-  onReplyTo: (platform: string, author: string) => void;
+  /** Fires on row double-click: sends the message to the highlight-message
+   *  overlay (toggles off if it was already the active highlight). */
+  onHighlight: (message: ChatMessage) => void;
   onContextMenuRequest: (event: React.MouseEvent, platform: string, author: string, userId?: string, messageId?: string) => void;
 }
 
-const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highlighted, showStreamLabel, onReplyTo, onContextMenuRequest }: ChatMessageRowProps) {
+const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highlighted, showStreamLabel, onHighlight, onContextMenuRequest }: ChatMessageRowProps) {
   const meta = getPlatformProviderOrFallback(message.platform);
   const badgeLabel = (showStreamLabel && message.streamLabel) ? message.streamLabel : meta.displayName;
   const isCommand = message.content.startsWith('!');
@@ -867,7 +885,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highli
         ${isCommand ? 'bg-violet-500/5' : ''}`}
       data-platform={meta.id}
       data-author={message.author}
-      onDoubleClick={() => onReplyTo(message.platform, message.author)}
+      onDoubleClick={() => onHighlight(message)}
       onContextMenu={(event) => onContextMenuRequest(event, message.platform, message.author, message.userId, message.id)}
     >
       <span className="text-gray-600 text-xs mt-0.5 shrink-0 font-mono w-[54px] text-right">{message.timestampLabel}</span>

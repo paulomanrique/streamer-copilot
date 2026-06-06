@@ -7,7 +7,26 @@ import { ANDROID_VR_USER_AGENT } from './music-stream-resolver.js';
 
 import { OVERLAY_FONTS } from '../shared/constants.js';
 import type { RecentChatSnapshot } from '../shared/ipc.js';
-import type { ChatOverlayInfo, OverlayDefaults, OverlayId, OverlayPreferencesMap, PollOverlayInfo, PollOverlayState, RaffleOverlayInfo, RaffleOverlayState } from '../shared/types.js';
+import type { ChatMessage, ChatOverlayInfo, OverlayDefaults, OverlayId, OverlayPreferencesMap, PollOverlayInfo, PollOverlayState, RaffleOverlayInfo, RaffleOverlayState } from '../shared/types.js';
+
+/** Subset of `ChatMessage` the highlight-message overlay actually renders.
+ *  Mirrors what's pushed via the IPC + WebSocket payloads. */
+type HighlightedChatMessage = Pick<
+  ChatMessage,
+  'id' | 'platform' | 'author' | 'content' | 'contentParts' | 'color' | 'avatarUrl' | 'badges' | 'badgeUrls'
+>;
+
+interface HighlightMessageState {
+  message: HighlightedChatMessage;
+  /** Epoch ms when the overlay should auto-clear, or `null` to stick. */
+  expiresAt: number | null;
+}
+
+/** Cap on the dock message cache used by `POST /highlight-message/trigger`.
+ *  Reasonable for OBS panels — the streamer rarely scrolls back further than
+ *  a couple hundred lines before deciding to highlight something. */
+const DOCK_MESSAGE_CACHE_SIZE = 200;
+const DOCK_MESSAGE_CACHE_TTL_MS = 5 * 60 * 1000;
 
 interface OverlayServerOptions {
   /** TCP port to listen on; comes from GeneralSettings.overlayServerPort. */
@@ -15,6 +34,36 @@ interface OverlayServerOptions {
   getOverlayState: () => RaffleOverlayState | null;
   getPollsOverlayState: () => PollOverlayState | null;
   getChatSnapshot: () => RecentChatSnapshot;
+  /** Fired when the highlight state changes via something OTHER than the
+   *  renderer IPC (today: a dock dblclick that toggles via POST). Lets
+   *  `app-context` push the new state to the renderer so the highlighted-row
+   *  styling stays in sync. */
+  onHighlightChanged?: (messageId: string | null) => void;
+  /** Fired when the auto-hide timer clears the highlight on its own. Same
+   *  use case as `onHighlightChanged` but for the implicit transition to
+   *  `null`. */
+  onHighlightAutoCleared?: () => void;
+}
+
+/**
+ * Mirrors the `OverlayPreferences.autoHideSeconds` default used by the
+ * visual builder. Kept here too so the server has a working fallback when
+ * the streamer never opens the builder.
+ */
+const DEFAULT_HIGHLIGHT_AUTO_HIDE_SECONDS = 15;
+
+function pickHighlightedMessage(message: ChatMessage): HighlightedChatMessage {
+  return {
+    id: message.id,
+    platform: message.platform,
+    author: message.author,
+    content: message.content,
+    contentParts: message.contentParts,
+    color: message.color,
+    avatarUrl: message.avatarUrl,
+    badges: message.badges,
+    badgeUrls: message.badgeUrls,
+  };
 }
 
 interface WsLikeServer {
@@ -83,6 +132,22 @@ export class OverlayServer {
    * Each overlay merges this with its per-overlay override slice.
    */
   private overlayDefaults: OverlayDefaults = {};
+  /**
+   * Currently highlighted chat message (or null). Pushed to the
+   * `highlight-message` WS topic whenever it changes. Cleared by the
+   * `clearHighlightTimer` when `expiresAt` fires, or by an explicit
+   * `publishHighlightMessage(null)`.
+   */
+  private highlightState: HighlightMessageState | null = null;
+  private clearHighlightTimer: NodeJS.Timeout | null = null;
+  /**
+   * LRU cache of recent dock-rendered messages, keyed by message id. The
+   * OBS chat dock POSTs to `/highlight-message/trigger` with just the id —
+   * the server hydrates the full payload from this cache. Messages older
+   * than `DOCK_MESSAGE_CACHE_TTL_MS` are skipped, which matches the dock's
+   * own "1000 row" rendering window so highlighting stays consistent.
+   */
+  private readonly dockMessageCache = new Map<string, { message: HighlightedChatMessage; storedAt: number }>();
 
   constructor(private readonly options: OverlayServerOptions) {}
 
@@ -305,6 +370,56 @@ export class OverlayServer {
         return;
       }
 
+      if (path === '/highlight-message/overlay' || path === '/highlight-message/overlay/') {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(highlightMessageHtml);
+        return;
+      }
+
+      if (path === '/highlight-message/overlay.css') {
+        res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(highlightMessageCss);
+        return;
+      }
+
+      if (path === '/highlight-message/overlay.js') {
+        res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(highlightMessageJs);
+        return;
+      }
+
+      if (path === '/highlight-message/state') {
+        const isPreview = url.searchParams.get('preview') === '1';
+        const state = this.getHighlightStateForClient();
+        const payload = (!state && isPreview) ? DUMMY_HIGHLIGHT_STATE : state;
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+          'Access-Control-Allow-Origin': '*',
+        });
+        res.end(JSON.stringify(payload));
+        return;
+      }
+
+      if (path === '/highlight-message/trigger' && req.method === 'POST') {
+        let raw = '';
+        req.setEncoding('utf-8');
+        req.on('data', (chunk: string) => { raw += chunk; if (raw.length > 1024) req.destroy(); });
+        req.on('end', () => {
+          try {
+            const parsed = JSON.parse(raw) as { messageId?: unknown };
+            const messageId = typeof parsed.messageId === 'string' ? parsed.messageId : null;
+            this.triggerHighlightFromDock(messageId);
+            res.writeHead(204, { 'Access-Control-Allow-Origin': '*' });
+            res.end();
+          } catch {
+            res.writeHead(400, { 'Content-Type': 'text/plain' });
+            res.end('Bad request');
+          }
+        });
+        return;
+      }
+
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('Not found');
     });
@@ -477,6 +592,113 @@ export class OverlayServer {
       dockUrl: `http://127.0.0.1:${this.port}/chat/dock`,
       stateUrl: `http://127.0.0.1:${this.port}/chat/overlay/state`,
     };
+  }
+
+  getHighlightMessageOverlayUrl(): string | null {
+    if (!this.server || this.port === 0) return null;
+    return `http://127.0.0.1:${this.port}/highlight-message/overlay`;
+  }
+
+  /**
+   * Records a chat message into the dock-side LRU cache so that a later
+   * `POST /highlight-message/trigger` (from a dock dblclick) can be hydrated
+   * back into a full payload. Drops the oldest entry when the cache exceeds
+   * `DOCK_MESSAGE_CACHE_SIZE`. Called from `app-context` for every message
+   * that flows through `chatService.onMessage`.
+   */
+  recordDockMessage(message: ChatMessage): void {
+    if (!message.id) return;
+    this.dockMessageCache.set(message.id, {
+      message: pickHighlightedMessage(message),
+      storedAt: Date.now(),
+    });
+    while (this.dockMessageCache.size > DOCK_MESSAGE_CACHE_SIZE) {
+      const oldest = this.dockMessageCache.keys().next().value;
+      if (!oldest) break;
+      this.dockMessageCache.delete(oldest);
+    }
+  }
+
+  /**
+   * Publishes (or clears) the highlighted message — sets the in-memory
+   * state, broadcasts the WS topic, and arms the auto-clear timer when
+   * `autoHideSeconds > 0`. Pass `null` to clear immediately. Re-publishing
+   * the same message id with a fresh `expiresAt` resets the timer.
+   *
+   * Returns the resolved `expiresAt` (or `null`) so `app-context` can push
+   * the renderer-side change in the same tick.
+   */
+  publishHighlightMessage(message: HighlightedChatMessage | null): { messageId: string | null } {
+    if (this.clearHighlightTimer) {
+      clearTimeout(this.clearHighlightTimer);
+      this.clearHighlightTimer = null;
+    }
+    if (!message) {
+      this.highlightState = null;
+      this.publish('highlight-message', { message: null, expiresAt: null });
+      return { messageId: null };
+    }
+    const autoHideSeconds = this.resolveAutoHideSeconds();
+    const expiresAt = autoHideSeconds > 0 ? Date.now() + autoHideSeconds * 1000 : null;
+    // Re-clicking the same message id toggles the highlight off — matches the
+    // ChatFeed UX (click "Highlight" twice and it goes away).
+    if (this.highlightState && this.highlightState.message.id === message.id) {
+      this.highlightState = null;
+      this.publish('highlight-message', { message: null, expiresAt: null });
+      return { messageId: null };
+    }
+    this.highlightState = { message, expiresAt };
+    this.publish('highlight-message', { message, expiresAt });
+    if (expiresAt !== null) {
+      this.clearHighlightTimer = setTimeout(() => {
+        this.clearHighlightTimer = null;
+        this.highlightState = null;
+        this.publish('highlight-message', { message: null, expiresAt: null });
+        this.options.onHighlightAutoCleared?.();
+      }, expiresAt - Date.now());
+    }
+    return { messageId: message.id };
+  }
+
+  getCurrentHighlightedMessageId(): string | null {
+    return this.highlightState?.message.id ?? null;
+  }
+
+  /**
+   * Resolves a dblclick from the OBS chat-dock. Looks up the message in the
+   * dock cache by id and reuses `publishHighlightMessage` for the toggle
+   * semantics. Silently drops unknown / expired ids so a stale browser source
+   * can't fire stale highlights.
+   */
+  private triggerHighlightFromDock(messageId: string | null): void {
+    if (!messageId) return;
+    const cached = this.dockMessageCache.get(messageId);
+    if (!cached) return;
+    if (Date.now() - cached.storedAt > DOCK_MESSAGE_CACHE_TTL_MS) {
+      this.dockMessageCache.delete(messageId);
+      return;
+    }
+    const result = this.publishHighlightMessage(cached.message);
+    this.options.onHighlightChanged?.(result.messageId);
+  }
+
+  private resolveAutoHideSeconds(): number {
+    const highlightPrefs = this.overlayPreferences['highlight-message'];
+    if (highlightPrefs && typeof highlightPrefs.autoHideSeconds === 'number') {
+      return Math.max(0, highlightPrefs.autoHideSeconds);
+    }
+    return DEFAULT_HIGHLIGHT_AUTO_HIDE_SECONDS;
+  }
+
+  /** Returns the state payload the overlay client expects from
+   *  `/highlight-message/state`. Hides expired entries pro-actively so a
+   *  freshly-loaded overlay doesn't render a card that's already gone. */
+  private getHighlightStateForClient(): HighlightMessageState | null {
+    if (!this.highlightState) return null;
+    if (this.highlightState.expiresAt !== null && Date.now() >= this.highlightState.expiresAt) {
+      return null;
+    }
+    return this.highlightState;
   }
 
   private renderChatHtml(mode: 'overlay' | 'dock'): string {
@@ -841,6 +1063,17 @@ function buildDummyPollState() {
     updatedAt: new Date().toISOString(),
   };
 }
+
+const DUMMY_HIGHLIGHT_STATE: HighlightMessageState = {
+  message: {
+    id: 'preview-highlight',
+    platform: 'twitch',
+    author: 'PIXELpuro',
+    content: 'pedido de jogo: mande pix de 2,50 (10 min) ou 5 R$ (20 min), o pedido fura a fila de sugestões e se feito no final da live, estende a live pelo tempo do pedido, cada 1R$ aumenta 1min no tempo da live',
+    badges: [],
+  },
+  expiresAt: null,
+};
 
 function escapeHtml(value: string): string {
   return value
@@ -1382,6 +1615,20 @@ ${buildOverlayStyleScript('window')}
       body.appendChild(meta);
       body.appendChild(content);
       row.appendChild(body);
+      // In dock mode (panel embedded inside OBS), let the streamer
+      // double-click a row to trigger the highlight overlay without leaving
+      // OBS. The server hydrates the messageId via its dock-message LRU
+      // cache and re-uses the same publish path as the main app.
+      if (window.__overlayId === 'chat-dock') {
+        row.style.cursor = 'pointer';
+        row.addEventListener('dblclick', function () {
+          fetch('/highlight-message/trigger', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messageId: message.id }),
+          }).catch(function () { /* swallow */ });
+        });
+      }
       listEl.appendChild(row);
       renderedIds.add(message.id);
     });
@@ -2563,6 +2810,310 @@ ${buildOverlayStyleScript('now-playing')}
     });
   }
 
+  connect();
+})();
+`;
+
+// ── Highlight message overlay ───────────────────────────────────────────────
+
+const highlightMessageHtml = `<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Destaque — Overlay</title>${buildGoogleFontsLink()}
+    <link rel="stylesheet" href="/highlight-message/overlay.css" />
+  </head>
+  <body>
+    <div id="root" class="highlight-root idle" data-position="top-left">
+      <article id="card" class="highlight-card">
+        <div class="highlight-avatar-wrap">
+          <img id="avatar" class="highlight-avatar" alt="" />
+          <span id="avatar-fallback" class="highlight-avatar-fallback"></span>
+        </div>
+        <div class="highlight-body">
+          <span id="author" class="highlight-author">@author</span>
+          <p id="content" class="highlight-content"></p>
+        </div>
+      </article>
+    </div>
+    <script src="/highlight-message/overlay.js"></script>
+  </body>
+</html>`;
+
+const highlightMessageCss = `
+:root {
+  color-scheme: dark;
+  /* Live-customizable visual style — written by the merge script shared with
+   * every overlay. The card derives its rounding, border, fonts, and accent
+   * color (pill background) from these tokens. */
+  --bg-color-rgb: 17, 17, 19;
+  --opacity: 0.78;
+  --border-radius: 14px;
+  --border-color: rgba(255,255,255,0.06);
+  --border-width: 0px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --text-color: #f8fafc;
+  --accent-color: #ef4444;
+  --accent-color-rgb: 239, 68, 68;
+  /* Highlight-specific tokens — overridden from the visual editor's
+   * "Destaque de mensagem" controls (maxWidthPx) and rendered in JS for
+   * position and auto-hide. */
+  --highlight-max-width: 520px;
+  --highlight-font-size: 22px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  font-family: var(--font);
+  color: var(--text-color);
+  overflow: hidden;
+}
+
+.highlight-root {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  padding: 24px;
+}
+
+/* Anchor corners — JS writes data-position; the CSS only picks the
+ * justification axis. inset:0 + flex keeps the layout robust against any
+ * source size OBS gives us. */
+.highlight-root[data-position="top-left"]     { align-items: flex-start;  justify-content: flex-start; }
+.highlight-root[data-position="top-right"]    { align-items: flex-start;  justify-content: flex-end;   }
+.highlight-root[data-position="bottom-left"]  { align-items: flex-end;    justify-content: flex-start; }
+.highlight-root[data-position="bottom-right"] { align-items: flex-end;    justify-content: flex-end;   }
+
+.highlight-card {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  max-width: var(--highlight-max-width);
+  padding: 16px 18px;
+  /* Backdrop + border + rounding — same pattern as the chat overlay so the
+   * editor's tokens read uniformly across overlays. */
+  background-color: rgba(var(--bg-color-rgb), var(--opacity, 0.78));
+  border-radius: var(--border-radius);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.45), 0 0 0 var(--border-width) var(--border-color);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.55);
+  transform: translateY(-6px);
+  opacity: 0;
+  transition: opacity 220ms ease, transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.highlight-root:not(.idle) .highlight-card {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.highlight-root.idle .highlight-card {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+.highlight-avatar-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  width: 56px;
+  height: 56px;
+}
+
+.highlight-avatar,
+.highlight-avatar-fallback {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--accent-color);
+  background: rgba(var(--accent-color-rgb), 0.18);
+  display: block;
+}
+
+.highlight-avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-color);
+  font-weight: 800;
+  font-size: 26px;
+  letter-spacing: 0;
+  text-shadow: none;
+}
+
+.highlight-avatar[src=""],
+.highlight-avatar[data-empty="1"] { display: none; }
+
+.highlight-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.highlight-author {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--accent-color);
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.01em;
+  line-height: 1.1;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: none;
+}
+
+.highlight-content {
+  font-size: var(--highlight-font-size);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-color);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.highlight-content .emote {
+  height: calc(var(--highlight-font-size) * 1.1);
+  vertical-align: middle;
+  margin: 0 2px;
+}
+`;
+
+const highlightMessageJs = `
+'use strict';
+${buildOverlayStyleScript('highlight-message')}
+
+(function () {
+  var rootEl = document.getElementById('root');
+  var cardEl = document.getElementById('card');
+  var avatarEl = document.getElementById('avatar');
+  var fallbackEl = document.getElementById('avatar-fallback');
+  var authorEl = document.getElementById('author');
+  var contentEl = document.getElementById('content');
+
+  var IS_PREVIEW = new URLSearchParams(location.search).get('preview') === '1';
+  var STATE_URL = '/highlight-message/state' + (IS_PREVIEW ? '?preview=1' : '');
+  var hideTimer = null;
+  var prefs = {};
+
+  // Subscribe to the per-overlay prefs topic for the maxWidth / position knobs
+  // (the inherited tokens come through the shared style script already).
+  function applyHighlightPrefs() {
+    var root = document.documentElement.style;
+    var maxWidth = (typeof prefs.maxWidthPx === 'number') ? prefs.maxWidthPx : 520;
+    root.setProperty('--highlight-max-width', maxWidth + 'px');
+    var position = (typeof prefs.position === 'string') ? prefs.position : 'top-left';
+    rootEl.setAttribute('data-position', position);
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function renderContent(message) {
+    contentEl.innerHTML = '';
+    if (Array.isArray(message.contentParts) && message.contentParts.length > 0) {
+      message.contentParts.forEach(function (part) {
+        if (part && part.type === 'emote' && part.imageUrl) {
+          var img = document.createElement('img');
+          img.className = 'emote';
+          img.src = part.imageUrl;
+          img.alt = part.name || '';
+          contentEl.appendChild(img);
+        } else if (part && part.type === 'text') {
+          contentEl.appendChild(document.createTextNode(part.text || ''));
+        }
+      });
+      return;
+    }
+    contentEl.textContent = String(message.content || '');
+  }
+
+  function show(state) {
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    if (!state || !state.message) {
+      rootEl.classList.add('idle');
+      return;
+    }
+    var message = state.message;
+    authorEl.textContent = '@' + (message.author || '');
+    if (message.avatarUrl) {
+      avatarEl.src = message.avatarUrl;
+      avatarEl.removeAttribute('data-empty');
+      avatarEl.style.display = 'block';
+      fallbackEl.style.display = 'none';
+      avatarEl.onerror = function () {
+        avatarEl.setAttribute('data-empty', '1');
+        avatarEl.style.display = 'none';
+        fallbackEl.style.display = 'flex';
+      };
+    } else {
+      avatarEl.removeAttribute('src');
+      avatarEl.setAttribute('data-empty', '1');
+      avatarEl.style.display = 'none';
+      fallbackEl.style.display = 'flex';
+    }
+    var initial = String(message.author || '?').trim().charAt(0).toUpperCase();
+    fallbackEl.textContent = initial || '?';
+    renderContent(message);
+    rootEl.classList.remove('idle');
+    if (state.expiresAt && state.expiresAt > Date.now()) {
+      hideTimer = setTimeout(function () {
+        rootEl.classList.add('idle');
+      }, state.expiresAt - Date.now());
+    }
+  }
+
+  function fetchPrefs() {
+    return fetch('/overlay-prefs/state?id=highlight-message', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : {}; })
+      .then(function (p) { prefs = p || {}; applyHighlightPrefs(); })
+      .catch(function () { /* noop */ });
+  }
+
+  function fetchState() {
+    return fetch(STATE_URL, { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (state) { show(state); })
+      .catch(function () { /* noop */ });
+  }
+
+  function connect() {
+    var ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+    ws.addEventListener('open', function () {
+      ws.send(JSON.stringify({ type: 'subscribe', topic: 'highlight-message' }));
+      ws.send(JSON.stringify({ type: 'subscribe', topic: 'overlay-prefs:highlight-message' }));
+    });
+    ws.addEventListener('message', function (event) {
+      try {
+        var msg = JSON.parse(event.data);
+        if (msg.topic === 'highlight-message') show(msg.payload);
+        else if (msg.topic === 'overlay-prefs:highlight-message') {
+          prefs = msg.payload || {};
+          applyHighlightPrefs();
+        }
+      } catch (e) { /* ignore */ }
+    });
+    ws.addEventListener('close', function () { setTimeout(connect, 1500); });
+  }
+
+  applyHighlightPrefs();
+  void fetchPrefs();
+  void fetchState();
   connect();
 })();
 `;

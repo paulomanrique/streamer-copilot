@@ -470,7 +470,8 @@ export const moderationShoutoutSchema = z.object({
 
 // ── Overlay preferences ───────────────────────────────────────────────────────
 
-const overlayIdSchema = z.enum(['chat-overlay', 'chat-dock', 'now-playing', 'raffles', 'polls']);
+const overlayIdSchema = z.enum(['chat-overlay', 'chat-dock', 'now-playing', 'raffles', 'polls', 'highlight-message']);
+const highlightPositionSchema = z.enum(['top-left', 'top-right', 'bottom-left', 'bottom-right']);
 
 const hexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 // Permissive font-key shape — the canonical whitelist lives in
@@ -495,11 +496,46 @@ export const overlayDefaultsSchema = overlayVisualStyleSchema.strict();
 export const overlayPreferencesSchema = overlayVisualStyleSchema.extend({
   /** Legacy single-knob field kept for older profile files. */
   opacity: z.number().min(0).max(1).optional(),
+  /** Highlight-message overlay: card width in px. */
+  maxWidthPx: z.number().int().min(320).max(960).optional(),
+  /** Highlight-message overlay: anchor corner. */
+  position: highlightPositionSchema.optional(),
+  /** Highlight-message overlay: auto-dismiss timer, 0 = manual only. */
+  autoHideSeconds: z.number().int().min(0).max(120).optional(),
 }).strict();
 
 export const overlayPreferencesSetInputSchema = z.object({
   id: overlayIdSchema,
   prefs: overlayPreferencesSchema,
+});
+
+/**
+ * Payload accepted by the `highlightChatMessage` IPC handler. The message
+ * mirrors `ChatMessage` from `shared/types` — only the fields the highlight
+ * overlay actually needs are validated here so a malformed `contentParts`
+ * entry doesn't reject the whole highlight. Pass `null` to clear.
+ */
+const chatMessageContentPartSchema = z.union([
+  z.object({ type: z.literal('text'), text: z.string().max(2000) }),
+  z.object({
+    type: z.literal('emote'),
+    name: z.string().max(200),
+    imageUrl: z.string().max(1000).optional(),
+  }),
+]);
+
+export const highlightMessageInputSchema = z.object({
+  message: z.object({
+    id: z.string().min(1).max(200),
+    platform: platformIdSchema,
+    author: z.string().min(1).max(200),
+    content: z.string().max(2000),
+    contentParts: z.array(chatMessageContentPartSchema).max(200).optional(),
+    color: z.string().max(40).optional(),
+    avatarUrl: z.string().max(1000).optional(),
+    badges: z.array(z.string().max(120)).max(40).optional(),
+    badgeUrls: z.array(z.string().max(1000)).max(40).optional(),
+  }).nullable(),
 });
 
 // ── User lists ────────────────────────────────────────────────────────────────

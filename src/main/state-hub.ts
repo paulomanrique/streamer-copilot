@@ -97,6 +97,10 @@ export class StateHub {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.overlayDefaultsUpdate, payload);
   }
 
+  pushHighlightedMessage(payload: { messageId: string | null }): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.highlightMessageUpdate, payload);
+  }
+
   pushGoogleTtsAudio(payload: { base64: string }): void {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.voiceGoogleTtsAudio, payload);
   }

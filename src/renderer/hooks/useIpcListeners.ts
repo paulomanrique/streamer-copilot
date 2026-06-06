@@ -15,6 +15,7 @@ export function useIpcListeners(): void {
   const setPlatformLiveStats = useAppStore((s) => s.setPlatformLiveStats);
   const setSubscriberTiers = useAppStore((s) => s.setSubscriberTiers);
   const setUserLists = useAppStore((s) => s.setUserLists);
+  const setHighlightedMessageId = useAppStore((s) => s.setHighlightedMessageId);
 
   // OBS listeners
   useEffect(() => {
@@ -67,4 +68,13 @@ export function useIpcListeners(): void {
       setUserLists(lists);
     });
   }, [setUserLists]);
+
+  // Highlighted-message id — keeps ChatFeed in sync with the overlay so the
+  // selected row paints differently no matter which window triggered the
+  // highlight (main app menu, dbl-click, or dock dblclick).
+  useEffect(() => {
+    return window.copilot.onHighlightedMessageChange(({ messageId }) => {
+      setHighlightedMessageId(messageId);
+    });
+  }, [setHighlightedMessageId]);
 }

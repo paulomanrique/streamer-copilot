@@ -231,6 +231,9 @@ const IPC_CHANNELS = {
   overlayDefaultsGet: 'overlay-defaults:get',
   overlayDefaultsSet: 'overlay-defaults:set',
   overlayDefaultsUpdate: 'overlay-defaults:update',
+  highlightMessageSet: 'highlight-message:set',
+  highlightMessageClear: 'highlight-message:clear',
+  highlightMessageUpdate: 'highlight-message:update',
 } as const;
 
 const copilotApi: CopilotApi = {
@@ -534,6 +537,13 @@ const copilotApi: CopilotApi = {
     ) => listener(payload);
     ipcRenderer.on(IPC_CHANNELS.overlayDefaultsUpdate, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.overlayDefaultsUpdate, wrappedListener); };
+  },
+  highlightChatMessage: (input: { message: ChatMessage | null }) => ipcRenderer.invoke(IPC_CHANNELS.highlightMessageSet, input) as Promise<void>,
+  clearHighlightedMessage: () => ipcRenderer.invoke(IPC_CHANNELS.highlightMessageClear) as Promise<void>,
+  onHighlightedMessageChange: (listener: (payload: { messageId: string | null }) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: { messageId: string | null }) => listener(payload);
+    ipcRenderer.on(IPC_CHANNELS.highlightMessageUpdate, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.highlightMessageUpdate, wrappedListener); };
   },
 };
 

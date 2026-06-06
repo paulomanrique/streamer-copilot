@@ -4,7 +4,7 @@ import { sanitizeOverlayPreferences } from './overlay-style-sanitize.js';
 
 const SETTINGS_FILE = 'overlay-preferences.json';
 
-const KNOWN_IDS: OverlayId[] = ['chat-overlay', 'chat-dock', 'now-playing', 'raffles', 'polls'];
+const KNOWN_IDS: OverlayId[] = ['chat-overlay', 'chat-dock', 'now-playing', 'raffles', 'polls', 'highlight-message'];
 
 function isOverlayId(value: unknown): value is OverlayId {
   return typeof value === 'string' && (KNOWN_IDS as string[]).includes(value);

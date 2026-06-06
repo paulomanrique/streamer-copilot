@@ -647,7 +647,10 @@ export interface ChatOverlayInfo {
  * model is bespoke — the renderer registry of customization options is keyed
  * on these literals.
  */
-export type OverlayId = 'chat-overlay' | 'chat-dock' | 'now-playing' | 'raffles' | 'polls';
+export type OverlayId = 'chat-overlay' | 'chat-dock' | 'now-playing' | 'raffles' | 'polls' | 'highlight-message';
+
+/** Anchor corner of the highlight-message card on the OBS scene. */
+export type HighlightMessagePosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
 /**
  * Streamer-tunable visual style — shared between the global defaults
@@ -693,6 +696,13 @@ export type OverlayDefaults = OverlayVisualStyle;
 export interface OverlayPreferences extends OverlayVisualStyle {
   /** Legacy alias for `backgroundOpacity` — older profiles persisted only this field. */
   opacity?: number;
+  /** Highlight-message overlay: max width of the message card, in px. */
+  maxWidthPx?: number;
+  /** Highlight-message overlay: corner of the OBS scene where the card sits. */
+  position?: HighlightMessagePosition;
+  /** Highlight-message overlay: seconds before the card auto-dismisses. `0`
+   *  keeps the card visible until a new highlight or a manual clear. */
+  autoHideSeconds?: number;
 }
 
 export type OverlayPreferencesMap = Partial<Record<OverlayId, OverlayPreferences>>;

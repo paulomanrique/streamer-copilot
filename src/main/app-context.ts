@@ -128,6 +128,7 @@ import {
   subscriberTiersReplaceInputSchema,
   overlayDefaultsSchema,
   overlayPreferencesSetInputSchema,
+  highlightMessageInputSchema,
   userListCreateInputSchema,
   userListRenameInputSchema,
   userListIdInputSchema,
@@ -1463,6 +1464,12 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       }
     },
     getChatSnapshot: () => chatService.getRecent(),
+    onHighlightChanged: (messageId) => {
+      options.stateHub.pushHighlightedMessage({ messageId });
+    },
+    onHighlightAutoCleared: () => {
+      options.stateHub.pushHighlightedMessage({ messageId: null });
+    },
   });
 
   // R4: now that overlayServer exists, build the music player + stream resolver.
@@ -1635,6 +1642,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     commandModules: [soundService, textService, voiceService, raffleService, pollService, suggestionService, musicService],
     onMessage: (message) => {
       options.stateHub.pushChatMessage(message);
+      // Feed the LRU cache used by the chat-dock dblclick → highlight path.
+      // The dock POSTs only a messageId; the server hydrates from this cache.
+      overlayServer.recordDockMessage(message);
       if (!message.isHistory) {
         try { chatLogService.recordMessage(message); } catch { /* DB may not be open yet */ }
         const self = selfSenderName[message.platform];
@@ -3314,6 +3324,17 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }
   }
 
+  ipcMain.handle(IPC_CHANNELS.highlightMessageSet, async (_, raw) => {
+    const input = highlightMessageInputSchema.parse(raw);
+    const result = overlayServer.publishHighlightMessage(input.message);
+    options.stateHub.pushHighlightedMessage(result);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.highlightMessageClear, async () => {
+    const result = overlayServer.publishHighlightMessage(null);
+    options.stateHub.pushHighlightedMessage(result);
+  });
+
   ipcMain.handle(IPC_CHANNELS.overlayServerInfo, async () => {
     const status = overlayServer.getStatus();
     let chat: string | null = null;
@@ -3321,6 +3342,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     let raffles: string | null = null;
     let polls: string | null = null;
     let nowPlaying: string | null = null;
+    let highlightMessage: string | null = null;
     if (status.status === 'running') {
       try {
         const info = overlayServer.getChatOverlayInfo();
@@ -3330,8 +3352,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       try { raffles = overlayServer.getOverlayInfo().overlayUrl; } catch { raffles = null; }
       try { polls = overlayServer.getPollsOverlayInfo().overlayUrl; } catch { polls = null; }
       try { nowPlaying = overlayServer.getNowPlayingInfo()?.overlayUrl ?? null; } catch { nowPlaying = null; }
+      try { highlightMessage = overlayServer.getHighlightMessageOverlayUrl(); } catch { highlightMessage = null; }
     }
-    return { ...status, urls: { chat, chatDock, raffles, polls, nowPlaying } };
+    return { ...status, urls: { chat, chatDock, raffles, polls, nowPlaying, highlightMessage } };
   });
 
   void overlayServer.start().catch((cause) => {

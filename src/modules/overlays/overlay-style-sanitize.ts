@@ -1,5 +1,7 @@
 import { OVERLAY_FONTS } from '../../shared/constants.js';
-import type { OverlayPreferences, OverlayVisualStyle } from '../../shared/types.js';
+import type { HighlightMessagePosition, OverlayPreferences, OverlayVisualStyle } from '../../shared/types.js';
+
+const HIGHLIGHT_POSITIONS: HighlightMessagePosition[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
@@ -66,13 +68,22 @@ export function sanitizeOverlayVisualStyle(raw: unknown): OverlayVisualStyle {
 }
 
 /** Sanitize per-overlay overrides — same fields as `OverlayVisualStyle` plus
- *  the legacy `opacity` shortcut. */
+ *  the legacy `opacity` shortcut and the highlight-message-specific knobs. */
 export function sanitizeOverlayPreferences(raw: unknown): OverlayPreferences {
   const out: OverlayPreferences = sanitizeOverlayVisualStyle(raw);
   if (raw && typeof raw === 'object') {
     const obj = raw as Record<string, unknown>;
     if (typeof obj.opacity === 'number') {
       out.opacity = clamp(obj.opacity, 0, 1);
+    }
+    if (typeof obj.maxWidthPx === 'number') {
+      out.maxWidthPx = clamp(Math.round(obj.maxWidthPx), 320, 960);
+    }
+    if (typeof obj.position === 'string' && (HIGHLIGHT_POSITIONS as string[]).includes(obj.position)) {
+      out.position = obj.position as HighlightMessagePosition;
+    }
+    if (typeof obj.autoHideSeconds === 'number') {
+      out.autoHideSeconds = clamp(Math.round(obj.autoHideSeconds), 0, 120);
     }
   }
   return out;
