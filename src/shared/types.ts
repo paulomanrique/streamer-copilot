@@ -650,7 +650,9 @@ export interface ChatOverlayInfo {
 export type OverlayId = 'chat-overlay' | 'chat-dock' | 'now-playing' | 'raffles' | 'polls' | 'highlight-message';
 
 /** Anchor corner of the highlight-message card on the OBS scene. */
-export type HighlightMessagePosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+export type HighlightMessagePosition =
+  | 'top-left' | 'top-center' | 'top-right'
+  | 'bottom-left' | 'bottom-center' | 'bottom-right';
 
 /**
  * Streamer-tunable visual style — shared between the global defaults

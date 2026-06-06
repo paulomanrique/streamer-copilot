@@ -37,8 +37,10 @@ const HIGHLIGHT_DEFAULTS = {
 
 const HIGHLIGHT_POSITION_OPTIONS: Array<{ value: HighlightMessagePosition; label: string }> = [
   { value: 'top-left', label: 'Sup. esq.' },
+  { value: 'top-center', label: 'Sup. centro' },
   { value: 'top-right', label: 'Sup. dir.' },
   { value: 'bottom-left', label: 'Inf. esq.' },
+  { value: 'bottom-center', label: 'Inf. centro' },
   { value: 'bottom-right', label: 'Inf. dir.' },
 ];
 

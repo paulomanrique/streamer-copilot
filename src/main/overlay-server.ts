@@ -2885,10 +2885,12 @@ html, body {
 /* Anchor corners — JS writes data-position; the CSS only picks the
  * justification axis. inset:0 + flex keeps the layout robust against any
  * source size OBS gives us. */
-.highlight-root[data-position="top-left"]     { align-items: flex-start;  justify-content: flex-start; }
-.highlight-root[data-position="top-right"]    { align-items: flex-start;  justify-content: flex-end;   }
-.highlight-root[data-position="bottom-left"]  { align-items: flex-end;    justify-content: flex-start; }
-.highlight-root[data-position="bottom-right"] { align-items: flex-end;    justify-content: flex-end;   }
+.highlight-root[data-position="top-left"]      { align-items: flex-start;  justify-content: flex-start; }
+.highlight-root[data-position="top-center"]    { align-items: flex-start;  justify-content: center;     }
+.highlight-root[data-position="top-right"]     { align-items: flex-start;  justify-content: flex-end;   }
+.highlight-root[data-position="bottom-left"]   { align-items: flex-end;    justify-content: flex-start; }
+.highlight-root[data-position="bottom-center"] { align-items: flex-end;    justify-content: center;     }
+.highlight-root[data-position="bottom-right"]  { align-items: flex-end;    justify-content: flex-end;   }
 
 .highlight-card {
   display: flex;

@@ -471,7 +471,7 @@ export const moderationShoutoutSchema = z.object({
 // ── Overlay preferences ───────────────────────────────────────────────────────
 
 const overlayIdSchema = z.enum(['chat-overlay', 'chat-dock', 'now-playing', 'raffles', 'polls', 'highlight-message']);
-const highlightPositionSchema = z.enum(['top-left', 'top-right', 'bottom-left', 'bottom-right']);
+const highlightPositionSchema = z.enum(['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right']);
 
 const hexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 // Permissive font-key shape — the canonical whitelist lives in

@@ -1,7 +1,10 @@
 import { OVERLAY_FONTS } from '../../shared/constants.js';
 import type { HighlightMessagePosition, OverlayPreferences, OverlayVisualStyle } from '../../shared/types.js';
 
-const HIGHLIGHT_POSITIONS: HighlightMessagePosition[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
+const HIGHLIGHT_POSITIONS: HighlightMessagePosition[] = [
+  'top-left', 'top-center', 'top-right',
+  'bottom-left', 'bottom-center', 'bottom-right',
+];
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
