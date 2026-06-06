@@ -80,7 +80,7 @@ export function sanitizeOverlayPreferences(raw: unknown): OverlayPreferences {
       out.opacity = clamp(obj.opacity, 0, 1);
     }
     if (typeof obj.maxWidthPx === 'number') {
-      out.maxWidthPx = clamp(Math.round(obj.maxWidthPx), 320, 960);
+      out.maxWidthPx = clamp(Math.round(obj.maxWidthPx), 320, 1600);
     }
     if (typeof obj.position === 'string' && (HIGHLIGHT_POSITIONS as string[]).includes(obj.position)) {
       out.position = obj.position as HighlightMessagePosition;

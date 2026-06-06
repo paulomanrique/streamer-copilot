@@ -497,7 +497,7 @@ export const overlayPreferencesSchema = overlayVisualStyleSchema.extend({
   /** Legacy single-knob field kept for older profile files. */
   opacity: z.number().min(0).max(1).optional(),
   /** Highlight-message overlay: card width in px. */
-  maxWidthPx: z.number().int().min(320).max(960).optional(),
+  maxWidthPx: z.number().int().min(320).max(1600).optional(),
   /** Highlight-message overlay: anchor corner. */
   position: highlightPositionSchema.optional(),
   /** Highlight-message overlay: auto-dismiss timer, 0 = manual only. */

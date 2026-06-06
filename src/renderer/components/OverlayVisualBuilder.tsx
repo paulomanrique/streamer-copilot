@@ -30,7 +30,7 @@ const OVERLAY_OPTIONS: Array<{ id: OverlayId; label: string }> = [
 ];
 
 const HIGHLIGHT_DEFAULTS = {
-  maxWidthPx: 520,
+  maxWidthPx: 720,
   position: 'top-left' as HighlightMessagePosition,
   autoHideSeconds: 15,
 };
@@ -331,7 +331,7 @@ export function OverlayVisualBuilder({ mode, onBack, info }: OverlayVisualBuilde
                 <SliderField
                   label="Largura máxima"
                   value={prefs.maxWidthPx ?? HIGHLIGHT_DEFAULTS.maxWidthPx}
-                  min={320} max={960} step={10}
+                  min={320} max={1600} step={10}
                   format={(v) => `${v}px`}
                   onChange={(v) => setHighlightField('maxWidthPx', v)}
                 />

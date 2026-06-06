@@ -2859,7 +2859,7 @@ const highlightMessageCss = `
   /* Highlight-specific tokens — overridden from the visual editor's
    * "Destaque de mensagem" controls (maxWidthPx) and rendered in JS for
    * position and auto-hide. */
-  --highlight-max-width: 520px;
+  --highlight-max-width: 720px;
   --highlight-font-size: 22px;
 }
 
@@ -3014,7 +3014,7 @@ ${buildOverlayStyleScript('highlight-message')}
   // (the inherited tokens come through the shared style script already).
   function applyHighlightPrefs() {
     var root = document.documentElement.style;
-    var maxWidth = (typeof prefs.maxWidthPx === 'number') ? prefs.maxWidthPx : 520;
+    var maxWidth = (typeof prefs.maxWidthPx === 'number') ? prefs.maxWidthPx : 720;
     root.setProperty('--highlight-max-width', maxWidth + 'px');
     var position = (typeof prefs.position === 'string') ? prefs.position : 'top-left';
     rootEl.setAttribute('data-position', position);
