@@ -106,16 +106,21 @@ export function OverrideField({
   children: ReactNode;
 }) {
   return (
-    <div className="relative">
-      <label className="absolute -top-1 right-0 flex items-center gap-1 text-[10px] text-gray-500 cursor-pointer select-none z-10">
-        <input
-          type="checkbox"
-          checked={!active}
-          onChange={(e) => onToggleActive(!e.target.checked)}
-          className="accent-violet-500 w-3 h-3"
-        />
-        padrão
-      </label>
+    <div>
+      {/* Own row above the inner control — absolute positioning was
+       * colliding with the value chip / color swatch / select that the
+       * inner controls render on the right. */}
+      <div className="flex justify-end mb-0.5">
+        <label className="flex items-center gap-1 text-[10px] text-gray-500 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={!active}
+            onChange={(e) => onToggleActive(!e.target.checked)}
+            className="accent-violet-500 w-3 h-3"
+          />
+          padrão
+        </label>
+      </div>
       <div className={active ? '' : 'opacity-50 pointer-events-none'}>
         {children}
       </div>
