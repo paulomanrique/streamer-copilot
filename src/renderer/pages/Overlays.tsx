@@ -243,6 +243,18 @@ export function OverlaysPage() {
       />
 
       <OverlayLink
+        title="Destaque de mensagem"
+        description="Card grande com a mensagem destacada — duplo-clique numa mensagem do chat (ou item Highlight no menu de contexto) envia ela pra esse overlay. O dock do OBS também aceita duplo-clique."
+        url={info?.urls.highlightMessage ?? null}
+        obsHints={[
+          'Adicione como Browser Source no OBS.',
+          'Cubra toda a tela (1920×1080) — o card se posiciona no canto escolhido em "Personalizar".',
+          'A mensagem some sozinha depois do tempo configurado (ou fica até o próximo highlight).',
+        ]}
+        customize={{ overlayId: 'highlight-message', onCustomize: openOverlayBuilder }}
+      />
+
+      <OverlayLink
         title="Raffle"
         description="Visual wheel + status of the active raffle."
         url={info?.urls.raffles ?? null}
