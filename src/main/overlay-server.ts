@@ -708,9 +708,18 @@ export class OverlayServer {
     // the server. Runs before the stylesheet to avoid a flash of dark
     // background in overlay mode. Also exposes the overlay id so the runtime
     // JS knows which preferences topic to subscribe to.
+    //
+    // The dock additionally sets `__skipOverlayMerge` — the chat dock is a
+    // moderator panel embedded inside OBS, not a scene element, so it must
+    // NOT pick up customizations the streamer makes for scene overlays
+    // (e.g. a black `fontColor` in OverlayDefaults turned the dock into
+    // black-on-black; a bigger global `fontSize` blew up the panel text).
+    // The dock route is excluded from the visual builder dropdown for the
+    // same reason — this flag completes the isolation on the runtime side.
     const defaultTransparent = mode === 'overlay' ? '1' : '0';
     const defaultScale = mode === 'overlay' ? '1.5' : '1';
     const overlayId = mode === 'overlay' ? 'chat-overlay' : 'chat-dock';
+    const skipOverlayMergeAssign = mode === 'dock' ? 'window.__skipOverlayMerge = true;' : '';
     const bootScript = `
       (function () {
         try {
@@ -723,6 +732,7 @@ export class OverlayServer {
           var scale = parseFloat(scaleParam === null ? '${defaultScale}' : scaleParam);
           if (isFinite(scale) && scale > 0) html.style.setProperty('--scale', String(scale));
           window.__overlayId = '${overlayId}';
+          ${skipOverlayMergeAssign}
         } catch (e) { /* noop */ }
       })();
     `.trim();
@@ -831,6 +841,10 @@ function buildOverlayStyleScript(overlayId: string | 'window'): string {
 (function () {
   var ID = ${idExpr};
   if (!ID) return;
+  // Opt-out flag — the chat dock sets this so the streamer's scene-overlay
+  // customizations (fontColor, fontSize, backgroundColor, etc.) don't bleed
+  // into a panel that's supposed to stay readable in OBS.
+  if (window.__skipOverlayMerge) return;
   var FONT_STACKS = ${JSON.stringify(fontStacks)};
   var defaults = {};
   var prefs = {};
