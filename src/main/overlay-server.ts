@@ -9,12 +9,21 @@ import { OVERLAY_FONTS } from '../shared/constants.js';
 import type { RecentChatSnapshot } from '../shared/ipc.js';
 import type { ChatMessage, ChatOverlayInfo, OverlayDefaults, OverlayId, OverlayPreferencesMap, PollOverlayInfo, PollOverlayState, RaffleOverlayInfo, RaffleOverlayState } from '../shared/types.js';
 
-/** Subset of `ChatMessage` the highlight-message overlay actually renders.
- *  Mirrors what's pushed via the IPC + WebSocket payloads. */
-type HighlightedChatMessage = Pick<
-  ChatMessage,
-  'id' | 'platform' | 'author' | 'content' | 'contentParts' | 'color' | 'avatarUrl' | 'badges' | 'badgeUrls'
->;
+/**
+ * Subset of `ChatMessage` the highlight-message overlay actually renders.
+ * Mirrors what's pushed via the IPC + WebSocket payloads.
+ *
+ * `badges`/`badgeUrls` are optional here even though `ChatMessage.badges`
+ * isn't — the IPC schema accepts incoming highlight payloads without a
+ * badges array (it's a nice-to-have visual touch, not a load-bearing
+ * field), and the overlay JS guards every access with `Array.isArray`.
+ */
+type HighlightedChatMessage =
+  & Pick<ChatMessage, 'id' | 'platform' | 'author' | 'content' | 'contentParts' | 'color' | 'avatarUrl'>
+  & {
+    badges?: ChatMessage['badges'];
+    badgeUrls?: ChatMessage['badgeUrls'];
+  };
 
 interface HighlightMessageState {
   message: HighlightedChatMessage;
