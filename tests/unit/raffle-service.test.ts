@@ -70,6 +70,7 @@ describe('RaffleService', () => {
   });
 
   it('ignores entries after the deadline has passed', async () => {
+    let nowValue = new Date('2026-04-09T09:55:00.000Z').getTime();
     const service = new RaffleService({
       repository,
       getOverlayInfo: (raffleId) => ({ raffleId, overlayUrl: 'http://overlay', stateUrl: 'http://overlay/state' }),
@@ -77,7 +78,7 @@ describe('RaffleService', () => {
       onEntry: vi.fn(),
       onResult: vi.fn(),
       onAnnounceWinner: vi.fn(async () => {}),
-      now: () => new Date('2026-04-09T10:05:00.000Z').getTime(),
+      now: () => nowValue,
       random: () => 0,
     });
 
@@ -94,11 +95,42 @@ describe('RaffleService', () => {
     const raffle = service.list()[0];
     await service.control({ raffleId: raffle.id, action: 'open_entries' });
 
+    // The deadline passes while the raffle is collecting.
+    nowValue = new Date('2026-04-09T10:05:00.000Z').getTime();
     service.handle(createMessage(), 'everyone');
 
     const snapshot = service.getSnapshot(raffle.id);
     expect(snapshot.entries).toHaveLength(0);
     expect(snapshot.raffle.status).toBe('collecting');
+  });
+
+  it('refuses to open entries when the deadline is already in the past', async () => {
+    const service = new RaffleService({
+      repository,
+      getOverlayInfo: (raffleId) => ({ raffleId, overlayUrl: 'http://overlay', stateUrl: 'http://overlay/state' }),
+      onState: vi.fn(),
+      onEntry: vi.fn(),
+      onResult: vi.fn(),
+      onAnnounceWinner: vi.fn(async () => {}),
+      now: () => new Date('2026-04-09T10:05:00.000Z').getTime(),
+      random: () => 0,
+    });
+
+    service.create({
+      title: 'Stale deadline raffle',
+      entryCommand: '!join',
+      mode: 'single-winner',
+      entryDeadlineAt: '2026-04-09T10:00:00.000Z',
+      acceptedPlatforms: ['twitch'],
+      staffTriggerCommand: '!roll',
+      winnerAnnouncementTemplate: 'Congrats {winner}',
+      enabled: true,
+    });
+    const raffle = service.list()[0];
+
+    await expect(service.control({ raffleId: raffle.id, action: 'open_entries' }))
+      .rejects.toThrow('Entry deadline is in the past');
+    expect(service.getSnapshot(raffle.id).raffle.status).toBe('draft');
   });
 
   it('accepts staff trigger only for moderators and broadcasters', async () => {

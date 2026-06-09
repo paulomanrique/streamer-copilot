@@ -173,6 +173,11 @@ export class RaffleService implements CommandModule {
     }
 
     if (raffle.entryDeadlineAt && new Date(raffle.entryDeadlineAt).getTime() <= this.now()) {
+      this.log('warn', 'Raffle entry ignored: deadline has passed', {
+        raffleId: raffle.id,
+        entryDeadlineAt: raffle.entryDeadlineAt,
+        author: message.author,
+      });
       try {
         this.closeEntries(raffle);
       } catch { /* deadline close can fail silently */ }
@@ -188,7 +193,17 @@ export class RaffleService implements CommandModule {
       enteredAt: new Date(this.now()).toISOString(),
     });
 
-    if (!entry) return;
+    if (!entry) {
+      // Already in the pool — common after a reset, which keeps the previous
+      // participants on purpose. Logged so "I typed !join and nothing
+      // happened" can be answered from the event log.
+      this.log('info', 'Raffle entry ignored: user already entered', {
+        raffleId: raffle.id,
+        platform: message.platform,
+        author: message.author,
+      });
+      return;
+    }
 
     this.options.onEntry(entry);
     this.emitActiveState();
@@ -216,6 +231,12 @@ export class RaffleService implements CommandModule {
   private openEntries(raffle: Raffle): void {
     this.assertStatus(raffle, ['draft'], 'Only draft raffles can open entries');
     this.ensureNoOtherActiveRaffle(raffle.id);
+    // A deadline left over from a previous run silently rejects every entry
+    // the moment entries open (the first "!join" auto-closes them) — the
+    // raffle looks broken with zero feedback. Refuse to open instead.
+    if (raffle.entryDeadlineAt && new Date(raffle.entryDeadlineAt).getTime() <= this.now()) {
+      throw new Error('Entry deadline is in the past — update or clear it before opening entries');
+    }
     this.options.repository.transitionStatus(raffle.id, 'collecting', {
       winnerEntryId: null,
       top2EntryIds: [],
