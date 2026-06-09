@@ -39,6 +39,14 @@ export class VoiceService implements CommandModule {
     this.options.onSpeak(payload);
   }
 
+  /** Clears in-memory cooldown state. Called on profile switch — cloned
+   *  profiles share command ids, so a cooldown stamped in one profile would
+   *  otherwise keep blocking the same command in the next. */
+  reset(): void {
+    this.commandCooldowns.clear();
+    this.userCooldowns.clear();
+  }
+
   handle(message: ChatMessage, _permissionLevel: PermissionLevel): void {
     this.handleMessage(message);
   }
@@ -50,10 +58,15 @@ export class VoiceService implements CommandModule {
     const author = message.author;
 
     for (const command of commands) {
+      const timestamp = this.now();
       if (!command.enabled) continue;
       if (!content.startsWith(command.trigger)) continue;
-      if (!isCommandAllowed(command.permissions, message, userLists)) continue;
-      if (!this.canRun(command, author)) continue;
+      // The trigger matched: this command alone decides the outcome. Falling
+      // through to another command with the same trigger (stale duplicates
+      // from old versions of the TTS page) would bypass the permissions the
+      // streamer configured on the one the UI manages.
+      if (!isCommandAllowed(command.permissions, message, userLists)) return null;
+      if (!this.canRun(command, author, timestamp)) return null;
 
       let extractedText = command.template ?? content.slice(command.trigger.length).trim();
       if (!extractedText) return null;
@@ -68,8 +81,8 @@ export class VoiceService implements CommandModule {
 
       const payload = { text: extractedText, lang: command.language };
 
-      this.commandCooldowns.set(command.id, this.now());
-      if (author) this.userCooldowns.set(`${command.id}:${author}`, this.now());
+      this.commandCooldowns.set(command.id, timestamp);
+      if (author) this.userCooldowns.set(`${command.id}:${author}`, timestamp);
       this.options.onSpeak(payload);
       return payload;
     }
@@ -77,8 +90,9 @@ export class VoiceService implements CommandModule {
     return null;
   }
 
-  private canRun(command: VoiceCommand, author?: string): boolean {
-    const now = this.now();
+  /** `now` is captured once per message so the cooldown is stamped with the
+   *  same timestamp it was checked against (mirrors SoundService). */
+  private canRun(command: VoiceCommand, author: string | undefined, now: number): boolean {
     if (command.cooldownSeconds > 0) {
       const last = this.commandCooldowns.get(command.id);
       if (last && now - last < command.cooldownSeconds * 1000) return false;

@@ -154,6 +154,14 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
       triggerInputRef.current?.focus();
       return;
     }
+    // The IPC schema requires at least one permission entry; failing early
+    // with a clear message beats surfacing a raw validation error — and makes
+    // it obvious why the command "doesn't respond" (no one is allowed).
+    const effectivePermissions = overrides?.permissions ?? permissions;
+    if (effectivePermissions.length === 0) {
+      setError('Adicione pelo menos uma permissão em "Quem pode usar" — sem nenhuma entrada, ninguém consegue usar o comando.');
+      return;
+    }
     setIsBusy(true);
     setError(null);
     setStatusMessage(null);
