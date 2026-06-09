@@ -38,6 +38,7 @@ const ROLE_LABELS: Record<PermissionLevel, string> = {
 export function PermissionListPicker({ value, onChange }: PermissionListPickerProps) {
   const subscriberTiers = useAppStore((s) => s.subscriberTiers);
   const userLists = useAppStore((s) => s.userLists);
+  const platformStatus = useAppStore((s) => s.platformStatus);
   const providers = useMemo(() => listPlatformProviders(), []);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   // window.prompt is a silent no-op in Electron — use an inline input
@@ -200,8 +201,19 @@ export function PermissionListPicker({ value, onChange }: PermissionListPickerPr
                 ? (subscriberTiers.byPlatform[platformId] ?? [])
                 : [];
               const sortedTiers = [...tierEntries].sort((a, b) => a.order - b.order);
+              // The connection hint stops a classic mistake: granting the
+              // permission on a sibling driver (e.g. "YouTube (API)") while
+              // the chat actually flows through another ("YouTube (Scraped)")
+              // — the entry then matches no message and the command looks
+              // broken for everyone.
+              const isConnected = platformStatus[platformId] === 'connected';
               return (
-                <DropdownSection key={provider.id} title={provider.displayName}>
+                <DropdownSection
+                  key={provider.id}
+                  title={provider.displayName}
+                  hint={isConnected ? 'conectado' : 'não conectado'}
+                  hintAccent={isConnected}
+                >
                   {provider.supportedRoles.map((role) => {
                     if (role === 'subscriber' && sortedTiers.length > 0) {
                       // When explicit tiers exist, the generic "Subscriber" is still useful
@@ -291,10 +303,31 @@ function EntryChip({ entry, onRemove }: { entry: PermissionEntry; onRemove: () =
   );
 }
 
-function DropdownSection({ title, children }: { title: string; children: React.ReactNode }) {
+function DropdownSection({
+  title,
+  hint,
+  hintAccent,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  hintAccent?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <div className="border-b border-gray-800 last:border-b-0 py-1">
-      <div className="px-3 py-1 text-[10px] uppercase tracking-wide text-gray-500 font-semibold">{title}</div>
+      <div className="px-3 py-1 text-[10px] uppercase tracking-wide text-gray-500 font-semibold flex items-center gap-1.5">
+        {title}
+        {hint ? (
+          <span
+            className={`normal-case tracking-normal font-normal ${
+              hintAccent ? 'text-emerald-400' : 'text-gray-600'
+            }`}
+          >
+            • {hint}
+          </span>
+        ) : null}
+      </div>
       {children}
     </div>
   );
