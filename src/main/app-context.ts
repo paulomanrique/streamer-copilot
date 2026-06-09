@@ -144,7 +144,7 @@ import {
   youtubeSettingsSchema,
   youtubeApiStartOAuthSchema,
 } from '../shared/schemas.js';
-import type { AppInfo, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, MusicQueueItem, MusicRequestSettings, OverlayDefaults, OverlayPreferencesMap, PlatformAccount, PlatformId, Raffle, SoundSettings, StreamEvent, StreamEventType, SubscriberTierCatalog, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, UserList, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
+import type { AppInfo, ChatMessage, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, MusicQueueItem, MusicRequestSettings, OverlayDefaults, OverlayPreferencesMap, PlatformAccount, PlatformId, Raffle, SoundSettings, StreamEvent, StreamEventType, SubscriberTierCatalog, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, UserList, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
 
 const TWITCH_CLIENT_ID = 'vtwg8tzuv1nlip4qh9n6sxx2p76g0s';
 const TWITCH_REDIRECT_PORT = 32999;
@@ -397,8 +397,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     getUserLists: () => userListsCache,
     onRespond: async (payload) => {
       try {
-        await sendPlatformMessage(payload.platform, payload.content);
-        await pushLocalOutboundMessage(payload.platform, payload.content);
+        await sendPlatformMessageWithEcho(payload.platform, payload.content);
         logService.info('text-command', 'Sent response', { platform: payload.platform, content: payload.content });
       } catch (cause) {
         logService.error('text-command', 'Failed to send response', {
@@ -500,8 +499,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     onFeedback: async (payload) => {
       if (!payload.content) return;
       try {
-        await sendPlatformMessage(payload.platform, payload.content);
-        await pushLocalOutboundMessage(payload.platform, payload.content);
+        await sendPlatformMessageWithEcho(payload.platform, payload.content);
         logService.info('suggestion', 'Sent feedback', { platform: payload.platform, content: payload.content });
       } catch (cause) {
         logService.error('suggestion', 'Failed to send feedback', {
@@ -1500,8 +1498,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         .replaceAll('{command}', raffle.entryCommand);
       for (const target of resolveAnnouncementTargets(raffle.acceptedPlatforms)) {
         try {
-          await chatService.sendMessage(target, content);
-          await pushLocalOutboundMessage(target, content);
+          await sendPlatformMessageWithEcho(target, content);
         } catch (cause) {
           logService.warn('raffles', 'Failed to send open announcement', {
             raffleId: raffle.id,
@@ -1517,8 +1514,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         .replaceAll('{title}', raffle.title);
       for (const target of resolveAnnouncementTargets(raffle.acceptedPlatforms)) {
         try {
-          await chatService.sendMessage(target, content);
-          await pushLocalOutboundMessage(target, content);
+          await sendPlatformMessageWithEcho(target, content);
         } catch (cause) {
           logService.warn('raffles', 'Failed to send elimination announcement', {
             raffleId: raffle.id,
@@ -1532,8 +1528,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       const content = formatWinnerAnnouncement(raffle, winner.displayName);
       for (const target of resolveAnnouncementTargets(raffle.acceptedPlatforms)) {
         try {
-          await chatService.sendMessage(target, content);
-          await pushLocalOutboundMessage(target, content);
+          await sendPlatformMessageWithEcho(target, content);
         } catch (cause) {
           logService.warn('raffles', 'Failed to send winner announcement', {
             raffleId: raffle.id,
@@ -1588,8 +1583,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       if (!content) return;
       for (const target of resolveAnnouncementTargets(poll.acceptedPlatforms)) {
         try {
-          await chatService.sendMessage(target, content);
-          await pushLocalOutboundMessage(target, content);
+          await sendPlatformMessageWithEcho(target, content);
         } catch (cause) {
           logService.warn('polls', 'Failed to send poll result announcement', {
             pollId: poll.id,
@@ -1641,6 +1635,13 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const chatService = new ChatService({
     commandModules: [soundService, textService, voiceService, raffleService, pollService, suggestionService, musicService],
     onMessage: (message) => {
+      if (!message.isHistory && consumeOutboundEcho(message)) {
+        // The platform re-delivered a message the app itself just sent and
+        // already displayed via the local echo — keep it in the chat log for
+        // completeness but off the live feed (it would render as a duplicate).
+        try { chatLogService.recordMessage(message); } catch { /* DB may not be open yet */ }
+        return;
+      }
       options.stateHub.pushChatMessage(message);
       // Feed the LRU cache used by the chat-dock dblclick → highlight path.
       // The dock POSTs only a messageId; the server hydrates from this cache.
@@ -2006,10 +2007,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
   ipcMain.handle(IPC_CHANNELS.chatSendMessage, async (_, raw) => {
     const i = chatSendMessageSchema.parse(raw);
-    await sendPlatformMessage(i.platform, i.content);
-    if (i.platform !== 'youtube' && i.platform !== 'kick') {
-      await pushLocalOutboundMessage(i.platform, i.content);
-    }
+    // Always show the local echo; the platform echo (YouTube, Kick, second
+    // Twitch account) is suppressed by sendPlatformMessageWithEcho.
+    await sendPlatformMessageWithEcho(i.platform, i.content);
   });
   ipcMain.handle(IPC_CHANNELS.logsList, async (_, raw) => logService.list(eventLogFiltersSchema.parse(raw)));
   ipcMain.handle(IPC_CHANNELS.eventLogClearAll, async () => {
@@ -3402,6 +3402,48 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     else if (process.platform === 'linux') await execFile('espeak', [text]);
     else if (process.platform === 'win32') await execFile('powershell', ['-NoProfile', '-Command', `Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; $s.Speak('${text.replace(/'/g, "''")}')`]);
     else options.stateHub.pushVoiceSpeak({ text, lang: 'en-US' });
+  }
+
+  /**
+   * Platform echoes of messages the app sent and already displayed via
+   * `pushLocalOutboundMessage`. Some platforms re-deliver the bot's own
+   * message as a regular chat message moments after the send (YouTube
+   * polling/scraper, Kick pusher, a second Twitch account joined to the same
+   * channel) — without suppression the reply shows up twice in the chat feed.
+   * Entries are consumed on first match, so identical content sent twice
+   * still displays twice.
+   */
+  const pendingOutboundEchoes: Array<{ platform: PlatformId; content: string; at: number }> = [];
+  const OUTBOUND_ECHO_WINDOW_MS = 30_000;
+
+  function registerOutboundEcho(platform: PlatformId, content: string): void {
+    pendingOutboundEchoes.push({ platform, content: content.trim(), at: Date.now() });
+  }
+
+  function consumeOutboundEcho(message: ChatMessage): boolean {
+    const now = Date.now();
+    for (let i = pendingOutboundEchoes.length - 1; i >= 0; i--) {
+      if (now - pendingOutboundEchoes[i].at > OUTBOUND_ECHO_WINDOW_MS) pendingOutboundEchoes.splice(i, 1);
+    }
+    const index = pendingOutboundEchoes.findIndex(
+      (entry) => entry.platform === message.platform && entry.content === message.content.trim(),
+    );
+    if (index < 0) return false;
+    pendingOutboundEchoes.splice(index, 1);
+    return true;
+  }
+
+  /**
+   * Send + local echo as one unit. Every outbound path that mirrors the sent
+   * message into the chat feed must go through here so the platform echo of
+   * that same message gets suppressed. The echo entry is registered before
+   * the send because fast platforms (Kick pusher) can re-deliver the message
+   * before the send call resolves.
+   */
+  async function sendPlatformMessageWithEcho(platform: PlatformId, content: string): Promise<void> {
+    registerOutboundEcho(platform, content);
+    await sendPlatformMessage(platform, content);
+    await pushLocalOutboundMessage(platform, content);
   }
 
   async function pushLocalOutboundMessage(platform: PlatformId, content: string): Promise<void> {
