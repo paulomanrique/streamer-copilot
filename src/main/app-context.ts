@@ -389,7 +389,17 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     repository: soundRepository,
     getSettings: () => soundSettingsCache,
     getUserLists: () => userListsCache,
-    onPlay: (payload) => options.stateHub.pushSoundPlay(payload),
+    onPlay: (payload) => {
+      // The renderer fails with a generic toast when the file is gone (moved,
+      // renamed, profile cloned without its media) — leave a precise trail in
+      // the event log so the streamer knows which file to re-add.
+      void fs.access(payload.filePath).catch(() => {
+        logService.error('sound', 'Sound file not found — edit the command and pick the audio file again', {
+          filePath: payload.filePath,
+        });
+      });
+      options.stateHub.pushSoundPlay(payload);
+    },
   });
   const textService = new TextService({
     repository: textRepository,
@@ -1781,6 +1791,12 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     suggestionService.clearSessionEntries();
     welcomeService.reset();
     musicService.reset();
+    // Cooldown maps are keyed by command id; cloned profiles share ids, so a
+    // cooldown from the previous profile would silently block the "same"
+    // command in the new one.
+    soundService.reset();
+    textService.reset();
+    voiceService.reset();
     await reloadSoundSettingsCache();
     await reloadTextSettingsCache();
     await reloadWelcomeSettingsCache();
@@ -1916,10 +1932,17 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     let finalFilePath = input.filePath;
     if (input.filePath !== desiredPath) {
       try {
-        await fs.rename(input.filePath, desiredPath);
-        finalFilePath = desiredPath;
+        // Never rename onto an existing file: two commands whose triggers
+        // sanitize to the same name would otherwise silently replace each
+        // other's audio (the playback then fails until the command is
+        // recreated). Keeping the original (uuid) path is always safe.
+        const destinationTaken = await fs.access(desiredPath).then(() => true, () => false);
+        if (!destinationTaken) {
+          await fs.rename(input.filePath, desiredPath);
+          finalFilePath = desiredPath;
+        }
       } catch {
-        // Keep original path if rename fails (e.g. file already at destination)
+        // Keep original path if rename fails (e.g. file locked)
       }
     }
     const result = soundService.upsert({ ...input, filePath: finalFilePath } as import('../shared/types.js').SoundCommandUpsertInput);

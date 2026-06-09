@@ -146,8 +146,12 @@ function speakWithSystemTTS(
     utterance.rate = opts.voiceRate;
     utterance.volume = opts.voiceVolume;
 
-    utterance.onend = () => resolve();
-    utterance.onerror = () => resolve();
+    // Chromium's speechSynthesis sometimes fires neither onend nor onerror
+    // (engine stall) — without a watchdog that jams the shared audio queue
+    // and every later sound/TTS silently stops playing.
+    const watchdog = setTimeout(() => resolve(), 60_000);
+    utterance.onend = () => { clearTimeout(watchdog); resolve(); };
+    utterance.onerror = () => { clearTimeout(watchdog); resolve(); };
 
     window.speechSynthesis.speak(utterance);
   });
@@ -165,13 +169,45 @@ async function playBase64Audio(base64: string): Promise<void> {
   }
 }
 
+/** Upper bound for a single sound when its duration is unknown. A stuck
+ *  element (corrupt file, decoder stall) would otherwise never fire `ended`
+ *  and jam the whole queue until the app restarts. */
+const PLAYBACK_FALLBACK_TIMEOUT_MS = 60_000;
+const PLAYBACK_DURATION_SLACK_MS = 5_000;
+
 function playAudioElement(url: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const audio = new Audio(url);
     audio.volume = 1;
-    audio.addEventListener('ended', () => resolve(), { once: true });
-    audio.addEventListener('error', () => reject(new Error('Audio playback failed')), { once: true });
-    void audio.play().catch(reject);
+
+    let settled = false;
+    let watchdog: ReturnType<typeof setTimeout>;
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(watchdog);
+      if (error) {
+        audio.pause();
+        reject(error);
+      } else {
+        resolve();
+      }
+    };
+
+    watchdog = setTimeout(() => finish(new Error('Audio playback timed out')), PLAYBACK_FALLBACK_TIMEOUT_MS);
+    // Once the real duration is known, tighten the watchdog to duration + slack.
+    audio.addEventListener('loadedmetadata', () => {
+      if (settled || !Number.isFinite(audio.duration)) return;
+      clearTimeout(watchdog);
+      watchdog = setTimeout(
+        () => finish(new Error('Audio playback timed out')),
+        audio.duration * 1000 + PLAYBACK_DURATION_SLACK_MS,
+      );
+    }, { once: true });
+
+    audio.addEventListener('ended', () => finish(), { once: true });
+    audio.addEventListener('error', () => finish(new Error('Audio playback failed')), { once: true });
+    void audio.play().catch((cause) => finish(cause instanceof Error ? cause : new Error('Audio playback failed')));
   });
 }
 

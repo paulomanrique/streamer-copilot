@@ -27,6 +27,29 @@ const DEFAULT_PROFILE_SETTINGS: ProfileSettings = {
 };
 const EMPTY_ARRAY = '[]\n';
 
+/**
+ * Deep-walks a parsed config value and rewrites every string that points
+ * inside `fromDir` to the equivalent path under `toDir`. Used when cloning a
+ * profile so media references (sound files, etc.) follow the copy instead of
+ * staying tied to the source profile's directory.
+ */
+function rewritePathPrefixes(value: unknown, fromDir: string, toDir: string): unknown {
+  if (typeof value === 'string') {
+    if (value === fromDir) return toDir;
+    if (value.startsWith(fromDir + path.sep)) return toDir + value.slice(fromDir.length);
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => rewritePathPrefixes(item, fromDir, toDir));
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, rewritePathPrefixes(entry, fromDir, toDir)]),
+    );
+  }
+  return value;
+}
+
 export class ProfileStore {
   private readonly stateFilePath: string;
 
@@ -118,11 +141,24 @@ export class ProfileStore {
     await this.ensureProfileFiles(state, { createMissingDirectories: false });
     await fs.mkdir(normalizedDirectory, { recursive: true });
 
+    // Copy the whole directory, not just the config JSONs: profiles also hold
+    // media (sound command audio files) referenced by absolute path. Copying
+    // only the configs would leave the clone pointing at the source profile's
+    // files — renaming or deleting anything there breaks the clone.
+    await fs.cp(source.directory, normalizedDirectory, { recursive: true });
+
+    // Rebase absolute paths stored inside the config files (sound command
+    // filePath, welcome/suggestion sound paths, ...) onto the new directory.
     const files = Object.values(PROFILE_CONFIG_FILES);
     for (const fileName of files) {
-      const sourcePath = path.join(source.directory, fileName);
       const destinationPath = path.join(normalizedDirectory, fileName);
-      await fs.copyFile(sourcePath, destinationPath);
+      try {
+        const raw = await fs.readFile(destinationPath, 'utf8');
+        const rewritten = rewritePathPrefixes(JSON.parse(raw), source.directory, normalizedDirectory);
+        await fs.writeFile(destinationPath, JSON.stringify(rewritten, null, 2));
+      } catch {
+        // Missing or non-JSON file — keep the copied version as-is.
+      }
     }
 
     const cloneId = randomUUID();

@@ -41,6 +41,14 @@ export class SoundService implements CommandModule {
     this.options.onPlay(payload);
   }
 
+  /** Clears in-memory cooldown state. Called on profile switch — cloned
+   *  profiles share command ids, so a cooldown stamped in one profile would
+   *  otherwise keep blocking the same command in the next. */
+  reset(): void {
+    this.commandCooldowns.clear();
+    this.userCooldowns.clear();
+  }
+
   /** CommandModule entry point — called by CommandDispatcher. The
    *  `_permissionLevel` arg is ignored; the new evaluator operates on the
    *  full message + permission entries (which encode platform-specific

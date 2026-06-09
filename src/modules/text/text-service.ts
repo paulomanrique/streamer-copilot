@@ -37,6 +37,14 @@ export class TextService implements CommandModule {
     return this.options.repository.delete(id);
   }
 
+  /** Clears in-memory cooldown state. Called on profile switch — cloned
+   *  profiles share command ids, so a cooldown stamped in one profile would
+   *  otherwise keep blocking the same command in the next. */
+  reset(): void {
+    this.commandCooldowns.clear();
+    this.userCooldowns.clear();
+  }
+
   handle(message: ChatMessage, _permissionLevel: PermissionLevel): void {
     this.handleMessage(message);
   }
