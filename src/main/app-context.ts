@@ -3546,11 +3546,16 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         if (hasYoutubeScraper()) resolved.add('youtube');
         continue;
       }
+      if (target === 'youtube-api') {
+        if (youtubeApiAdapter.hasActiveStreams()) resolved.add('youtube-api');
+        continue;
+      }
       if (target === 'twitch' && twitchStatus === 'connected') {
         resolved.add('twitch');
         continue;
       }
       if (target === 'kick') resolved.add('kick');
+      // tiktok: read-only adapter, announcements are silently skipped.
     }
     return Array.from(resolved);
   }

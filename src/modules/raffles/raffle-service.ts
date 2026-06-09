@@ -159,7 +159,18 @@ export class RaffleService implements CommandModule {
 
     if (raffle.status !== 'collecting') return;
     if (!message.content.startsWith(raffle.entryCommand)) return;
-    if (!this.isAcceptedPlatform(raffle.acceptedPlatforms, message.platform)) return;
+    if (!this.isAcceptedPlatform(raffle.acceptedPlatforms, message.platform)) {
+      // A viewer typed the entry command but their platform isn't in the
+      // raffle's accepted list — surface it; silently dropping entries here
+      // reads as "the raffle is broken" to the streamer.
+      this.log('warn', 'Raffle entry ignored: platform not accepted', {
+        raffleId: raffle.id,
+        platform: message.platform,
+        acceptedPlatforms: raffle.acceptedPlatforms,
+        author: message.author,
+      });
+      return;
+    }
 
     if (raffle.entryDeadlineAt && new Date(raffle.entryDeadlineAt).getTime() <= this.now()) {
       try {

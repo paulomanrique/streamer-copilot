@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type {
   PlatformId,
+  PlatformLinkStatus,
   Raffle,
   RaffleControlAction,
   RaffleCreateInput,
@@ -11,6 +12,9 @@ import type {
   RaffleSnapshot,
   RaffleUpdateInput,
 } from '../../shared/types.js';
+import { listPlatformProviders } from '../platforms/registry.js';
+import '../platforms/register-all.js';
+import { useAppStore } from '../store.js';
 
 interface PlatformOption {
   id: PlatformId;
@@ -118,32 +122,28 @@ function canRunAction(status: Raffle['status'], action: RaffleControlAction): bo
   }
 }
 
-async function getConfiguredPlatformOptions(): Promise<PlatformOption[]> {
-  const [twitchCreds, youtubeSettings] = await Promise.all([
-    window.copilot.twitchGetCredentials(),
-    window.copilot.youtubeGetSettings(),
-  ]);
-
-  const options: PlatformOption[] = [];
-
-  if (twitchCreds?.channel) {
-    options.push({
-      id: 'twitch',
-      label: 'Twitch',
-      hint: `Configured for #${twitchCreds.channel}`,
-    });
-  }
-
-  const enabledYouTubeChannels = youtubeSettings.channels.filter((channel) => channel.enabled);
-  if (enabledYouTubeChannels.length > 0) {
-    options.push({
-      id: 'youtube',
-      label: 'YouTube',
-      hint: `${enabledYouTubeChannels.length} configured channel${enabledYouTubeChannels.length > 1 ? 's' : ''}`,
-    });
-  }
-
-  return options;
+/**
+ * Every registered platform is offered as a raffle entry source — the raffle
+ * gate matches `message.platform` against `acceptedPlatforms`, so the list
+ * must cover every id a chat message can carry (twitch, youtube, youtube-api,
+ * kick, tiktok, ...). The connection status is only a hint; a platform that
+ * connects mid-raffle still gets its entries captured.
+ *
+ * (The previous version listed only Twitch + the YouTube scraper, so raffles
+ * silently dropped every entry coming from any other platform/driver.)
+ */
+function buildPlatformOptions(
+  platformStatus: Partial<Record<PlatformId, PlatformLinkStatus>>,
+  platformPrimaryChannel: Partial<Record<PlatformId, string | null>>,
+): PlatformOption[] {
+  return listPlatformProviders().map((provider) => {
+    const id = provider.id as PlatformId;
+    const channel = platformPrimaryChannel[id];
+    const hint = platformStatus[id] === 'connected'
+      ? (channel ? `Conectado (${channel})` : 'Conectado')
+      : 'Não conectado';
+    return { id, label: provider.displayName, hint };
+  });
 }
 
 export function RafflesPage() {
@@ -151,7 +151,12 @@ export function RafflesPage() {
   const [raffle, setRaffle] = useState<Raffle | null>(null);
   const [snapshot, setSnapshot] = useState<RaffleSnapshot | null>(null);
   const [overlayInfo, setOverlayInfo] = useState<RaffleOverlayInfo | null>(null);
-  const [platformOptions, setPlatformOptions] = useState<PlatformOption[]>([]);
+  const platformStatus = useAppStore((s) => s.platformStatus);
+  const platformPrimaryChannel = useAppStore((s) => s.platformPrimaryChannel);
+  const platformOptions = useMemo(
+    () => buildPlatformOptions(platformStatus, platformPrimaryChannel),
+    [platformStatus, platformPrimaryChannel],
+  );
   const [form, setForm] = useState<RaffleFormState>(createFormState(null, []));
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
@@ -216,17 +221,14 @@ export function RafflesPage() {
   async function load(): Promise<void> {
     try {
       setError(null);
-      const [rows, active, nextPlatformOptions, sounds] = await Promise.all([
+      const [rows, active, sounds] = await Promise.all([
         window.copilot.listRaffles(),
         window.copilot.getActiveRaffle(),
-        getConfiguredPlatformOptions(),
         window.copilot.listRaffleSounds(),
       ]);
       setAvailableSounds(sounds);
       const latestRaffle = rows[0] ?? null;
       setRaffle(latestRaffle);
-      setPlatformOptions(nextPlatformOptions);
-      setForm((current) => current.id ? current : createFormState(null, nextPlatformOptions));
       const snapshotTarget = active ?? latestRaffle;
       if (snapshotTarget) setSnapshot(await window.copilot.getRaffleSnapshot(snapshotTarget.id));
     } catch (cause) {
