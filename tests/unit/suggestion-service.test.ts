@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { ChatMessage, SuggestionEntry, SuggestionList, SuggestionSnapshot } from '../../src/shared/types.js';
+import type { ChatMessage, PermissionEntry, SuggestionEntry, SuggestionList, SuggestionSnapshot } from '../../src/shared/types.js';
 import { SuggestionService } from '../../src/modules/suggestions/suggestion-service.js';
+
+const TWITCH_EVERYONE: PermissionEntry[] = [{ kind: 'platform-role', platform: 'twitch', role: 'everyone' }];
+const TWITCH_SUBSCRIBER: PermissionEntry[] = [{ kind: 'platform-role', platform: 'twitch', role: 'subscriber' }];
+const TWITCH_MODERATOR: PermissionEntry[] = [{ kind: 'platform-role', platform: 'twitch', role: 'moderator' }];
 
 function makeList(overrides: Partial<SuggestionList> = {}): SuggestionList {
   return {
@@ -9,9 +13,11 @@ function makeList(overrides: Partial<SuggestionList> = {}): SuggestionList {
     title: 'Game Suggestions',
     trigger: '!jogo',
     feedbackTemplate: '',
+    feedbackSoundPath: null,
+    feedbackTargetPlatforms: [],
     mode: 'session',
     allowDuplicates: false,
-    permissions: ['everyone'],
+    permissions: TWITCH_EVERYONE,
     cooldownSeconds: 0,
     userCooldownSeconds: 0,
     enabled: true,
@@ -77,6 +83,7 @@ function createService(
 ) {
   return new SuggestionService({
     repository: repo as never,
+    getUserLists: () => [],
     onState: onState ?? vi.fn(),
     onFeedback: onFeedback ?? vi.fn(),
     now,
@@ -160,47 +167,54 @@ describe('SuggestionService', () => {
 
   describe('permissions', () => {
     it('rejects users below required permission level', () => {
-      const repo = createMockRepo([makeList({ permissions: ['subscriber'] })]);
+      const repo = createMockRepo([makeList({ permissions: TWITCH_SUBSCRIBER })]);
       const service = createService(repo);
 
-      service.handle(makeMessage(), 'follower');
+      service.handle(makeMessage({ unifiedLevel: 'follower' }), 'follower');
       expect(repo.addEntry).not.toHaveBeenCalled();
     });
 
     it('allows higher permission levels', () => {
-      const repo = createMockRepo([makeList({ permissions: ['subscriber'] })]);
+      const repo = createMockRepo([makeList({ permissions: TWITCH_SUBSCRIBER })]);
       const service = createService(repo);
 
-      service.handle(makeMessage(), 'moderator');
+      service.handle(makeMessage({ unifiedLevel: 'moderator' }), 'moderator');
       expect(repo.addEntry).toHaveBeenCalled();
     });
 
     it('always allows broadcaster', () => {
-      const repo = createMockRepo([makeList({ permissions: ['moderator'] })]);
+      const repo = createMockRepo([makeList({ permissions: TWITCH_MODERATOR })]);
       const service = createService(repo);
 
-      service.handle(makeMessage(), 'broadcaster');
+      service.handle(makeMessage({ unifiedLevel: 'broadcaster' }), 'broadcaster');
       expect(repo.addEntry).toHaveBeenCalled();
     });
   });
 
-  describe('dedup (allowDuplicates)', () => {
-    it('rejects duplicate entry from same user when allowDuplicates=false', () => {
+  describe('dedup (delegated to the repository)', () => {
+    // Dedup lives inside repository.addEntry (it returns null for a rejected
+    // duplicate); the service's contract is to stay silent in that case.
+    it('does not emit state, feedback or cooldowns when the repository rejects the entry', () => {
       const repo = createMockRepo([makeList({ allowDuplicates: false })]);
-      repo.hasUserEntry.mockReturnValue(true);
-      const service = createService(repo);
-
-      service.handle(makeMessage(), 'everyone');
-      expect(repo.addEntry).not.toHaveBeenCalled();
-    });
-
-    it('allows duplicate entry from same user when allowDuplicates=true', () => {
-      const repo = createMockRepo([makeList({ allowDuplicates: true })]);
-      repo.hasUserEntry.mockReturnValue(true);
-      const service = createService(repo);
+      repo.addEntry.mockReturnValue(null);
+      const onState = vi.fn();
+      const onFeedback = vi.fn();
+      const service = createService(repo, onState, undefined, onFeedback);
 
       service.handle(makeMessage(), 'everyone');
       expect(repo.addEntry).toHaveBeenCalled();
+      expect(onState).not.toHaveBeenCalled();
+      expect(onFeedback).not.toHaveBeenCalled();
+    });
+
+    it('emits state when the repository accepts the entry', () => {
+      const repo = createMockRepo([makeList({ allowDuplicates: true })]);
+      const onState = vi.fn();
+      const service = createService(repo, onState);
+
+      service.handle(makeMessage(), 'everyone');
+      expect(repo.addEntry).toHaveBeenCalled();
+      expect(onState).toHaveBeenCalled();
     });
   });
 

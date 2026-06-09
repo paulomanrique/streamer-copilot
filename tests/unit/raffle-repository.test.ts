@@ -1,27 +1,28 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { MIGRATIONS } from '../../src/db/migrations.js';
 import { RaffleRepository } from '../../src/modules/raffles/raffle-repository.js';
-import { createTestDatabase } from './test-sqlite.js';
 
-function createDatabase() {
-  const db = createTestDatabase();
-  db.pragma('foreign_keys = ON');
-  for (const migration of MIGRATIONS) db.exec(migration.sql);
-  return db;
+// The repository persists to a per-profile JSON file — tests point it at a
+// throwaway directory.
+function createProfileDir(): string {
+  return mkdtempSync(path.join(os.tmpdir(), 'raffle-repo-test-'));
 }
 
 describe('RaffleRepository', () => {
-  let db: ReturnType<typeof createDatabase> | null = null;
+  let dir: string | null = null;
 
   afterEach(() => {
-    db?.close();
-    db = null;
+    if (dir) rmSync(dir, { recursive: true, force: true });
+    dir = null;
   });
 
   it('enforces unique entries per raffle and user key', () => {
-    db = createDatabase();
-    const repository = new RaffleRepository(db as never);
+    dir = createProfileDir();
+    const repository = new RaffleRepository(() => dir!);
     repository.create({
       title: 'Repo raffle',
       entryCommand: '!join',
@@ -57,8 +58,8 @@ describe('RaffleRepository', () => {
   });
 
   it('returns the active raffle and stores round history', () => {
-    db = createDatabase();
-    const repository = new RaffleRepository(db as never);
+    dir = createProfileDir();
+    const repository = new RaffleRepository(() => dir!);
     repository.create({
       title: 'History raffle',
       entryCommand: '!join',
@@ -96,8 +97,8 @@ describe('RaffleRepository', () => {
   });
 
   it('reset keeps entries and clears execution flags', () => {
-    db = createDatabase();
-    const repository = new RaffleRepository(db as never);
+    dir = createProfileDir();
+    const repository = new RaffleRepository(() => dir!);
     repository.create({
       title: 'Reset raffle',
       entryCommand: '!join',

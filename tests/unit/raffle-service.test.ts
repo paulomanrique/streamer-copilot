@@ -1,17 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
-import { MIGRATIONS } from '../../src/db/migrations.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { RaffleRepository } from '../../src/modules/raffles/raffle-repository.js';
 import { RaffleService } from '../../src/modules/raffles/raffle-service.js';
 import type { ChatMessage } from '../../src/shared/types.js';
-import { createTestDatabase } from './test-sqlite.js';
-
-function createDatabase() {
-  const db = createTestDatabase();
-  db.pragma('foreign_keys = ON');
-  for (const migration of MIGRATIONS) db.exec(migration.sql);
-  return db;
-}
 
 function createMessage(overrides: Partial<ChatMessage> = {}): ChatMessage {
   return {
@@ -26,12 +21,18 @@ function createMessage(overrides: Partial<ChatMessage> = {}): ChatMessage {
 }
 
 describe('RaffleService', () => {
-  let db: ReturnType<typeof createDatabase>;
+  let dir: string;
   let repository: RaffleRepository;
 
   beforeEach(() => {
-    db = createDatabase();
-    repository = new RaffleRepository(db as never);
+    // The repository persists to a per-profile JSON file — point it at a
+    // throwaway directory.
+    dir = mkdtempSync(path.join(os.tmpdir(), 'raffle-service-test-'));
+    repository = new RaffleRepository(() => dir);
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
   });
 
   it('registers one entry per platform:user pair', async () => {
@@ -61,7 +62,7 @@ describe('RaffleService', () => {
 
     service.handle(createMessage(), 'everyone');
     service.handle(createMessage({ id: 'msg-2' }), 'everyone');
-    service.handle(createMessage({ id: 'msg-3', platform: 'youtube-v' }), 'everyone');
+    service.handle(createMessage({ id: 'msg-3', platform: 'youtube' }), 'everyone');
 
     const snapshot = service.getSnapshot(raffle.id);
     expect(snapshot.entries).toHaveLength(2);

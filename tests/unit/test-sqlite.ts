@@ -16,6 +16,28 @@ interface DatabaseLike {
   close: () => void;
 }
 
+/**
+ * Mirrors the production migration runner (src/db/database.ts): executes the
+ * SQL statement by statement and tolerates `ALTER TABLE ... ADD COLUMN` on a
+ * column that already exists (migration 18 re-adds
+ * voice_commands.user_cooldown_seconds for DBs that ran an older revision of
+ * migration 17). Running the raw blob via `db.exec` aborts on that statement.
+ */
+export function execMigrationSql(db: DatabaseLike, sql: string): void {
+  const statements = sql.split(';').map((s) => s.trim()).filter(Boolean);
+  for (const stmt of statements) {
+    try {
+      db.exec(stmt);
+    } catch (err) {
+      const isDuplicateColumn =
+        err instanceof Error &&
+        /duplicate column name/i.test(err.message) &&
+        /ALTER\s+TABLE\s+\S+\s+ADD\s+COLUMN/i.test(stmt);
+      if (!isDuplicateColumn) throw err;
+    }
+  }
+}
+
 export function createTestDatabase(): DatabaseLike {
   const db = new DatabaseSync(':memory:');
 
