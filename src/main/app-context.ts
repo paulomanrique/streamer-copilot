@@ -391,13 +391,15 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     getUserLists: () => userListsCache,
     onPlay: (payload) => {
       // The renderer fails with a generic toast when the file is gone (moved,
-      // renamed, profile cloned without its media) — leave a precise trail in
-      // the event log so the streamer knows which file to re-add.
-      void fs.access(payload.filePath).catch(() => {
-        logService.error('sound', 'Sound file not found — edit the command and pick the audio file again', {
-          filePath: payload.filePath,
+      // renamed, profile relocated without its media) — leave a precise trail
+      // in the event log so the streamer knows which file to re-add.
+      void resolveProfileMediaPath(payload.filePath)
+        .then((resolved) => fs.access(resolved))
+        .catch(() => {
+          logService.error('sound', 'Sound file not found — edit the command and pick the audio file again', {
+            filePath: payload.filePath,
+          });
         });
-      });
       options.stateHub.pushSoundPlay(payload);
     },
   });
@@ -1964,7 +1966,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     await fs.copyFile(r.filePaths[0], dest);
     return dest;
   });
-  ipcMain.handle(IPC_CHANNELS.soundsReadFile, async (_, p) => (await fs.readFile(String(p))).toString('base64'));
+  ipcMain.handle(IPC_CHANNELS.soundsReadFile, async (_, p) => (await fs.readFile(await resolveProfileMediaPath(String(p)))).toString('base64'));
   ipcMain.handle(IPC_CHANNELS.soundsPreviewPlay, async (_, raw) => soundService.previewPlay(soundPlayPayloadSchema.parse(raw)));
   ipcMain.handle(IPC_CHANNELS.soundsGetSettings, async () => {
     const store = await getSoundSettingsStore();
@@ -3467,6 +3469,29 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     registerOutboundEcho(platform, content);
     await sendPlatformMessage(platform, content);
     await pushLocalOutboundMessage(platform, content);
+  }
+
+  /**
+   * Media paths stored in profile configs are absolute, so they break when
+   * the profile folder moves (drive letter change, machine swap, manual
+   * copy). When the stored path no longer exists but a file with the same
+   * name sits in the active profile directory, resolve to that one — keeps
+   * the "copy the profile folder anywhere and it works" promise.
+   */
+  async function resolveProfileMediaPath(filePath: string): Promise<string> {
+    try {
+      await fs.access(filePath);
+      return filePath;
+    } catch { /* stored path is gone — try the profile-local candidate */ }
+    const dir = getActiveProfileDirectory();
+    if (dir) {
+      const candidate = path.join(dir, path.basename(filePath));
+      try {
+        await fs.access(candidate);
+        return candidate;
+      } catch { /* keep the original path; the caller surfaces the error */ }
+    }
+    return filePath;
   }
 
   async function pushLocalOutboundMessage(platform: PlatformId, content: string): Promise<void> {
