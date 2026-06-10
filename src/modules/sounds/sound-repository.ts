@@ -20,7 +20,19 @@ export class SoundCommandRepository {
     if (this.cache?.dir === dir) return this.cache.data;
     const raw = new JsonStore<unknown[]>(this.filePath(), []).read();
     const { migrated, didChange } = normalizeStoredCommands(raw);
-    if (didChange) {
+    // Canonical filePath form is relative to the profile root (portability).
+    // Absolute paths pointing inside this profile directory are migrated in
+    // place; absolute paths pointing elsewhere (profile moved after the
+    // command was created) are left alone — playback falls back by basename.
+    let changed = didChange;
+    for (const command of migrated) {
+      const relative = toRelativeIfInside(command.filePath, dir);
+      if (relative !== command.filePath) {
+        command.filePath = relative;
+        changed = true;
+      }
+    }
+    if (changed) {
       new JsonStore<SoundCommand[]>(this.filePath(), []).write(migrated);
     }
     this.cache = { dir, data: migrated };
@@ -92,6 +104,13 @@ export class SoundCommandRepository {
  * `didChange` indicates whether the JSON needs to be rewritten to persist
  * the migration — saves a write when the file is already in the new shape.
  */
+function toRelativeIfInside(filePath: string, dir: string): string {
+  if (!filePath || !path.isAbsolute(filePath)) return filePath;
+  const relative = path.relative(dir, filePath);
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return filePath;
+  return relative;
+}
+
 function normalizeStoredCommands(raw: unknown[]): { migrated: SoundCommand[]; didChange: boolean } {
   let didChange = false;
   const out: SoundCommand[] = [];

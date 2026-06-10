@@ -1928,11 +1928,14 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.soundsList, async () => soundService.list());
   ipcMain.handle(IPC_CHANNELS.soundsUpsert, async (_, raw) => {
     const input = soundCommandUpsertInputSchema.parse(raw);
-    const ext = path.extname(input.filePath);
+    // Resolve whatever the renderer sent (profile-relative, legacy absolute,
+    // or a stale absolute from a moved profile) to a real file on disk.
+    const absolutePath = await resolveProfileMediaPath(input.filePath);
+    const ext = path.extname(absolutePath);
     const safeTrigger = (input.trigger ?? '').replace(/^!+/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
-    const desiredPath = safeTrigger ? path.join(path.dirname(input.filePath), safeTrigger + ext) : input.filePath;
-    let finalFilePath = input.filePath;
-    if (input.filePath !== desiredPath) {
+    const desiredPath = safeTrigger ? path.join(path.dirname(absolutePath), safeTrigger + ext) : absolutePath;
+    let finalAbsolutePath = absolutePath;
+    if (absolutePath !== desiredPath) {
       try {
         // Never rename onto an existing file: two commands whose triggers
         // sanitize to the same name would otherwise silently replace each
@@ -1940,14 +1943,15 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         // recreated). Keeping the original (uuid) path is always safe.
         const destinationTaken = await fs.access(desiredPath).then(() => true, () => false);
         if (!destinationTaken) {
-          await fs.rename(input.filePath, desiredPath);
-          finalFilePath = desiredPath;
+          await fs.rename(absolutePath, desiredPath);
+          finalAbsolutePath = desiredPath;
         }
       } catch {
         // Keep original path if rename fails (e.g. file locked)
       }
     }
-    const result = soundService.upsert({ ...input, filePath: finalFilePath } as import('../shared/types.js').SoundCommandUpsertInput);
+    // Canonical stored form is relative to the profile root (portability).
+    const result = soundService.upsert({ ...input, filePath: toProfileRelativePath(finalAbsolutePath) } as import('../shared/types.js').SoundCommandUpsertInput);
     schedulerService.refreshStatus();
     return result;
   });
@@ -1964,7 +1968,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const dest = path.join(active ? active.directory : path.join(options.userDataPath, 'sounds'), `${randomUUID()}${path.extname(r.filePaths[0])}`);
     await fs.mkdir(path.dirname(dest), { recursive: true });
     await fs.copyFile(r.filePaths[0], dest);
-    return dest;
+    // Profile media references are stored relative to the profile root so
+    // the folder stays portable; the no-profile fallback keeps the absolute
+    // userData path.
+    return active ? path.relative(active.directory, dest) : dest;
   });
   ipcMain.handle(IPC_CHANNELS.soundsReadFile, async (_, p) => (await fs.readFile(await resolveProfileMediaPath(String(p)))).toString('base64'));
   ipcMain.handle(IPC_CHANNELS.soundsPreviewPlay, async (_, raw) => soundService.previewPlay(soundPlayPayloadSchema.parse(raw)));
@@ -3472,18 +3479,23 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   }
 
   /**
-   * Media paths stored in profile configs are absolute, so they break when
-   * the profile folder moves (drive letter change, machine swap, manual
-   * copy). When the stored path no longer exists but a file with the same
-   * name sits in the active profile directory, resolve to that one — keeps
-   * the "copy the profile folder anywhere and it works" promise.
+   * Resolves a profile media reference to an absolute path. Canonical form
+   * is RELATIVE to the profile root — that's what keeps a profile folder
+   * portable (copy it to another machine/drive and everything still plays).
+   * Legacy configs hold absolute paths tied to wherever the profile lived
+   * when the file was picked; when such a path no longer exists but a file
+   * with the same name sits in the active profile directory, resolve to
+   * that one.
    */
   async function resolveProfileMediaPath(filePath: string): Promise<string> {
+    const dir = getActiveProfileDirectory();
+    if (!path.isAbsolute(filePath)) {
+      return dir ? path.join(dir, filePath) : filePath;
+    }
     try {
       await fs.access(filePath);
       return filePath;
     } catch { /* stored path is gone — try the profile-local candidate */ }
-    const dir = getActiveProfileDirectory();
     if (dir) {
       const candidate = path.join(dir, path.basename(filePath));
       try {
@@ -3492,6 +3504,16 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       } catch { /* keep the original path; the caller surfaces the error */ }
     }
     return filePath;
+  }
+
+  /** Inverse of resolveProfileMediaPath for writes: store the path relative
+   *  to the profile root whenever the file lives inside it. */
+  function toProfileRelativePath(absolutePath: string): string {
+    const dir = getActiveProfileDirectory();
+    if (!dir) return absolutePath;
+    const relative = path.relative(dir, absolutePath);
+    if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return absolutePath;
+    return relative;
   }
 
   async function pushLocalOutboundMessage(platform: PlatformId, content: string): Promise<void> {

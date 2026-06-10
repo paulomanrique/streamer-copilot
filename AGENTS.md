@@ -87,7 +87,7 @@ streamer-copilot/
 2. **All IPC channels** are declared in `src/shared/ipc.ts`. Add there first, then implement both sides.
 3. **All IPC inputs** from the renderer are validated with Zod (`src/shared/schemas.ts`) before being processed in the main process.
 4. **Platform adapters** implement the `PlatformChatAdapter` interface from `src/platforms/base.ts`. Never call platform APIs directly from services.
-5. **Sound files** live in `app.getPath('userData')/sounds/`. Never bundle user media in the app package.
+5. **Sound files** live in the active profile directory (fallback: `app.getPath('userData')/sounds/` when no profile is active). Never bundle user media in the app package. **Media references stored in profile configs must be relative to the profile root** — absolute paths break the moment the folder is copied to another machine/drive. Resolution goes through `resolveProfileMediaPath` in `app-context.ts` (which also rescues legacy absolute paths by basename).
 6. **Tokens** are encrypted with `electron.safeStorage`. Never store them in plain text in SQLite.
 7. The renderer **never accesses the filesystem directly**. Use IPC to request paths (dialog) and file contents.
 8. **All configuration (commands, raffles, suggestions, platforms, OBS, etc.) is saved as per-profile JSON**, inside the profile directory. SQLite is used only for diagnostic logs and chat sessions. The goal is full portability — the streamer can copy the profile folder to another machine and everything works.
