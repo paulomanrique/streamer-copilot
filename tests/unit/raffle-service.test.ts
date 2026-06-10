@@ -283,6 +283,47 @@ describe('RaffleService', () => {
     await expect(service.control({ raffleId: raffle.id, action: 'spin' })).rejects.toThrow('Spin can only run when the raffle is ready');
   });
 
+  it('start_over wipes participants and rounds back to a clean draft', async () => {
+    const service = new RaffleService({
+      repository,
+      getOverlayInfo: (raffleId) => ({ raffleId, overlayUrl: 'http://overlay', stateUrl: 'http://overlay/state' }),
+      onState: vi.fn(),
+      onEntry: vi.fn(),
+      onResult: vi.fn(),
+      onAnnounceWinner: vi.fn(async () => {}),
+      now: () => new Date('2026-04-09T10:00:00.000Z').getTime(),
+      random: () => 0,
+    });
+
+    service.create({
+      title: 'Start over',
+      entryCommand: '!join',
+      mode: 'single-winner',
+      entryDeadlineAt: null,
+      acceptedPlatforms: ['twitch'],
+      staffTriggerCommand: '!roll',
+      winnerAnnouncementTemplate: 'Congrats {winner}',
+      enabled: true,
+    });
+    const raffle = service.list()[0];
+    await service.control({ raffleId: raffle.id, action: 'open_entries' });
+    service.handle(createMessage({ id: 'msg-a', author: 'alice' }), 'everyone');
+    service.handle(createMessage({ id: 'msg-b', author: 'bob' }), 'everyone');
+
+    // Allowed from any status — here straight out of 'collecting'.
+    await service.control({ raffleId: raffle.id, action: 'start_over' });
+
+    const snapshot = service.getSnapshot(raffle.id);
+    expect(snapshot.raffle.status).toBe('draft');
+    expect(snapshot.entries).toHaveLength(0);
+    expect(snapshot.history).toHaveLength(0);
+
+    // The same users can enter again on the next run.
+    await service.control({ raffleId: raffle.id, action: 'open_entries' });
+    service.handle(createMessage({ id: 'msg-c', author: 'alice' }), 'everyone');
+    expect(service.getSnapshot(raffle.id).entries).toHaveLength(1);
+  });
+
   it('reset restores enrolled users after a completed raffle', async () => {
     vi.useFakeTimers();
     const service = new RaffleService({

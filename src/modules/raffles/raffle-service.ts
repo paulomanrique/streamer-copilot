@@ -132,6 +132,9 @@ export class RaffleService implements CommandModule {
       case 'reset':
         this.resetRaffle(raffle);
         break;
+      case 'start_over':
+        this.startOver(raffle);
+        break;
       default:
         throw new Error(`Unsupported action "${(input as { action: string }).action}"`);
     }
@@ -284,6 +287,15 @@ export class RaffleService implements CommandModule {
     }
     this.cancelPendingAnimation(raffle.id);
     this.options.repository.reset(raffle.id);
+    this.emitActiveState();
+  }
+
+  /** Full wipe back to draft — participants, rounds and winner are all
+   *  discarded. Allowed from any status: this is the "the pool/state got
+   *  weird, give me a clean slate" escape hatch. */
+  private startOver(raffle: Raffle): void {
+    this.cancelPendingAnimation(raffle.id);
+    this.options.repository.startOver(raffle.id);
     this.emitActiveState();
   }
 

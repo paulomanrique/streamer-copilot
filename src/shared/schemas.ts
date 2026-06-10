@@ -30,7 +30,7 @@ export const permissionEntrySchema = z.discriminatedUnion('kind', [
 const permissionEntriesSchema = z.array(permissionEntrySchema).min(1).max(50);
 const eventLogLevelSchema = z.enum(['info', 'warn', 'error']);
 const raffleModeSchema = z.enum(['single-winner', 'survivor-final']);
-const raffleControlActionSchema = z.enum(['open_entries', 'close_entries', 'spin', 'finalize', 'cancel', 'reset']);
+const raffleControlActionSchema = z.enum(['open_entries', 'close_entries', 'spin', 'finalize', 'cancel', 'reset', 'start_over']);
 export const appLanguageSchema = z.enum(['pt-BR', 'en-US']);
 
 export const selectProfileInputSchema = z.object({

@@ -119,6 +119,10 @@ function canRunAction(status: Raffle['status'], action: RaffleControlAction): bo
       return ['draft', 'collecting', 'ready_to_spin', 'spinning', 'paused_top2'].includes(status);
     case 'reset':
       return status === 'completed' || status === 'cancelled';
+    case 'start_over':
+      // Clean-slate escape hatch: discards participants, rounds and winner
+      // from any status (a drafted raffle can still hold a stale pool).
+      return true;
   }
 }
 
@@ -217,6 +221,25 @@ export function RafflesPage() {
     if (!isModalOpen) return;
     requestAnimationFrame(() => titleInputRef.current?.focus());
   }, [isModalOpen]);
+
+  // Validate-on-existence rather than on click: a deadline that is already in
+  // the past silently kills entry collection (open_entries refuses it, and a
+  // collecting raffle auto-closes), so surface it as a persistent banner.
+  // Ticks every 30s so the warning also appears when the deadline expires
+  // while the page is open.
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNowTick(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const deadlineExpired = useMemo(() => {
+    const target = snapshot?.raffle ?? raffle;
+    if (!target?.entryDeadlineAt) return false;
+    if (!['draft', 'collecting'].includes(target.status)) return false;
+    const deadline = new Date(target.entryDeadlineAt).getTime();
+    return !Number.isNaN(deadline) && deadline <= nowTick;
+  }, [snapshot, raffle, nowTick]);
 
   async function load(): Promise<void> {
     try {
@@ -364,6 +387,13 @@ export function RafflesPage() {
 
         {error ? <p className="mb-4 text-sm text-red-400">{error}</p> : null}
 
+        {deadlineExpired ? (
+          <div className="mb-4 px-4 py-3 rounded-lg bg-yellow-500/10 border border-yellow-400/30 text-sm text-yellow-200">
+            O prazo de inscrições deste sorteio já passou — ninguém consegue entrar.
+            Edite o sorteio e defina um prazo futuro (ou deixe o campo vazio) antes de abrir as inscrições.
+          </div>
+        ) : null}
+
         {raffle ? (
           <div className="bg-gray-800/40 rounded-xl border border-gray-700 p-4 flex items-center gap-4 mb-6">
             <div className="flex-1 min-w-0">
@@ -417,7 +447,8 @@ export function RafflesPage() {
                   <button type="button" disabled={isBusy || !canRunAction(currentStatus, 'spin')} onClick={() => void runAction('spin')} className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-violet-600 text-gray-300 hover:text-white transition-colors disabled:opacity-40 disabled:hover:bg-gray-700 disabled:hover:text-gray-300">Spin</button>
                   <button type="button" disabled={isBusy || !canRunAction(currentStatus, 'finalize')} onClick={() => void runAction('finalize')} className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-fuchsia-600 text-gray-300 hover:text-white transition-colors disabled:opacity-40 disabled:hover:bg-gray-700 disabled:hover:text-gray-300">Finalize</button>
                   <button type="button" disabled={isBusy || !canRunAction(currentStatus, 'cancel')} onClick={() => void runAction('cancel')} className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-red-700 text-gray-300 hover:text-white transition-colors disabled:opacity-40 disabled:hover:bg-gray-700 disabled:hover:text-gray-300">Cancel</button>
-                  <button type="button" disabled={isBusy || !canRunAction(currentStatus, 'reset')} onClick={() => void runAction('reset')} className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors disabled:opacity-40 disabled:hover:bg-gray-700">Reset</button>
+                  <button type="button" disabled={isBusy || !canRunAction(currentStatus, 'reset')} onClick={() => void runAction('reset')} className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors disabled:opacity-40 disabled:hover:bg-gray-700" title="Volta para rascunho mantendo os participantes">Reset</button>
+                  <button type="button" disabled={isBusy || !canRunAction(currentStatus, 'start_over')} onClick={() => void runAction('start_over')} className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-orange-600 text-gray-300 hover:text-white transition-colors disabled:opacity-40 disabled:hover:bg-gray-700 disabled:hover:text-gray-300" title="Apaga participantes, rodadas e vencedor — recomeça do zero">Start over</button>
                 </div>
               </div>
 

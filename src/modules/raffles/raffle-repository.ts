@@ -333,6 +333,27 @@ export class RaffleRepository {
     return this.mapRound(record);
   }
 
+  /** Full wipe: removes every entry and round and returns the raffle to
+   *  draft. Unlike reset(), nothing from the previous run survives. */
+  startOver(raffleId: string): void {
+    const file = this.readFile();
+    const idx = file.raffles.findIndex((r) => r.id === raffleId);
+    if (idx < 0) return;
+    file.entries[raffleId] = [];
+    file.rounds[raffleId] = [];
+    file.raffles[idx] = {
+      ...file.raffles[idx],
+      status: 'draft',
+      winnerEntryId: null,
+      top2EntryIds: [],
+      lastSpinAt: null,
+      currentRound: 0,
+      overlaySessionId: null,
+      updatedAt: new Date().toISOString(),
+    };
+    this.writeFile(file);
+  }
+
   reset(raffleId: string): void {
     const file = this.readFile();
     const idx = file.raffles.findIndex((r) => r.id === raffleId);

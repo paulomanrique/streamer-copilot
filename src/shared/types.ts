@@ -514,7 +514,7 @@ export interface SoundPlayPayload {
 
 export type RaffleMode = 'single-winner' | 'survivor-final';
 export type RaffleStatus = 'draft' | 'collecting' | 'ready_to_spin' | 'spinning' | 'paused_top2' | 'completed' | 'cancelled';
-export type RaffleControlAction = 'open_entries' | 'close_entries' | 'spin' | 'finalize' | 'cancel' | 'reset';
+export type RaffleControlAction = 'open_entries' | 'close_entries' | 'spin' | 'finalize' | 'cancel' | 'reset' | 'start_over';
 export type RaffleRoundActionType = 'spin' | 'finalize';
 export type RaffleRoundResultType = 'winner' | 'eliminated';
 
