@@ -40,6 +40,10 @@ export function PermissionListPicker({ value, onChange }: PermissionListPickerPr
   const userLists = useAppStore((s) => s.userLists);
   const platformStatus = useAppStore((s) => s.platformStatus);
   const providers = useMemo(() => listPlatformProviders(), []);
+  const connectedProviders = useMemo(
+    () => providers.filter((provider) => platformStatus[provider.id as PlatformId] === 'connected'),
+    [providers, platformStatus],
+  );
   const [dropdownOpen, setDropdownOpen] = useState(false);
   // window.prompt is a silent no-op in Electron — use an inline input
   // inside the dropdown for the "New list" option.
@@ -194,26 +198,27 @@ export function PermissionListPicker({ value, onChange }: PermissionListPickerPr
               )}
             </DropdownSection>
 
-            {/* Plataformas */}
-            {providers.map((provider) => {
+            {/* Plataformas — only connected ones are offered. Granting a role
+              * on a disconnected sibling driver (e.g. "YouTube (API)" while
+              * the chat flows through "YouTube (Scraped)") creates an entry
+              * that matches no message, and the command looks broken for
+              * everyone. Existing chips keep rendering regardless, so stale
+              * entries remain visible and removable. */}
+            {connectedProviders.length === 0 ? (
+              <DropdownSection title="Plataformas">
+                <p className="px-3 py-1.5 text-xs text-gray-500">
+                  Nenhuma plataforma conectada — conecte em Plataformas para liberar papéis por plataforma.
+                </p>
+              </DropdownSection>
+            ) : null}
+            {connectedProviders.map((provider) => {
               const platformId = provider.id as PlatformId;
               const tierEntries = provider.hasSubscriberTiers
                 ? (subscriberTiers.byPlatform[platformId] ?? [])
                 : [];
               const sortedTiers = [...tierEntries].sort((a, b) => a.order - b.order);
-              // The connection hint stops a classic mistake: granting the
-              // permission on a sibling driver (e.g. "YouTube (API)") while
-              // the chat actually flows through another ("YouTube (Scraped)")
-              // — the entry then matches no message and the command looks
-              // broken for everyone.
-              const isConnected = platformStatus[platformId] === 'connected';
               return (
-                <DropdownSection
-                  key={provider.id}
-                  title={provider.displayName}
-                  hint={isConnected ? 'conectado' : 'não conectado'}
-                  hintAccent={isConnected}
-                >
+                <DropdownSection key={provider.id} title={provider.displayName} hint="conectado" hintAccent>
                   {provider.supportedRoles.map((role) => {
                     if (role === 'subscriber' && sortedTiers.length > 0) {
                       // When explicit tiers exist, the generic "Subscriber" is still useful
