@@ -1,6 +1,18 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../../tailwind.config.ts";
+
+/* Tailwind v4 compat: v4 defaults the border/ring color to currentColor, but
+   the codebase has many bare `border` utilities that relied on v3's gray-200
+   default. Restore it so borders keep their look without auditing 180+ sites. */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+}
 
 :root {
   color-scheme: dark;
