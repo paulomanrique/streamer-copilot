@@ -705,13 +705,17 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
                     const userId = ctxMenu.userId!;
                     const author = ctxMenu.author;
                     void (async () => {
-                      const lists = await window.copilot.createUserList({ name: trimmed });
-                      const created = lists.find((l) => l.name === trimmed);
-                      if (created) {
-                        await window.copilot.addUserListMember({
-                          listId: created.id,
-                          member: { platform, userId, displayName: author },
-                        });
+                      try {
+                        const lists = await window.copilot.createUserList({ name: trimmed });
+                        const created = lists.find((l) => l.name === trimmed);
+                        if (created) {
+                          await window.copilot.addUserListMember({
+                            listId: created.id,
+                            member: { platform, userId, displayName: author },
+                          });
+                        }
+                      } catch (cause) {
+                        setModActionError(cause instanceof Error ? cause.message : 'Falha ao criar a lista de usuários');
                       }
                     })();
                     setNewListMode(false);

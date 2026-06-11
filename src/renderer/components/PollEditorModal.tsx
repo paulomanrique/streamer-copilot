@@ -14,7 +14,14 @@ interface PlatformOption {
 
 interface OptionDraft {
   id?: string;
+  /** Stable client-side React key. Never sent to the backend — `id` is the
+   *  persisted option id (undefined for not-yet-saved options). */
+  key: string;
   label: string;
+}
+
+function newOption(): OptionDraft {
+  return { key: crypto.randomUUID(), label: '' };
 }
 
 interface PollDraft {
@@ -44,7 +51,7 @@ interface PollEditorModalProps {
 function emptyDraft(platformOptions: PlatformOption[]): PollDraft {
   return {
     title: '',
-    options: [{ label: '' }, { label: '' }],
+    options: [newOption(), newOption()],
     durationSeconds: 60,
     acceptedPlatforms: platformOptions.map((o) => o.id),
     resultAnnouncementTemplate: DEFAULT_TEMPLATE,
@@ -55,7 +62,7 @@ function fromPoll(poll: Poll): PollDraft {
   return {
     id: poll.id,
     title: poll.title,
-    options: poll.options.map((opt) => ({ id: opt.id, label: opt.label })),
+    options: poll.options.map((opt) => ({ id: opt.id, key: opt.id, label: opt.label })),
     durationSeconds: poll.durationSeconds,
     acceptedPlatforms: [...poll.acceptedPlatforms],
     resultAnnouncementTemplate: poll.resultAnnouncementTemplate,
@@ -117,7 +124,7 @@ export function PollEditorModal({
     setDraft((current) =>
       current.options.length >= 10
         ? current
-        : { ...current, options: [...current.options, { label: '' }] },
+        : { ...current, options: [...current.options, newOption()] },
     );
   }
 
@@ -188,7 +195,7 @@ export function PollEditorModal({
             <span className="block text-xs uppercase tracking-wider text-gray-400">Options</span>
             <ul className="mt-2 space-y-2">
               {draft.options.map((option, index) => (
-                <li key={index} className="flex items-center gap-2">
+                <li key={option.key} className="flex items-center gap-2">
                   <span className="inline-flex items-center justify-center min-w-[28px] h-8 px-2 rounded bg-gray-800 text-gray-300 font-mono text-sm">
                     {index + 1}
                   </span>
