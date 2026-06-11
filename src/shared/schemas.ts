@@ -606,3 +606,29 @@ export const accountUpdateInputSchema = accountCreateInputSchema.extend({
 export const accountIdInputSchema = z.object({
   id: z.string().min(1).max(120),
 });
+
+// ── Read-side IPC payloads that previously reached services unvalidated ──────
+
+/** Bare id/handle passed as the raw IPC arg (poll/raffle snapshot, live check).
+ *  Length-bounded and degrades to '' on a non-string, matching the prior
+ *  `String(raw ?? '')` coercion while rejecting unexpected shapes. */
+export const lookupStringInputSchema = z.string().max(200).catch('');
+
+export const rafflesSoundsPreviewInputSchema = z.object({
+  event: z.enum(['spinning', 'eliminated', 'winner']),
+  // No path separators — the filename is joined onto a bundled sounds dir, so a
+  // value like "../../secret" must never get through.
+  filename: z.string().min(1).max(120).regex(/^[A-Za-z0-9._ -]+$/, 'Unsafe sound filename'),
+});
+
+export const chatLogGetMessagesOptsSchema = z
+  .object({
+    limit: z.number().int().positive().max(100_000).optional(),
+    offset: z.number().int().nonnegative().optional(),
+  })
+  .optional();
+
+/** Twitch login/id lists for avatar/badge lookups — bounded; degrades to [] on
+ *  malformed input to preserve the handlers' graceful "empty result" behavior. */
+export const twitchLoginListSchema = z.array(z.string().min(1).max(80)).max(200).catch([]);
+export const twitchBadgeIdListSchema = z.array(z.string().min(1).max(160)).max(500).catch([]);
