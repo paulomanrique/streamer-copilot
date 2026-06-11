@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { app, BrowserWindow, Menu, Tray, nativeImage, net, protocol, session } from 'electron';
+import { app, BrowserWindow, Menu, Tray, nativeImage, net, protocol, session, shell } from 'electron';
 
 // Must be called before app.whenReady()
 protocol.registerSchemesAsPrivileged([
@@ -61,10 +61,27 @@ async function createMainWindow(): Promise<void> {
       preload: PRELOAD_PATH,
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
     },
   });
 
   stateHub.attachWindow(mainWindow);
+
+  // The app is a single-page renderer; it never legitimately opens a second
+  // window or navigates the top frame away from its own bundle. Route any
+  // window.open / target=_blank to the OS browser (http(s) only) and block
+  // stray top-level navigations, opening external links externally instead.
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const appUrl = process.env.VITE_DEV_SERVER_URL;
+    const isAppNavigation = appUrl ? url.startsWith(appUrl) : url.startsWith('file://');
+    if (isAppNavigation) return;
+    event.preventDefault();
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+  });
 
   mainWindow.once('ready-to-show', () => {
     mainWindow?.maximize();
