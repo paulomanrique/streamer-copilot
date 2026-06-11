@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 /**
@@ -22,7 +22,13 @@ export class JsonStore<T> {
 
   write(value: T): void {
     mkdirSync(path.dirname(this.filePath), { recursive: true });
-    writeFileSync(this.filePath, JSON.stringify(value, null, 2), 'utf-8');
+    // Write to a temp file and rename over the target so a crash or power loss
+    // mid-write can never leave a truncated/corrupt config — rename is atomic
+    // on the same volume. All profile config flows through here, so this guards
+    // every per-profile JSON store.
+    const tmp = `${this.filePath}.tmp`;
+    writeFileSync(tmp, JSON.stringify(value, null, 2), 'utf-8');
+    renameSync(tmp, this.filePath);
   }
 
   exists(): boolean {
