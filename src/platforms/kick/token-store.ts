@@ -1,6 +1,8 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
+import { decryptMarked, encryptMarked, isPlaintextSecret } from '../secret-storage.js';
+
 const TOKEN_FILE = 'kick-token.json';
 
 export interface KickAuthToken {
@@ -43,18 +45,24 @@ export class KickTokenStore {
         return null;
       }
 
-      return {
+      const session: KickAuthSession = {
         token: {
-          accessToken: token.accessToken,
+          accessToken: decryptMarked(token.accessToken),
           tokenType: token.tokenType,
           expiresIn: token.expiresIn,
-          refreshToken: typeof token.refreshToken === 'string' ? token.refreshToken : undefined,
+          refreshToken: typeof token.refreshToken === 'string' ? decryptMarked(token.refreshToken) : undefined,
           scope: typeof token.scope === 'string' ? token.scope : undefined,
           expiresAt: token.expiresAt,
         },
         channelSlug: parsed.channelSlug,
         broadcasterUserId: typeof parsed.broadcasterUserId === 'number' ? parsed.broadcasterUserId : null,
       };
+
+      // Migrate legacy plaintext tokens to encrypted-at-rest on first read.
+      if (isPlaintextSecret(token.accessToken) || isPlaintextSecret(token.refreshToken)) {
+        await this.save(session).catch(() => { /* best-effort migration */ });
+      }
+      return session;
     } catch {
       return null;
     }
@@ -62,7 +70,17 @@ export class KickTokenStore {
 
   async save(session: KickAuthSession): Promise<void> {
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    await fs.writeFile(this.filePath, JSON.stringify(session, null, 2), 'utf8');
+    const onDisk: KickAuthSession = {
+      ...session,
+      token: {
+        ...session.token,
+        accessToken: encryptMarked(session.token.accessToken),
+        refreshToken: session.token.refreshToken ? encryptMarked(session.token.refreshToken) : session.token.refreshToken,
+      },
+    };
+    const tmp = `${this.filePath}.tmp`;
+    await fs.writeFile(tmp, JSON.stringify(onDisk, null, 2), 'utf8');
+    await fs.rename(tmp, this.filePath);
   }
 
   async clear(): Promise<void> {
