@@ -274,7 +274,6 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
       });
     });
   // avatarCache intentionally omitted — requestedAvatarsRef is the guard against double-fetching
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items]);
 
   // ── close context menu on outside click / Escape ───────────────────
@@ -874,7 +873,6 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highli
   const authorColor = resolveAuthorColor(message);
 
   const effectiveAvatarUrl = message.avatarUrl || avatarUrl;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const messageContent = useMemo(() => renderMessageContent(message), [message]);
 
   return (

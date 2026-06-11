@@ -58,7 +58,7 @@ export class MusicPlayer {
     this.currentRequestedBy = cmd.requestedBy ?? null;
     this.currentDurationSeconds = cmd.durationSeconds ?? 0;
 
-    let streamUrl: string | null = null;
+    let streamUrl: string | null;
     try {
       streamUrl = await this.resolver.resolveAudioUrl(cmd.videoId);
     } catch (cause) {

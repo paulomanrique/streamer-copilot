@@ -154,7 +154,7 @@ export class YTApiClient implements YouTubeLiveClient {
   private async pollChat(): Promise<void> {
     if (this.stopped || !this.liveChatId) return;
 
-    let nextDelayMs = this.minPollIntervalMs;
+    let nextDelayMs: number;
     try {
       const res = await this.youtube.liveChatMessages.list({
         liveChatId: this.liveChatId,
