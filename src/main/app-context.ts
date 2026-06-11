@@ -143,6 +143,11 @@ import {
   youtubeConnectSchema,
   youtubeSettingsSchema,
   youtubeApiStartOAuthSchema,
+  lookupStringInputSchema,
+  rafflesSoundsPreviewInputSchema,
+  chatLogGetMessagesOptsSchema,
+  twitchLoginListSchema,
+  twitchBadgeIdListSchema,
 } from '../shared/schemas.js';
 import type { AppInfo, ChatMessage, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, MusicQueueItem, MusicRequestSettings, OverlayDefaults, OverlayPreferencesMap, PlatformAccount, PlatformId, Raffle, SoundSettings, StreamEvent, StreamEventType, SubscriberTierCatalog, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, UserList, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
 
@@ -1878,7 +1883,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.pollsUpsert, async (_, raw) => pollService.upsert(pollUpsertInputSchema.parse(raw)));
   ipcMain.handle(IPC_CHANNELS.pollsDelete, async (_, raw) => pollService.delete(pollDeleteInputSchema.parse(raw).id));
   ipcMain.handle(IPC_CHANNELS.pollsGetActive, async () => pollService.getActive());
-  ipcMain.handle(IPC_CHANNELS.pollsGetSnapshot, async (_, raw) => pollService.getSnapshot(String(raw ?? '')));
+  ipcMain.handle(IPC_CHANNELS.pollsGetSnapshot, async (_, raw) => pollService.getSnapshot(lookupStringInputSchema.parse(raw)));
   ipcMain.handle(IPC_CHANNELS.pollsControl, async (_, raw) => pollService.control(pollControlInputSchema.parse(raw)));
   ipcMain.handle(IPC_CHANNELS.pollsOverlayInfo, async () => pollService.getOverlayInfo());
   ipcMain.handle(IPC_CHANNELS.rafflesList, async () => raffleService.list());
@@ -1886,12 +1891,12 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.rafflesUpdate, async (_, raw) => raffleService.update(raffleUpdateInputSchema.parse(raw)));
   ipcMain.handle(IPC_CHANNELS.rafflesDelete, async (_, raw) => raffleService.delete(raffleDeleteInputSchema.parse(raw).id));
   ipcMain.handle(IPC_CHANNELS.rafflesGetActive, async () => raffleService.getActive());
-  ipcMain.handle(IPC_CHANNELS.rafflesGetSnapshot, async (_, raw) => raffleService.getSnapshot(String(raw ?? '')));
+  ipcMain.handle(IPC_CHANNELS.rafflesGetSnapshot, async (_, raw) => raffleService.getSnapshot(lookupStringInputSchema.parse(raw)));
   ipcMain.handle(IPC_CHANNELS.rafflesControl, async (_, raw) => raffleService.control(raffleControlActionInputSchema.parse(raw)));
   ipcMain.handle(IPC_CHANNELS.rafflesOverlayInfo, async () => raffleService.getOverlayInfo());
   ipcMain.handle(IPC_CHANNELS.rafflesSoundsList, async () => listBundledSounds());
   ipcMain.handle(IPC_CHANNELS.rafflesSoundsPreview, async (_, raw) => {
-    const { event, filename } = raw as { event: 'spinning' | 'eliminated' | 'winner'; filename: string };
+    const { event, filename } = rafflesSoundsPreviewInputSchema.parse(raw);
     const filePath = resolveBundledSound(event, filename);
     options.stateHub.pushSoundPlay({ filePath });
   });
@@ -2054,7 +2059,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     return chatLogService.listSessions(filters);
   });
   ipcMain.handle(IPC_CHANNELS.chatLogGetMessages, async (_, sessionId, opts) => {
-    return chatLogService.getMessages(String(sessionId ?? ''), opts as { limit?: number; offset?: number } | undefined);
+    return chatLogService.getMessages(lookupStringInputSchema.parse(sessionId), chatLogGetMessagesOptsSchema.parse(opts));
   });
   ipcMain.handle(IPC_CHANNELS.chatLogExportSession, async (e, sessionId) => {
     const html = chatLogService.exportSessionHtml(String(sessionId ?? ''));
@@ -2107,7 +2112,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const s = await getTwitchCredentialsStore(); if (s) await s.clear();
   });
   ipcMain.handle(IPC_CHANNELS.twitchGetUserAvatars, async (_, logins) => {
-    const list = Array.isArray(logins) ? logins.filter(l => typeof l === 'string') : [];
+    const list = twitchLoginListSchema.parse(logins);
     if (list.length === 0) return {};
     const uncached = list.filter(l => !userAvatarCache.has(l));
     if (uncached.length > 0) {
@@ -2126,7 +2131,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     return res;
   });
   ipcMain.handle(IPC_CHANNELS.twitchGetBadgeUrls, async (_, ids) => {
-    const list = Array.isArray(ids) ? ids.filter(i => typeof i === 'string') : [];
+    const list = twitchBadgeIdListSchema.parse(ids);
     if (list.length === 0) return {};
     if (list.some(i => !badgeCache.has(i))) {
       const s = await getTwitchCredentialsStore(); const c = s ? await s.load() : null;
@@ -2269,7 +2274,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     await closed;
   });
   ipcMain.handle(IPC_CHANNELS.youtubeCheckLive, async (_, handle: unknown) => {
-    const streams = await checkYouTubeLive(String(handle ?? ''));
+    const streams = await checkYouTubeLive(lookupStringInputSchema.parse(handle));
     return { videoIds: (streams ?? []).map((s) => s.videoId) };
   });
   ipcMain.handle(IPC_CHANNELS.youtubeGetChatChannels, async () => {
@@ -2302,7 +2307,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     setTiktokStatus('disconnected', null);
   });
   ipcMain.handle(IPC_CHANNELS.tiktokCheckLive, async (_, raw: unknown) => {
-    const username = typeof raw === 'string' ? raw.trim() : '';
+    const username = lookupStringInputSchema.parse(raw).trim();
     if (!username) return { isLive: false };
     // Lightweight check — true if any connected child is currently bound to
     // this username. The wizard's "Add" step doesn't strictly require it.
