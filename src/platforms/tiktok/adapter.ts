@@ -131,6 +131,7 @@ export class TikTokChatAdapter implements PlatformChatAdapter {
       if (!message && stack.includes('fetchRoomId')) {
         throw new Error(
           `TikTok room not found for "${this.options.username}". Make sure the user is currently live and the handle is correct (no @, no URL).`,
+          { cause },
         );
       }
       throw cause;

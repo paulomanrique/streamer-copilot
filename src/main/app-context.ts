@@ -1205,7 +1205,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     // the stream is live. YouTube has tightened this endpoint's filtering
     // and intermittently 404s it, so we fall back to parsing the watch page
     // for `videoDetails.viewCount` when the primary returns nothing usable.
-    let primaryDetail = '';
+    let primaryDetail: string;
     try {
       const resp = await net.fetch(`https://www.youtube.com/live_stats?v=${id}`, { headers });
       if (resp.ok) {
@@ -3256,7 +3256,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         status: 'error',
         detail: message,
       });
-      throw new Error(message);
+      throw new Error(message, { cause });
     }
   });
 
