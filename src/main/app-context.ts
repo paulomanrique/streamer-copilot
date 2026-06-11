@@ -182,7 +182,9 @@ function resolveBundledSound(event: 'spinning' | 'eliminated' | 'winner', filena
   const base = isDev
     ? path.join(process.cwd(), 'public', 'sounds', 'raffles')
     : path.join(CONTEXT_DIR, '..', 'renderer', 'sounds', 'raffles');
-  return path.join(base, event, filename);
+  // basename() strips any path separators so a crafted filename can't escape
+  // the bundled sounds directory (the IPC schema also enforces a safe basename).
+  return path.join(base, event, path.basename(filename));
 }
 
 async function listBundledSounds(): Promise<Record<'spinning' | 'eliminated' | 'winner', string[]>> {
@@ -3495,7 +3497,15 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   async function resolveProfileMediaPath(filePath: string): Promise<string> {
     const dir = getActiveProfileDirectory();
     if (!path.isAbsolute(filePath)) {
-      return dir ? path.join(dir, filePath) : filePath;
+      if (!dir) return filePath;
+      // Keep a relative media reference contained inside the profile root — a
+      // crafted "..\..\.." must not resolve to a file outside the profile.
+      const resolved = path.resolve(dir, filePath);
+      const root = path.resolve(dir);
+      if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+        throw new Error('Media path escapes the profile directory');
+      }
+      return resolved;
     }
     try {
       await fs.access(filePath);
