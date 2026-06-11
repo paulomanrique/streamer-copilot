@@ -1,8 +1,12 @@
 import http from 'node:http';
 
-import { safeStorage, shell } from 'electron';
+import { shell } from 'electron';
 import { google } from 'googleapis';
 import type { OAuth2Client } from 'google-auth-library';
+
+// Re-exported so existing imports (`from '../youtube/api-auth.js'`) keep working;
+// the implementation now lives in the shared, platform-neutral secret store.
+export { encryptSecret, decryptSecret } from '../secret-storage.js';
 
 export const YOUTUBE_OAUTH_REDIRECT_PORT = 33020;
 export const YOUTUBE_OAUTH_REDIRECT_URI = `http://127.0.0.1:${YOUTUBE_OAUTH_REDIRECT_PORT}`;
@@ -36,19 +40,6 @@ export interface YouTubeOAuthResult {
   scope?: string;
 }
 
-export function encryptSecret(plain: string): string {
-  if (!plain) return '';
-  if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error('safeStorage encryption is not available on this machine');
-  }
-  return safeStorage.encryptString(plain).toString('base64');
-}
-
-export function decryptSecret(encrypted: string): string {
-  if (!encrypted) return '';
-  if (!safeStorage.isEncryptionAvailable()) return '';
-  return safeStorage.decryptString(Buffer.from(encrypted, 'base64'));
-}
 
 /**
  * Builds an OAuth2Client primed with refresh-token credentials. The googleapis
