@@ -8,7 +8,6 @@ import { z } from 'zod';
  */
 const platformIdSchema = z.string().min(1).max(64).regex(/^[a-z0-9-]+$/);
 const scheduledTargetPlatformSchema = z.enum(['twitch', 'youtube', 'youtube-api']);
-const permissionLevelSchema = z.enum(['everyone', 'follower', 'subscriber', 'moderator', 'broadcaster']);
 
 const permissionRoleIdSchema = z.union([
   z.enum(['everyone', 'follower', 'subscriber', 'vip', 'moderator', 'broadcaster']),
