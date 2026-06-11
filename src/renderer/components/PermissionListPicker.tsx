@@ -49,6 +49,7 @@ export function PermissionListPicker({ value, onChange }: PermissionListPickerPr
   // inside the dropdown for the "New list" option.
   const [newListMode, setNewListMode] = useState(false);
   const [newListName, setNewListName] = useState('');
+  const [newListError, setNewListError] = useState<string | null>(null);
   // Portal-based positioning: o dropdown precisa escapar do overflow-y-auto
   // the parent modal's overflow:hidden (without this the content is clipped inside the form container).
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -66,6 +67,7 @@ export function PermissionListPicker({ value, onChange }: PermissionListPickerPr
         setDropdownOpen(false);
         setNewListMode(false);
         setNewListName('');
+        setNewListError(null);
       }
     };
     window.addEventListener('mousedown', onClick);
@@ -112,12 +114,15 @@ export function PermissionListPicker({ value, onChange }: PermissionListPickerPr
   const submitNewList = async () => {
     const trimmed = newListName.trim();
     if (!trimmed) return;
-    const lists = await window.copilot.createUserList({ name: trimmed });
-    const created = lists.find((l) => l.name === trimmed);
-    setNewListMode(false);
-    setNewListName('');
-    if (created) {
-      addEntry({ kind: 'list', listId: created.id });
+    try {
+      const lists = await window.copilot.createUserList({ name: trimmed });
+      const created = lists.find((l) => l.name === trimmed);
+      if (created) addEntry({ kind: 'list', listId: created.id });
+      setNewListMode(false);
+      setNewListName('');
+      setNewListError(null);
+    } catch (cause) {
+      setNewListError(cause instanceof Error ? cause.message : 'Falha ao criar a lista');
     }
   };
 
@@ -128,7 +133,7 @@ export function PermissionListPicker({ value, onChange }: PermissionListPickerPr
           <span className="text-xs text-gray-500 self-center">Ninguém pode usar ainda — adicione abaixo.</span>
         ) : (
           value.map((entry, index) => (
-            <EntryChip key={index} entry={entry} onRemove={() => removeAt(index)} />
+            <EntryChip key={entryKey(entry)} entry={entry} onRemove={() => removeAt(index)} />
           ))
         )}
       </div>
@@ -179,6 +184,7 @@ export function PermissionListPicker({ value, onChange }: PermissionListPickerPr
                         e.preventDefault();
                         setNewListMode(false);
                         setNewListName('');
+                        setNewListError(null);
                       }
                     }}
                     placeholder="Nome da lista"
@@ -194,8 +200,11 @@ export function PermissionListPicker({ value, onChange }: PermissionListPickerPr
                   </button>
                 </form>
               ) : (
-                <DropdownItem label="+ Nova lista..." onClick={() => { setNewListMode(true); setNewListName(''); }} accent />
+                <DropdownItem label="+ Nova lista..." onClick={() => { setNewListMode(true); setNewListName(''); setNewListError(null); }} accent />
               )}
+              {newListError ? (
+                <p className="px-3 py-1 text-xs text-red-400">{newListError}</p>
+              ) : null}
             </DropdownSection>
 
             {/* Plataformas — only connected ones are offered. Granting a role
@@ -261,6 +270,14 @@ export function PermissionListPicker({ value, onChange }: PermissionListPickerPr
       </div>
     </div>
   );
+}
+
+/** Stable, content-derived React key. Entries are unique (duplicates are blocked
+ *  at selection time), so this never collides within a list. */
+function entryKey(entry: PermissionEntry): string {
+  return entry.kind === 'list'
+    ? `list:${entry.listId}`
+    : `role:${entry.platform}:${entry.role}`;
 }
 
 function entriesEqual(a: PermissionEntry, b: PermissionEntry): boolean {
