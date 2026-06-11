@@ -9,6 +9,9 @@
   },
   "type": "module",
   "main": "dist/main/index.js",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:renderer": "vite",
@@ -33,7 +36,6 @@
     "@legendapp/list": "^3.0.0-beta.44",
     "@nekiro/kick-api": "^2.1.2",
     "@sefinek/google-tts-api": "^2.1.13",
-    "@types/ws": "^8.18.1",
     "better-sqlite3": "^12.4.1",
     "electron-updater": "^6.8.3",
     "googleapis": "^171.4.0",
@@ -44,7 +46,6 @@
     "tiktok-live-connector": "^2.1.1-beta1",
     "tmi.js": "^1.8.5",
     "ws": "^8.20.0",
-    "youtube-sr": "^4.3.12",
     "youtubei.js": "^17.0.1",
     "zod": "^4.1.5",
     "zustand": "^5.0.8"
@@ -58,6 +59,7 @@
     "@types/node": "^24.4.0",
     "@types/react": "^19.0.12",
     "@types/react-dom": "^19.0.4",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^5.0.2",
     "autoprefixer": "^10.4.27",
     "concurrently": "^10.0.3",
