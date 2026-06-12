@@ -76,14 +76,14 @@ export interface PlatformBehavior {
    *  shows a synthesized avatar slot instead, and renders a textual `MOD`
    *  label for moderators since no badge image is available. */
   hasNativeBadgeUrls: boolean;
-  /** Papéis hierárquicos suportados por esta plataforma, na ordem em que
-   *  aparecem no dropdown de permissões. NÃO inclui tiers de assinante
-   *  dinâmicos (que vêm do catálogo `subscriberTiers` no store). Plataformas
-   *  sem o conceito de follower/vip omitem o item. */
+  /** Hierarchical roles supported by this platform, in the order they appear
+   *  in the permission dropdown. Does NOT include dynamic subscriber tiers
+   *  (those come from the `subscriberTiers` catalog in the store). Platforms
+   *  without the follower/vip concept omit the item. */
   supportedRoles: PermissionLevel[];
-  /** True quando a plataforma usa tiers de assinante (Twitch builtin, YouTube
-   *  via catálogo). O dropdown intercala os tiers entre 'subscriber' e 'vip'
-   *  na ordem do catálogo. False para plataformas sem tier (Kick, TikTok). */
+  /** True when the platform uses subscriber tiers (Twitch builtin, YouTube
+   *  via catalog). The dropdown interleaves the tiers between 'subscriber'
+   *  and 'vip' in catalog order. False for tierless platforms (Kick, TikTok). */
   hasSubscriberTiers: boolean;
 }
 
@@ -106,10 +106,10 @@ export interface PlatformProvider extends PlatformVisuals, PlatformBehavior {
   AuthStep?: ComponentType<AuthStepProps>;
   /** Renders the inline card for an existing connected account (status, controls). */
   AccountCard?: ComponentType<{ account: PlatformAccount; onDelete: () => void; onConnect: () => void; onDisconnect: () => void }>;
-  /** Botões extra renderizados no card de conta — antes do Login/Connect/Disconnect.
-   *  Cada provider declara aqui ações específicas que não cabem na barra
-   *  comum (ex: YouTube precisa de "Trocar canal" pra escolher o canal de
-   *  envio de mensagens dentro da conta Google). */
+  /** Extra buttons rendered on the account card — before Login/Connect/Disconnect.
+   *  Each provider declares here provider-specific actions that don't fit the
+   *  common bar (e.g. YouTube needs "Trocar canal" to pick which channel of
+   *  the Google account sends messages). */
   AccountActions?: ComponentType<{ account: PlatformAccount }>;
   /** Returns null if valid, otherwise an error message. */
   validate?(channel: string, providerData: Record<string, unknown>): string | null;

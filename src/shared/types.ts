@@ -83,7 +83,7 @@ export interface UserListMember {
   platform: PlatformId;
   userId: string;
   displayName: string;
-  /** ISO timestamp de quando foi adicionado. */
+  /** ISO timestamp of when the member was added. */
   addedAt: string;
 }
 

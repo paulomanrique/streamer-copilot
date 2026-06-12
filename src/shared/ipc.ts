@@ -449,7 +449,7 @@ export interface CopilotApi {
     channelKey: string;
     stats: unknown | null;
   }) => void) => () => void;
-  /** Snapshot atual do catálogo de tiers de membro (todas as plataformas). */
+  /** Current snapshot of the membership-tier catalog (all platforms). */
   getSubscriberTiers: () => Promise<SubscriberTierCatalog>;
   /** Replaces every entry for a platform (used by the management page and by
    *  the YouTube Data API path on adapter connect). */

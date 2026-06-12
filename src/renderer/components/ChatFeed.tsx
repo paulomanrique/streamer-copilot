@@ -171,8 +171,8 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
     visible: false, x: 0, y: 0, platform: '', author: '',
   });
   const userLists = useAppStore((s) => s.userLists);
-  // window.prompt não funciona em Electron — usamos um input inline dentro do
-  // próprio menu de contexto quando o streamer clica em "Nova lista".
+  // window.prompt doesn't work in Electron — we use an inline input inside the
+  // context menu itself when the streamer clicks "Nova lista".
   const [newListMode, setNewListMode] = useState(false);
   const [newListName, setNewListName] = useState('');
   const newListInputRef = useRef<HTMLInputElement | null>(null);
@@ -663,7 +663,7 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
             {t('Copy username')}
           </button>
 
-          {/* Add to list — quando temos userId estável (sem ele, lista quebra) */}
+          {/* Add to list — only with a stable userId (lists break without one) */}
           {ctxMenu.userId ? (
             <>
               <div className="border-t border-gray-700 my-1" />

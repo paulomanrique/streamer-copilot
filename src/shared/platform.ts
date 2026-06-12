@@ -1,12 +1,12 @@
 /**
- * Forma comum do papel do autor da mensagem em qualquer plataforma.
+ * Common shape of the message author's role on any platform.
  *
- * Cada adapter preenche os booleans que se aplicam à sua plataforma e usa
- * `extras` para detalhes ricos (sub tier, gift rank, anos de membership).
- * O core nunca lê de `extras` — apenas UIs específicas da plataforma fazem.
+ * Each adapter fills in the booleans that apply to its platform and uses
+ * `extras` for rich details (sub tier, gift rank, membership years).
+ * The core never reads from `extras` — only platform-specific UIs do.
  *
- * Isto torna o contrato plug-and-play: um adapter de terceiro implementa
- * esta forma sem precisar editar tipos compartilhados.
+ * This keeps the contract plug-and-play: a third-party adapter implements
+ * this shape without editing shared types.
  */
 export interface PlatformRole {
   readonly broadcaster?: boolean;
@@ -22,9 +22,9 @@ export interface PlatformRole {
 }
 
 /**
- * Metadados ricos do evento (superchat amount, gift count, etc.).
- * `kind` é uma string livre — adapters podem cunhar tipos novos sem
- * alterar este arquivo.
+ * Rich event metadata (superchat amount, gift count, etc.).
+ * `kind` is a free-form string — adapters can coin new kinds without
+ * editing this file.
  */
 export interface ChatMessageMetadata {
   readonly kind: string;

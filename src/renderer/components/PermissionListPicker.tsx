@@ -56,7 +56,7 @@ export function PermissionListPicker({ value, onChange }: PermissionListPickerPr
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
 
-  // Fecha o dropdown quando o usuário clica fora.
+  // Close the dropdown when the user clicks outside.
   useEffect(() => {
     if (!dropdownOpen) return;
     const onClick = (e: MouseEvent) => {
