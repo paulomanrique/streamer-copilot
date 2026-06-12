@@ -6,8 +6,7 @@ Guide for AI agents working in this repository.
 
 - **Name**: Streamer Copilot
 - **Type**: Electron desktop app for stream automation
-- **Purpose**: Unified chat (Twitch + YouTube + Kick), sound/voice commands, scheduled messages, OBS stats
-- **Current phase**: Electron + React renderer with runtime integrations
+- **Purpose**: Unified chat (Twitch + YouTube + Kick + TikTok), sound/voice/text commands, scheduled messages, raffles, polls, music requests, suggestions, welcome messages, OBS overlays and stats
 
 ---
 
@@ -15,19 +14,20 @@ Guide for AI agents working in this repository.
 
 | Layer | Technology |
 |-------|-----------|
-| Runtime | Electron ^35 |
-| UI (Phase 2) | React 19 + TypeScript |
+| Runtime | Electron ^41 (ceiling — better-sqlite3 cannot build against Electron 42's V8) |
+| UI | React 19 + TypeScript |
 | Build | Vite + @vitejs/plugin-react |
-| Styles | Tailwind CSS |
+| Styles | Tailwind CSS v4 (@tailwindcss/vite) |
 | Database | better-sqlite3 (SQLite) |
 | State | Zustand |
 | Validation | Zod |
 | Twitch chat | tmi.js |
-| YouTube chat | googleapis (polling) |
-| Kick chat | pusher-js |
+| YouTube chat | two drivers: youtubei.js scraper + googleapis Data API (polling) |
+| Kick chat | hidden BrowserWindow scraping the popout chat; sending via popout DOM or @nekiro/kick-api |
+| TikTok chat | tiktok-live-connector (read-only) |
 | OBS stats | obs-websocket-js v5 |
 | Audio | Web Audio API (native) |
-| TTS | Web Speech API + OS fallback |
+| TTS | Web Speech API + Google TTS fallback (@sefinek/google-tts-api) |
 | Packaging | electron-builder |
 | Tests | Vitest + Playwright |
 
@@ -41,35 +41,53 @@ streamer-copilot/
 │   ├── main/                  ← Electron main process
 │   │   ├── index.ts           ← BrowserWindow, lifecycle
 │   │   ├── app-context.ts     ← Service wiring + IPC handlers
-│   │   └── state-hub.ts       ← State push to renderer
+│   │   ├── state-hub.ts       ← State push to renderer
+│   │   ├── overlay-server.ts  ← Local HTTP server for OBS overlays
+│   │   ├── adapter-factory.ts ← Builds platform adapters from settings
+│   │   ├── music-player.ts / music-stream-resolver.ts ← Music requests
+│   │   ├── updater.ts         ← electron-updater wiring
+│   │   └── platforms/registry.ts ← MainPlatformProvider registry
 │   ├── preload/
-│   │   └── index.ts           ← contextBridge → window.copilot
+│   │   └── index.cts          ← contextBridge → window.copilot
 │   ├── shared/
 │   │   ├── types.ts           ← All shared TypeScript types
 │   │   ├── ipc.ts             ← CopilotApi interface + IPC_CHANNELS map
 │   │   ├── schemas.ts         ← Zod schemas for IPC validation
+│   │   ├── platform.ts        ← PlatformId, PlatformRole
+│   │   ├── moderation.ts      ← ModerationApi, PlatformCapabilities
 │   │   └── constants.ts
 │   ├── db/
 │   │   ├── database.ts        ← SQLite init, path resolution
+│   │   ├── json-store.ts      ← Atomic JSON file persistence
 │   │   └── migrations.ts      ← Versioned SQL migration array
-│   ├── modules/
+│   ├── modules/               ← One folder per backend service
+│   │   ├── base/              ← JsonSettingsStore<T> base class
 │   │   ├── chat/              ← ChatService: aggregates adapters, emits events
-│   │   ├── sounds/            ← SoundService: match, permission, cooldown
-│   │   ├── voice/             ← VoiceService: match, permission, TTS
-│   │   ├── scheduled/         ← SchedulerService: loop, jitter
+│   │   ├── chat-log/          ← Per-session chat persistence
+│   │   ├── commands/          ← Permission resolution (permission-utils)
+│   │   ├── sounds/ voice/ text/ scheduled/ welcome/
+│   │   ├── raffles/ polls/ suggestions/ music/
+│   │   ├── subscriber-tiers/ user-lists/ accounts/
+│   │   ├── overlays/          ← Overlay defaults + preferences stores
 │   │   ├── obs/               ← ObsService: obs-websocket-js, reconnect
-│   │   └── settings/          ← SettingsService
+│   │   ├── logs/ settings/
 │   ├── platforms/
 │   │   ├── base.ts            ← PlatformChatAdapter interface
-│   │   ├── twitch/adapter.ts  ← tmi.js
-│   │   ├── youtube/adapter.ts ← googleapis polling
-│   │   └── kick/adapter.ts    ← pusher-js
+│   │   ├── secret-storage.ts  ← safeStorage-encrypted credential files
+│   │   ├── twitch/            ← tmi.js adapter + moderation + multi-account
+│   │   ├── youtube/           ← scraper-adapter (youtubei.js) + api-adapter (Data API)
+│   │   ├── kick/              ← popout-chat scraper + OAuth send
+│   │   └── tiktok/            ← tiktok-live-connector (read-only)
 │   └── renderer/
 │       ├── main.tsx
 │       ├── App.tsx            ← Shell with sidebar navigation
 │       ├── store.ts           ← Zustand root store
-│       ├── pages/             ← Dashboard, SoundCommands, VoiceCommands, etc.
-│       └── components/        ← ChatFeed, ObsStatsPanel, PermissionPicker, etc.
+│       ├── pages/             ← SoundCommands, Raffles, Polls, Overlays, etc.
+│       ├── components/        ← ChatFeed, ObsStatsPanel, PermissionPicker, etc.
+│       ├── platforms/         ← PlatformProvider registry (see below)
+│       ├── modules/           ← RendererSettingsModule registry (see below)
+│       ├── hooks/             ← useAudioQueue, etc.
+│       └── i18n/              ← pt-BR / en-US UI strings
 │
 ├── tests/
 │   ├── unit/                  ← Vitest
@@ -81,7 +99,7 @@ streamer-copilot/
 
 ---
 
-## Architecture Rules (Phase 2)
+## Architecture Rules
 
 1. **IPC is the only bridge** between main process and renderer. Never import main process modules in the renderer.
 2. **All IPC channels** are declared in `src/shared/ipc.ts`. Add there first, then implement both sides.
@@ -185,24 +203,27 @@ The main process keeps its module wiring (service instantiation + IPC handler re
 
 ### Twitch
 - Uses tmi.js IRC over WebSocket.
-- OAuth scopes: `chat:read`, `chat:edit`, `channel:read:subscriptions`, `moderator:read:followers`.
-- Follower status requires a Helix API call; cache per session.
+- OAuth scopes (see `app-context.ts`): `chat:read`, `chat:edit`, plus moderation scopes (`moderator:manage:banned_users`, `moderator:manage:chat_messages`, `moderator:manage:chat_settings`, `moderator:manage:shoutouts`, `channel:manage:raids`, `channel:manage:moderators`, `channel:manage:vips`).
 - Badges (`isModerator`, `isSubscriber`) available directly on the tmi.js message.
 
 ### YouTube
-- Uses `googleapis` `youtube.liveChatMessages.list` with polling.
-- Respect `pollingIntervalMillis` from the API response to avoid quota exhaustion.
-- OAuth requires a Google Cloud project with YouTube Data API v3 enabled.
-- Redirect URI: `http://127.0.0.1:PORT` (loopback, captured by Electron).
+Two independent drivers (separate platform ids — see the platform-agnostic rules below):
+- **`youtube` (scraper)**: `youtubei.js` — no API key or OAuth needed; reads live chat and can send via the logged-in session.
+- **`youtube-api` (Data API)**: `googleapis` `youtube.liveChatMessages.list` with polling.
+  - Respect `pollingIntervalMillis` from the API response to avoid quota exhaustion.
+  - OAuth requires a Google Cloud project with YouTube Data API v3 enabled; scopes `youtube.force-ssl` + `youtube.readonly` (see `api-auth.ts`).
+  - Redirect URI: `http://127.0.0.1:33020` (loopback, captured by a local HTTP server).
 - "Follower" on YouTube = channel member (subscription level).
 
 ### Kick
-- Uses pusher-js with Kick's public app key.
-- No authentication required for reading public chat.
-- Pusher channel: `chatrooms.{chatroomId}.v2`.
-- Channel ID resolved via: `https://kick.com/api/v2/channels/{slug}`.
-- **Warning**: unofficial API; may break without notice.
+- Reads chat by loading the popout chat (`kick.com/popout/{slug}/chat`) in a hidden `BrowserWindow` and scraping the DOM (no pusher-js).
+- Sends messages through the popout DOM when the user is logged in; falls back to the official OAuth API via `@nekiro/kick-api` (`id.kick.com`, scopes per https://docs.kick.com/getting-started/scopes).
+- **Warning**: DOM scraping is unofficial; may break without notice.
 - No native "follower" concept; treat as "everyone".
+
+### TikTok
+- Uses `tiktok-live-connector` with EulerStream signing.
+- **Read-only**: `sendMessage` throws by design; chat send is not supported.
 
 ### OBS
 - Uses obs-websocket-js v5 (OBS WebSocket v5 protocol, OBS 28+).
@@ -214,23 +235,26 @@ The main process keeps its module wiring (service instantiation + IPC handler re
 ## Permission System
 
 ```typescript
-type PermissionLevel = 'everyone' | 'follower' | 'subscriber' | 'moderator' | 'broadcaster';
+type PermissionRoleId =
+  | 'everyone' | 'follower' | 'subscriber' | 'vip' | 'moderator' | 'broadcaster'
+  | `tier:${string}`;  // exact subscriber-tier match, no hierarchy
+
+type PermissionEntry =
+  | { kind: 'platform-role'; platform: PlatformId; role: PermissionRoleId }
+  | { kind: 'list'; listId: string };  // membership in a custom user list
 
 interface CommandPermission {
-  allowedLevels: PermissionLevel[];  // e.g. ['subscriber', 'moderator']
-  cooldownSeconds: number;           // global command cooldown
-  userCooldownSeconds: number;       // per-user cooldown
+  entries: PermissionEntry[];  // OR evaluation: user passes if ANY entry matches
+  cooldownSeconds: number;     // global command cooldown
+  userCooldownSeconds: number; // per-user cooldown
 }
 ```
 
-Resolution order (highest level wins):
-1. `broadcaster` — always allowed
-2. `moderator`
-3. `subscriber`
-4. `follower`
-5. `everyone`
+- **Hierarchy** (for `platform-role` entries, via `PERMISSION_RANK` in `src/modules/commands/permission-utils.ts`): `everyone(0) < follower(1) < subscriber(2) < vip(3) < moderator(4) < broadcaster(5)`. Selecting `vip` admits VIP, Moderator, and Broadcaster.
+- **`tier:<id>` is exact-match**, not hierarchical — selecting Tier 2 does NOT grant Tier 3; the streamer adds every tier they want to allow.
+- **`list` entries** match against user lists (`(platform, userId)` pairs) managed in the User Lists module.
 
-Cooldowns tracked in memory in the main process: `Map<commandId, lastUsed>` and `Map<commandId:userId, lastUsed>`.
+Cooldowns tracked in memory in the main process: `Map<commandId, lastUsed>` and `Map<commandId:userId, lastUsed>`, cleared on profile switch.
 
 ---
 
@@ -244,6 +268,7 @@ npm run package      # generate installers
 npm test             # unit tests (Vitest)
 npm run test:e2e     # e2e tests (Playwright)
 npm run lint         # ESLint
+npm run validate:ipc # check IPC channel/schema/preload sync
 npm run rebuild:native  # recompile native modules for Electron
 ```
 
