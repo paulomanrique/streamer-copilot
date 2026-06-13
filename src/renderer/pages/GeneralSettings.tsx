@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { APP_LANGUAGE_OPTIONS } from '../../shared/constants.js';
-import type { AppLanguage, EventLogLevel, GeneralSettings, ProfileSettings } from '../../shared/types.js';
+import type { AppInfo, AppLanguage, EventLogLevel, GeneralSettings, ProfileSettings } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
 import { ToggleSwitch } from '../components/ToggleSwitch.js';
 
@@ -20,10 +20,17 @@ export function GeneralSettingsPage({ settings, onSave, appLanguage, onSaveProfi
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
+  const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
 
   useEffect(() => {
     setDraft(settings);
   }, [settings]);
+
+  // Real running version + Electron version for the footer, fetched from main.
+  // Best-effort: the footer just stays blank if the lookup fails.
+  useEffect(() => {
+    void window.copilot.getAppInfo().then(setAppInfo).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     setDraftLanguage(appLanguage);
@@ -133,7 +140,9 @@ export function GeneralSettingsPage({ settings, onSave, appLanguage, onSaveProfi
           {error ? <p className="text-sm text-red-300">{error}</p> : null}
         </div>
 
-        <div className="text-center text-xs text-gray-600 pt-2">Streamer Copilot v0.1.0 · Electron 35</div>
+        <div className="text-center text-xs text-gray-600 pt-2">
+          Streamer Copilot{appInfo ? ` v${appInfo.appVersion} · Electron ${appInfo.electronVersion}` : ''}
+        </div>
       </div>
     </div>
   );
