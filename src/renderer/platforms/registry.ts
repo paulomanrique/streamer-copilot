@@ -85,6 +85,10 @@ export interface PlatformBehavior {
    *  via catalog). The dropdown interleaves the tiers between 'subscriber'
    *  and 'vip' in catalog order. False for tierless platforms (Kick, TikTok). */
   hasSubscriberTiers: boolean;
+  /** Whether the app can send outbound chat messages on this platform. False for
+   *  read-only adapters (TikTok). Drives message-target selectors (e.g. the
+   *  suggestion-feedback platforms) so they offer only platforms that can reply. */
+  canSendMessages: boolean;
 }
 
 export interface PlatformProvider extends PlatformVisuals, PlatformBehavior {
@@ -183,6 +187,7 @@ const FALLBACK_PROVIDER: PlatformProvider = {
   hasNativeBadgeUrls: false,
   supportedRoles: ['everyone', 'broadcaster'],
   hasSubscriberTiers: false,
+  canSendMessages: false,
 };
 
 /** Returns the provider matching `id`, or a gray fallback when the id is

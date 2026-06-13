@@ -132,6 +132,7 @@ registerPlatformProvider({
   hasNativeBadgeUrls: false,
   supportedRoles: ['everyone', 'subscriber', 'moderator', 'broadcaster'],
   hasSubscriberTiers: true,
+  canSendMessages: true,
   profileUrl: youtubeProfileUrl,
   AuthStep: YouTubeApiAuthStep,
   validate(channel, providerData) {

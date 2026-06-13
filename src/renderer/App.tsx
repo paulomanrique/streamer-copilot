@@ -58,15 +58,16 @@ export default function App() {
   const kickStatus = (platformStatus.kick ?? 'disconnected') as KickConnectionStatus;
   const kickSlug = platformPrimaryChannel.kick ?? null;
   const kickLiveStatsByChannel = (platformLiveStats.kick ?? {}) as Record<string, KickLiveStats>;
-  // YouTube uses one entry per concurrent live stream, keyed by videoId.
-  // Flatten across all youtube driver ids so the renderer sees a single list.
+  // YouTube emits one live-stats entry per concurrent stream, keyed by videoId.
+  // Collect them across every driver by shape (the videoId field) instead of
+  // hardcoding the youtube driver ids — see the platform-agnostic rules.
   const youtubeStreams = useMemo(() => {
     const out: YouTubeStreamInfo[] = [];
-    for (const driverId of ['youtube', 'youtube-api'] as const) {
-      const byVideoId = platformLiveStats[driverId];
-      if (!byVideoId) continue;
-      for (const stream of Object.values(byVideoId)) {
-        if (stream) out.push(stream as YouTubeStreamInfo);
+    for (const byVideoId of Object.values(platformLiveStats)) {
+      for (const stream of Object.values(byVideoId ?? {})) {
+        if (stream && typeof stream === 'object' && 'videoId' in stream) {
+          out.push(stream as YouTubeStreamInfo);
+        }
       }
     }
     return out;

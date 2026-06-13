@@ -1,14 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { PermissionEntry, PlatformId, SuggestionEntry, SuggestionList, SuggestionListMode, SuggestionListUpsertInput } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
 import { PermissionListPicker } from '../components/PermissionListPicker.js';
-
-const FEEDBACK_PLATFORMS: { id: PlatformId; label: string }[] = [
-  { id: 'twitch', label: 'Twitch' },
-  { id: 'youtube', label: 'YouTube' },
-  { id: 'kick', label: 'Kick' },
-];
+import { listPlatformProviders } from '../platforms/registry.js';
 
 const EMPTY_FORM: SuggestionListUpsertInput = {
   title: '',
@@ -41,6 +36,14 @@ function mapEntryCounts(lists: SuggestionList[]): Record<string, number> {
 
 export function SuggestionsPage() {
   const { t } = useI18n();
+  // Platforms that can receive the feedback message — read-only adapters (TikTok)
+  // are excluded. Derived from the provider registry, not a hardcoded list.
+  const feedbackPlatforms = useMemo(
+    () => listPlatformProviders()
+      .filter((p) => p.canSendMessages)
+      .map((p) => ({ id: p.id as PlatformId, label: p.displayName })),
+    [],
+  );
   const triggerInputRef = useRef<HTMLInputElement | null>(null);
   const [rows, setRows] = useState<SuggestionList[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -411,7 +414,7 @@ export function SuggestionsPage() {
                   <span className="text-gray-500 ml-1 text-xs">(leave all unchecked to reply only on the platform the suggestion came from)</span>
                 </label>
                 <div className="flex gap-3">
-                  {FEEDBACK_PLATFORMS.map(({ id, label }) => (
+                  {feedbackPlatforms.map(({ id, label }) => (
                     <label key={id} className="flex items-center gap-1.5 cursor-pointer">
                       <input
                         type="checkbox"

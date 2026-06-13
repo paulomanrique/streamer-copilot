@@ -158,7 +158,7 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
     Object.fromEntries(listPlatformProviders().map((m) => [m.id, true])),
   );
   const [inputValue,    setInputValue]    = useState('');
-  const [inputPlatform, setInputPlatform] = useState(() => connectedPlatforms[0] ?? 'twitch');
+  const [inputPlatform, setInputPlatform] = useState(() => connectedPlatforms[0] ?? '');
   const [sendError, setSendError] = useState<string | null>(null);
   const [avatarCache,   setAvatarCache]   = useState<Map<string, string>>(new Map());
   const requestedAvatarsRef = useRef<Set<string>>(new Set());
