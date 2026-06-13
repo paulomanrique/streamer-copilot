@@ -36,7 +36,17 @@ export class YTLiveClient implements YouTubeLiveClient {
     this.stopped = false;
     this.startedAt = Date.now();
 
-    const yt = await Innertube.create();
+    // Read the chat ANONYMOUSLY. In a packaged Electron build the main-process
+    // global fetch carries the default session's cookies, and the user is signed
+    // in to YouTube (needed to *send* messages). An authenticated read makes
+    // YouTube return the channel-owner/moderator chat view, whose renderers
+    // youtubei.js 17.0.1 can't parse — it throws "reading 'url'" on every
+    // continuation poll until it gives up ("live chat ended"), so no messages
+    // ever reach the feed. `credentials: 'omit'` keeps reads on the public chat
+    // format that parses correctly; sending still uses an authed Innertube below.
+    const yt = await Innertube.create({
+      fetch: (input, init) => fetch(input, { ...init, credentials: 'omit' }),
+    });
     const info = await yt.getInfo(this.options.videoId);
     const livechat = info.getLiveChat();
     this.livechat = livechat;
