@@ -2513,6 +2513,24 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }
   })();
 
+  // Aggregate "connected" status for the two YouTube drivers. Matches how the
+  // Connections UI / each provider's getStatus() decides it: connected while a
+  // channel (scrape) or account (api) is *enabled*, independent of whether a
+  // stream is currently live — an offline streamer must still be assignable in
+  // the role/permission pickers. Unlike Twitch/Kick/TikTok these were never
+  // pushed to the renderer, so `platformStatus` stayed stuck at its startup
+  // value and pickers showed YouTube as disconnected even when connected.
+  const aggregateYoutubeStatus = async () => {
+    const settings = await loadYoutubeSettings().catch(() => null);
+    return settings?.channels.some((c) => c.enabled) ? ('connected' as const) : ('disconnected' as const);
+  };
+  const aggregateYoutubeApiStatus = async () => {
+    const accounts = await accountRepository.list().catch(() => []);
+    return accounts.some((a) => a.providerId === 'youtube-api' && a.enabled) ? ('connected' as const) : ('disconnected' as const);
+  };
+  const pushYoutubeStatus = async () => options.stateHub.pushPlatformStatus('youtube', await aggregateYoutubeStatus());
+  const pushYoutubeApiStatus = async () => options.stateHub.pushPlatformStatus('youtube-api', await aggregateYoutubeApiStatus());
+
   void (async () => {
     if (!youtubeAdapter) return;
     const settings = await loadYoutubeSettings().catch(() => null);
@@ -2525,6 +2543,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       { autoMonitor: true },
     );
     await chatService.replaceAdapter(youtubeAdapter);
+    void pushYoutubeStatus();
   })();
 
   // Auto-attach the YouTube API adapter on startup. The adapter idles when
@@ -2539,6 +2558,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       logService.warn('youtube-api', `Initial account scan failed: ${cause instanceof Error ? cause.message : String(cause)}`);
     }
     await chatService.replaceAdapter(youtubeApiAdapter);
+    void pushYoutubeApiStatus();
   })();
 
   // Auto-reconnect TikTok on startup. Account-model takes precedence: spin up
@@ -3076,25 +3096,27 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     provider.onStatusChange(() => broadcastAccountsForProvider(provider.providerId));
   }
 
+  // Push the aggregate YouTube link-status on every channel/account change, so
+  // the renderer's `platformStatus` (and the role/permission pickers that read
+  // it) stay in sync. Twitch/Kick/TikTok push from their own connect paths; the
+  // YouTube drivers had no such push, so their status went stale after startup.
+  youtubeProvider.onStatusChange(() => void pushYoutubeStatus());
+  youtubeApiProvider.onStatusChange(() => void pushYoutubeApiStatus());
+
   // Symmetric snapshot used by the renderer's initial-load path. Today this
   // is a pragmatic shim over the per-platform aggregates that still live on
   // app-context — each provider should eventually expose `getAggregateStatus()`
   // via MainPlatformProvider and this handler should iterate `mainPlatforms.list()`
   // instead of hardcoding the ids below.
   ipcMain.handle(IPC_CHANNELS.platformsGetStatuses, async () => {
-    const streams = getYoutubeStreams();
     return {
       twitch: { status: twitchStatus, primaryChannel: twitchChannel },
       kick: { status: aggregateKickStatus(), primaryChannel: kickSlug },
       tiktok: { status: aggregateTiktokStatus(), primaryChannel: tiktokUsername },
-      youtube: {
-        status: streams.some((s) => s.platform === 'youtube') ? ('connected' as const) : ('disconnected' as const),
-        primaryChannel: null,
-      },
-      'youtube-api': {
-        status: streams.some((s) => s.platform === 'youtube-api') ? ('connected' as const) : ('disconnected' as const),
-        primaryChannel: null,
-      },
+      // Account/channel-based (not stream-based): connected while a channel or
+      // account is enabled, matching the Connections UI and the role pickers.
+      youtube: { status: await aggregateYoutubeStatus(), primaryChannel: null },
+      'youtube-api': { status: await aggregateYoutubeApiStatus(), primaryChannel: null },
     };
   });
 
