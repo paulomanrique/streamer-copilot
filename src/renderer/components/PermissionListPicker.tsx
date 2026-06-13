@@ -45,6 +45,16 @@ export function PermissionListPicker({ value, onChange }: PermissionListPickerPr
     [providers, platformStatus],
   );
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  // Platform role groups are collapsed by default — with several platforms
+  // connected, listing every role flat made the dropdown scroll endlessly.
+  const [expandedPlatforms, setExpandedPlatforms] = useState<Set<string>>(new Set());
+  const togglePlatform = (id: string) =>
+    setExpandedPlatforms((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   // window.prompt is a silent no-op in Electron — use an inline input
   // inside the dropdown for the "New list" option.
   const [newListMode, setNewListMode] = useState(false);
@@ -227,7 +237,12 @@ export function PermissionListPicker({ value, onChange }: PermissionListPickerPr
                 : [];
               const sortedTiers = [...tierEntries].sort((a, b) => a.order - b.order);
               return (
-                <DropdownSection key={provider.id} title={provider.displayName} hint="conectado" hintAccent>
+                <CollapsiblePlatformSection
+                  key={provider.id}
+                  title={provider.displayName}
+                  expanded={expandedPlatforms.has(provider.id)}
+                  onToggle={() => togglePlatform(provider.id)}
+                >
                   {provider.supportedRoles.map((role) => {
                     if (role === 'subscriber' && sortedTiers.length > 0) {
                       // When explicit tiers exist, the generic "Subscriber" is still useful
@@ -262,7 +277,7 @@ export function PermissionListPicker({ value, onChange }: PermissionListPickerPr
                       />
                     );
                   })}
-                </DropdownSection>
+                </CollapsiblePlatformSection>
               );
             })}
           </div>
@@ -351,6 +366,44 @@ function DropdownSection({
         ) : null}
       </div>
       {children}
+    </div>
+  );
+}
+
+/** A connected-platform group whose roles collapse behind a clickable header,
+ *  so the dropdown stays short when several platforms are connected. */
+function CollapsiblePlatformSection({
+  title,
+  expanded,
+  onToggle,
+  children,
+}: {
+  title: string;
+  expanded: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="border-b border-gray-800 last:border-b-0">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className="w-full flex items-center gap-1.5 px-3 py-1.5 text-[10px] uppercase tracking-wide text-gray-400 font-semibold hover:bg-gray-800/40 transition-colors"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3"
+          className={`w-3 h-3 text-gray-500 transition-transform ${expanded ? 'rotate-90' : ''}`}
+        >
+          <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        {title}
+        <span className="normal-case tracking-normal font-normal text-emerald-400">• conectado</span>
+      </button>
+      {expanded ? <div className="pb-1">{children}</div> : null}
     </div>
   );
 }
