@@ -27,6 +27,10 @@ export const permissionEntrySchema = z.discriminatedUnion('kind', [
 ]);
 
 const permissionEntriesSchema = z.array(permissionEntrySchema).min(1).max(50);
+// For commands that can be schedule-only (commandEnabled=false): a scheduled
+// message has no chat invoker, so an empty permission list is valid. The ≥1
+// requirement is re-applied per-schema in superRefine when the chat trigger is on.
+const optionalPermissionEntriesSchema = z.array(permissionEntrySchema).max(50);
 const eventLogLevelSchema = z.enum(['info', 'warn', 'error']);
 const raffleModeSchema = z.enum(['single-winner', 'survivor-final']);
 const raffleControlActionSchema = z.enum(['open_entries', 'close_entries', 'spin', 'finalize', 'cancel', 'reset', 'start_over']);
@@ -161,7 +165,7 @@ export const textCommandUpsertInputSchema = z.object({
   name: z.string().min(1).max(80),
   trigger: z.string().max(80).nullable(),
   response: z.string().min(1).max(500),
-  permissions: permissionEntriesSchema,
+  permissions: optionalPermissionEntriesSchema,
   cooldownSeconds: z.number().int().min(0).max(3600).nullable(),
   userCooldownSeconds: z.number().int().min(0).max(3600).nullable(),
   commandEnabled: z.boolean(),
@@ -180,6 +184,9 @@ export const textCommandUpsertInputSchema = z.object({
     } else if (trigger.length < 2) {
       ctx.addIssue({ code: 'custom', path: ['trigger'], message: 'Command must have at least one character after !' });
     }
+  }
+  if (input.commandEnabled && input.permissions.length < 1) {
+    ctx.addIssue({ code: 'custom', path: ['permissions'], message: 'Add at least one permission for the chat command' });
   }
   if (!input.commandEnabled && !input.schedule?.enabled) {
     ctx.addIssue({ code: 'custom', path: ['schedule'], message: 'Enable a command trigger or a schedule' });
@@ -226,7 +233,7 @@ export const soundCommandUpsertInputSchema = z.object({
   name: z.string().min(1).max(80),
   trigger: z.string().max(80).nullable(),
   filePath: z.string().min(1),
-  permissions: permissionEntriesSchema,
+  permissions: optionalPermissionEntriesSchema,
   cooldownSeconds: z.number().int().min(0).max(3600).nullable(),
   userCooldownSeconds: z.number().int().min(0).max(3600).nullable(),
   commandEnabled: z.boolean(),
@@ -245,6 +252,9 @@ export const soundCommandUpsertInputSchema = z.object({
     } else if (trigger.length < 2) {
       ctx.addIssue({ code: 'custom', path: ['trigger'], message: 'Command must have at least one character after !' });
     }
+  }
+  if (input.commandEnabled && input.permissions.length < 1) {
+    ctx.addIssue({ code: 'custom', path: ['permissions'], message: 'Add at least one permission for the chat command' });
   }
   if (!input.commandEnabled && !input.schedule?.enabled) {
     ctx.addIssue({ code: 'custom', path: ['schedule'], message: 'Enable a command trigger or a schedule' });
