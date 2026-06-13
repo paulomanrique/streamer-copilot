@@ -99,6 +99,12 @@ export function AppHeader({
     || liveKickChannels.length > 0
     || liveTiktokUsernames.length > 0;
 
+  // TODO(platform-agnostic): the per-platform live-link branches below (and the
+  // hardcoded twitch.tv / kick.com / tiktok.com URLs) violate the AGENTS.md
+  // "no hardcoded platform lists" rule. They persist because live-state in the
+  // store is asymmetric per platform (twitch by channel, kick by channel+slug,
+  // tiktok by username, youtube by stream). Planned fix: a registry
+  // `liveEntries(input): PlatformLiveEntry[]` method so this iterates providers.
   const liveLinks = [
     ...liveTwitchChannels.map((channel) =>
       makeLiveLink('twitch', `twitch-${channel}`, `Twitch #${channel}`, `https://twitch.tv/${channel}`),

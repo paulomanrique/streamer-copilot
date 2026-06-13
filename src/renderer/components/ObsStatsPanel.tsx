@@ -116,6 +116,12 @@ export function ObsStatsPanel({ stats, twitchLiveStatsByChannel, twitchConnected
             || kickConnectedChannels.length > 0;
           if (!anyConnected) return null;
 
+          // TODO(platform-agnostic): the per-platform viewer-card branches below
+          // (hardcoded getPlatformProviderOrFallback('twitch'|'tiktok'|'kick'))
+          // violate the AGENTS.md "no hardcoded platform lists" rule. They
+          // persist because live-state in the store is asymmetric per platform.
+          // Planned fix: a registry `liveEntries(input): PlatformLiveEntry[]`
+          // method so this maps a single uniform list of entries.
           return (
             <div className="col-span-4 grid grid-cols-2 gap-2">
               {twitchConnectedChannels.map((channel) => {
