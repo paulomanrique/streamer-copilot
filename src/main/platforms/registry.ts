@@ -1,4 +1,4 @@
-import type { PlatformAccount, PlatformAccountConnectionStatus } from '../../shared/types.js';
+import type { PlatformAccount, PlatformAccountConnectionStatus, PlatformLinkSnapshot } from '../../shared/types.js';
 
 /**
  * Main-process counterpart to the renderer's `src/renderer/platforms/registry.ts`.
@@ -17,6 +17,14 @@ export interface MainPlatformProvider {
 
   /** Current connection state of `account`. May read provider-specific state. */
   getStatus(account: PlatformAccount): Promise<PlatformAccountConnectionStatus> | PlatformAccountConnectionStatus;
+
+  /** Aggregate connection state for the whole platform (vs the per-account
+   *  `getStatus`). Drives the renderer's symmetric `platformStatus` map and the
+   *  role/permission pickers, which must show a platform as connected whenever
+   *  an account/channel is enabled — independent of whether a stream is live.
+   *  Read by the unified `platformsGetStatuses` handler and the generic status
+   *  push, both of which iterate the registry instead of hardcoding ids. */
+  getAggregateStatus(): Promise<PlatformLinkSnapshot> | PlatformLinkSnapshot;
 
   /** Connect this account. Must throw on failure. Idempotent: re-connecting a
    *  connected account is allowed (typically re-applies credentials). */

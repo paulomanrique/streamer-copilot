@@ -568,6 +568,14 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }
   };
 
+  /** Pushes a provider's aggregate connection status to the renderer's symmetric
+   *  `platformStatus` map. Generic over the registry — no per-platform branches
+   *  (see the platform-agnostic rules in AGENTS.md). */
+  const pushAggregateStatus = async (provider: MainPlatformProvider): Promise<void> => {
+    const snapshot = await provider.getAggregateStatus();
+    options.stateHub.pushPlatformStatus(provider.providerId as PlatformId, snapshot.status, snapshot.primaryChannel);
+  };
+
   const getTwitchCredentialsStore = async (): Promise<TwitchCredentialsStore | null> => {
     const snapshot = await profileStore.list();
     const active = snapshot.profiles.find((p) => p.id === snapshot.activeProfileId);
@@ -1844,6 +1852,11 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     await reloadTextSettingsCache();
     await reloadWelcomeSettingsCache();
     await reloadMusicSettingsCache();
+    // Re-broadcast every platform's aggregate status now the profile is active,
+    // so accounts already connected from a previous session show as connected in
+    // the renderer (the initial getPlatformStatuses can run before the profile
+    // resolves). Generic over the registry — no per-platform branches.
+    for (const provider of mainPlatforms.list()) void pushAggregateStatus(provider);
     return snapshot;
   });
 
@@ -2513,24 +2526,6 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }
   })();
 
-  // Aggregate "connected" status for the two YouTube drivers. Matches how the
-  // Connections UI / each provider's getStatus() decides it: connected while a
-  // channel (scrape) or account (api) is *enabled*, independent of whether a
-  // stream is currently live — an offline streamer must still be assignable in
-  // the role/permission pickers. Unlike Twitch/Kick/TikTok these were never
-  // pushed to the renderer, so `platformStatus` stayed stuck at its startup
-  // value and pickers showed YouTube as disconnected even when connected.
-  const aggregateYoutubeStatus = async () => {
-    const settings = await loadYoutubeSettings().catch(() => null);
-    return settings?.channels.some((c) => c.enabled) ? ('connected' as const) : ('disconnected' as const);
-  };
-  const aggregateYoutubeApiStatus = async () => {
-    const accounts = await accountRepository.list().catch(() => []);
-    return accounts.some((a) => a.providerId === 'youtube-api' && a.enabled) ? ('connected' as const) : ('disconnected' as const);
-  };
-  const pushYoutubeStatus = async () => options.stateHub.pushPlatformStatus('youtube', await aggregateYoutubeStatus());
-  const pushYoutubeApiStatus = async () => options.stateHub.pushPlatformStatus('youtube-api', await aggregateYoutubeApiStatus());
-
   void (async () => {
     if (!youtubeAdapter) return;
     const settings = await loadYoutubeSettings().catch(() => null);
@@ -2543,7 +2538,6 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       { autoMonitor: true },
     );
     await chatService.replaceAdapter(youtubeAdapter);
-    void pushYoutubeStatus();
   })();
 
   // Auto-attach the YouTube API adapter on startup. The adapter idles when
@@ -2558,7 +2552,6 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       logService.warn('youtube-api', `Initial account scan failed: ${cause instanceof Error ? cause.message : String(cause)}`);
     }
     await chatService.replaceAdapter(youtubeApiAdapter);
-    void pushYoutubeApiStatus();
   })();
 
   // Auto-reconnect TikTok on startup. Account-model takes precedence: spin up
@@ -2811,6 +2804,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   const twitchProvider: MainPlatformProvider = {
     providerId: 'twitch',
+    getAggregateStatus: () => ({ status: twitchStatus, primaryChannel: twitchChannel }),
     getStatus: (account) => {
       const status = twitchAccountStatus.get(account.id);
       if (status === 'connected') return 'connected';
@@ -2845,6 +2839,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   const kickProvider: MainPlatformProvider = {
     providerId: 'kick',
+    getAggregateStatus: () => ({ status: aggregateKickStatus(), primaryChannel: kickSlug }),
     getStatus: (account) => {
       if (account) {
         const status = kickAccountStatus.get(account.id);
@@ -2978,6 +2973,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   const tiktokProvider: MainPlatformProvider = {
     providerId: 'tiktok',
+    getAggregateStatus: () => ({ status: aggregateTiktokStatus(), primaryChannel: tiktokUsername }),
     getStatus: (account) => {
       if (account) {
         const accountId = account.id;
@@ -3014,6 +3010,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const youtubeStatusListeners = new Set<() => void>();
   const youtubeProvider: MainPlatformProvider = {
     providerId: 'youtube',
+    getAggregateStatus: async () => ({
+      status: (await loadYoutubeSettings().catch(() => null))?.channels.some((c) => c.enabled) ? ('connected' as const) : ('disconnected' as const),
+      primaryChannel: null,
+    }),
     async getStatus(account) {
       // A YouTube account is "connected" while its handle is enabled in the
       // shared YouTubeSettings.channels list — the adapter will pick it up
@@ -3056,6 +3056,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const youtubeApiStatusListeners = new Set<() => void>();
   const youtubeApiProvider: MainPlatformProvider = {
     providerId: 'youtube-api',
+    getAggregateStatus: async () => ({
+      status: (await accountRepository.list().catch(() => [])).some((a) => a.providerId === 'youtube-api' && a.enabled) ? ('connected' as const) : ('disconnected' as const),
+      primaryChannel: null,
+    }),
     async getStatus(account) {
       // Mirrors the YouTube scraper provider: the account is "connected" while
       // it's enabled in the AccountRepository. Live monitoring takes over from
@@ -3093,31 +3097,23 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   for (const provider of [twitchProvider, kickProvider, tiktokProvider, youtubeProvider, youtubeApiProvider]) {
     mainPlatforms.register(provider);
-    provider.onStatusChange(() => broadcastAccountsForProvider(provider.providerId));
+    provider.onStatusChange(() => {
+      broadcastAccountsForProvider(provider.providerId);
+      // Keep the renderer's symmetric `platformStatus` in sync on every status
+      // change, generically. (The YouTube drivers had no status push before, so
+      // the role/permission pickers saw only the stale startup snapshot.)
+      void pushAggregateStatus(provider);
+    });
   }
 
-  // Push the aggregate YouTube link-status on every channel/account change, so
-  // the renderer's `platformStatus` (and the role/permission pickers that read
-  // it) stay in sync. Twitch/Kick/TikTok push from their own connect paths; the
-  // YouTube drivers had no such push, so their status went stale after startup.
-  youtubeProvider.onStatusChange(() => void pushYoutubeStatus());
-  youtubeApiProvider.onStatusChange(() => void pushYoutubeApiStatus());
-
-  // Symmetric snapshot used by the renderer's initial-load path. Today this
-  // is a pragmatic shim over the per-platform aggregates that still live on
-  // app-context — each provider should eventually expose `getAggregateStatus()`
-  // via MainPlatformProvider and this handler should iterate `mainPlatforms.list()`
-  // instead of hardcoding the ids below.
+  // Symmetric snapshot used by the renderer's initial-load path. Iterates the
+  // provider registry and asks each for its aggregate status — no hardcoded
+  // platform ids (each provider's getAggregateStatus owns its own logic).
   ipcMain.handle(IPC_CHANNELS.platformsGetStatuses, async () => {
-    return {
-      twitch: { status: twitchStatus, primaryChannel: twitchChannel },
-      kick: { status: aggregateKickStatus(), primaryChannel: kickSlug },
-      tiktok: { status: aggregateTiktokStatus(), primaryChannel: tiktokUsername },
-      // Account/channel-based (not stream-based): connected while a channel or
-      // account is enabled, matching the Connections UI and the role pickers.
-      youtube: { status: await aggregateYoutubeStatus(), primaryChannel: null },
-      'youtube-api': { status: await aggregateYoutubeApiStatus(), primaryChannel: null },
-    };
+    const entries = await Promise.all(
+      mainPlatforms.list().map(async (p) => [p.providerId, await p.getAggregateStatus()] as const),
+    );
+    return Object.fromEntries(entries);
   });
 
   ipcMain.handle(IPC_CHANNELS.overlayPrefsGet, async () => {
