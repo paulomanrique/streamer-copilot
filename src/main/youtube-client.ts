@@ -12,6 +12,15 @@ Log.setLevel(Log.Level.ERROR);
 
 export type YTLiveClientOptions = YouTubeLiveClientOptions;
 
+/** Condenses the top stack frames of an error onto a single log line. Used to
+ *  pinpoint where inside youtubei.js a continuation parse threw (the message
+ *  alone is too generic), especially for failures seen only in packaged builds. */
+function topFrames(err: unknown): string {
+  if (!(err instanceof Error) || !err.stack) return '';
+  const frames = err.stack.split('\n').slice(1, 5).map((l) => l.trim()).filter(Boolean).join(' « ');
+  return frames ? ` | ${frames}` : '';
+}
+
 export class YTLiveClient implements YouTubeLiveClient {
   private livechat: any = null;
   private stopped = false;
@@ -43,12 +52,16 @@ export class YTLiveClient implements YouTubeLiveClient {
           this.handleItem(action.item);
         }
       } catch (err) {
-        this.options.onLog?.(`[YT] chat update error: ${String(err)}`);
+        this.options.onLog?.(`[YT] chat update error: ${String(err)}${topFrames(err)}`);
       }
     });
 
     livechat.on('error', (err: Error) => {
-      this.options.onLog?.(`[YT] error: ${err.message}`);
+      // The bare message (e.g. "...reading 'url'") doesn't reveal which
+      // continuation node youtubei.js choked on. Append the top stack frames so
+      // a failure that only reproduces in a packaged build can be traced to the
+      // exact internal parser/class without another debug cycle.
+      this.options.onLog?.(`[YT] error: ${err.message}${topFrames(err)}`);
     });
 
     livechat.on('end', () => {
