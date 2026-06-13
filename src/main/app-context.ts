@@ -1651,6 +1651,40 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     notification.show();
   }
 
+  /**
+   * Platform echoes of messages the app sent and already displayed via
+   * `pushLocalOutboundMessage`. Some platforms re-deliver the bot's own
+   * message as a regular chat message moments after the send (YouTube
+   * polling/scraper, Kick pusher, a second Twitch account joined to the same
+   * channel) — without suppression the reply shows up twice in the chat feed.
+   * Entries are consumed on first match, so identical content sent twice
+   * still displays twice.
+   *
+   * Declared here — above `chatService` — because the onMessage handler below
+   * reads it via `consumeOutboundEcho`. The helpers are hoisted, but the
+   * `const` binding is not: keeping it ahead of its first consumer avoids a
+   * temporal-dead-zone ReferenceError if a message arrives during startup.
+   */
+  const pendingOutboundEchoes: Array<{ platform: PlatformId; content: string; at: number }> = [];
+  const OUTBOUND_ECHO_WINDOW_MS = 30_000;
+
+  function registerOutboundEcho(platform: PlatformId, content: string): void {
+    pendingOutboundEchoes.push({ platform, content: content.trim(), at: Date.now() });
+  }
+
+  function consumeOutboundEcho(message: ChatMessage): boolean {
+    const now = Date.now();
+    for (let i = pendingOutboundEchoes.length - 1; i >= 0; i--) {
+      if (now - pendingOutboundEchoes[i].at > OUTBOUND_ECHO_WINDOW_MS) pendingOutboundEchoes.splice(i, 1);
+    }
+    const index = pendingOutboundEchoes.findIndex(
+      (entry) => entry.platform === message.platform && entry.content === message.content.trim(),
+    );
+    if (index < 0) return false;
+    pendingOutboundEchoes.splice(index, 1);
+    return true;
+  }
+
   const chatService = new ChatService({
     commandModules: [soundService, textService, voiceService, raffleService, pollService, suggestionService, musicService],
     onMessage: (message) => {
@@ -3441,35 +3475,6 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     else if (process.platform === 'linux') await execFile('espeak', [text]);
     else if (process.platform === 'win32') await execFile('powershell', ['-NoProfile', '-Command', `Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; $s.Speak('${text.replace(/'/g, "''")}')`]);
     else options.stateHub.pushVoiceSpeak({ text, lang: 'en-US' });
-  }
-
-  /**
-   * Platform echoes of messages the app sent and already displayed via
-   * `pushLocalOutboundMessage`. Some platforms re-deliver the bot's own
-   * message as a regular chat message moments after the send (YouTube
-   * polling/scraper, Kick pusher, a second Twitch account joined to the same
-   * channel) — without suppression the reply shows up twice in the chat feed.
-   * Entries are consumed on first match, so identical content sent twice
-   * still displays twice.
-   */
-  const pendingOutboundEchoes: Array<{ platform: PlatformId; content: string; at: number }> = [];
-  const OUTBOUND_ECHO_WINDOW_MS = 30_000;
-
-  function registerOutboundEcho(platform: PlatformId, content: string): void {
-    pendingOutboundEchoes.push({ platform, content: content.trim(), at: Date.now() });
-  }
-
-  function consumeOutboundEcho(message: ChatMessage): boolean {
-    const now = Date.now();
-    for (let i = pendingOutboundEchoes.length - 1; i >= 0; i--) {
-      if (now - pendingOutboundEchoes[i].at > OUTBOUND_ECHO_WINDOW_MS) pendingOutboundEchoes.splice(i, 1);
-    }
-    const index = pendingOutboundEchoes.findIndex(
-      (entry) => entry.platform === message.platform && entry.content === message.content.trim(),
-    );
-    if (index < 0) return false;
-    pendingOutboundEchoes.splice(index, 1);
-    return true;
   }
 
   /**
