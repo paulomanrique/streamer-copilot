@@ -29,7 +29,9 @@ export function TextCommandsPage() {
   const [error, setError] = useState<string | null>(null);
   const [occupiedTriggers, setOccupiedTriggers] = useState<Set<string>>(new Set());
   const [statusById, setStatusById] = useState<Record<string, ScheduledStatusItem>>({});
-  const [availableTargets, setAvailableTargets] = useState<ScheduledAvailableTargets>({ supported: ['twitch', 'youtube'], connected: [] });
+  // Filled from the main process (getScheduledAvailableTargets), which derives
+  // the supported set from each provider's supportsScheduledSend capability.
+  const [availableTargets, setAvailableTargets] = useState<ScheduledAvailableTargets>({ supported: [], connected: [] });
 
   const [textSettings, setTextSettings] = useState<TextSettings>(DEFAULT_TEXT_SETTINGS);
   const [draftSettings, setDraftSettings] = useState<TextSettings>(DEFAULT_TEXT_SETTINGS);

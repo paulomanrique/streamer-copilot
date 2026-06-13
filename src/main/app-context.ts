@@ -544,7 +544,11 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   // here so helpers defined earlier can defer to the adapter once it exists.
   let youtubeAdapter: YouTubeChatAdapter | null = null;
 
-  const SCHEDULED_SUPPORTED_TARGETS: PlatformId[] = ['twitch', 'youtube', 'youtube-api'];
+  // Platforms that can receive outbound scheduled/announced messages — derived
+  // from the provider registry's `supportsScheduledSend` capability, not a
+  // hardcoded list. Evaluated at call time (providers register during startup).
+  const scheduledSupportedTargets = (): PlatformId[] =>
+    mainPlatforms.list().filter((p) => p.supportsScheduledSend).map((p) => p.providerId as PlatformId);
   // eslint-disable-next-line prefer-const -- forward-declared; assigned after dependent services are created
   let raffleService: RaffleService;
   // eslint-disable-next-line prefer-const -- forward-declared; assigned after dependent services are created
@@ -1923,8 +1927,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   ipcMain.handle(IPC_CHANNELS.scheduledGetAvailableTargets, async () => {
     schedulerService.refreshStatus();
     return {
-      supported: [...SCHEDULED_SUPPORTED_TARGETS],
-      connected: getConnectedScheduledTargets(),
+      supported: scheduledSupportedTargets(),
+      connected: await getConnectedScheduledTargets(),
     };
   });
 
@@ -2804,6 +2808,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   const twitchProvider: MainPlatformProvider = {
     providerId: 'twitch',
+    supportsScheduledSend: true,
     getAggregateStatus: () => ({ status: twitchStatus, primaryChannel: twitchChannel }),
     getStatus: (account) => {
       const status = twitchAccountStatus.get(account.id);
@@ -2839,6 +2844,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   const kickProvider: MainPlatformProvider = {
     providerId: 'kick',
+    supportsScheduledSend: false,
     getAggregateStatus: () => ({ status: aggregateKickStatus(), primaryChannel: kickSlug }),
     getStatus: (account) => {
       if (account) {
@@ -2973,6 +2979,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   const tiktokProvider: MainPlatformProvider = {
     providerId: 'tiktok',
+    supportsScheduledSend: false,
     getAggregateStatus: () => ({ status: aggregateTiktokStatus(), primaryChannel: tiktokUsername }),
     getStatus: (account) => {
       if (account) {
@@ -3010,6 +3017,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const youtubeStatusListeners = new Set<() => void>();
   const youtubeProvider: MainPlatformProvider = {
     providerId: 'youtube',
+    supportsScheduledSend: true,
     getAggregateStatus: async () => ({
       status: (await loadYoutubeSettings().catch(() => null))?.channels.some((c) => c.enabled) ? ('connected' as const) : ('disconnected' as const),
       primaryChannel: null,
@@ -3056,6 +3064,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const youtubeApiStatusListeners = new Set<() => void>();
   const youtubeApiProvider: MainPlatformProvider = {
     providerId: 'youtube-api',
+    supportsScheduledSend: true,
     getAggregateStatus: async () => ({
       status: (await accountRepository.list().catch(() => [])).some((a) => a.providerId === 'youtube-api' && a.enabled) ? ('connected' as const) : ('disconnected' as const),
       primaryChannel: null,
@@ -3620,11 +3629,18 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       .replaceAll('{title}', raffle.title);
   }
 
-  function getConnectedScheduledTargets(): PlatformId[] {
+  // Which schedule-capable platforms are currently connected — derived from the
+  // registry's aggregate status (account/channel enabled), matching the role
+  // pickers. Generic over providers, no hardcoded ids. Note: actually *sending*
+  // still requires a live stream — resolveDispatchTargets keeps that per-target
+  // check; this only drives the schedule-target UI's "connected" hints.
+  async function getConnectedScheduledTargets(): Promise<PlatformId[]> {
     const connected: PlatformId[] = [];
-    if (twitchStatus === 'connected') connected.push('twitch');
-    if (hasYoutubeScraper()) connected.push('youtube');
-    if (youtubeApiAdapter.hasActiveStreams()) connected.push('youtube-api');
+    for (const provider of mainPlatforms.list()) {
+      if (!provider.supportsScheduledSend) continue;
+      const { status } = await provider.getAggregateStatus();
+      if (status === 'connected') connected.push(provider.providerId as PlatformId);
+    }
     return connected;
   }
 
@@ -3671,7 +3687,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   function resolveDispatchTargets(requestedTargets: PlatformId[]): PlatformId[] {
     const resolved = new Set<PlatformId>();
     for (const target of requestedTargets) {
-      if (!SCHEDULED_SUPPORTED_TARGETS.includes(target)) continue;
+      if (!scheduledSupportedTargets().includes(target)) continue;
       if (target === 'twitch') {
         if (twitchStatus === 'connected') resolved.add('twitch');
         continue;

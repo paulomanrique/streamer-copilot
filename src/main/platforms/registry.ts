@@ -15,6 +15,11 @@ import type { PlatformAccount, PlatformAccountConnectionStatus, PlatformLinkSnap
 export interface MainPlatformProvider {
   readonly providerId: string;
 
+  /** Whether this platform can receive outbound scheduled/announced messages.
+   *  Drives the scheduling target list (UI + dispatch validation) so the set of
+   *  schedulable platforms is derived from the registry, never hardcoded. */
+  readonly supportsScheduledSend: boolean;
+
   /** Current connection state of `account`. May read provider-specific state. */
   getStatus(account: PlatformAccount): Promise<PlatformAccountConnectionStatus> | PlatformAccountConnectionStatus;
 

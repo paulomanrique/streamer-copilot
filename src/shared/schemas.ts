@@ -7,7 +7,10 @@ import { z } from 'zod';
  * (e.g. chatService rejects sends to a platform with no registered adapter).
  */
 const platformIdSchema = z.string().min(1).max(64).regex(/^[a-z0-9-]+$/);
-const scheduledTargetPlatformSchema = z.enum(['twitch', 'youtube', 'youtube-api']);
+// Any platform id is accepted at the schema layer; which platforms can actually
+// receive a scheduled/announced message is a runtime capability (provider
+// `supportsScheduledSend`) enforced by the dispatch path — not a hardcoded enum.
+const scheduledTargetPlatformSchema = platformIdSchema;
 
 const permissionRoleIdSchema = z.union([
   z.enum(['everyone', 'follower', 'subscriber', 'vip', 'moderator', 'broadcaster']),
