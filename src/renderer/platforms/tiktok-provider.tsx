@@ -1,4 +1,6 @@
+import type { TikTokLiveStats } from '../../shared/types.js';
 import { registerPlatformProvider, type AuthStepProps } from './registry.js';
+import { fmtNum } from './live-entry.js';
 
 function normalizeTikTokUsername(raw: string): string {
   let value = raw.trim().toLowerCase();
@@ -61,6 +63,24 @@ registerPlatformProvider({
   supportedRoles: ['everyone', 'follower', 'moderator', 'broadcaster'],
   hasSubscriberTiers: false,
   canSendMessages: false,
+  liveEntries: ({ liveStats, status, primaryChannel }) => {
+    const keys = Object.keys(liveStats);
+    const usernames = keys.length > 0 ? keys : (status === 'connected' && primaryChannel ? [primaryChannel] : []);
+    const multi = usernames.length > 1;
+    return usernames.map((username) => {
+      const s = liveStats[username] as TikTokLiveStats | undefined;
+      return {
+        key: `tiktok:${username}`,
+        platformId: 'tiktok',
+        isLive: true,
+        liveUrl: `https://www.tiktok.com/@${username}/live`,
+        linkLabel: `TikTok @${username}`,
+        cardLabel: multi ? `TikTok · @${username}` : 'TikTok',
+        value: s ? fmtNum(s.viewerCount) : '—',
+        valueLabel: 'viewers',
+      };
+    });
+  },
   profileUrl: (handle) => {
     const username = handle.replace(/^@+/, '').trim();
     return username ? `https://www.tiktok.com/@${encodeURIComponent(username)}` : '';

@@ -1,6 +1,8 @@
 import { useState } from 'react';
 
+import type { YouTubeStreamInfo } from '../../shared/types.js';
 import { registerPlatformProvider, type AuthStepProps } from './registry.js';
+import { fmtNum } from './live-entry.js';
 import { YouTubeAccountActions } from './youtube-channel-picker.js';
 import { YOUTUBE_ICON, youtubeProfileUrl } from './youtube-shared.js';
 
@@ -81,6 +83,21 @@ registerPlatformProvider({
   supportedRoles: ['everyone', 'subscriber', 'moderator', 'broadcaster'],
   hasSubscriberTiers: true,
   canSendMessages: true,
+  liveEntries: ({ liveStats }) => Object.values(liveStats).map((raw) => {
+    const stream = raw as YouTubeStreamInfo;
+    return {
+      key: `${stream.platform}:${stream.videoId}`,
+      platformId: stream.platform,
+      isLive: true,
+      liveUrl: stream.liveUrl,
+      linkLabel: stream.label || 'YouTube',
+      cardLabel: stream.label || 'YouTube',
+      value: stream.viewerCount !== null ? fmtNum(stream.viewerCount) : '—',
+      valueLabel: 'viewers',
+      secondaryValue: stream.subscriberCount !== null ? fmtNum(stream.subscriberCount) : '—',
+      secondaryLabel: 'subscribers',
+    };
+  }),
   profileUrl: youtubeProfileUrl,
   AuthStep: YouTubeAuthStep,
   validate(channel) {

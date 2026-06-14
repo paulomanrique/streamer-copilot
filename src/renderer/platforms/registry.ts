@@ -1,6 +1,15 @@
 import type { ComponentType } from 'react';
 
-import type { PermissionLevel, PlatformAccount } from '../../shared/types.js';
+import type { PermissionLevel, PlatformAccount, PlatformLinkStatus, PlatformLiveEntry } from '../../shared/types.js';
+
+/** Input for `PlatformProvider.liveEntries` — the symmetric per-platform store
+ *  slices for one platform id. Each provider casts `liveStats` to its own stats
+ *  shape. */
+export interface PlatformLiveInput {
+  liveStats: Record<string, unknown>;
+  status: PlatformLinkStatus;
+  primaryChannel: string | null;
+}
 
 export interface AuthStepProps {
   /** Current draft of providerData being built up by the wizard. */
@@ -89,6 +98,10 @@ export interface PlatformBehavior {
    *  read-only adapters (TikTok). Drives message-target selectors (e.g. the
    *  suggestion-feedback platforms) so they offer only platforms that can reply. */
   canSendMessages: boolean;
+  /** Normalizes this platform's live state into uniform entries for the header
+   *  live-links drawer and the dashboard viewer cards — so neither consumer
+   *  hardcodes per-platform branches. Returns [] when nothing is connected. */
+  liveEntries(input: PlatformLiveInput): PlatformLiveEntry[];
 }
 
 export interface PlatformProvider extends PlatformVisuals, PlatformBehavior {
@@ -188,6 +201,7 @@ const FALLBACK_PROVIDER: PlatformProvider = {
   supportedRoles: ['everyone', 'broadcaster'],
   hasSubscriberTiers: false,
   canSendMessages: false,
+  liveEntries: () => [],
 };
 
 /** Returns the provider matching `id`, or a gray fallback when the id is

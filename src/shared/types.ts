@@ -131,6 +131,35 @@ export interface PlatformLinkSnapshot {
   primaryChannel: string | null;
 }
 
+/**
+ * One live channel/stream, normalized for the header live-links drawer and the
+ * dashboard viewer cards. Produced by each platform provider's `liveEntries()`
+ * so neither consumer hardcodes per-platform branches (see the platform-agnostic
+ * rules in AGENTS.md). `value`/`secondaryValue` are already formatted with the
+ * platform's fallback ('0' vs '—'); the *Label fields are i18n keys.
+ */
+export interface PlatformLiveEntry {
+  /** Unique, stable React key across all platforms. */
+  key: string;
+  platformId: PlatformId;
+  /** Whether this entry is live right now — the header drawer renders only these. */
+  isLive: boolean;
+  /** Public "watch live" URL (header drawer). */
+  liveUrl: string;
+  /** Label for the header live-link row (e.g. "Twitch #foo", "YouTube"). */
+  linkLabel: string;
+  /** Label for the dashboard viewer card (e.g. "Twitch", "Twitch · foo"). */
+  cardLabel: string;
+  /** Pre-formatted primary stat (viewer count) with the platform's fallback. */
+  value: string;
+  /** i18n key for the primary stat label (e.g. 'viewers'). */
+  valueLabel: string;
+  /** Pre-formatted secondary stat, or undefined when the platform has none. */
+  secondaryValue?: string;
+  /** i18n key for the secondary stat label (e.g. 'followers' | 'subscribers'). */
+  secondaryLabel?: string;
+}
+
 export type ChatBadge = 'moderator' | 'subscriber' | 'member' | 'vip' | 'broadcaster' | (string & {});
 export type ChatMessageContentPart =
   | { type: 'text'; text: string }

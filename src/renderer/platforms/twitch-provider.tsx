@@ -1,6 +1,8 @@
 import { useState } from 'react';
 
+import type { TwitchLiveStats } from '../../shared/types.js';
 import { registerPlatformProvider, type AuthStepProps } from './registry.js';
+import { fmtNum } from './live-entry.js';
 
 function TwitchAuthStep({ draft, updateDraft, channel, setChannel, setError }: AuthStepProps) {
   const [busy, setBusy] = useState(false);
@@ -77,6 +79,25 @@ registerPlatformProvider({
   supportedRoles: ['everyone', 'follower', 'subscriber', 'vip', 'moderator', 'broadcaster'],
   hasSubscriberTiers: true,
   canSendMessages: true,
+  liveEntries: ({ liveStats }) => {
+    const channels = Object.keys(liveStats);
+    const multi = channels.length > 1;
+    return channels.map((channel) => {
+      const s = liveStats[channel] as TwitchLiveStats | undefined;
+      return {
+        key: `twitch:${channel}`,
+        platformId: 'twitch',
+        isLive: !!s?.isLive,
+        liveUrl: `https://twitch.tv/${channel}`,
+        linkLabel: `Twitch #${channel}`,
+        cardLabel: multi ? `Twitch · ${channel}` : 'Twitch',
+        value: s ? fmtNum(s.viewerCount) : '0',
+        valueLabel: 'viewers',
+        secondaryValue: s ? fmtNum(s.followerCount) : undefined,
+        secondaryLabel: 'followers',
+      };
+    });
+  },
   profileUrl: (handle) => {
     const username = handle.replace(/^@+/, '').trim();
     return username ? `https://twitch.tv/${encodeURIComponent(username)}` : '';

@@ -1,6 +1,8 @@
 import { useState } from 'react';
 
+import type { KickLiveStats } from '../../shared/types.js';
 import { registerPlatformProvider, type AuthStepProps } from './registry.js';
+import { fmtNum } from './live-entry.js';
 
 function KickAuthStep({ channel, setChannel, setError }: AuthStepProps) {
   const [busy, setBusy] = useState(false);
@@ -75,6 +77,28 @@ registerPlatformProvider({
   supportedRoles: ['everyone', 'follower', 'subscriber', 'moderator', 'broadcaster'],
   hasSubscriberTiers: false,
   canSendMessages: true,
+  liveEntries: ({ liveStats, status, primaryChannel }) => {
+    const keys = Object.keys(liveStats);
+    const channels = keys.length > 0 ? keys : (status === 'connected' && primaryChannel ? [primaryChannel] : []);
+    const multi = channels.length > 1;
+    return channels.map((channel) => {
+      const s = liveStats[channel] as KickLiveStats | undefined;
+      const hasFollower = s?.followerCount !== null && s?.followerCount !== undefined;
+      const hasSubscriber = s?.subscriberCount !== null && s?.subscriberCount !== undefined;
+      return {
+        key: `kick:${channel}`,
+        platformId: 'kick',
+        isLive: s?.isLive ?? true,
+        liveUrl: `https://kick.com/${channel}`,
+        linkLabel: `Kick ${channel}`,
+        cardLabel: multi ? `Kick · ${channel}` : 'Kick',
+        value: s ? fmtNum(s.viewerCount) : '—',
+        valueLabel: 'viewers',
+        secondaryValue: hasFollower ? fmtNum(s!.followerCount as number) : hasSubscriber ? fmtNum(s!.subscriberCount as number) : '—',
+        secondaryLabel: hasFollower ? 'followers' : 'subscribers',
+      };
+    });
+  },
   profileUrl: (handle) => {
     const username = handle.replace(/^@+/, '').trim().toLowerCase();
     return username ? `https://kick.com/${encodeURIComponent(username)}` : '';

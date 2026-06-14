@@ -1,42 +1,25 @@
 import { useEffect, useState } from 'react';
-import type { KickConnectionStatus, KickLiveStats, ObsStatsSnapshot, TikTokConnectionStatus, TikTokLiveStats, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
+import type { ObsStatsSnapshot, PlatformLiveEntry, TwitchLiveStats } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
 import { getPlatformProviderOrFallback } from '../platforms/registry.js';
 
 interface ObsStatsPanelProps {
   stats: ObsStatsSnapshot;
+  /** Uniform live entries from the registry — drives the viewer cards. */
+  liveEntries: PlatformLiveEntry[];
+  /** Twitch-only hype-train slice (no cross-platform analog). */
   twitchLiveStatsByChannel: Record<string, TwitchLiveStats>;
-  /** Distinct channels currently connected via the Twitch multi-adapter,
-   *  in stable order (insertion). Drives one ViewerCard per channel even
-   *  before the first stats poll lands. */
-  twitchConnectedChannels: string[];
-  twitchConnected: boolean;
-  youtubeStreams: YouTubeStreamInfo[];
-  tiktokStatus: TikTokConnectionStatus;
-  tiktokUsername: string | null;
-  /** Per-username TikTok stats — drives one ViewerCard per connected host. */
-  tiktokLiveStatsByUsername: Record<string, TikTokLiveStats>;
-  kickStatus: KickConnectionStatus;
-  kickSlug: string | null;
-  /** Per-channel Kick stats — drives one ViewerCard per connected channel. */
-  kickLiveStatsByChannel: Record<string, KickLiveStats>;
 }
 
-function fmtNum(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return String(n);
-}
-
-export function ObsStatsPanel({ stats, twitchLiveStatsByChannel, twitchConnectedChannels, twitchConnected, youtubeStreams, tiktokStatus, tiktokUsername, tiktokLiveStatsByUsername, kickStatus, kickSlug, kickLiveStatsByChannel }: ObsStatsPanelProps) {
+export function ObsStatsPanel({ stats, liveEntries, twitchLiveStatsByChannel }: ObsStatsPanelProps) {
   const { t } = useI18n();
 
-  // Hype train is per-channel — pick whichever channel currently has one.
-  // Multi-channel hype is rare enough that one indicator is fine.
-  const hype = twitchConnectedChannels
-    .map((c) => twitchLiveStatsByChannel[c]?.hypeTrain)
+  // Hype train is Twitch-only and per-channel — pick whichever channel
+  // currently has one. Multi-channel hype is rare enough that one indicator
+  // is fine.
+  const hype = Object.values(twitchLiveStatsByChannel)
+    .map((s) => s?.hypeTrain)
     .find((h): h is NonNullable<typeof h> => Boolean(h)) ?? null;
-  const hasMultipleTwitch = twitchConnectedChannels.length > 1;
   const [timeLeft, setTimeLeft] = useState('');
 
   useEffect(() => {
@@ -60,12 +43,6 @@ export function ObsStatsPanel({ stats, twitchLiveStatsByChannel, twitchConnected
     const timer = setInterval(update, 1000);
     return () => clearInterval(timer);
   }, [hype]);
-
-  // Stream labels are computed in the main process by computeYouTubeStreamLabels —
-  // the card just renders what's resolved (channel handle, Horizontal/Vertical,
-  // or the YouTube-N fallback). Avoids re-deriving from platform here, which
-  // can't tell channels apart.
-  const resolveYouTubeCardLabel = (stream: YouTubeStreamInfo): string => stream.label || 'YouTube';
 
   return (
     <div className="border-b border-gray-800 p-4 shrink-0">
@@ -99,94 +76,22 @@ export function ObsStatsPanel({ stats, twitchLiveStatsByChannel, twitchConnected
           <div className="text-xs text-gray-500 mt-0.5 leading-tight">{t('Dropped Frames')}<br />({t('render')})</div>
         </div>
 
-        {(() => {
-          const tiktokUsernames = Object.keys(tiktokLiveStatsByUsername);
-          const tiktokFallback = tiktokStatus === 'connected' && tiktokUsernames.length === 0 && tiktokUsername ? [tiktokUsername] : [];
-          const tiktokConnectedUsernames = tiktokUsernames.length > 0 ? tiktokUsernames : tiktokFallback;
-          const hasMultipleTiktok = tiktokConnectedUsernames.length > 1;
-
-          const kickChannels = Object.keys(kickLiveStatsByChannel);
-          const kickFallback = kickStatus === 'connected' && kickChannels.length === 0 && kickSlug ? [kickSlug] : [];
-          const kickConnectedChannels = kickChannels.length > 0 ? kickChannels : kickFallback;
-          const hasMultipleKick = kickConnectedChannels.length > 1;
-
-          const anyConnected = twitchConnected
-            || youtubeStreams.length > 0
-            || tiktokConnectedUsernames.length > 0
-            || kickConnectedChannels.length > 0;
-          if (!anyConnected) return null;
-
-          // TODO(platform-agnostic): the per-platform viewer-card branches below
-          // (hardcoded getPlatformProviderOrFallback('twitch'|'tiktok'|'kick'))
-          // violate the AGENTS.md "no hardcoded platform lists" rule. They
-          // persist because live-state in the store is asymmetric per platform.
-          // Planned fix: a registry `liveEntries(input): PlatformLiveEntry[]`
-          // method so this maps a single uniform list of entries.
-          return (
-            <div className="col-span-4 grid grid-cols-2 gap-2">
-              {twitchConnectedChannels.map((channel) => {
-                const channelStats = twitchLiveStatsByChannel[channel] ?? null;
-                const meta = getPlatformProviderOrFallback('twitch');
-                return (
-                  <ViewerCard
-                    key={`twitch-${channel}`}
-                    label={hasMultipleTwitch ? `Twitch · ${channel}` : 'Twitch'}
-                    meta={meta}
-                    value={channelStats ? fmtNum(channelStats.viewerCount) : '0'}
-                    isLive={!!channelStats?.isLive}
-                    secondaryValue={channelStats ? fmtNum(channelStats.followerCount) : undefined}
-                    secondaryLabel={t('followers')}
-                  />
-                );
-              })}
-              {youtubeStreams.map((stream) => (
-                <ViewerCard
-                  key={stream.videoId}
-                  label={resolveYouTubeCardLabel(stream)}
-                  meta={getPlatformProviderOrFallback(stream.platform)}
-                  value={stream.viewerCount !== null ? fmtNum(stream.viewerCount) : '—'}
-                  isLive
-                  secondaryValue={stream.subscriberCount !== null ? fmtNum(stream.subscriberCount) : '—'}
-                  secondaryLabel={t('subscribers')}
-                />
-              ))}
-              {tiktokConnectedUsernames.map((username) => {
-                const usernameStats = tiktokLiveStatsByUsername[username] ?? null;
-                return (
-                  <ViewerCard
-                    key={`tiktok-${username}`}
-                    label={hasMultipleTiktok ? `TikTok · @${username}` : 'TikTok'}
-                    meta={getPlatformProviderOrFallback('tiktok')}
-                    value={usernameStats ? fmtNum(usernameStats.viewerCount) : '—'}
-                    valueLabel={t('viewers')}
-                    isLive
-                  />
-                );
-              })}
-              {kickConnectedChannels.map((channel) => {
-                const channelStats = kickLiveStatsByChannel[channel] ?? null;
-                return (
-                  <ViewerCard
-                    key={`kick-${channel}`}
-                    label={hasMultipleKick ? `Kick · ${channel}` : 'Kick'}
-                    meta={getPlatformProviderOrFallback('kick')}
-                    value={channelStats ? fmtNum(channelStats.viewerCount) : '—'}
-                    valueLabel={t('viewers')}
-                    isLive={channelStats?.isLive ?? true}
-                    secondaryValue={channelStats?.followerCount !== null && channelStats?.followerCount !== undefined
-                      ? fmtNum(channelStats.followerCount)
-                      : channelStats?.subscriberCount !== null && channelStats?.subscriberCount !== undefined
-                        ? fmtNum(channelStats.subscriberCount)
-                      : '—'}
-                    secondaryLabel={channelStats?.followerCount !== null && channelStats?.followerCount !== undefined
-                      ? t('followers')
-                      : t('subscribers')}
-                  />
-                );
-              })}
-            </div>
-          );
-        })()}
+        {liveEntries.length > 0 ? (
+          <div className="col-span-4 grid grid-cols-2 gap-2">
+            {liveEntries.map((entry) => (
+              <ViewerCard
+                key={entry.key}
+                label={entry.cardLabel}
+                meta={getPlatformProviderOrFallback(entry.platformId)}
+                value={entry.value}
+                valueLabel={t(entry.valueLabel)}
+                isLive={entry.isLive}
+                secondaryValue={entry.secondaryValue}
+                secondaryLabel={entry.secondaryLabel ? t(entry.secondaryLabel) : undefined}
+              />
+            ))}
+          </div>
+        ) : null}
 
         {/* Hype Train Indicator */}
         {hype && (

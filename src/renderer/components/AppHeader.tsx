@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import logoUrl from '../assets/logo.svg';
-import type { AppInfo, KickConnectionStatus, KickLiveStats, TikTokConnectionStatus, TikTokLiveStats, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
+import type { AppInfo, PlatformLiveEntry } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
 import { getPlatformProviderOrFallback } from '../platforms/registry.js';
 import type { AppSection } from './SectionTabs.js';
@@ -11,16 +11,8 @@ interface AppHeaderProps {
   currentSection: AppSection;
   onChangeSection: (section: AppSection) => void;
   onOpenProfileSelector?: () => void;
-  twitchLiveStatsByChannel: Record<string, TwitchLiveStats>;
-  youtubeStreams: YouTubeStreamInfo[];
-  tiktokStatus: TikTokConnectionStatus;
-  tiktokUsername: string | null;
-  /** Per-username TikTok stats — one entry per connected host. */
-  tiktokLiveStatsByUsername: Record<string, TikTokLiveStats>;
-  kickStatus: KickConnectionStatus;
-  kickSlug: string | null;
-  /** Per-channel Kick stats — one entry per connected channel. */
-  kickLiveStatsByChannel: Record<string, KickLiveStats>;
+  /** Uniform live entries from the registry (App.tsx) — already platform-agnostic. */
+  liveEntries: PlatformLiveEntry[];
 }
 
 /** Build a single live-link row using the platform registry — every
@@ -58,71 +50,20 @@ export function AppHeader({
   currentSection,
   onChangeSection,
   onOpenProfileSelector,
-  twitchLiveStatsByChannel,
-  youtubeStreams,
-  tiktokStatus,
-  tiktokUsername,
-  tiktokLiveStatsByUsername,
-  kickStatus,
-  kickSlug,
-  kickLiveStatsByChannel,
+  liveEntries,
 }: AppHeaderProps) {
   const { messages, t } = useI18n();
   const [liveOpen, setLiveOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const appName = appInfo?.appName ?? 'Streamer Copilot';
 
-  const liveTwitchChannels = Object.entries(twitchLiveStatsByChannel)
-    .filter(([, stats]) => stats.isLive)
-    .map(([channel]) => channel);
-
-  // Kick: prefer per-channel stats; fall back to the legacy single-status flag
-  // when no stats have arrived yet so a freshly-connected channel still surfaces.
-  const liveKickChannels = (() => {
-    const fromStats = Object.entries(kickLiveStatsByChannel)
-      .filter(([, stats]) => stats.isLive !== false)
-      .map(([channel]) => channel);
-    if (fromStats.length > 0) return fromStats;
-    return kickStatus === 'connected' && kickSlug ? [kickSlug] : [];
-  })();
-
-  // TikTok: connected username keys carry "is live now". Stats arrive only
-  // when the host is actually live, so any entry here qualifies.
-  const liveTiktokUsernames = (() => {
-    const fromStats = Object.keys(tiktokLiveStatsByUsername);
-    if (fromStats.length > 0) return fromStats;
-    return tiktokStatus === 'connected' && tiktokUsername ? [tiktokUsername] : [];
-  })();
-
-  const isAnyLive = liveTwitchChannels.length > 0
-    || youtubeStreams.length > 0
-    || liveKickChannels.length > 0
-    || liveTiktokUsernames.length > 0;
-
-  // TODO(platform-agnostic): the per-platform live-link branches below (and the
-  // hardcoded twitch.tv / kick.com / tiktok.com URLs) violate the AGENTS.md
-  // "no hardcoded platform lists" rule. They persist because live-state in the
-  // store is asymmetric per platform (twitch by channel, kick by channel+slug,
-  // tiktok by username, youtube by stream). Planned fix: a registry
-  // `liveEntries(input): PlatformLiveEntry[]` method so this iterates providers.
-  const liveLinks = [
-    ...liveTwitchChannels.map((channel) =>
-      makeLiveLink('twitch', `twitch-${channel}`, `Twitch #${channel}`, `https://twitch.tv/${channel}`),
-    ),
-    // stream.label already carries the "YouTube" prefix when needed
-    // (e.g. "YouTube Horizontal", "YouTube @user", "YouTube-1") and is
-    // just "YouTube" for the single-stream case — see
-    // computeYouTubeStreamLabels in the main process.
-    ...youtubeStreams.map((stream) =>
-      makeLiveLink(stream.platform, `yt-${stream.videoId}`, stream.label || 'YouTube', stream.liveUrl),
-    ),
-    ...liveKickChannels.map((channel) =>
-      makeLiveLink('kick', `kick-${channel}`, `Kick ${channel}`, `https://kick.com/${channel}`),
-    ),
-    ...liveTiktokUsernames.map((username) =>
-      makeLiveLink('tiktok', `tiktok-${username}`, `TikTok @${username}`, `https://www.tiktok.com/@${username}/live`),
-    ),
-  ];
+  // Live links come straight from the registry-produced entries — no
+  // per-platform branches or hardcoded URLs here (see AGENTS.md). The drawer
+  // shows only entries currently live.
+  const liveLinks = liveEntries
+    .filter((entry) => entry.isLive)
+    .map((entry) => makeLiveLink(entry.platformId, entry.key, entry.linkLabel, entry.liveUrl));
+  const isAnyLive = liveLinks.length > 0;
 
   const copyLink = (id: string, url: string) => {
     navigator.clipboard.writeText(url).catch(() => null);

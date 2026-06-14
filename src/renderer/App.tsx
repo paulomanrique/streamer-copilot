@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { DEFAULT_APP_LANGUAGE } from '../shared/constants.js';
-import type { AppInfo, AppLanguage, GeneralSettings, KickConnectionStatus, KickLiveStats, PermissionLevel, ProfileSettings, ProfilesSnapshot, TikTokConnectionStatus, TikTokLiveStats, TwitchConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../shared/types.js';
+import type { AppInfo, AppLanguage, GeneralSettings, PlatformId, ProfileSettings, ProfilesSnapshot, TwitchLiveStats } from '../shared/types.js';
 import { useAppStore } from './store.js';
+import { listPlatformProviders } from './platforms/registry.js';
 import { I18nProvider } from './i18n/I18nProvider.js';
 import { messages } from './i18n/messages.js';
 import { AppHeader } from './components/AppHeader.js';
@@ -45,33 +46,20 @@ export default function App() {
     setUserLists,
   } = useAppStore();
 
-  // Per-platform views, derived from the symmetric store. This local
-  // unpacking is a temporary smell — the registry-driven prop pass-down
-  // (next commit) will let the consumers read straight from the symmetric
-  // maps and drop these aliases.
-  const twitchStatus = (platformStatus.twitch ?? 'disconnected') as TwitchConnectionStatus;
-  const twitchChannel = platformPrimaryChannel.twitch ?? null;
+  // Twitch hype-train data flows as a raw slice — it's a Twitch-only feature
+  // with no cross-platform analog (see ObsStatsPanel's hype indicator).
   const twitchLiveStatsByChannel = (platformLiveStats.twitch ?? {}) as Record<string, TwitchLiveStats>;
-  const tiktokStatus = (platformStatus.tiktok ?? 'disconnected') as TikTokConnectionStatus;
-  const tiktokUsername = platformPrimaryChannel.tiktok ?? null;
-  const tiktokLiveStatsByUsername = (platformLiveStats.tiktok ?? {}) as Record<string, TikTokLiveStats>;
-  const kickStatus = (platformStatus.kick ?? 'disconnected') as KickConnectionStatus;
-  const kickSlug = platformPrimaryChannel.kick ?? null;
-  const kickLiveStatsByChannel = (platformLiveStats.kick ?? {}) as Record<string, KickLiveStats>;
-  // YouTube emits one live-stats entry per concurrent stream, keyed by videoId.
-  // Collect them across every driver by shape (the videoId field) instead of
-  // hardcoding the youtube driver ids — see the platform-agnostic rules.
-  const youtubeStreams = useMemo(() => {
-    const out: YouTubeStreamInfo[] = [];
-    for (const byVideoId of Object.values(platformLiveStats)) {
-      for (const stream of Object.values(byVideoId ?? {})) {
-        if (stream && typeof stream === 'object' && 'videoId' in stream) {
-          out.push(stream as YouTubeStreamInfo);
-        }
-      }
-    }
-    return out;
-  }, [platformLiveStats]);
+  // Uniform live entries for the header live-links drawer and the dashboard
+  // viewer cards, produced by each provider's liveEntries() — the consumers
+  // hold no per-platform branches (see the platform-agnostic rules in AGENTS.md).
+  const liveEntries = useMemo(
+    () => listPlatformProviders().flatMap((p) => p.liveEntries({
+      liveStats: platformLiveStats[p.id as PlatformId] ?? {},
+      status: platformStatus[p.id as PlatformId] ?? 'disconnected',
+      primaryChannel: platformPrimaryChannel[p.id as PlatformId] ?? null,
+    })),
+    [platformLiveStats, platformStatus, platformPrimaryChannel],
+  );
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -373,14 +361,7 @@ export default function App() {
             appInfo={appInfo}
             currentSection={currentSection}
             onChangeSection={setCurrentSection}
-            twitchLiveStatsByChannel={twitchLiveStatsByChannel}
-            youtubeStreams={youtubeStreams}
-            tiktokStatus={tiktokStatus}
-            tiktokUsername={tiktokUsername}
-            tiktokLiveStatsByUsername={tiktokLiveStatsByUsername}
-            kickStatus={kickStatus}
-            kickSlug={kickSlug}
-            kickLiveStatsByChannel={kickLiveStatsByChannel}
+            liveEntries={liveEntries}
           />
         ) : null}
 
@@ -391,16 +372,8 @@ export default function App() {
           <ConnectedDashboardSummary
             activeProfileName={activeProfileName}
             obsStats={obsStats}
-            twitchStatus={twitchStatus}
-            twitchChannel={twitchChannel}
             twitchLiveStatsByChannel={twitchLiveStatsByChannel}
-            youtubeStreams={youtubeStreams}
-            tiktokStatus={tiktokStatus}
-            tiktokUsername={tiktokUsername}
-            tiktokLiveStatsByUsername={tiktokLiveStatsByUsername}
-            kickStatus={kickStatus}
-            kickSlug={kickSlug}
-            kickLiveStatsByChannel={kickLiveStatsByChannel}
+            liveEntries={liveEntries}
             recommendationTemplate={generalSettings.recommendationTemplate}
           />
           </SectionErrorBoundary>

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 
-import type { ChatMessage, KickConnectionStatus, KickLiveStats, ObsStatsSnapshot, StreamEvent, TikTokConnectionStatus, TikTokLiveStats, TwitchConnectionStatus, TwitchLiveStats, YouTubeStreamInfo } from '../../shared/types.js';
+import type { ChatMessage, ObsStatsSnapshot, PlatformLiveEntry, StreamEvent, TwitchLiveStats } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
 import { useAppStore } from '../store.js';
 import { ChatFeed } from './ChatFeed.js';
@@ -13,20 +13,14 @@ interface DashboardSummaryProps {
   chatEvents: StreamEvent[];
   chatMessages: ChatMessage[];
   obsStats: ObsStatsSnapshot;
-  twitchStatus: TwitchConnectionStatus;
-  twitchChannel: string | null;
+  /** Twitch-only hype-train slice (no cross-platform analog). */
   twitchLiveStatsByChannel: Record<string, TwitchLiveStats>;
-  youtubeStreams: YouTubeStreamInfo[];
-  tiktokStatus: TikTokConnectionStatus;
-  tiktokUsername: string | null;
-  tiktokLiveStatsByUsername: Record<string, TikTokLiveStats>;
-  kickStatus: KickConnectionStatus;
-  kickSlug: string | null;
-  kickLiveStatsByChannel: Record<string, KickLiveStats>;
+  /** Uniform live entries from the registry, for the dashboard viewer cards. */
+  liveEntries: PlatformLiveEntry[];
   recommendationTemplate: string;
 }
 
-export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, obsStats, twitchStatus, twitchChannel, twitchLiveStatsByChannel, youtubeStreams, tiktokStatus, tiktokUsername, tiktokLiveStatsByUsername, kickStatus, kickSlug, kickLiveStatsByChannel, recommendationTemplate }: DashboardSummaryProps) {
+export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, obsStats, twitchLiveStatsByChannel, liveEntries, recommendationTemplate }: DashboardSummaryProps) {
   const { messages, t } = useI18n();
   const visibleMessages = chatMessages;
   const visibleEvents = chatEvents;
@@ -96,16 +90,8 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
         <div className="flex flex-col w-[40%] overflow-hidden">
           <ObsStatsPanel
             stats={obsStats}
+            liveEntries={liveEntries}
             twitchLiveStatsByChannel={twitchLiveStatsByChannel}
-            twitchConnectedChannels={Object.keys(twitchLiveStatsByChannel)}
-            twitchConnected={twitchStatus === 'connected'}
-            youtubeStreams={youtubeStreams}
-            tiktokStatus={tiktokStatus}
-            tiktokUsername={tiktokUsername}
-            tiktokLiveStatsByUsername={tiktokLiveStatsByUsername}
-            kickStatus={kickStatus}
-            kickSlug={kickSlug}
-            kickLiveStatsByChannel={kickLiveStatsByChannel}
           />
 
           <div className="flex flex-col flex-1 overflow-hidden p-4">
