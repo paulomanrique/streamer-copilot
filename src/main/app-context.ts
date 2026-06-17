@@ -57,6 +57,7 @@ import { KickSettingsStore } from '../platforms/kick/settings-store.js';
 import { KickTokenStore, type KickAuthSession, type KickAuthToken } from '../platforms/kick/token-store.js';
 import { TikTokSettingsStore } from '../platforms/tiktok/settings-store.js';
 import { TikTokMultiChatAdapter } from '../platforms/tiktok/multi-adapter.js';
+import { XMultiChatAdapter } from '../platforms/x/multi-adapter.js';
 import { TwitchCredentialsStore } from '../platforms/twitch/credentials-store.js';
 import { type TwitchChatAdapter } from '../platforms/twitch/adapter.js';
 import { TwitchMultiChatAdapter } from '../platforms/twitch/multi-adapter.js';
@@ -149,7 +150,7 @@ import {
   twitchLoginListSchema,
   twitchBadgeIdListSchema,
 } from '../shared/schemas.js';
-import type { AppInfo, ChatMessage, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, MusicQueueItem, MusicRequestSettings, OverlayDefaults, OverlayPreferencesMap, PlatformAccount, PlatformId, Raffle, SoundSettings, StreamEvent, StreamEventType, SubscriberTierCatalog, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, UserList, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
+import type { AppInfo, ChatMessage, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, MusicQueueItem, MusicRequestSettings, OverlayDefaults, OverlayPreferencesMap, PlatformAccount, PlatformId, PlatformLinkStatus, Raffle, SoundSettings, StreamEvent, StreamEventType, SubscriberTierCatalog, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, UserList, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
 
 const TWITCH_CLIENT_ID = 'vtwg8tzuv1nlip4qh9n6sxx2p76g0s';
 const TWITCH_REDIRECT_PORT = 32999;
@@ -1168,6 +1169,35 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     if (statuses.some((s) => s === 'captcha')) return 'captcha';
     if (statuses.some((s) => s === 'error')) return 'error';
     return 'disconnected';
+  };
+
+  // ── X (Twitter broadcasts) — read-only, same watching/retry model as TikTok ──
+  const xStatusListeners = new Set<() => void>();
+  let xPrimaryHandle: string | null = null;
+  const xMultiAdapter = new XMultiChatAdapter();
+  let xMultiRegistered = false;
+  const xAccountStatus = new Map<string, PlatformLinkStatus>();
+  const xAccountHandle = new Map<string, string>();
+  const xWatchingAccounts = new Set<string>();
+  const xRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  const ensureXMultiRegistered = async (): Promise<void> => {
+    if (xMultiRegistered) return;
+    xMultiRegistered = true;
+    await chatService.replaceAdapter(xMultiAdapter);
+  };
+
+  const aggregateXStatus = (): PlatformLinkStatus => {
+    const statuses = Array.from(xAccountStatus.values());
+    if (statuses.some((s) => s === 'connected')) return 'connected';
+    if (statuses.some((s) => s === 'connecting')) return 'connecting';
+    if (statuses.some((s) => s === 'error')) return 'error';
+    return 'disconnected';
+  };
+
+  const setXStatus = (): void => {
+    options.stateHub.pushPlatformStatus('x', aggregateXStatus(), xPrimaryHandle);
+    for (const listener of xStatusListeners) listener();
   };
 
   const checkYouTubeLive = async (handle: string): Promise<LiveStreamInfo[] | null> => {
@@ -2599,6 +2629,31 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }
   })();
 
+  // Auto-reconnect X broadcasts on startup — one watcher per enabled x account.
+  // Each watcher retries until the streamer goes live (read-only).
+  void (async () => {
+    await activeProfileDirectoryReady;
+    try {
+      const accounts = await accountRepository.list();
+      const xAccounts = accounts.filter((a) => a.providerId === 'x' && a.enabled);
+      for (const account of xAccounts) {
+        const broadcastUrl = typeof account.providerData.broadcastUrl === 'string' ? account.providerData.broadcastUrl : undefined;
+        try {
+          await connectXAccount(account.id, account.channel, broadcastUrl);
+          logService.info('x', 'Auto-reconnected account', { handle: account.channel, accountId: account.id });
+        } catch (cause) {
+          logService.warn('x', 'Auto-reconnect failed', {
+            accountId: account.id,
+            handle: account.channel,
+            error: cause instanceof Error ? cause.message : String(cause),
+          });
+        }
+      }
+    } catch (cause) {
+      logService.warn('x', 'Auto-reconnect orchestration failed', { error: cause instanceof Error ? cause.message : String(cause) });
+    }
+  })();
+
   // Auto-reconnect Kick on startup. Account-model takes precedence: spin up
   // a multi-adapter child per enabled kick account. Fall back to the legacy
   // single-account settings store for installs that haven't migrated.
@@ -3014,6 +3069,140 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     },
   };
 
+  // X broadcasts (like TikTok) need an active live before a chat session binds,
+  // so we use the same watching/retry-until-live model. Each account owns its
+  // retry timer + watching flag.
+  const X_RETRY_MS = 60_000;
+
+  function clearXRetryFor(accountId: string): void {
+    const timer = xRetryTimers.get(accountId);
+    if (timer) { clearTimeout(timer); xRetryTimers.delete(accountId); }
+  }
+
+  function logXConnectionError(message: string, handle: string, cause: unknown): void {
+    const metadata = {
+      handle,
+      errorName: cause instanceof Error ? cause.name : undefined,
+      error: cause instanceof Error ? cause.message : String(cause),
+      stack: cause instanceof Error ? cause.stack : undefined,
+    };
+    logService.error('x', message, metadata);
+    console.error(`[x] ${message}`, metadata);
+  }
+
+  async function tryConnectXAccount(accountId: string, handle: string, broadcastUrl?: string): Promise<{ ok: boolean; error?: unknown }> {
+    try {
+      await ensureXMultiRegistered();
+      await xMultiAdapter.addAccount({
+        accountId,
+        handle,
+        broadcastUrl,
+        log: (msg) => logService.info('x', msg, { accountId, handle }),
+        onError: (cause) => logXConnectionError('Connection error', handle, cause),
+        onStatusChange: (status) => {
+          if (status === 'connected') xWatchingAccounts.delete(accountId);
+          xAccountStatus.set(accountId, status);
+          xPrimaryHandle = handle;
+          setXStatus();
+          broadcastAccountsForProvider('x');
+        },
+        onLiveStats: (stats) => options.stateHub.pushPlatformLiveStats('x', handle, { viewerCount: stats.viewerCount, isLive: true }),
+      });
+      return { ok: true };
+    } catch (cause) {
+      try { await xMultiAdapter.removeAccount(accountId); } catch { /* ignore */ }
+      return { ok: false, error: cause };
+    }
+  }
+
+  function scheduleXRetry(accountId: string, handle: string, broadcastUrl?: string): void {
+    clearXRetryFor(accountId);
+    if (!xWatchingAccounts.has(accountId)) return;
+    const timer = setTimeout(() => {
+      xRetryTimers.delete(accountId);
+      if (!xWatchingAccounts.has(accountId)) return;
+      void tryConnectXAccount(accountId, handle, broadcastUrl).then((result) => {
+        if (!xWatchingAccounts.has(accountId)) return;
+        if (result.ok) return;
+        scheduleXRetry(accountId, handle, broadcastUrl);
+      });
+    }, X_RETRY_MS);
+    xRetryTimers.set(accountId, timer);
+  }
+
+  async function connectXAccount(accountId: string, handle: string, broadcastUrl?: string): Promise<void> {
+    xWatchingAccounts.delete(accountId);
+    clearXRetryFor(accountId);
+    xAccountStatus.set(accountId, 'connecting');
+    xAccountHandle.set(accountId, handle);
+    xPrimaryHandle = handle;
+    chatLogService.openSession('x', handle);
+    suggestionService.clearSessionEntries();
+    selfSenderName.x = handle.toLowerCase();
+    setXStatus();
+
+    const result = await tryConnectXAccount(accountId, handle, broadcastUrl);
+    if (result.ok) return;
+
+    // First attempt failed — usually because the broadcast isn't live yet or
+    // couldn't be resolved from the handle. Switch to "watching" and retry.
+    xWatchingAccounts.add(accountId);
+    broadcastAccountsForProvider('x');
+    logService.info('x', 'Broadcast not live / unresolved — will retry until live', {
+      accountId,
+      handle,
+      retryMs: X_RETRY_MS,
+      reason: result.error instanceof Error ? result.error.message || result.error.name : String(result.error),
+    });
+    scheduleXRetry(accountId, handle, broadcastUrl);
+  }
+
+  async function disconnectXAccount(accountId: string): Promise<void> {
+    xWatchingAccounts.delete(accountId);
+    clearXRetryFor(accountId);
+    const handle = xAccountHandle.get(accountId);
+    xAccountStatus.delete(accountId);
+    xAccountHandle.delete(accountId);
+    if (xMultiAdapter.hasAccount(accountId)) {
+      await xMultiAdapter.removeAccount(accountId);
+    }
+    if (handle) options.stateHub.pushPlatformLiveStats('x', handle, null);
+    if (!xMultiAdapter.hasConnectedChild()) {
+      xPrimaryHandle = null;
+      chatLogService.closeSessionsForPlatform('x');
+    }
+    setXStatus();
+    broadcastAccountsForProvider('x');
+  }
+
+  const xProvider: MainPlatformProvider = {
+    providerId: 'x',
+    supportsScheduledSend: false,
+    getAggregateStatus: () => ({ status: aggregateXStatus(), primaryChannel: xPrimaryHandle }),
+    getStatus: (account) => {
+      const status = xAccountStatus.get(account.id);
+      if (status === 'connected') return 'connected';
+      if (xWatchingAccounts.has(account.id)) return 'watching';
+      if (status === 'connecting') return 'connecting';
+      if (status === 'error') return 'error';
+      return 'disconnected';
+    },
+    async connect(account) {
+      const broadcastUrl = typeof account.providerData.broadcastUrl === 'string' ? account.providerData.broadcastUrl : undefined;
+      await connectXAccount(account.id, account.channel, broadcastUrl);
+    },
+    async disconnect(account) {
+      await disconnectXAccount(account.id);
+    },
+    async purgeStores(account) {
+      if (account) await disconnectXAccount(account.id);
+    },
+    onStatusChange(listener) {
+      xStatusListeners.add(listener);
+      return () => xStatusListeners.delete(listener);
+    },
+  };
+
   const youtubeStatusListeners = new Set<() => void>();
   const youtubeProvider: MainPlatformProvider = {
     providerId: 'youtube',
@@ -3104,7 +3293,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     },
   };
 
-  for (const provider of [twitchProvider, kickProvider, tiktokProvider, youtubeProvider, youtubeApiProvider]) {
+  for (const provider of [twitchProvider, kickProvider, tiktokProvider, xProvider, youtubeProvider, youtubeApiProvider]) {
     mainPlatforms.register(provider);
     provider.onStatusChange(() => {
       broadcastAccountsForProvider(provider.providerId);

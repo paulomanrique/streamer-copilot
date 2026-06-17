@@ -1121,6 +1121,8 @@ const chatOverlayCss = `
   --kick-text: #86efac;
   --tiktok: rgba(236, 72, 153, 0.2);
   --tiktok-text: #f9a8d4;
+  --x: rgba(148, 163, 184, 0.2);
+  --x-text: #cbd5e1;
   /* Live-customizable visual style — vars below are written by the merge
    * JS (defaults ⊕ per-overlay prefs). Falling back to the per-overlay
    * look when the streamer leaves a field unset. */
@@ -1211,6 +1213,7 @@ html { --scale: 1; --opacity: 0; }
 .chat-message.youtube { border-left-color: rgba(239, 68, 68, 0.2); }
 .chat-message.kick { border-left-color: rgba(34, 197, 94, 0.2); }
 .chat-message.tiktok { border-left-color: rgba(236, 72, 153, 0.2); }
+.chat-message.x { border-left-color: rgba(148, 163, 184, 0.2); }
 /* Layer the command-row tint OVER the universal backdrop — the 'background'
  * shorthand used to live here, but it clobbered background-color and left
  * command rows looking transparent whenever the streamer raised --opacity
@@ -1253,6 +1256,7 @@ html { --scale: 1; --opacity: 0; }
 .platform-badge.youtube { background: var(--youtube); color: var(--youtube-text); }
 .platform-badge.kick { background: var(--kick); color: var(--kick-text); }
 .platform-badge.tiktok { background: var(--tiktok); color: var(--tiktok-text); }
+.platform-badge.x { background: var(--x); color: var(--x-text); }
 
 .avatar,
 .avatar-fallback {
@@ -1400,6 +1404,14 @@ ${buildOverlayStyleScript('window')}
       cssClass: 'tiktok',
       label: 'TikTok',
       icon: 'M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.67a8.17 8.17 0 0 0 4.79 1.53V6.75a4.85 4.85 0 0 1-1.02-.06z',
+      badgeStyle: 'synthesized',
+      subscriberBadge: 'subscriber',
+      authorAtPrefix: false,
+    },
+    x: {
+      cssClass: 'x',
+      label: 'X',
+      icon: 'M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z',
       badgeStyle: 'synthesized',
       subscriberBadge: 'subscriber',
       authorAtPrefix: false,
