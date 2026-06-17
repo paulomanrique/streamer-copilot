@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { LegendList, type LegendListRef } from '@legendapp/list/react';
 
 import type { ChatMessage, ObsStatsSnapshot, PlatformLiveEntry, StreamEvent, TwitchLiveStats } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
@@ -65,6 +66,21 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
   }, [platformStatus, platformLiveStats]);
 
   const filteredActivity = visibleEvents.filter((event) => enabledTypes[event.type] !== false);
+
+  // Activity-log scroll: same stick-to-bottom behavior as ChatFeed — newest
+  // events are appended at the bottom, the list auto-follows while the user is
+  // at the end, and a jump-to-bottom button appears once they scroll up.
+  const activityListRef = useRef<LegendListRef | null>(null);
+  const [activityAtBottom, setActivityAtBottom] = useState(true);
+  const onActivityScroll = useCallback(() => {
+    const state = activityListRef.current?.getState();
+    if (!state) return;
+    setActivityAtBottom((current) => (current === state.isAtEnd ? current : state.isAtEnd));
+  }, []);
+  const jumpActivityToBottom = () => {
+    void activityListRef.current?.scrollToEnd({ animated: true });
+    setActivityAtBottom(true);
+  };
 
   const setAllFilters = (enabled: boolean) => {
     setEnabledTypes({
@@ -151,10 +167,36 @@ export function DashboardSummary({ activeProfileName, chatEvents, chatMessages, 
                 ) : null}
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto text-xs">
-              {filteredActivity.length > 0 ? filteredActivity.map((event) => (
-                <EventBanner key={event.id} event={event} variant="activity" />
-              )) : <p className="text-gray-600 text-xs text-center py-4">{t('No event types are enabled.')}</p>}
+            <div className="relative flex-1 min-h-0">
+              {filteredActivity.length > 0 ? (
+                <LegendList<StreamEvent>
+                  ref={activityListRef}
+                  data={filteredActivity}
+                  keyExtractor={(event) => event.id}
+                  renderItem={({ item }) => <EventBanner event={item} variant="activity" />}
+                  estimatedItemSize={40}
+                  initialScrollAtEnd
+                  maintainScrollAtEnd
+                  maintainScrollAtEndThreshold={0.25}
+                  maintainVisibleContentPosition
+                  onScroll={onActivityScroll}
+                  className="h-full overflow-y-auto text-xs"
+                />
+              ) : (
+                <p className="text-gray-600 text-xs text-center py-4">{t('No event types are enabled.')}</p>
+              )}
+              {!activityAtBottom && (
+                <button
+                  type="button"
+                  onClick={jumpActivityToBottom}
+                  aria-label="Scroll to bottom"
+                  className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 bg-violet-600 hover:bg-violet-500 text-white p-1.5 rounded-full shadow-2xl border border-violet-400/30 transition-all animate-bounce"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                  </svg>
+                </button>
+              )}
             </div>
           </div>
         </div>
