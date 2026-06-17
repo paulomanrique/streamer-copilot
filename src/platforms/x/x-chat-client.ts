@@ -31,6 +31,12 @@ export interface XChatBootstrap {
   host: string | null;
   title: string | null;
   viewerCount: number;
+  /** Raw X chat permission type, e.g. 'StreamTypePublic' / 'StreamTypeOnlyFriends'. */
+  chatPermissionType: string | null;
+  /** Whether the chat is readable by an anonymous guest. False for friends-only
+   *  / restricted broadcasts — the connection still works (live + viewer count),
+   *  but no chat messages are delivered to a guest. */
+  chatReadable: boolean;
 }
 
 export interface XChatMessage {
@@ -131,57 +137,21 @@ export function parseBroadcastId(input: string | undefined): string | null {
 }
 
 /**
- * BEST-EFFORT: resolve a handle's current live broadcast id. X exposes no
- * documented endpoint for this; we query the undocumented GraphQL
- * `UserByScreenName` and deep-scan the response for a broadcast id. This is
- * fragile and WILL return null whenever X changes shape, rotates the query id,
- * or the user simply isn't live — callers MUST fall back to a pasted broadcast
- * URL. Never throws.
+ * Resolving a handle's live broadcast id is NOT possible with anonymous guest
+ * credentials. X exposes no public endpoint that maps a @handle (or user id) to
+ * an active video broadcast — verified against a live broadcast that
+ * `UserByScreenName`, `broadcasts/show?user_ids`, `live_video_stream/status` and
+ * the Periscope user-broadcast endpoints all either 404 or omit the broadcast.
+ * The streamer must paste the broadcast URL while live (the `broadcastUrl`
+ * fallback). Kept as a stable seam so a future authenticated / timeline-scan
+ * strategy can slot in without touching callers. Never throws.
  */
 export async function resolveLiveBroadcastId(
   handle: string,
-  guestToken: string,
+  _guestToken: string,
   log?: (msg: string) => void,
 ): Promise<string | null> {
-  const screenName = normalizeHandle(handle);
-  if (!screenName) return null;
-  try {
-    const variables = encodeURIComponent(JSON.stringify({ screen_name: screenName }));
-    const features = encodeURIComponent(
-      JSON.stringify({
-        hidden_profile_subscriptions_enabled: true,
-        responsive_web_graphql_exclude_directive_enabled: true,
-        verified_phone_label_enabled: false,
-        responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
-        responsive_web_graphql_timeline_navigation_enabled: true,
-      }),
-    );
-    // Undocumented GraphQL query id — may need updating when X rotates it.
-    const url = `https://x.com/i/api/graphql/qW5u-DAuXpMEG0zA1F7UGQ/UserByScreenName?variables=${variables}&features=${features}`;
-    const data = await requestJson<unknown>(url, { headers: xApiHeaders(guestToken) });
-    const id = deepFindBroadcastId(data);
-    if (!id) log?.(`No live broadcast auto-detected for @${screenName}`);
-    return id;
-  } catch (cause) {
-    log?.(`Live-broadcast auto-detect failed for @${screenName}: ${cause instanceof Error ? cause.message : String(cause)}`);
-    return null;
-  }
-}
-
-/** Walks arbitrary JSON looking for a broadcast id (`broadcast_id` field or an
- *  embedded `/i/broadcasts/<id>` url). */
-function deepFindBroadcastId(node: unknown, depth = 0): string | null {
-  if (depth > 12 || !isRecord(node)) return null;
-  for (const [key, value] of Object.entries(node)) {
-    if ((key === 'broadcast_id' || key === 'broadcastId') && typeof value === 'string' && value) return value;
-    if (typeof value === 'string') {
-      const m = value.match(/\/i\/broadcasts\/([A-Za-z0-9]+)/);
-      if (m?.[1]) return m[1];
-    } else {
-      const found = deepFindBroadcastId(value, depth + 1);
-      if (found) return found;
-    }
-  }
+  log?.(`No public handle→broadcast lookup on X — paste the broadcast URL for @${normalizeHandle(handle)} while live.`);
   return null;
 }
 
@@ -204,11 +174,16 @@ export async function bootstrapChat(broadcastId: string, guestToken: string): Pr
   const mediaKey = typeof broadcast?.media_key === 'string' ? broadcast.media_key : null;
   if (!mediaKey) throw new Error(`No media_key for X broadcast ${broadcastId} (is it live?)`);
 
-  const status = await requestJson<{ chatToken?: string }>(
+  const status = await requestJson<{ chatToken?: string; chatPermissionType?: string }>(
     `https://x.com/i/api/1.1/live_video_stream/status/${encodeURIComponent(mediaKey)}?client=web&use_syndication_guest_id=false&cookie_set_host=x.com`,
     { headers: xApiHeaders(guestToken) },
   );
   if (!status.chatToken) throw new Error(`No chatToken for X broadcast ${broadcastId}`);
+  // Anonymous guests can only read the chat when it's public. Friends-only /
+  // restricted broadcasts (chatPermissionType !== 'StreamTypePublic') still
+  // bootstrap and report viewers, but deliver no chat messages to a guest.
+  const chatPermissionType = typeof status.chatPermissionType === 'string' ? status.chatPermissionType : null;
+  const chatReadable = !chatPermissionType || chatPermissionType === 'StreamTypePublic';
 
   const access = await requestJson<{
     access_token?: string;
@@ -233,6 +208,8 @@ export async function bootstrapChat(broadcastId: string, guestToken: string): Pr
     host: typeof broadcast?.username === 'string' ? broadcast.username : null,
     title: typeof broadcast?.status === 'string' ? broadcast.status : null,
     viewerCount: toCount(broadcast?.total_watching ?? broadcast?.num_watching ?? broadcast?.total_watched),
+    chatPermissionType,
+    chatReadable,
   };
 }
 

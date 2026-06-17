@@ -62,6 +62,16 @@ export class XChatAdapter implements PlatformChatAdapter {
 
       const bootstrap = await bootstrapChat(broadcastId, guestToken);
       this.bootstrap = bootstrap;
+      // The live + viewer count work for any public broadcast, but anonymous
+      // guests can only read the chat when it's public. Surface friends-only /
+      // restricted chats explicitly so an empty feed isn't a silent mystery.
+      if (!bootstrap.chatReadable) {
+        this.options.log?.(
+          `X broadcast for "@${normalizeHandle(this.options.handle)}" is live, but its chat is restricted ` +
+          `(${bootstrap.chatPermissionType ?? 'non-public'}) — messages can't be read anonymously. ` +
+          `Live status and viewer count still work.`,
+        );
+      }
       const streamLabel = normalizeHandle(this.options.handle) || bootstrap.host || undefined;
       const hostLower = bootstrap.host?.toLowerCase() ?? null;
 
