@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 import type { XLiveStats } from '../../shared/types.js';
 import { registerPlatformProvider, type AuthStepProps } from './registry.js';
 import { fmtNum } from './live-entry.js';
@@ -11,8 +13,22 @@ function normalizeXHandle(raw: string): string {
   return value.split(/[/?#]/)[0] ?? '';
 }
 
-function XAuthStep({ draft, updateDraft, channel, setChannel }: AuthStepProps) {
+function XAuthStep({ draft, updateDraft, channel, setChannel, setError }: AuthStepProps) {
   const broadcastUrl = String(draft.broadcastUrl ?? '');
+  const [openingLogin, setOpeningLogin] = useState(false);
+
+  async function openLogin() {
+    setOpeningLogin(true);
+    setError(null);
+    try {
+      await window.copilot.xOpenLogin();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setOpeningLogin(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div>
@@ -25,9 +41,25 @@ function XAuthStep({ draft, updateDraft, channel, setChannel }: AuthStepProps) {
           className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-100"
         />
         <p className="text-xs text-gray-500 mt-2">
-          Read-only access to the broadcast chat. The user must be live. The app tries to auto-detect the
-          live broadcast from the handle.
+          Read-only access to the broadcast chat. The user must be live. With an X login the app auto-detects
+          the live broadcast from the handle each time the user goes live.
         </p>
+      </div>
+      <div className="rounded border border-gray-700 bg-gray-900/50 p-3">
+        <p className="text-xs text-gray-300 font-medium mb-1">Entrar no X</p>
+        <p className="text-xs text-gray-500 mb-3">
+          Necessário para a <strong className="text-gray-300">detecção automática</strong> da live (o X não
+          expõe isso sem login). A leitura do chat continua anônima. Abre uma janela de login do X; os cookies
+          ficam guardados na sessão do app.
+        </p>
+        <button
+          type="button"
+          disabled={openingLogin}
+          onClick={() => void openLogin()}
+          className="px-4 py-2 rounded bg-slate-600/30 border border-slate-500/40 text-slate-200 hover:bg-slate-600/40 disabled:opacity-50 text-sm"
+        >
+          {openingLogin ? 'Abrindo login…' : 'Entrar no X'}
+        </button>
       </div>
       <div>
         <label className="block text-xs uppercase text-gray-500 mb-1">Broadcast URL (fallback, optional)</label>
@@ -39,8 +71,7 @@ function XAuthStep({ draft, updateDraft, channel, setChannel }: AuthStepProps) {
           className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-100"
         />
         <p className="text-xs text-gray-500 mt-2">
-          Auto-detection uses undocumented X endpoints and can fail. If it does, paste the live broadcast URL
-          here and it will be used directly.
+          Sem login (ou se a auto-detecção falhar), cole a URL da live aqui e ela será usada direto.
         </p>
       </div>
     </div>

@@ -2356,6 +2356,47 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
     await closed;
   });
+  ipcMain.handle(IPC_CHANNELS.xOpenLogin, async (event) => {
+    // Opens an X login on the default session so auth_token/ct0 persist there —
+    // the live auto-detector reads them at request time. The chat read itself
+    // stays anonymous (guest token), so these cookies never leak into reads.
+    const parent = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+    const win = new BrowserWindow({
+      width: 600,
+      height: 800,
+      parent,
+      modal: Boolean(parent),
+      title: 'X Login',
+      autoHideMenuBar: true,
+    });
+
+    win.webContents.on('did-navigate', (_, url) => {
+      const target = new URL(url);
+      // X lands on /home (or /) once logged in — close the popup shortly after.
+      if ((target.hostname === 'x.com' || target.hostname.endsWith('.x.com'))
+        && (target.pathname === '/home' || target.pathname === '/')) {
+        setTimeout(() => {
+          if (!win.isDestroyed()) win.close();
+        }, 1500);
+      }
+    });
+
+    const closed = new Promise<void>((resolve) => {
+      win.once('closed', () => resolve());
+    });
+
+    try {
+      await win.loadURL('https://x.com/i/flow/login');
+    } catch (cause) {
+      const code = cause && typeof cause === 'object' && 'code' in cause ? String(cause.code) : '';
+      if (code !== 'ERR_ABORTED' && code !== 'ERR_FAILED') {
+        if (!win.isDestroyed()) win.close();
+        throw cause;
+      }
+    }
+
+    await closed;
+  });
   ipcMain.handle(IPC_CHANNELS.youtubeCheckLive, async (_, handle: unknown) => {
     const streams = await checkYouTubeLive(lookupStringInputSchema.parse(handle));
     return { videoIds: (streams ?? []).map((s) => s.videoId) };

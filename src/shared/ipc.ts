@@ -165,6 +165,7 @@ export const IPC_CHANNELS = {
   youtubeConnect: 'youtube:connect',
   youtubeDisconnect: 'youtube:disconnect',
   youtubeOpenLogin: 'youtube:open-login',
+  xOpenLogin: 'x:open-login',
   youtubeGetSettings: 'youtube:get-settings',
   youtubeSaveSettings: 'youtube:save-settings',
   youtubeCheckLive: 'youtube:check-live',
@@ -353,6 +354,9 @@ export interface CopilotApi {
   youtubeConnect: (input: { videoId: string }) => Promise<void>;
   youtubeDisconnect: () => Promise<void>;
   youtubeOpenLogin: () => Promise<void>;
+  /** Opens an X login window so the streamer's session cookies persist (used by
+   *  live auto-detection — the only X step that needs auth; chat read stays guest). */
+  xOpenLogin: () => Promise<void>;
   youtubeGetSettings: () => Promise<import('./types.js').YouTubeSettings>;
   youtubeSaveSettings: (settings: import('./types.js').YouTubeSettings) => Promise<import('./types.js').YouTubeSettings>;
   youtubeCheckLive: (handle: string) => Promise<{ videoIds: string[] }>;

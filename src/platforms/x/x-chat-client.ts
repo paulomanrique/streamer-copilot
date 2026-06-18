@@ -1,3 +1,4 @@
+import { session } from 'electron';
 import { WebSocket } from 'ws';
 
 /**
@@ -21,6 +22,63 @@ const X_WEB_BEARER =
 
 const BROWSER_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36';
+
+// Undocumented GraphQL query ids used for live auto-detection. These rotate
+// occasionally — when detection breaks, grab the fresh ids from the x.com web
+// client (DevTools → Network) and update them here, in one place.
+const GQL_USER_BY_SCREEN_NAME = 'qW5u-DAuXpMEG0zA1F7UGQ';
+const GQL_USER_TWEETS = 'RyDU3I9VJtPF-Pnl6vrRlw';
+
+// Feature flags the GraphQL endpoints require. Minimal verified set for
+// UserByScreenName; the fuller set X's web client sends for UserTweets.
+const USER_BY_SCREEN_NAME_FEATURES = {
+  hidden_profile_subscriptions_enabled: true,
+  responsive_web_graphql_exclude_directive_enabled: true,
+  verified_phone_label_enabled: false,
+  responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
+  responsive_web_graphql_timeline_navigation_enabled: true,
+};
+const USER_TWEETS_FEATURES = {
+  rweb_video_screen_enabled: false,
+  rweb_cashtags_enabled: true,
+  profile_label_improvements_pcf_label_in_post_enabled: true,
+  responsive_web_profile_redirect_enabled: false,
+  rweb_tipjar_consumption_enabled: false,
+  verified_phone_label_enabled: false,
+  creator_subscriptions_tweet_preview_api_enabled: true,
+  responsive_web_graphql_timeline_navigation_enabled: true,
+  responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
+  premium_content_api_read_enabled: false,
+  communities_web_enable_tweet_community_results_fetch: true,
+  c9s_tweet_anatomy_moderator_badge_enabled: true,
+  responsive_web_grok_analyze_button_fetch_trends_enabled: false,
+  responsive_web_grok_analyze_post_followups_enabled: true,
+  rweb_cashtags_composer_attachment_enabled: true,
+  responsive_web_jetfuel_frame: true,
+  responsive_web_grok_share_attachment_enabled: true,
+  responsive_web_grok_annotations_enabled: true,
+  articles_preview_enabled: true,
+  responsive_web_edit_tweet_api_enabled: true,
+  rweb_conversational_replies_downvote_enabled: false,
+  graphql_is_translatable_rweb_tweet_is_translatable_enabled: true,
+  view_counts_everywhere_api_enabled: true,
+  longform_notetweets_consumption_enabled: true,
+  responsive_web_twitter_article_tweet_consumption_enabled: true,
+  content_disclosure_indicator_enabled: true,
+  content_disclosure_ai_generated_indicator_enabled: true,
+  responsive_web_grok_show_grok_translated_post: true,
+  responsive_web_grok_analysis_button_from_backend: true,
+  post_ctas_fetch_enabled: false,
+  freedom_of_speech_not_reach_fetch_enabled: true,
+  standardized_nudges_misinfo: true,
+  tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled: true,
+  longform_notetweets_rich_text_read_enabled: true,
+  longform_notetweets_inline_media_enabled: false,
+  responsive_web_grok_image_annotation_enabled: true,
+  responsive_web_grok_imagine_annotation_enabled: true,
+  responsive_web_grok_community_note_auto_translation_is_enabled: true,
+  responsive_web_enhance_cards_enabled: false,
+};
 
 export interface XChatBootstrap {
   broadcastId: string;
@@ -136,23 +194,138 @@ export function parseBroadcastId(input: string | undefined): string | null {
   return /^[A-Za-z0-9]+$/.test(trimmed) ? trimmed : null;
 }
 
+/** Reads the streamer's X auth from the default Electron session (set by the
+ *  in-app X login). Returns null when not logged in. Cookies are read live and
+ *  never persisted/logged elsewhere. */
+async function getXAuthFromSession(): Promise<{ cookie: string; csrf: string } | null> {
+  try {
+    const cookies = await session.defaultSession.cookies.get({ url: 'https://x.com' });
+    const authToken = cookies.find((c) => c.name === 'auth_token')?.value;
+    const csrf = cookies.find((c) => c.name === 'ct0')?.value;
+    if (!authToken || !csrf) return null;
+    return { cookie: `auth_token=${authToken}; ct0=${csrf}`, csrf };
+  } catch {
+    return null;
+  }
+}
+
+/** handle → numeric user id (rest_id). Works with the guest token. */
+async function fetchUserRestId(screenName: string, guestToken: string): Promise<string | null> {
+  const variables = encodeURIComponent(JSON.stringify({ screen_name: screenName }));
+  const features = encodeURIComponent(JSON.stringify(USER_BY_SCREEN_NAME_FEATURES));
+  const url = `https://x.com/i/api/graphql/${GQL_USER_BY_SCREEN_NAME}/UserByScreenName?variables=${variables}&features=${features}`;
+  const data = await requestJson<{ data?: { user?: { result?: { rest_id?: string } } } }>(url, {
+    headers: xApiHeaders(guestToken),
+  });
+  return data.data?.user?.result?.rest_id ?? null;
+}
+
+/** Pulls `{ broadcast_id, broadcast_state }` out of a GraphQL card's
+ *  binding_values, which come either as an array of `{ key, value:{string_value} }`
+ *  or as an object map `{ broadcast_id: { string_value } }`. */
+function bindingArrayToMap(arr: unknown[]): Record<string, string> | null {
+  const out: Record<string, string> = {};
+  let any = false;
+  for (const el of arr) {
+    if (isRecord(el) && typeof el.key === 'string' && isRecord(el.value)) {
+      const sv = (el.value as Record<string, unknown>).string_value;
+      if (typeof sv === 'string') { out[el.key] = sv; any = true; }
+    }
+  }
+  return any ? out : null;
+}
+
+/** Walks UserTweets JSON for broadcast cards and returns the most-recent LIVE
+ *  broadcast id. Prefers cards whose `broadcast_state` is RUNNING; if no card
+ *  exposes a state at all, falls back to the most-recent broadcast id and lets
+ *  bootstrap validate liveness (so detection still works if the field is absent). */
+function findLiveBroadcastId(root: unknown): string | null {
+  const cards: Array<{ id: string; state: string | null }> = [];
+  const walk = (node: unknown, depth: number): void => {
+    if (depth > 24 || node === null || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      const kv = bindingArrayToMap(node);
+      if (kv && typeof kv.broadcast_id === 'string') {
+        cards.push({ id: kv.broadcast_id, state: kv.broadcast_state ?? null });
+      }
+      for (const v of node) walk(v, depth + 1);
+      return;
+    }
+    const rec = node as Record<string, unknown>;
+    if (isRecord(rec.broadcast_id) && typeof (rec.broadcast_id as Record<string, unknown>).string_value === 'string') {
+      const st = isRecord(rec.broadcast_state) ? (rec.broadcast_state as Record<string, unknown>).string_value : null;
+      cards.push({
+        id: (rec.broadcast_id as Record<string, unknown>).string_value as string,
+        state: typeof st === 'string' ? st : null,
+      });
+    }
+    for (const v of Object.values(rec)) walk(v, depth + 1);
+  };
+  walk(root, 0);
+  if (cards.length === 0) return null;
+  const running = cards.find((c) => c.state != null && /running/i.test(c.state));
+  if (running) return running.id;
+  // States present but none running → not live. No states at all → best-effort.
+  return cards.some((c) => c.state != null) ? null : cards[0].id;
+}
+
 /**
- * Resolving a handle's live broadcast id is NOT possible with anonymous guest
- * credentials. X exposes no public endpoint that maps a @handle (or user id) to
- * an active video broadcast — verified against a live broadcast that
- * `UserByScreenName`, `broadcasts/show?user_ids`, `live_video_stream/status` and
- * the Periscope user-broadcast endpoints all either 404 or omit the broadcast.
- * The streamer must paste the broadcast URL while live (the `broadcastUrl`
- * fallback). Kept as a stable seam so a future authenticated / timeline-scan
- * strategy can slot in without touching callers. Never throws.
+ * Resolves a handle's current LIVE broadcast id. Requires the streamer to be
+ * logged into X (cookies in the default Electron session) — X exposes no public
+ * guest endpoint for this. Chain: handle → rest_id (UserByScreenName, guest) →
+ * recent tweets (UserTweets, authed) → the live broadcast card's broadcast_id.
+ * Returns null (never throws) when not logged in, the user isn't live, or X
+ * changed shape — callers fall back to the pasted broadcast URL.
  */
 export async function resolveLiveBroadcastId(
   handle: string,
-  _guestToken: string,
+  guestToken: string,
   log?: (msg: string) => void,
 ): Promise<string | null> {
-  log?.(`No public handle→broadcast lookup on X — paste the broadcast URL for @${normalizeHandle(handle)} while live.`);
-  return null;
+  const screenName = normalizeHandle(handle);
+  if (!screenName) return null;
+  const auth = await getXAuthFromSession();
+  if (!auth) {
+    log?.('Not logged in to X — auto-detection needs an X login (Conexões → X → Entrar). Paste the broadcast URL otherwise.');
+    return null;
+  }
+  try {
+    const restId = await fetchUserRestId(screenName, guestToken);
+    if (!restId) {
+      log?.(`Could not resolve the X user id for @${screenName}`);
+      return null;
+    }
+    const variables = encodeURIComponent(JSON.stringify({
+      userId: restId, count: 20, includePromotedContent: true,
+      withQuickPromoteEligibilityTweetFields: true, withVoice: true,
+    }));
+    const features = encodeURIComponent(JSON.stringify(USER_TWEETS_FEATURES));
+    const fieldToggles = encodeURIComponent(JSON.stringify({ withArticlePlainText: false }));
+    const url = `https://x.com/i/api/graphql/${GQL_USER_TWEETS}/UserTweets?variables=${variables}&features=${features}&fieldToggles=${fieldToggles}`;
+    const response = await fetch(url, {
+      credentials: 'omit',
+      headers: {
+        authorization: `Bearer ${X_WEB_BEARER}`,
+        'x-csrf-token': auth.csrf,
+        'x-twitter-auth-type': 'OAuth2Session',
+        'x-twitter-active-user': 'yes',
+        'content-type': 'application/json',
+        'user-agent': BROWSER_UA,
+        cookie: auth.cookie,
+      },
+    });
+    if (!response.ok) {
+      log?.(`X UserTweets returned HTTP ${response.status} for @${screenName} (session expired? re-login)`);
+      return null;
+    }
+    const data = safeParse(await response.text());
+    const id = data ? findLiveBroadcastId(data) : null;
+    if (!id) log?.(`No live broadcast found in @${screenName}'s recent tweets`);
+    return id;
+  } catch (cause) {
+    log?.(`X live auto-detect failed for @${screenName}: ${cause instanceof Error ? cause.message : String(cause)}`);
+    return null;
+  }
 }
 
 function toCount(v: unknown): number {
