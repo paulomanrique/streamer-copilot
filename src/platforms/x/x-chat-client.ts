@@ -3,16 +3,21 @@ import { WebSocket } from 'ws';
 
 /**
  * X (Twitter) broadcast live-chat client. X broadcasts run on the legacy
- * Periscope chat infrastructure, which is readable anonymously via a guest
- * token — no user login required. Protocol ported from
+ * Periscope chat infrastructure. Protocol ported from
  * https://github.com/badlogic/twitter-broadcast-chat.
  *
- * Every request is anonymous (guest token only). We use the plain global
- * `fetch` with explicit headers and `credentials: 'omit'` rather than Electron's
- * session, so the streamer's logged-in X cookies never leak into these reads
- * (an authenticated read returns a different shape — see the YouTube anon-read
- * lesson). All X endpoints live here so there's a single place to update when X
- * changes them.
+ * Two distinct auth modes, deliberately separated:
+ *  - **Chat read** (guest token only, `credentials: 'omit'`): bootstrap +
+ *    history + the chatnow WebSocket never touch the Electron session, so the
+ *    streamer's logged-in X cookies don't leak into reads (an authed read
+ *    returns a different shape — see the YouTube anon-read lesson).
+ *  - **Live detection** (`resolveLiveBroadcastId`): X exposes no guest endpoint
+ *    that maps a @handle to an active broadcast, so this one path reads the
+ *    streamer's `auth_token`/`ct0` *live* from the default session (set by the
+ *    in-app X login) to call the authed UserTweets timeline. Cookies are read
+ *    per-request and never persisted/logged.
+ *
+ * All X endpoints + the rotating GraphQL query ids live here, in one place.
  */
 
 // The public X web bearer token shipped by the x.com web client; powers guest
