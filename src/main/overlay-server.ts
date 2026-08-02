@@ -86,6 +86,12 @@ interface WsLikeClient {
   on(event: 'close' | 'message' | 'error', handler: (...args: unknown[]) => void): void;
 }
 
+export type OverlayRouteHandler = (
+  request: http.IncomingMessage,
+  response: http.ServerResponse,
+  url: URL,
+) => boolean | Promise<boolean>;
+
 export type OverlayServerStatus = 'running' | 'failed' | 'stopped';
 
 /**
@@ -112,6 +118,7 @@ export class OverlayServer {
   /** Map of topic → connected clients subscribed to that topic. */
   private readonly subscribers = new Map<string, Set<WsLikeClient>>();
   private readonly clientsChangeHandlers = new Map<string, Set<() => void>>();
+  private readonly routeHandlers = new Set<OverlayRouteHandler>();
   private port = 0;
   private startPromise: Promise<void> | null = null;
   private lastStatus: OverlayServerStatus = 'stopped';
@@ -179,6 +186,17 @@ export class OverlayServer {
     return !!set && set.size > 0;
   }
 
+  clientCount(topic: string): number {
+    return this.subscribers.get(topic)?.size ?? 0;
+  }
+
+  /** Registers a self-contained route provider without growing the built-in
+   * overlay switch. Providers return true only after fully handling a route. */
+  registerRouteHandler(handler: OverlayRouteHandler): () => void {
+    this.routeHandlers.add(handler);
+    return () => { this.routeHandlers.delete(handler); };
+  }
+
   onClientsChange(topic: string, handler: () => void): () => void {
     let set = this.clientsChangeHandlers.get(topic);
     if (!set) {
@@ -201,7 +219,7 @@ export class OverlayServer {
     if (this.server) return;
     if (this.startPromise) return this.startPromise;
 
-    const server = http.createServer((req, res) => {
+    const server = http.createServer(async (req, res) => {
       const url = new URL(req.url ?? '/', 'http://127.0.0.1');
       const path = url.pathname;
 
@@ -427,6 +445,18 @@ export class OverlayServer {
           }
         });
         return;
+      }
+
+      for (const handler of this.routeHandlers) {
+        try {
+          if (await handler(req, res, url)) return;
+        } catch (cause) {
+          if (!res.headersSent) {
+            res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+          }
+          res.end(JSON.stringify({ error: cause instanceof Error ? cause.message : String(cause) }));
+          return;
+        }
       }
 
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
