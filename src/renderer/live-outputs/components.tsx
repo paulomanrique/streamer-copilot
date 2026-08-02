@@ -305,15 +305,16 @@ export function ArtifactsPanel({ runtime, copy, onReveal }: {
   );
 }
 
-export function CommonConfigEditor({ config, copy, onChange }: {
+export function CommonConfigEditor({ config, copy, onChange, showStartWithProfile }: {
   config: LiveOutputConfig;
   copy: Copy;
   onChange: (next: LiveOutputConfig) => void;
+  showStartWithProfile: boolean;
 }) {
   return (
     <EditorSection title="Status">
       <CheckRow label={copy.enabled} checked={config.enabled} onChange={(enabled) => onChange({ ...config, enabled })} />
-      <CheckRow label={copy.startWithProfile} checked={config.startOnProfileLoad} onChange={(startOnProfileLoad) => onChange({ ...config, startOnProfileLoad })} />
+      {showStartWithProfile ? <CheckRow label={copy.startWithProfile} checked={config.startOnProfileLoad} onChange={(startOnProfileLoad) => onChange({ ...config, startOnProfileLoad })} /> : null}
     </EditorSection>
   );
 }

@@ -12,6 +12,7 @@ import type {
   PlatformLiveOutputConfig,
   PlatformStreamCapability,
   PlatformStreamMetadata,
+  PlatformStreamMetadataPreset,
   PlayingNowLiveOutputConfig,
   SystemInfoLiveOutputConfig,
   TextRotatorLiveOutputConfig,
@@ -279,9 +280,12 @@ export function SystemInfoEditor(props: LiveOutputEditorProps) {
   );
 }
 
-function PlatformMetadataPanel({ config, capability }: {
+function PlatformMetadataPanel({ config, capability, presets, onSavePreset, onDeletePreset }: {
   config: PlatformLiveOutputConfig;
   capability: PlatformStreamCapability;
+  presets: PlatformStreamMetadataPreset[];
+  onSavePreset: (preset: PlatformStreamMetadataPreset) => Promise<boolean>;
+  onDeletePreset: (id: string) => Promise<boolean>;
 }) {
   const copy = getLiveOutputsCopy(useI18n().language);
   const [metadata, setMetadata] = useState<PlatformStreamMetadata | null>(null);
@@ -295,6 +299,13 @@ function PlatformMetadataPanel({ config, capability }: {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [presetName, setPresetName] = useState('');
+  const [selectedPresetId, setSelectedPresetId] = useState('');
+  const [presetBusy, setPresetBusy] = useState(false);
+  const compatiblePresets = useMemo(
+    () => presets.filter((preset) => preset.platformId === config.platformId),
+    [config.platformId, presets],
+  );
 
   const target = useMemo(() => ({
     platformId: config.platformId,
@@ -394,6 +405,58 @@ function PlatformMetadataPanel({ config, capability }: {
     && categoryQuery !== (metadata?.categoryName ?? '')
     && categoryId.length === 0;
 
+  const selectPreset = (id: string) => {
+    setSelectedPresetId(id);
+    const preset = compatiblePresets.find((item) => item.id === id);
+    if (!preset) {
+      setPresetName('');
+      return;
+    }
+    setPresetName(preset.name);
+    setTitle(preset.title);
+    setCategoryId(preset.categoryId);
+    setCategoryQuery(preset.categoryName);
+    setCategorySearchActive(false);
+    setCategories([]);
+    setMessage(null);
+  };
+
+  const savePreset = async () => {
+    if (!presetName.trim()) {
+      setError(copy.fillPresetName);
+      return;
+    }
+    setPresetBusy(true);
+    setError(null);
+    const ok = await onSavePreset({
+      id: selectedPresetId || crypto.randomUUID(),
+      platformId: config.platformId,
+      name: presetName.trim(),
+      title,
+      categoryId,
+      categoryName: categoryQuery,
+    });
+    if (ok) {
+      setMessage(copy.presetSaved);
+      setPresetName('');
+      setSelectedPresetId('');
+    }
+    setPresetBusy(false);
+  };
+
+  const deletePreset = async () => {
+    if (!selectedPresetId || !window.confirm(copy.confirmDeletePreset)) return;
+    setPresetBusy(true);
+    setError(null);
+    const ok = await onDeletePreset(selectedPresetId);
+    if (ok) {
+      setMessage(copy.presetDeleted);
+      setPresetName('');
+      setSelectedPresetId('');
+    }
+    setPresetBusy(false);
+  };
+
   return (
     <EditorSection title={copy.channelMetadata} description={copy.channelMetadataDescription}>
       {capability.metadataReadable ? (
@@ -458,6 +521,27 @@ function PlatformMetadataPanel({ config, capability }: {
       ) : metadata?.categoryName ? <p data-no-i18n="true" className="text-sm text-gray-400">{metadata.categoryName}</p> : null}
 
       {capability.mutableMetadataFields.length > 0 ? (
+        <div className="space-y-3 rounded-lg border border-gray-800 bg-gray-950/35 p-3">
+          <p className="text-xs font-medium text-gray-300">{copy.metadataPresets}</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label={copy.metadataPresets}>
+              <select className={INPUT_CLASS} value={selectedPresetId} onChange={(event) => selectPreset(event.target.value)}>
+                <option value="">{copy.noPresets}</option>
+                {compatiblePresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
+              </select>
+            </Field>
+            <Field label={copy.presetName}>
+              <input className={INPUT_CLASS} maxLength={120} value={presetName} onChange={(event) => setPresetName(event.target.value)} />
+            </Field>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={presetBusy} onClick={() => void savePreset()} className="rounded-lg border border-violet-700 px-3 py-2 text-xs text-violet-200 disabled:opacity-50">{copy.savePreset}</button>
+            <button type="button" disabled={presetBusy || !selectedPresetId} onClick={() => void deletePreset()} className="rounded-lg border border-rose-900/70 px-3 py-2 text-xs text-rose-300 disabled:opacity-50">{copy.deletePreset}</button>
+          </div>
+        </div>
+      ) : null}
+
+      {capability.mutableMetadataFields.length > 0 ? (
         <button type="button" disabled={saving || loading || categoryNeedsSelection} onClick={() => void save()} className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-medium text-white hover:bg-violet-500 disabled:opacity-50">{saving ? '…' : copy.saveMetadata}</button>
       ) : <p className="text-xs text-gray-500">{copy.metadataReadOnly}</p>}
       {message ? <p role="status" className="text-xs text-emerald-300">{message}</p> : null}
@@ -496,7 +580,13 @@ export function PlatformLiveEditor(props: LiveOutputEditorProps) {
             <Field label={copy.fields.metric}>
               <select className={INPUT_CLASS} value={config.metricId} onChange={(event) => {
                 const metric = currentCapability?.metrics.find((item) => item.id === event.target.value);
-                change(props, { ...config, metricId: event.target.value, refreshSeconds: Math.max(config.refreshSeconds, metric?.minimumRefreshSeconds ?? 1) });
+                const previousMetric = currentCapability?.metrics.find((item) => item.id === config.metricId);
+                change(props, {
+                  ...config,
+                  metricId: event.target.value,
+                  format: metric && previousMetric ? config.format.replaceAll(previousMetric.token, metric.token) : config.format,
+                  refreshSeconds: Math.max(config.refreshSeconds, metric?.minimumRefreshSeconds ?? 1),
+                });
               }}>
                 {currentCapability?.metrics.map((metric) => <option key={metric.id} value={metric.id}>{metric.label}</option>)}
               </select>
@@ -505,8 +595,26 @@ export function PlatformLiveEditor(props: LiveOutputEditorProps) {
           </>
         )}
       </EditorSection>
-      <FormatField props={props} value={config.format} onChange={(format) => change(props, { ...config, format })} />
-      {currentCapability ? <PlatformMetadataPanel config={config} capability={currentCapability} /> : null}
+      <FormatField
+        props={{
+          ...props,
+          descriptor: {
+            ...props.descriptor,
+            tokens: currentCapability?.metrics.map((metric) => ({ token: metric.token, description: metric.label, example: '42' })) ?? props.descriptor.tokens,
+          },
+        }}
+        value={config.format}
+        onChange={(format) => change(props, { ...config, format })}
+      />
+      {currentCapability ? (
+        <PlatformMetadataPanel
+          config={config}
+          capability={currentCapability}
+          presets={props.metadataPresets}
+          onSavePreset={props.onSaveMetadataPreset}
+          onDeletePreset={props.onDeleteMetadataPreset}
+        />
+      ) : null}
     </>
   );
 }
@@ -629,7 +737,7 @@ export function PlayingNowEditor(props: LiveOutputEditorProps) {
   const copy = getLiveOutputsCopy(useI18n().language);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
-  const availableSources = useMemo(() => props.playingNowSources.filter((source) => source.status !== 'error'), [props.playingNowSources]);
+  const availableSources = useMemo(() => props.playingNowSources.filter((source) => source.status === 'available'), [props.playingNowSources]);
   const test = async () => {
     if (!config.sourceId) return;
     setTesting(true);
@@ -653,7 +761,7 @@ export function PlayingNowEditor(props: LiveOutputEditorProps) {
             <Field label={copy.fields.source}>
               <select className={INPUT_CLASS} value={config.sourceId ?? ''} onChange={(event) => change(props, { ...config, sourceId: event.target.value || null })}>
                 <option value="">—</option>
-                {availableSources.map((source) => <option key={source.id} value={source.id}>{source.label} · {source.status}</option>)}
+                {props.playingNowSources.map((source) => <option key={source.id} value={source.id} disabled={source.status !== 'available'}>{source.label} · {source.status}</option>)}
               </select>
             </Field>
             <div className="flex items-center gap-3">

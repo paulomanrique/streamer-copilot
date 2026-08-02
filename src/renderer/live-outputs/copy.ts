@@ -57,6 +57,15 @@ type Copy = {
   saveMetadata: string;
   metadataSaved: string;
   metadataReadOnly: string;
+  metadataPresets: string;
+  presetName: string;
+  savePreset: string;
+  deletePreset: string;
+  noPresets: string;
+  presetSaved: string;
+  presetDeleted: string;
+  confirmDeletePreset: string;
+  fillPresetName: string;
   spotifyCredentials: string;
   spotifyCredentialsDescription: string;
   credentialStatus: string;
@@ -129,6 +138,10 @@ const en: Copy = {
   categoryResults: 'Category results', noCategories: 'No categories found.', refreshMetadata: 'Refresh status',
   saveMetadata: 'Save channel metadata', metadataSaved: 'Channel metadata saved.',
   metadataReadOnly: 'This provider exposes status as read-only.',
+  metadataPresets: 'Stream metadata presets', presetName: 'Preset name',
+  savePreset: 'Save current fields as preset', deletePreset: 'Delete preset', noPresets: 'Choose a preset',
+  presetSaved: 'Metadata preset saved.', presetDeleted: 'Metadata preset deleted.',
+  confirmDeletePreset: 'Delete this metadata preset?', fillPresetName: 'Enter a preset name.',
   spotifyCredentials: 'Spotify metadata credentials',
   spotifyCredentialsDescription: 'Used only to enrich missing album and artwork metadata. The secret is encrypted by the operating system.',
   credentialStatus: 'Credential status', configured: 'Configured', notConfiguredCredential: 'Not configured',
@@ -219,6 +232,10 @@ const pt: Copy = {
   categoryResults: 'Resultados de categorias', noCategories: 'Nenhuma categoria encontrada.', refreshMetadata: 'Atualizar status',
   saveMetadata: 'Salvar metadados do canal', metadataSaved: 'Metadados do canal salvos.',
   metadataReadOnly: 'Este provider expõe o status apenas para leitura.',
+  metadataPresets: 'Presets de metadados da live', presetName: 'Nome do preset',
+  savePreset: 'Salvar campos atuais como preset', deletePreset: 'Excluir preset', noPresets: 'Escolha um preset',
+  presetSaved: 'Preset de metadados salvo.', presetDeleted: 'Preset de metadados excluído.',
+  confirmDeletePreset: 'Excluir este preset de metadados?', fillPresetName: 'Informe um nome para o preset.',
   spotifyCredentials: 'Credenciais de metadados do Spotify',
   spotifyCredentialsDescription: 'Usadas somente para completar álbum e capa ausentes. O secret é criptografado pelo sistema operacional.',
   credentialStatus: 'Status das credenciais', configured: 'Configuradas', notConfiguredCredential: 'Não configuradas',

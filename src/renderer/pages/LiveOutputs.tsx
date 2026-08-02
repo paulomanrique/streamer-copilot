@@ -202,16 +202,19 @@ export function LiveOutputsPage() {
           <div className="min-w-0 space-y-5">
             {(controller.error || notice) ? <p role="alert" data-no-i18n="true" className="rounded-lg border border-rose-800/50 bg-rose-950/30 px-4 py-3 text-sm text-rose-200">{controller.error ?? notice}</p> : null}
             {runtime?.errors.map((error) => <p key={`${error.code}-${error.field ?? ''}`} role="alert" data-no-i18n="true" className="rounded-lg border border-orange-800/50 bg-orange-950/30 px-4 py-3 text-sm text-orange-200">{error.message}</p>)}
-            <CommonConfigEditor config={draft} copy={copy} onChange={updateDraft} />
+            <CommonConfigEditor config={draft} copy={copy} onChange={updateDraft} showStartWithProfile={descriptor.controls.includes('start')} />
             <FeatureEditor
               config={draft}
               descriptor={descriptor}
               runtime={runtime}
               playingNowSources={controller.sources}
               platformCapabilities={controller.platformCapabilities}
+              metadataPresets={controller.snapshot?.settings.metadataPresets ?? []}
               onChange={updateDraft}
               onPickSound={pickSound}
               onTestPlayingNowSource={controller.testSource}
+              onSaveMetadataPreset={controller.saveMetadataPreset}
+              onDeleteMetadataPreset={controller.deleteMetadataPreset}
             />
             <DestinationEditor destinations={draft.destinations} copy={copy} onChange={(destinations) => setDraft({ ...draft, destinations })} />
           </div>

@@ -6,6 +6,7 @@ import type {
   LiveOutputFeatureDescriptor,
   LiveOutputHotkeyBinding,
   LiveOutputsSnapshot,
+  PlatformStreamMetadataPreset,
   PlatformStreamCapability,
   PlayingNowSourceCapability,
 } from '../../shared/types.js';
@@ -26,6 +27,8 @@ interface LiveOutputsController {
   pickSound: (id: string) => Promise<string | null>;
   testSource: (sourceId: string) => Promise<string>;
   saveHotkeys: (enabled: boolean, bindings: LiveOutputHotkeyBinding[]) => Promise<boolean>;
+  saveMetadataPreset: (preset: PlatformStreamMetadataPreset) => Promise<boolean>;
+  deleteMetadataPreset: (id: string) => Promise<boolean>;
 }
 
 function errorMessage(cause: unknown): string {
@@ -129,8 +132,23 @@ export function useLiveOutputs(): LiveOutputsController {
     return true;
   }, [run]);
 
+  const saveMetadataPreset = useCallback(async (preset: PlatformStreamMetadataPreset) => {
+    const next = await run(() => window.copilot.saveLiveOutputMetadataPreset(preset));
+    if (!next) return false;
+    setSnapshot(next);
+    return true;
+  }, [run]);
+
+  const deleteMetadataPreset = useCallback(async (id: string) => {
+    const next = await run(() => window.copilot.deleteLiveOutputMetadataPreset({ id }));
+    if (!next) return false;
+    setSnapshot(next);
+    return true;
+  }, [run]);
+
   return {
     catalog, snapshot, sources, platformCapabilities, loading, busy, error,
     reload, save, control, regenerate, reveal, pickSound, testSource, saveHotkeys,
+    saveMetadataPreset, deleteMetadataPreset,
   };
 }

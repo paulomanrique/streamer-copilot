@@ -5,6 +5,7 @@ import type {
   LiveOutputFeatureDescriptor,
   LiveOutputKind,
   LiveOutputRuntimeSnapshot,
+  PlatformStreamMetadataPreset,
   PlatformStreamCapability,
   PlayingNowSourceCapability,
 } from '../../shared/types.js';
@@ -16,9 +17,12 @@ export interface LiveOutputEditorProps<T extends LiveOutputConfig = LiveOutputCo
   runtime: LiveOutputRuntimeSnapshot | null;
   playingNowSources: PlayingNowSourceCapability[];
   platformCapabilities: PlatformStreamCapability[];
+  metadataPresets: PlatformStreamMetadataPreset[];
   onChange: (next: T) => void;
   onPickSound: () => Promise<void>;
   onTestPlayingNowSource: (sourceId: string) => Promise<string>;
+  onSaveMetadataPreset: (preset: PlatformStreamMetadataPreset) => Promise<boolean>;
+  onDeleteMetadataPreset: (id: string) => Promise<boolean>;
 }
 
 export interface RendererLiveOutputFeature {
@@ -41,4 +45,3 @@ export function getLiveOutputFeature(kind: LiveOutputKind): RendererLiveOutputFe
 export function listLiveOutputFeatures(): RendererLiveOutputFeature[] {
   return [...features.values()];
 }
-
