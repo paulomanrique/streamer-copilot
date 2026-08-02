@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 /**
  * Base class for per-profile JSON settings stores.
@@ -58,7 +59,14 @@ export abstract class JsonSettingsStore<T> {
   async save(input: T): Promise<T> {
     const next = this.normalize(input);
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    await fs.writeFile(this.filePath, JSON.stringify(next, null, 2), 'utf-8');
+    const temporaryPath = `${this.filePath}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+      await fs.writeFile(temporaryPath, `${JSON.stringify(next, null, 2)}\n`, 'utf-8');
+      await fs.rename(temporaryPath, this.filePath);
+    } catch (error) {
+      await fs.rm(temporaryPath, { force: true }).catch(() => undefined);
+      throw error;
+    }
     return next;
   }
 }
