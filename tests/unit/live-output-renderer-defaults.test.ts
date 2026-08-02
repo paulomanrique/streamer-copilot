@@ -46,8 +46,11 @@ describe('live-output renderer defaults', () => {
     for (const language of ['pt-BR', 'en-US'] as const) {
       const copy = getLiveOutputsCopy(language);
       for (const kind of kinds) expect(copy.features[kind].label.length).toBeGreaterThan(0);
+      expect(copy.channelMetadata.length).toBeGreaterThan(0);
+      expect(copy.searchCategory.length).toBeGreaterThan(0);
+      expect(copy.spotifyCredentials.length).toBeGreaterThan(0);
+      expect(copy.testCredentials.length).toBeGreaterThan(0);
       expect(JSON.stringify(copy).toLowerCase()).not.toContain('dynamic files');
     }
   });
 });
-

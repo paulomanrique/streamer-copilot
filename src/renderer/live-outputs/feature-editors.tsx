@@ -1,13 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type {
   ChronoDownLiveOutputConfig,
   ChronoUpLiveOutputConfig,
   CountdownLiveOutputConfig,
+  CredentialStatus,
   DateLiveOutputConfig,
   LiveOutputConfig,
   LiveOutputTextLine,
+  PlatformCategory,
   PlatformLiveOutputConfig,
+  PlatformStreamCapability,
+  PlatformStreamMetadata,
   PlayingNowLiveOutputConfig,
   SystemInfoLiveOutputConfig,
   TextRotatorLiveOutputConfig,
@@ -275,6 +279,193 @@ export function SystemInfoEditor(props: LiveOutputEditorProps) {
   );
 }
 
+function PlatformMetadataPanel({ config, capability }: {
+  config: PlatformLiveOutputConfig;
+  capability: PlatformStreamCapability;
+}) {
+  const copy = getLiveOutputsCopy(useI18n().language);
+  const [metadata, setMetadata] = useState<PlatformStreamMetadata | null>(null);
+  const [title, setTitle] = useState('');
+  const [categoryId, setCategoryId] = useState('');
+  const [categoryQuery, setCategoryQuery] = useState('');
+  const [categorySearchActive, setCategorySearchActive] = useState(false);
+  const [categories, setCategories] = useState<PlatformCategory[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const target = useMemo(() => ({
+    platformId: config.platformId,
+    accountId: config.accountId,
+    channelId: config.channelId,
+  }), [config.accountId, config.channelId, config.platformId]);
+
+  const loadMetadata = useCallback(async () => {
+    if (!capability.metadataReadable) return;
+    setLoading(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await window.copilot.getPlatformStreamMetadata(target);
+      if (!result.ok) {
+        setError(result.error.message);
+        return;
+      }
+      setMetadata(result.value);
+      setTitle(result.value.title);
+      setCategoryId(result.value.categoryId);
+      setCategoryQuery(result.value.categoryName);
+      setCategorySearchActive(false);
+      setCategories([]);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setLoading(false);
+    }
+  }, [capability.metadataReadable, target]);
+
+  useEffect(() => {
+    void loadMetadata();
+  }, [loadMetadata]);
+
+  useEffect(() => {
+    if (!categorySearchActive || !capability.mutableMetadataFields.includes('category')) return undefined;
+    const query = categoryQuery.trim();
+    if (query.length < 2) {
+      setCategories([]);
+      setSearching(false);
+      return undefined;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setSearching(true);
+      setError(null);
+      void window.copilot.searchPlatformCategories({ ...target, query }).then((result) => {
+        if (cancelled) return;
+        if (!result.ok) {
+          setCategories([]);
+          setError(result.error.message);
+          return;
+        }
+        setCategories(result.value);
+      }).catch((cause: unknown) => {
+        if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
+      }).finally(() => {
+        if (!cancelled) setSearching(false);
+      });
+    }, 350);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [capability.mutableMetadataFields, categoryQuery, categorySearchActive, target]);
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await window.copilot.updatePlatformStreamMetadata({
+        ...target,
+        ...(capability.mutableMetadataFields.includes('title') ? { title } : {}),
+        ...(capability.mutableMetadataFields.includes('category') && categoryId ? { categoryId } : {}),
+      });
+      if (!result.ok) {
+        setError(result.error.message);
+        return;
+      }
+      setMetadata(result.value);
+      setTitle(result.value.title);
+      setCategoryId(result.value.categoryId);
+      setCategoryQuery(result.value.categoryName);
+      setCategorySearchActive(false);
+      setCategories([]);
+      setMessage(copy.metadataSaved);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const categoryNeedsSelection = capability.mutableMetadataFields.includes('category')
+    && categoryQuery !== (metadata?.categoryName ?? '')
+    && categoryId.length === 0;
+
+  return (
+    <EditorSection title={copy.channelMetadata} description={copy.channelMetadataDescription}>
+      {capability.metadataReadable ? (
+        <>
+          <div aria-busy={loading} className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border border-gray-800 bg-gray-950/50 p-3"><p className="text-[11px] text-gray-500">{copy.streamState}</p><p className={['mt-1 text-sm font-medium', metadata?.isLive ? 'text-emerald-300' : 'text-gray-300'].join(' ')}>{metadata?.isLive ? copy.live : copy.offline}</p></div>
+            <div className="rounded-lg border border-gray-800 bg-gray-950/50 p-3"><p className="text-[11px] text-gray-500">{copy.viewers}</p><p data-no-i18n="true" className="mt-1 text-sm font-medium text-gray-200">{metadata?.viewerCount?.toLocaleString() ?? '—'}</p></div>
+            <div className="rounded-lg border border-gray-800 bg-gray-950/50 p-3"><p className="text-[11px] text-gray-500">{copy.followers}</p><p data-no-i18n="true" className="mt-1 text-sm font-medium text-gray-200">{metadata?.followerCount?.toLocaleString() ?? '—'}</p></div>
+          </div>
+          <button type="button" disabled={loading} onClick={() => void loadMetadata()} className="text-xs text-violet-300 hover:text-violet-200 disabled:opacity-50">{loading ? '…' : copy.refreshMetadata}</button>
+        </>
+      ) : null}
+
+      {capability.mutableMetadataFields.includes('title') ? (
+        <Field label={copy.streamTitle}>
+          <input data-no-i18n="true" className={INPUT_CLASS} maxLength={500} value={title} onChange={(event) => setTitle(event.target.value)} />
+        </Field>
+      ) : metadata?.title ? <p data-no-i18n="true" className="text-sm text-gray-300">{metadata.title}</p> : null}
+
+      {capability.mutableMetadataFields.includes('category') ? (
+        <div>
+          <Field label={copy.streamCategory} hint={copy.searchCategory}>
+            <input
+              data-no-i18n="true"
+              role="combobox"
+              aria-expanded={categorySearchActive && categories.length > 0}
+              aria-controls="platform-category-results"
+              aria-autocomplete="list"
+              className={INPUT_CLASS}
+              value={categoryQuery}
+              onChange={(event) => {
+                setCategoryQuery(event.target.value);
+                setCategoryId('');
+                setCategorySearchActive(true);
+                setMessage(null);
+              }}
+            />
+          </Field>
+          {searching ? <p role="status" className="mt-2 text-xs text-gray-500">…</p> : null}
+          {categorySearchActive && !searching && categoryQuery.trim().length >= 2 ? (
+            <div id="platform-category-results" role="listbox" aria-label={copy.categoryResults} className="mt-2 max-h-48 overflow-y-auto rounded-lg border border-gray-700 bg-gray-950 p-1">
+              {categories.length === 0 ? <p role="status" className="px-3 py-2 text-xs text-gray-500">{copy.noCategories}</p> : categories.map((category) => (
+                <button
+                  key={category.id}
+                  type="button"
+                  role="option"
+                  aria-selected={category.id === categoryId}
+                  onClick={() => {
+                    setCategoryId(category.id);
+                    setCategoryQuery(category.name);
+                    setCategorySearchActive(false);
+                    setCategories([]);
+                  }}
+                  className="block w-full rounded px-3 py-2 text-left text-sm text-gray-200 hover:bg-gray-800 focus:bg-gray-800 focus:outline-none"
+                >
+                  {category.name}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : metadata?.categoryName ? <p data-no-i18n="true" className="text-sm text-gray-400">{metadata.categoryName}</p> : null}
+
+      {capability.mutableMetadataFields.length > 0 ? (
+        <button type="button" disabled={saving || loading || categoryNeedsSelection} onClick={() => void save()} className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-medium text-white hover:bg-violet-500 disabled:opacity-50">{saving ? '…' : copy.saveMetadata}</button>
+      ) : <p className="text-xs text-gray-500">{copy.metadataReadOnly}</p>}
+      {message ? <p role="status" className="text-xs text-emerald-300">{message}</p> : null}
+      {error ? <p role="alert" data-no-i18n="true" className="rounded-lg border border-rose-800/50 bg-rose-950/30 px-3 py-2 text-xs text-rose-200">{error}</p> : null}
+    </EditorSection>
+  );
+}
+
 export function PlatformLiveEditor(props: LiveOutputEditorProps) {
   const config = props.config as PlatformLiveOutputConfig;
   const copy = getLiveOutputsCopy(useI18n().language);
@@ -315,7 +506,121 @@ export function PlatformLiveEditor(props: LiveOutputEditorProps) {
         )}
       </EditorSection>
       <FormatField props={props} value={config.format} onChange={(format) => change(props, { ...config, format })} />
+      {currentCapability ? <PlatformMetadataPanel config={config} capability={currentCapability} /> : null}
     </>
+  );
+}
+
+function SpotifyCredentialsPanel() {
+  const copy = getLiveOutputsCopy(useI18n().language);
+  const [status, setStatus] = useState<CredentialStatus | null>(null);
+  const [clientId, setClientId] = useState('');
+  const [clientSecret, setClientSecret] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void window.copilot.getPlayingNowCredentialStatus().then((next) => {
+      if (!cancelled) setStatus(next);
+    }).catch((cause: unknown) => {
+      if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const run = async (operation: () => Promise<CredentialStatus>, successMessage?: string) => {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const next = await operation();
+      setStatus(next);
+      if (next.status === 'error') setError(next.message ?? 'Spotify error');
+      else if (successMessage) setMessage(successMessage);
+      return next;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const save = async () => {
+    if (!clientId.trim() || !clientSecret.trim()) {
+      setError(copy.fillSpotifyCredentials);
+      return;
+    }
+    const next = await run(
+      () => window.copilot.savePlayingNowCredentials({ clientId: clientId.trim(), clientSecret }),
+      copy.credentialsSaved,
+    );
+    if (next?.status === 'configured') {
+      setClientId('');
+      setClientSecret('');
+    }
+  };
+
+  const test = async () => {
+    const hasDraft = clientId.trim().length > 0 || clientSecret.length > 0;
+    if (hasDraft && (!clientId.trim() || !clientSecret)) {
+      setError(copy.fillSpotifyCredentials);
+      return;
+    }
+    await run(() => hasDraft
+      ? window.copilot.testPlayingNowCredentials({ clientId: clientId.trim(), clientSecret })
+      : window.copilot.testPlayingNowCredentials());
+  };
+
+  const remove = async () => {
+    if (!window.confirm(copy.confirmRemoveCredentials)) return;
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await window.copilot.removePlayingNowCredentials();
+      setStatus({ status: 'not-configured', message: null });
+      setClientId('');
+      setClientSecret('');
+      setMessage(copy.credentialsRemoved);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const statusLabel = status?.status === 'configured'
+    ? copy.configured
+    : status?.status === 'error'
+      ? copy.statuses.error
+      : copy.notConfiguredCredential;
+
+  return (
+    <EditorSection title={copy.spotifyCredentials} description={copy.spotifyCredentialsDescription}>
+      <div className="flex items-center justify-between rounded-lg border border-gray-800 bg-gray-950/50 px-3 py-2">
+        <span className="text-xs text-gray-500">{copy.credentialStatus}</span>
+        <span role="status" className={['text-xs font-medium', status?.status === 'configured' ? 'text-emerald-300' : status?.status === 'error' ? 'text-rose-300' : 'text-gray-400'].join(' ')}>{statusLabel}</span>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label={copy.clientId}>
+          <input data-no-i18n="true" autoComplete="off" className={INPUT_CLASS} value={clientId} onChange={(event) => setClientId(event.target.value)} />
+        </Field>
+        <Field label={copy.clientSecret} hint={copy.savedSecretHint}>
+          <input data-no-i18n="true" autoComplete="new-password" type="password" className={INPUT_CLASS} value={clientSecret} onChange={(event) => setClientSecret(event.target.value)} />
+        </Field>
+      </div>
+      <div className="flex flex-wrap gap-2" aria-busy={busy}>
+        <button type="button" disabled={busy} onClick={() => void save()} className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-medium hover:bg-violet-500 disabled:opacity-50">{copy.saveCredentials}</button>
+        <button type="button" disabled={busy || (!clientId && !clientSecret && status?.status !== 'configured')} onClick={() => void test()} className="rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 hover:border-violet-600 disabled:opacity-50">{copy.testCredentials}</button>
+        <button type="button" disabled={busy || status?.status !== 'configured'} onClick={() => void remove()} className="rounded-lg border border-rose-900/70 px-3 py-2 text-xs text-rose-300 hover:bg-rose-950/40 disabled:opacity-50">{copy.removeCredentials}</button>
+      </div>
+      {status?.message && status.status !== 'error' ? <p role="status" data-no-i18n="true" className="text-xs text-gray-400">{status.message}</p> : null}
+      {message ? <p role="status" className="text-xs text-emerald-300">{message}</p> : null}
+      {error ? <p role="alert" data-no-i18n="true" className="rounded-lg border border-rose-800/50 bg-rose-950/30 px-3 py-2 text-xs text-rose-200">{error}</p> : null}
+    </EditorSection>
   );
 }
 
@@ -373,6 +678,7 @@ export function PlayingNowEditor(props: LiveOutputEditorProps) {
         <CheckRow label={copy.fields.artwork} checked={config.writeArtwork} onChange={(writeArtwork) => change(props, { ...config, writeArtwork })} />
         <CheckRow label={copy.fields.spotify} checked={config.spotifyEnrichmentEnabled} onChange={(spotifyEnrichmentEnabled) => change(props, { ...config, spotifyEnrichmentEnabled })} />
       </EditorSection>
+      {config.spotifyEnrichmentEnabled ? <SpotifyCredentialsPanel /> : null}
       <EditorSection title={copy.fields.layout}>
         <Field label={copy.fields.layout}>
           <select className={INPUT_CLASS} value={config.overlayLayout} onChange={(event) => change(props, { ...config, overlayLayout: event.target.value as PlayingNowLiveOutputConfig['overlayLayout'] })}>

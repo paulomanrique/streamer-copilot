@@ -41,6 +41,37 @@ type Copy = {
   metadata: string;
   font: string;
   noPlatformMetrics: string;
+  channelMetadata: string;
+  channelMetadataDescription: string;
+  viewers: string;
+  followers: string;
+  streamState: string;
+  live: string;
+  offline: string;
+  streamTitle: string;
+  streamCategory: string;
+  searchCategory: string;
+  categoryResults: string;
+  noCategories: string;
+  refreshMetadata: string;
+  saveMetadata: string;
+  metadataSaved: string;
+  metadataReadOnly: string;
+  spotifyCredentials: string;
+  spotifyCredentialsDescription: string;
+  credentialStatus: string;
+  configured: string;
+  notConfiguredCredential: string;
+  clientId: string;
+  clientSecret: string;
+  savedSecretHint: string;
+  saveCredentials: string;
+  testCredentials: string;
+  removeCredentials: string;
+  credentialsSaved: string;
+  credentialsRemoved: string;
+  confirmRemoveCredentials: string;
+  fillSpotifyCredentials: string;
   categories: Record<FeatureCategory, string>;
   features: Record<LiveOutputKind, { label: string; description: string }>;
   statuses: Record<LiveOutputRuntimeStatus, string>;
@@ -91,6 +122,22 @@ const en: Copy = {
   metadata: 'Metadata',
   font: 'Font',
   noPlatformMetrics: 'No connected platform exposes live-output metrics yet.',
+  channelMetadata: 'Channel status & metadata',
+  channelMetadataDescription: 'Read live statistics and update the fields supported by this platform provider.',
+  viewers: 'Viewers', followers: 'Followers', streamState: 'Stream status', live: 'Live', offline: 'Offline',
+  streamTitle: 'Stream title', streamCategory: 'Category', searchCategory: 'Search categories',
+  categoryResults: 'Category results', noCategories: 'No categories found.', refreshMetadata: 'Refresh status',
+  saveMetadata: 'Save channel metadata', metadataSaved: 'Channel metadata saved.',
+  metadataReadOnly: 'This provider exposes status as read-only.',
+  spotifyCredentials: 'Spotify metadata credentials',
+  spotifyCredentialsDescription: 'Used only to enrich missing album and artwork metadata. The secret is encrypted by the operating system.',
+  credentialStatus: 'Credential status', configured: 'Configured', notConfiguredCredential: 'Not configured',
+  clientId: 'Spotify client ID', clientSecret: 'Spotify client secret',
+  savedSecretHint: 'Leave both fields empty to test the saved credentials.', saveCredentials: 'Save credentials',
+  testCredentials: 'Test credentials', removeCredentials: 'Remove credentials',
+  credentialsSaved: 'Spotify credentials saved.', credentialsRemoved: 'Spotify credentials removed.',
+  confirmRemoveCredentials: 'Remove the saved Spotify credentials?',
+  fillSpotifyCredentials: 'Enter both client ID and client secret before saving.',
   categories: {
     clock: 'Clock & date',
     timers: 'Timers',
@@ -165,6 +212,22 @@ const pt: Copy = {
   enableGlobalShortcuts: 'Habilitar atalhos globais', health: 'Integridade',
   regenerate: 'Regenerar saídas', metadata: 'Metadados', font: 'Fonte',
   noPlatformMetrics: 'Nenhuma plataforma conectada expõe métricas para saídas ao vivo.',
+  channelMetadata: 'Status e metadados do canal',
+  channelMetadataDescription: 'Consulte estatísticas ao vivo e altere os campos suportados pelo provider da plataforma.',
+  viewers: 'Espectadores', followers: 'Seguidores', streamState: 'Status da transmissão', live: 'Ao vivo', offline: 'Offline',
+  streamTitle: 'Título da transmissão', streamCategory: 'Categoria', searchCategory: 'Buscar categorias',
+  categoryResults: 'Resultados de categorias', noCategories: 'Nenhuma categoria encontrada.', refreshMetadata: 'Atualizar status',
+  saveMetadata: 'Salvar metadados do canal', metadataSaved: 'Metadados do canal salvos.',
+  metadataReadOnly: 'Este provider expõe o status apenas para leitura.',
+  spotifyCredentials: 'Credenciais de metadados do Spotify',
+  spotifyCredentialsDescription: 'Usadas somente para completar álbum e capa ausentes. O secret é criptografado pelo sistema operacional.',
+  credentialStatus: 'Status das credenciais', configured: 'Configuradas', notConfiguredCredential: 'Não configuradas',
+  clientId: 'Client ID do Spotify', clientSecret: 'Client secret do Spotify',
+  savedSecretHint: 'Deixe os dois campos vazios para testar as credenciais salvas.', saveCredentials: 'Salvar credenciais',
+  testCredentials: 'Testar credenciais', removeCredentials: 'Remover credenciais',
+  credentialsSaved: 'Credenciais do Spotify salvas.', credentialsRemoved: 'Credenciais do Spotify removidas.',
+  confirmRemoveCredentials: 'Remover as credenciais salvas do Spotify?',
+  fillSpotifyCredentials: 'Informe o client ID e o client secret antes de salvar.',
   categories: { clock: 'Relógio e data', timers: 'Temporizadores', content: 'Conteúdo', telemetry: 'Telemetria', media: 'Mídia' },
   features: {
     time: { label: 'Hora', description: 'Relógio da transmissão com opções de 12/24 horas e fuso.' },
