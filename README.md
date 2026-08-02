@@ -31,6 +31,7 @@ Live production gets messy when every platform has its own chat window, every co
 - **Raffles** with chat entry commands, staff triggers, and an OBS wheel overlay.
 - **Polls** voted from chat, with a live OBS results overlay.
 - **Music requests** from chat (YouTube), with queue limits, skip/queue/cancel triggers, and a now-playing overlay.
+- **Live outputs** for time, date, countdowns, chronometers, rotating text, system telemetry, Twitch metrics/metadata, and local-player track data.
 - **Welcome messages** with per-user overrides and optional sounds.
 - **Suggestion lists** for collecting viewer ideas during a stream.
 - **OBS overlays** served as local Browser Sources: chat overlay, chat dock, now playing, raffle wheel, polls, and highlighted message (double-click a chat message to feature it on stream).
@@ -60,6 +61,19 @@ Every overlay is served by a local web server — add the generated URL as an OB
 - **Now playing**: current music request with title and artwork.
 - **Polls**: live vote counts while a poll runs.
 - **Raffle wheel**: animated wheel while a raffle resolves.
+
+## Live Outputs
+
+The Live Outputs workspace provides the stream-text tools commonly used with OBS text sources, plus a Browser Source for every enabled output. Settings and generated artifacts stay inside the active profile so the profile folder remains portable.
+
+- Time and localized date, with custom formats and timezones.
+- Countdown, Chrono Down, and Chrono Up, including completion sounds, global shortcuts, and timer chaining.
+- Rotating text lines in sequential or shuffled order.
+- CPU, RAM, process-count, upload, and download telemetry.
+- Provider-registered live metrics. Twitch includes viewers, followers, stream status, title/category editing, category search, and reusable metadata presets.
+- Playing Now for Windows system media sessions and classic-player window fallbacks (Spotify, foobar2000, Winamp, iTunes, and VLC), with encrypted Spotify metadata credentials, separate text files, artwork, and `Data/track-info.json`.
+
+Generated text files use the profile's `TextFiles/` directory. Browser Source URLs use `/live-outputs/<output-id>`. The existing music-request player remains independent at `/now-playing`; external/local-player media uses `/live-outputs/playing-now`.
 
 ## Raffles
 
