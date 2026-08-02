@@ -62,6 +62,18 @@ import type {
   VoiceCommandUpsertInput,
   VoiceSpeakPayload,
   WelcomeSettings,
+  CredentialStatus,
+  LiveOutputConfig,
+  LiveOutputControlInput,
+  LiveOutputFeatureDescriptor,
+  LiveOutputHotkeyBinding,
+  LiveOutputOperationResult,
+  LiveOutputsSnapshot,
+  PlatformCategory,
+  PlatformStreamCapability,
+  PlatformStreamMetadata,
+  PlayingNowSourceCapability,
+  PlayingNowTrackSnapshot,
 } from '../shared/types.js';
 
 const IPC_CHANNELS = {
@@ -235,6 +247,26 @@ const IPC_CHANNELS = {
   highlightMessageSet: 'highlight-message:set',
   highlightMessageClear: 'highlight-message:clear',
   highlightMessageUpdate: 'highlight-message:update',
+  liveOutputsGetCatalog: 'live-outputs:get-catalog',
+  liveOutputsGetSnapshot: 'live-outputs:get-snapshot',
+  liveOutputsUpsert: 'live-outputs:upsert',
+  liveOutputsDelete: 'live-outputs:delete',
+  liveOutputsControl: 'live-outputs:control',
+  liveOutputsSaveHotkeys: 'live-outputs:save-hotkeys',
+  liveOutputsRegenerate: 'live-outputs:regenerate',
+  liveOutputsReveal: 'live-outputs:reveal',
+  liveOutputsPickSound: 'live-outputs:pick-sound',
+  liveOutputsUpdate: 'live-outputs:update',
+  playingNowListSources: 'playing-now:list-sources',
+  playingNowTestSource: 'playing-now:test-source',
+  playingNowGetCredentialStatus: 'playing-now:get-credential-status',
+  playingNowSaveCredentials: 'playing-now:save-credentials',
+  playingNowTestCredentials: 'playing-now:test-credentials',
+  playingNowRemoveCredentials: 'playing-now:remove-credentials',
+  platformStreamGetCapabilities: 'platform-stream:get-capabilities',
+  platformStreamGetMetadata: 'platform-stream:get-metadata',
+  platformStreamSearchCategories: 'platform-stream:search-categories',
+  platformStreamUpdateMetadata: 'platform-stream:update-metadata',
 } as const;
 
 const copilotApi: CopilotApi = {
@@ -547,6 +579,30 @@ const copilotApi: CopilotApi = {
     ipcRenderer.on(IPC_CHANNELS.highlightMessageUpdate, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.highlightMessageUpdate, wrappedListener); };
   },
+  getLiveOutputCatalog: () => ipcRenderer.invoke(IPC_CHANNELS.liveOutputsGetCatalog) as Promise<LiveOutputFeatureDescriptor[]>,
+  getLiveOutputsSnapshot: () => ipcRenderer.invoke(IPC_CHANNELS.liveOutputsGetSnapshot) as Promise<LiveOutputsSnapshot>,
+  upsertLiveOutput: (input: LiveOutputConfig) => ipcRenderer.invoke(IPC_CHANNELS.liveOutputsUpsert, input) as Promise<LiveOutputOperationResult<LiveOutputsSnapshot>>,
+  deleteLiveOutput: (input: { id: string }) => ipcRenderer.invoke(IPC_CHANNELS.liveOutputsDelete, input) as Promise<LiveOutputOperationResult<LiveOutputsSnapshot>>,
+  controlLiveOutput: (input: LiveOutputControlInput) => ipcRenderer.invoke(IPC_CHANNELS.liveOutputsControl, input) as Promise<LiveOutputOperationResult<LiveOutputsSnapshot>>,
+  saveLiveOutputHotkeys: (input: { enabled: boolean; bindings: LiveOutputHotkeyBinding[] }) => ipcRenderer.invoke(IPC_CHANNELS.liveOutputsSaveHotkeys, input) as Promise<LiveOutputOperationResult<LiveOutputsSnapshot>>,
+  regenerateLiveOutput: (input: { id: string }) => ipcRenderer.invoke(IPC_CHANNELS.liveOutputsRegenerate, input) as Promise<LiveOutputOperationResult<LiveOutputsSnapshot>>,
+  revealLiveOutput: (input: { id: string; artifact?: string }) => ipcRenderer.invoke(IPC_CHANNELS.liveOutputsReveal, input) as Promise<LiveOutputOperationResult<void>>,
+  pickLiveOutputSound: (input: { id: string }) => ipcRenderer.invoke(IPC_CHANNELS.liveOutputsPickSound, input) as Promise<LiveOutputOperationResult<string | null>>,
+  onLiveOutputsUpdate: (listener: (payload: LiveOutputsSnapshot) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: LiveOutputsSnapshot) => listener(payload);
+    ipcRenderer.on(IPC_CHANNELS.liveOutputsUpdate, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.liveOutputsUpdate, wrappedListener); };
+  },
+  listPlayingNowSources: () => ipcRenderer.invoke(IPC_CHANNELS.playingNowListSources) as Promise<PlayingNowSourceCapability[]>,
+  testPlayingNowSource: (input: { sourceId: string }) => ipcRenderer.invoke(IPC_CHANNELS.playingNowTestSource, input) as Promise<LiveOutputOperationResult<PlayingNowTrackSnapshot>>,
+  getPlayingNowCredentialStatus: () => ipcRenderer.invoke(IPC_CHANNELS.playingNowGetCredentialStatus) as Promise<CredentialStatus>,
+  savePlayingNowCredentials: (input: { clientId: string; clientSecret: string }) => ipcRenderer.invoke(IPC_CHANNELS.playingNowSaveCredentials, input) as Promise<CredentialStatus>,
+  testPlayingNowCredentials: (input?: { clientId: string; clientSecret: string }) => ipcRenderer.invoke(IPC_CHANNELS.playingNowTestCredentials, input) as Promise<CredentialStatus>,
+  removePlayingNowCredentials: () => ipcRenderer.invoke(IPC_CHANNELS.playingNowRemoveCredentials) as Promise<void>,
+  getPlatformStreamCapabilities: () => ipcRenderer.invoke(IPC_CHANNELS.platformStreamGetCapabilities) as Promise<PlatformStreamCapability[]>,
+  getPlatformStreamMetadata: (input) => ipcRenderer.invoke(IPC_CHANNELS.platformStreamGetMetadata, input) as Promise<LiveOutputOperationResult<PlatformStreamMetadata>>,
+  searchPlatformCategories: (input) => ipcRenderer.invoke(IPC_CHANNELS.platformStreamSearchCategories, input) as Promise<LiveOutputOperationResult<PlatformCategory[]>>,
+  updatePlatformStreamMetadata: (input) => ipcRenderer.invoke(IPC_CHANNELS.platformStreamUpdateMetadata, input) as Promise<LiveOutputOperationResult<PlatformStreamMetadata>>,
 };
 
 contextBridge.exposeInMainWorld('copilot', copilotApi);

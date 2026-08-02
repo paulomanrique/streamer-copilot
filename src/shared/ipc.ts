@@ -73,6 +73,18 @@ import type {
   MusicPlayCommand,
   MusicPlayerEvent,
   WelcomeSettings,
+  CredentialStatus,
+  LiveOutputConfig,
+  LiveOutputControlInput,
+  LiveOutputFeatureDescriptor,
+  LiveOutputHotkeyBinding,
+  LiveOutputOperationResult,
+  LiveOutputsSnapshot,
+  PlatformCategory,
+  PlatformStreamCapability,
+  PlatformStreamMetadata,
+  PlayingNowSourceCapability,
+  PlayingNowTrackSnapshot,
 } from './types.js';
 import type { ChatSession, ChatLogMessage } from '../modules/chat-log/chat-log-service.js';
 export type { ChatSession, ChatLogMessage };
@@ -254,6 +266,26 @@ export const IPC_CHANNELS = {
   highlightMessageSet: 'highlight-message:set',
   highlightMessageClear: 'highlight-message:clear',
   highlightMessageUpdate: 'highlight-message:update',
+  liveOutputsGetCatalog: 'live-outputs:get-catalog',
+  liveOutputsGetSnapshot: 'live-outputs:get-snapshot',
+  liveOutputsUpsert: 'live-outputs:upsert',
+  liveOutputsDelete: 'live-outputs:delete',
+  liveOutputsControl: 'live-outputs:control',
+  liveOutputsSaveHotkeys: 'live-outputs:save-hotkeys',
+  liveOutputsRegenerate: 'live-outputs:regenerate',
+  liveOutputsReveal: 'live-outputs:reveal',
+  liveOutputsPickSound: 'live-outputs:pick-sound',
+  liveOutputsUpdate: 'live-outputs:update',
+  playingNowListSources: 'playing-now:list-sources',
+  playingNowTestSource: 'playing-now:test-source',
+  playingNowGetCredentialStatus: 'playing-now:get-credential-status',
+  playingNowSaveCredentials: 'playing-now:save-credentials',
+  playingNowTestCredentials: 'playing-now:test-credentials',
+  playingNowRemoveCredentials: 'playing-now:remove-credentials',
+  platformStreamGetCapabilities: 'platform-stream:get-capabilities',
+  platformStreamGetMetadata: 'platform-stream:get-metadata',
+  platformStreamSearchCategories: 'platform-stream:search-categories',
+  platformStreamUpdateMetadata: 'platform-stream:update-metadata',
 } as const;
 
 export interface RecentChatSnapshot {
@@ -500,6 +532,44 @@ export interface CopilotApi {
   /** Async push so every renderer window stays in sync with the currently
    *  highlighted message id (used by ChatFeed to paint the row differently). */
   onHighlightedMessageChange: (listener: (payload: { messageId: string | null }) => void) => () => void;
+  getLiveOutputCatalog: () => Promise<LiveOutputFeatureDescriptor[]>;
+  getLiveOutputsSnapshot: () => Promise<LiveOutputsSnapshot>;
+  upsertLiveOutput: (input: LiveOutputConfig) => Promise<LiveOutputOperationResult<LiveOutputsSnapshot>>;
+  deleteLiveOutput: (input: { id: string }) => Promise<LiveOutputOperationResult<LiveOutputsSnapshot>>;
+  controlLiveOutput: (input: LiveOutputControlInput) => Promise<LiveOutputOperationResult<LiveOutputsSnapshot>>;
+  saveLiveOutputHotkeys: (input: {
+    enabled: boolean;
+    bindings: LiveOutputHotkeyBinding[];
+  }) => Promise<LiveOutputOperationResult<LiveOutputsSnapshot>>;
+  regenerateLiveOutput: (input: { id: string }) => Promise<LiveOutputOperationResult<LiveOutputsSnapshot>>;
+  revealLiveOutput: (input: { id: string; artifact?: string }) => Promise<LiveOutputOperationResult<void>>;
+  pickLiveOutputSound: (input: { id: string }) => Promise<LiveOutputOperationResult<string | null>>;
+  onLiveOutputsUpdate: (listener: (payload: LiveOutputsSnapshot) => void) => () => void;
+  listPlayingNowSources: () => Promise<PlayingNowSourceCapability[]>;
+  testPlayingNowSource: (input: { sourceId: string }) => Promise<LiveOutputOperationResult<PlayingNowTrackSnapshot>>;
+  getPlayingNowCredentialStatus: () => Promise<CredentialStatus>;
+  savePlayingNowCredentials: (input: { clientId: string; clientSecret: string }) => Promise<CredentialStatus>;
+  testPlayingNowCredentials: (input?: { clientId: string; clientSecret: string }) => Promise<CredentialStatus>;
+  removePlayingNowCredentials: () => Promise<void>;
+  getPlatformStreamCapabilities: () => Promise<PlatformStreamCapability[]>;
+  getPlatformStreamMetadata: (input: {
+    platformId: PlatformId;
+    accountId: string;
+    channelId: string;
+  }) => Promise<LiveOutputOperationResult<PlatformStreamMetadata>>;
+  searchPlatformCategories: (input: {
+    platformId: PlatformId;
+    accountId: string;
+    channelId: string;
+    query: string;
+  }) => Promise<LiveOutputOperationResult<PlatformCategory[]>>;
+  updatePlatformStreamMetadata: (input: {
+    platformId: PlatformId;
+    accountId: string;
+    channelId: string;
+    title?: string;
+    categoryId?: string;
+  }) => Promise<LiveOutputOperationResult<PlatformStreamMetadata>>;
 }
 
 export interface OverlayServerInfo {

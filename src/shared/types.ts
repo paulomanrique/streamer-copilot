@@ -743,6 +743,361 @@ export interface OverlayPreferences extends OverlayVisualStyle {
 
 export type OverlayPreferencesMap = Partial<Record<OverlayId, OverlayPreferences>>;
 
+// ── Live outputs ────────────────────────────────────────────────────────────
+
+/** Stream-facing text/media outputs inspired by Snaz. Platform-specific
+ *  behavior is supplied by provider registries; these ids describe features,
+ *  never streaming platforms. */
+export type LiveOutputKind =
+  | 'time'
+  | 'date'
+  | 'countdown'
+  | 'chrono-down'
+  | 'chrono-up'
+  | 'text-rotator'
+  | 'system-info'
+  | 'platform-live'
+  | 'playing-now';
+
+export type LiveOutputRuntimeStatus =
+  | 'disabled'
+  | 'ready'
+  | 'running'
+  | 'paused'
+  | 'completed'
+  | 'degraded'
+  | 'error';
+
+export type LiveOutputErrorCode =
+  | 'INVALID_SETTINGS'
+  | 'OUTPUT_WRITE_FAILED'
+  | 'HOTKEY_CONFLICT'
+  | 'SOURCE_UNAVAILABLE'
+  | 'PLATFORM_DISCONNECTED'
+  | 'AUTH_SCOPE_REQUIRED'
+  | 'COLLECTOR_FAILED';
+
+export interface LiveOutputError {
+  code: LiveOutputErrorCode;
+  message: string;
+  field?: string;
+}
+
+export interface LiveOutputDestinationConfig {
+  file: {
+    enabled: boolean;
+    /** Always relative to the active profile. */
+    relativePath: string;
+  };
+  browser: {
+    enabled: boolean;
+    style: OverlayVisualStyle;
+  };
+}
+
+export interface LiveOutputBaseConfig {
+  id: string;
+  kind: LiveOutputKind;
+  enabled: boolean;
+  startOnProfileLoad: boolean;
+  destinations: LiveOutputDestinationConfig;
+}
+
+export interface TimeLiveOutputConfig extends LiveOutputBaseConfig {
+  kind: 'time';
+  format: string;
+  use24Hour: boolean;
+  removeLeadingHourZero: boolean;
+  /** `system` or an IANA timezone. */
+  timeZone: string;
+}
+
+export interface DateLiveOutputConfig extends LiveOutputBaseConfig {
+  kind: 'date';
+  template: string;
+  /** .NET-compatible custom date format. */
+  dateFormat: string;
+  locale: 'system' | AppLanguage;
+  /** `system` or an IANA timezone. */
+  timeZone: string;
+}
+
+export interface CompletionEffectConfig {
+  doneText: string;
+  playSound: boolean;
+  /** Relative to the active profile, or null. */
+  soundPath: string | null;
+}
+
+export interface CountdownLiveOutputConfig extends LiveOutputBaseConfig, CompletionEffectConfig {
+  kind: 'countdown';
+  format: string;
+  targetAt: string;
+  useTodayOnProfileLoad: boolean;
+  doubleDigits: boolean;
+  omitLeadingZeroUnits: boolean;
+  /** `system` or an IANA timezone. */
+  timeZone: string;
+}
+
+export interface ChronoDownLiveOutputConfig extends LiveOutputBaseConfig, CompletionEffectConfig {
+  kind: 'chrono-down';
+  format: string;
+  initialSeconds: number;
+  adjustmentMinutes: number;
+  doubleDigits: boolean;
+  omitLeadingZeroUnits: boolean;
+  startChronoUpOnComplete: boolean;
+}
+
+export interface ChronoUpLiveOutputConfig extends LiveOutputBaseConfig {
+  kind: 'chrono-up';
+  format: string;
+  initialSeconds: number;
+  adjustmentMinutes: number;
+  useDays: boolean;
+  resetOnStart: boolean;
+}
+
+export interface LiveOutputTextLine {
+  id: string;
+  text: string;
+  enabled: boolean;
+  allowEmpty: boolean;
+}
+
+export interface TextRotatorLiveOutputConfig extends LiveOutputBaseConfig {
+  kind: 'text-rotator';
+  intervalSeconds: number;
+  order: 'sequential' | 'shuffle';
+  loop: boolean;
+  lines: LiveOutputTextLine[];
+}
+
+export interface SystemInfoLiveOutputConfig extends LiveOutputBaseConfig {
+  kind: 'system-info';
+  format: string;
+  sampleIntervalSeconds: number;
+  networkEnabled: boolean;
+  networkInterfaceId: string | null;
+  roundRamUsedPercent: boolean;
+  roundRamAvailablePercent: boolean;
+}
+
+export interface PlatformLiveOutputConfig extends LiveOutputBaseConfig {
+  kind: 'platform-live';
+  platformId: PlatformId;
+  accountId: string;
+  channelId: string;
+  metricId: string;
+  format: string;
+  refreshSeconds: number;
+}
+
+export interface PlayingNowLiveOutputConfig extends LiveOutputBaseConfig {
+  kind: 'playing-now';
+  format: string;
+  noMediaText: string;
+  sourceMode: 'auto' | 'pinned';
+  sourceId: string | null;
+  fallbackToSystemSession: boolean;
+  truncate: {
+    artist: number;
+    song: number;
+    album: number;
+  };
+  writeSeparateFiles: boolean;
+  writeJson: boolean;
+  writeArtwork: boolean;
+  overlayLayout: 'compact' | 'artwork-left' | 'artwork-right';
+  showProgress: boolean;
+  spotifyEnrichmentEnabled: boolean;
+}
+
+export type LiveOutputConfig =
+  | TimeLiveOutputConfig
+  | DateLiveOutputConfig
+  | CountdownLiveOutputConfig
+  | ChronoDownLiveOutputConfig
+  | ChronoUpLiveOutputConfig
+  | TextRotatorLiveOutputConfig
+  | SystemInfoLiveOutputConfig
+  | PlatformLiveOutputConfig
+  | PlayingNowLiveOutputConfig;
+
+export type LiveOutputHotkeyAction =
+  | 'chrono-down.toggle'
+  | 'chrono-down.stop'
+  | 'chrono-down.increment'
+  | 'chrono-down.decrement'
+  | 'chrono-up.toggle'
+  | 'chrono-up.stop'
+  | 'chrono-up.increment'
+  | 'chrono-up.decrement';
+
+export interface LiveOutputHotkeyBinding {
+  action: LiveOutputHotkeyAction;
+  accelerator: string | null;
+}
+
+export interface LiveOutputsSettings {
+  schemaVersion: 1;
+  hotkeysEnabled: boolean;
+  hotkeys: LiveOutputHotkeyBinding[];
+  outputs: LiveOutputConfig[];
+  metadataPresets: PlatformStreamMetadataPreset[];
+}
+
+export interface LiveOutputTokenDescriptor {
+  token: string;
+  description: string;
+  example: string;
+}
+
+export interface LiveOutputFeatureDescriptor {
+  kind: LiveOutputKind;
+  singleton: boolean;
+  defaultId: string;
+  defaultFileRelativePath: string;
+  tokens: LiveOutputTokenDescriptor[];
+  controls: LiveOutputControlAction[];
+}
+
+export interface LiveOutputArtifactSnapshot {
+  id: string;
+  label: string;
+  relativePath: string | null;
+  absolutePath: string | null;
+  browserUrl: string | null;
+  updatedAt: string | null;
+  error: LiveOutputError | null;
+}
+
+export interface LiveOutputRuntimeSnapshot {
+  id: string;
+  kind: LiveOutputKind;
+  status: LiveOutputRuntimeStatus;
+  renderedText: string;
+  updatedAt: string;
+  nextTransitionAt: string | null;
+  browserClients: number;
+  errors: LiveOutputError[];
+  artifacts: LiveOutputArtifactSnapshot[];
+  details: Record<string, unknown>;
+}
+
+export interface LiveOutputsSnapshot {
+  settings: LiveOutputsSettings;
+  outputs: Record<string, LiveOutputRuntimeSnapshot>;
+  overlayServerStatus: 'running' | 'failed' | 'stopped';
+}
+
+export type LiveOutputControlAction =
+  | 'start'
+  | 'pause'
+  | 'resume'
+  | 'stop'
+  | 'reset'
+  | 'previous'
+  | 'next'
+  | 'shuffle'
+  | 'adjust'
+  | 'play';
+
+export interface LiveOutputControlInput {
+  id: string;
+  action: LiveOutputControlAction;
+  amountSeconds?: number;
+}
+
+export type LiveOutputOperationResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: LiveOutputError };
+
+export interface PlayingNowSourceCapability {
+  id: string;
+  label: string;
+  applicationId: string;
+  status: 'available' | 'unavailable' | 'error';
+  sourceType: 'system-session' | 'dedicated' | 'window-title' | 'mpris';
+  canPlay: boolean;
+  canPause: boolean;
+  canStop: boolean;
+  canPrevious: boolean;
+  canNext: boolean;
+  error: string | null;
+}
+
+export interface PlayingNowTrackSnapshot {
+  sourceId: string | null;
+  sourceLabel: string | null;
+  state: 'idle' | 'playing' | 'paused' | 'stopped' | 'unavailable' | 'error';
+  artist: string;
+  song: string;
+  album: string;
+  artworkPath: string | null;
+  positionSeconds: number | null;
+  durationSeconds: number | null;
+}
+
+export interface CredentialStatus {
+  status: 'not-configured' | 'configured' | 'error';
+  message: string | null;
+}
+
+export interface PlatformStreamTarget {
+  platformId: PlatformId;
+  accountId: string;
+  channelId: string;
+  label: string;
+}
+
+export interface PlatformMetricDescriptor {
+  id: string;
+  label: string;
+  token: string;
+  minimumRefreshSeconds: number;
+  defaultFileRelativePath: string;
+}
+
+export interface PlatformStreamCapability {
+  platformId: PlatformId;
+  targets: PlatformStreamTarget[];
+  metrics: PlatformMetricDescriptor[];
+  metadataReadable: boolean;
+  mutableMetadataFields: Array<'title' | 'category'>;
+}
+
+export interface PlatformStreamMetadata {
+  platformId: PlatformId;
+  accountId: string;
+  channelId: string;
+  isLive: boolean;
+  viewerCount: number | null;
+  followerCount: number | null;
+  title: string;
+  categoryId: string;
+  categoryName: string;
+  broadcasterType: string;
+  accountCreatedAt: string | null;
+  startedAt: string | null;
+}
+
+export interface PlatformCategory {
+  id: string;
+  name: string;
+  imageUrl: string | null;
+}
+
+export interface PlatformStreamMetadataPreset {
+  id: string;
+  platformId: PlatformId;
+  name: string;
+  title: string;
+  categoryId: string;
+  categoryName: string;
+}
+
 export interface RaffleSnapshot {
   raffle: Raffle;
   entries: RaffleEntry[];

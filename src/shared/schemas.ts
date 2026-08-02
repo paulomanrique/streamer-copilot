@@ -521,6 +521,249 @@ export const overlayPreferencesSetInputSchema = z.object({
   prefs: overlayPreferencesSchema,
 });
 
+// ── Live outputs ─────────────────────────────────────────────────────────────
+
+const liveOutputIdSchema = z.string().min(1).max(120).regex(/^[A-Za-z0-9_-]+$/);
+const liveOutputRelativePathSchema = z.string().min(1).max(500).refine((value) => {
+  if (/^(?:[A-Za-z]:|[\\/])/.test(value)) return false;
+  const segments = value.split(/[\\/]+/);
+  return segments.every((segment) => segment.length > 0 && segment !== '.' && segment !== '..');
+}, 'Path must stay inside the active profile');
+const liveOutputTimeZoneSchema = z.string().min(1).max(100);
+
+const liveOutputDestinationSchema = z.object({
+  file: z.object({
+    enabled: z.boolean(),
+    relativePath: liveOutputRelativePathSchema,
+  }).strict(),
+  browser: z.object({
+    enabled: z.boolean(),
+    style: overlayVisualStyleSchema.strict(),
+  }).strict(),
+}).strict();
+
+const liveOutputBaseShape = {
+  id: liveOutputIdSchema,
+  enabled: z.boolean(),
+  startOnProfileLoad: z.boolean(),
+  destinations: liveOutputDestinationSchema,
+};
+
+const completionEffectShape = {
+  doneText: z.string().max(500),
+  playSound: z.boolean(),
+  soundPath: liveOutputRelativePathSchema.nullable(),
+};
+
+export const timeLiveOutputConfigSchema = z.object({
+  ...liveOutputBaseShape,
+  kind: z.literal('time'),
+  format: z.string().min(1).max(500),
+  use24Hour: z.boolean(),
+  removeLeadingHourZero: z.boolean(),
+  timeZone: liveOutputTimeZoneSchema,
+}).strict();
+
+export const dateLiveOutputConfigSchema = z.object({
+  ...liveOutputBaseShape,
+  kind: z.literal('date'),
+  template: z.string().min(1).max(500),
+  dateFormat: z.string().min(1).max(200),
+  locale: z.union([z.literal('system'), appLanguageSchema]),
+  timeZone: liveOutputTimeZoneSchema,
+}).strict();
+
+export const countdownLiveOutputConfigSchema = z.object({
+  ...liveOutputBaseShape,
+  ...completionEffectShape,
+  kind: z.literal('countdown'),
+  format: z.string().min(1).max(500),
+  targetAt: z.string().datetime(),
+  useTodayOnProfileLoad: z.boolean(),
+  doubleDigits: z.boolean(),
+  omitLeadingZeroUnits: z.boolean(),
+  timeZone: liveOutputTimeZoneSchema,
+}).strict();
+
+export const chronoDownLiveOutputConfigSchema = z.object({
+  ...liveOutputBaseShape,
+  ...completionEffectShape,
+  kind: z.literal('chrono-down'),
+  format: z.string().min(1).max(500),
+  initialSeconds: z.number().int().min(0).max(315_576_000),
+  adjustmentMinutes: z.number().int().min(1).max(10_080),
+  doubleDigits: z.boolean(),
+  omitLeadingZeroUnits: z.boolean(),
+  startChronoUpOnComplete: z.boolean(),
+}).strict();
+
+export const chronoUpLiveOutputConfigSchema = z.object({
+  ...liveOutputBaseShape,
+  kind: z.literal('chrono-up'),
+  format: z.string().min(1).max(500),
+  initialSeconds: z.number().int().min(0).max(315_576_000),
+  adjustmentMinutes: z.number().int().min(1).max(10_080),
+  useDays: z.boolean(),
+  resetOnStart: z.boolean(),
+}).strict();
+
+const liveOutputTextLineSchema = z.object({
+  id: liveOutputIdSchema,
+  text: z.string().max(2_000),
+  enabled: z.boolean(),
+  allowEmpty: z.boolean(),
+}).strict().superRefine((line, ctx) => {
+  if (!line.allowEmpty && line.text.length === 0) {
+    ctx.addIssue({ code: 'custom', path: ['text'], message: 'Empty lines must be explicitly allowed' });
+  }
+});
+
+export const textRotatorLiveOutputConfigSchema = z.object({
+  ...liveOutputBaseShape,
+  kind: z.literal('text-rotator'),
+  intervalSeconds: z.number().int().min(1).max(86_400),
+  order: z.enum(['sequential', 'shuffle']),
+  loop: z.boolean(),
+  lines: z.array(liveOutputTextLineSchema).max(1_000),
+}).strict();
+
+export const systemInfoLiveOutputConfigSchema = z.object({
+  ...liveOutputBaseShape,
+  kind: z.literal('system-info'),
+  format: z.string().min(1).max(1_000),
+  sampleIntervalSeconds: z.number().int().min(1).max(60),
+  networkEnabled: z.boolean(),
+  networkInterfaceId: z.string().min(1).max(200).nullable(),
+  roundRamUsedPercent: z.boolean(),
+  roundRamAvailablePercent: z.boolean(),
+}).strict();
+
+export const platformLiveOutputConfigSchema = z.object({
+  ...liveOutputBaseShape,
+  kind: z.literal('platform-live'),
+  platformId: platformIdSchema,
+  accountId: z.string().min(1).max(120),
+  channelId: z.string().min(1).max(400),
+  metricId: z.string().min(1).max(80),
+  format: z.string().min(1).max(500),
+  refreshSeconds: z.number().int().min(1).max(300),
+}).strict();
+
+export const playingNowLiveOutputConfigSchema = z.object({
+  ...liveOutputBaseShape,
+  kind: z.literal('playing-now'),
+  format: z.string().min(1).max(1_000),
+  noMediaText: z.string().max(500),
+  sourceMode: z.enum(['auto', 'pinned']),
+  sourceId: z.string().min(1).max(200).nullable(),
+  fallbackToSystemSession: z.boolean(),
+  truncate: z.object({
+    artist: z.number().int().min(0).max(1_000),
+    song: z.number().int().min(0).max(1_000),
+    album: z.number().int().min(0).max(1_000),
+  }).strict(),
+  writeSeparateFiles: z.boolean(),
+  writeJson: z.boolean(),
+  writeArtwork: z.boolean(),
+  overlayLayout: z.enum(['compact', 'artwork-left', 'artwork-right']),
+  showProgress: z.boolean(),
+  spotifyEnrichmentEnabled: z.boolean(),
+}).strict().superRefine((settings, ctx) => {
+  if (settings.sourceMode === 'pinned' && !settings.sourceId) {
+    ctx.addIssue({ code: 'custom', path: ['sourceId'], message: 'Pinned mode requires a source' });
+  }
+});
+
+export const liveOutputConfigSchema = z.discriminatedUnion('kind', [
+  timeLiveOutputConfigSchema,
+  dateLiveOutputConfigSchema,
+  countdownLiveOutputConfigSchema,
+  chronoDownLiveOutputConfigSchema,
+  chronoUpLiveOutputConfigSchema,
+  textRotatorLiveOutputConfigSchema,
+  systemInfoLiveOutputConfigSchema,
+  platformLiveOutputConfigSchema,
+  playingNowLiveOutputConfigSchema,
+]);
+
+const liveOutputHotkeyActionSchema = z.enum([
+  'chrono-down.toggle',
+  'chrono-down.stop',
+  'chrono-down.increment',
+  'chrono-down.decrement',
+  'chrono-up.toggle',
+  'chrono-up.stop',
+  'chrono-up.increment',
+  'chrono-up.decrement',
+]);
+
+export const liveOutputHotkeyBindingSchema = z.object({
+  action: liveOutputHotkeyActionSchema,
+  accelerator: z.string().min(1).max(120).nullable(),
+}).strict();
+
+const platformStreamMetadataPresetSchema = z.object({
+  id: liveOutputIdSchema,
+  platformId: platformIdSchema,
+  name: z.string().min(1).max(120),
+  title: z.string().max(500),
+  categoryId: z.string().max(120),
+  categoryName: z.string().max(200),
+}).strict();
+
+export const liveOutputsSettingsSchema = z.object({
+  schemaVersion: z.literal(1),
+  hotkeysEnabled: z.boolean(),
+  hotkeys: z.array(liveOutputHotkeyBindingSchema).max(8),
+  outputs: z.array(liveOutputConfigSchema).max(200),
+  metadataPresets: z.array(platformStreamMetadataPresetSchema).max(500),
+}).strict();
+
+export const liveOutputControlInputSchema = z.object({
+  id: liveOutputIdSchema,
+  action: z.enum(['start', 'pause', 'resume', 'stop', 'reset', 'previous', 'next', 'shuffle', 'adjust', 'play']),
+  amountSeconds: z.number().int().min(-31_557_600).max(31_557_600).optional(),
+}).strict().superRefine((input, ctx) => {
+  if (input.action === 'adjust' && input.amountSeconds === undefined) {
+    ctx.addIssue({ code: 'custom', path: ['amountSeconds'], message: 'Adjust requires amountSeconds' });
+  }
+});
+
+export const liveOutputIdInputSchema = z.object({
+  id: liveOutputIdSchema,
+}).strict();
+
+export const liveOutputArtifactInputSchema = z.object({
+  id: liveOutputIdSchema,
+  artifact: z.string().min(1).max(120).optional(),
+}).strict();
+
+export const playingNowSourceInputSchema = z.object({
+  sourceId: z.string().min(1).max(200),
+}).strict();
+
+export const playingNowCredentialsSchema = z.object({
+  clientId: z.string().min(1).max(300),
+  clientSecret: z.string().min(1).max(500),
+}).strict();
+
+export const platformStreamTargetInputSchema = z.object({
+  platformId: platformIdSchema,
+  accountId: z.string().min(1).max(120),
+  channelId: z.string().min(1).max(400),
+}).strict();
+
+export const platformCategorySearchInputSchema = platformStreamTargetInputSchema.extend({
+  query: z.string().min(1).max(120),
+}).strict();
+
+export const platformStreamMetadataUpdateInputSchema = platformStreamTargetInputSchema.extend({
+  title: z.string().max(500).optional(),
+  categoryId: z.string().max(120).optional(),
+}).strict().refine((input) => input.title !== undefined || input.categoryId !== undefined, {
+  message: 'At least one metadata field is required',
+});
+
 /**
  * Payload accepted by the `highlightChatMessage` IPC handler. The message
  * mirrors `ChatMessage` from `shared/types` — only the fields the highlight
