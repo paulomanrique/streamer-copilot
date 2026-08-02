@@ -21,3 +21,4 @@ import './overlays-settings-module.js';
 import './obs-settings-module.js';
 import './subscriber-tiers-settings-module.js';
 import './user-lists-settings-module.js';
+import './live-outputs-settings-module.js';

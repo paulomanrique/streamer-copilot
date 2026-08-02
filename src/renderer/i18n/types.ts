@@ -83,6 +83,7 @@ export interface TranslationMessages {
     eventLog: string;
     welcomeMessage: string;
     musicRequest: string;
+    liveOutputs: string;
     saveSettings: string;
     settingsSaved: string;
   };
