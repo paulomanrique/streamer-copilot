@@ -14,10 +14,10 @@ function runtimeData(runtime: LiveOutputFeatureRuntime): SystemRuntimeData {
 }
 
 function rate(bytes: number): string {
-  const units = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
-  let value = Math.max(0, bytes);
+  const units = ['bps', 'Kbps', 'Mbps', 'Gbps'];
+  let value = Math.max(0, bytes) * 8;
   let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit += 1; }
+  while (value >= 1_000 && unit < units.length - 1) { value /= 1_000; unit += 1; }
   return `${value >= 10 || unit === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`;
 }
 

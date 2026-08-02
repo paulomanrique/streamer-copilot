@@ -18,11 +18,11 @@ describe('LiveOutputWriter', () => {
     tempDirectories.push(directory);
     const writer = new LiveOutputWriter(directory);
 
-    await writer.writeText('TextFiles/Time.txt', 'Olá 21:05');
+    expect(await writer.writeText('TextFiles/Time.txt', 'Olá 21:05')).toBe(true);
     const target = path.join(directory, 'TextFiles', 'Time.txt');
     const firstStat = await stat(target);
     await new Promise((resolve) => setTimeout(resolve, 10));
-    await writer.writeText('TextFiles/Time.txt', 'Olá 21:05');
+    expect(await writer.writeText('TextFiles/Time.txt', 'Olá 21:05')).toBe(false);
 
     const bytes = await readFile(target);
     expect(bytes.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf]))).toBe(false);

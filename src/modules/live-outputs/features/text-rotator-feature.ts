@@ -50,6 +50,10 @@ export const textRotatorFeature: LiveOutputFeature<TextRotatorLiveOutputConfig> 
     };
   },
   tick(config, runtime, now) {
+    if (!config.enabled) {
+      runtime.status = 'disabled';
+      return { status: 'disabled', renderedText: '', nextTransitionAt: null, details: { currentIndex: null, nextIndex: null } };
+    }
     const state = data(runtime);
     const valid = enabledIndexes(config);
     if (valid.length === 0) {

@@ -702,7 +702,12 @@ export const liveOutputHotkeyBindingSchema = z.object({
   accelerator: z.string().min(1).max(120).nullable(),
 }).strict();
 
-const platformStreamMetadataPresetSchema = z.object({
+export const liveOutputHotkeySettingsSchema = z.object({
+  enabled: z.boolean(),
+  bindings: z.array(liveOutputHotkeyBindingSchema).max(8),
+}).strict();
+
+export const platformStreamMetadataPresetSchema = z.object({
   id: liveOutputIdSchema,
   platformId: platformIdSchema,
   name: z.string().min(1).max(120),

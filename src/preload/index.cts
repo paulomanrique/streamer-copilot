@@ -256,6 +256,8 @@ const IPC_CHANNELS = {
   liveOutputsRegenerate: 'live-outputs:regenerate',
   liveOutputsReveal: 'live-outputs:reveal',
   liveOutputsPickSound: 'live-outputs:pick-sound',
+  liveOutputsSaveMetadataPreset: 'live-outputs:save-metadata-preset',
+  liveOutputsDeleteMetadataPreset: 'live-outputs:delete-metadata-preset',
   liveOutputsUpdate: 'live-outputs:update',
   playingNowListSources: 'playing-now:list-sources',
   playingNowTestSource: 'playing-now:test-source',
@@ -588,6 +590,8 @@ const copilotApi: CopilotApi = {
   regenerateLiveOutput: (input: { id: string }) => ipcRenderer.invoke(IPC_CHANNELS.liveOutputsRegenerate, input) as Promise<LiveOutputOperationResult<LiveOutputsSnapshot>>,
   revealLiveOutput: (input: { id: string; artifact?: string }) => ipcRenderer.invoke(IPC_CHANNELS.liveOutputsReveal, input) as Promise<LiveOutputOperationResult<void>>,
   pickLiveOutputSound: (input: { id: string }) => ipcRenderer.invoke(IPC_CHANNELS.liveOutputsPickSound, input) as Promise<LiveOutputOperationResult<string | null>>,
+  saveLiveOutputMetadataPreset: (input) => ipcRenderer.invoke(IPC_CHANNELS.liveOutputsSaveMetadataPreset, input) as Promise<LiveOutputOperationResult<LiveOutputsSnapshot>>,
+  deleteLiveOutputMetadataPreset: (input) => ipcRenderer.invoke(IPC_CHANNELS.liveOutputsDeleteMetadataPreset, input) as Promise<LiveOutputOperationResult<LiveOutputsSnapshot>>,
   onLiveOutputsUpdate: (listener: (payload: LiveOutputsSnapshot) => void) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, payload: LiveOutputsSnapshot) => listener(payload);
     ipcRenderer.on(IPC_CHANNELS.liveOutputsUpdate, wrappedListener);

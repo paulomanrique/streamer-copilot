@@ -38,6 +38,40 @@ function initialStatus(enabled: boolean, startOnProfileLoad: boolean): LiveOutpu
   return startOnProfileLoad ? 'running' : 'ready';
 }
 
+function countdownTarget(config: CountdownLiveOutputConfig, now: number): number {
+  const configured = Date.parse(config.targetAt);
+  if (!config.useTodayOnProfileLoad || !Number.isFinite(configured)) return configured;
+  const zone = config.timeZone === 'system' ? Intl.DateTimeFormat().resolvedOptions().timeZone : config.timeZone;
+  const today = zonedParts(new Date(now), zone);
+  const time = zonedParts(new Date(configured), zone);
+  return zonedDateTimeToEpoch({ ...today, hour: time.hour, minute: time.minute, second: time.second }, zone);
+}
+
+function zonedParts(date: Date, timeZone: string): { year: number; month: number; day: number; hour: number; minute: number; second: number } {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).formatToParts(date).map((part) => [part.type, part.value]));
+  return {
+    year: Number(parts.year), month: Number(parts.month), day: Number(parts.day),
+    hour: Number(parts.hour), minute: Number(parts.minute), second: Number(parts.second),
+  };
+}
+
+function zonedDateTimeToEpoch(parts: ReturnType<typeof zonedParts>, timeZone: string): number {
+  const desiredAsUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+  let guess = desiredAsUtc;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const actual = zonedParts(new Date(guess), timeZone);
+    const actualAsUtc = Date.UTC(actual.year, actual.month - 1, actual.day, actual.hour, actual.minute, actual.second);
+    const correction = desiredAsUtc - actualAsUtc;
+    guess += correction;
+    if (correction === 0) break;
+  }
+  return guess;
+}
+
 function controlTimer(
   runtime: LiveOutputFeatureRuntime,
   input: LiveOutputControlInput,
@@ -81,6 +115,9 @@ function renderDown(
   runtime: LiveOutputFeatureRuntime,
   now: number,
 ): LiveOutputFeatureResult {
+  if (runtime.status === 'disabled') {
+    return { status: 'disabled', renderedText: '', nextTransitionAt: null, details: { remainingMilliseconds: 0 } };
+  }
   const value = currentValue(runtime, now, 'down');
   const data = timerData(runtime);
   let completedNow = false;
@@ -112,7 +149,7 @@ export const countdownFeature: LiveOutputFeature<CountdownLiveOutputConfig> = {
     ['$d', 'Days', '02'], ['$h', 'Hours', '04'], ['$m', 'Minutes', '15'], ['$s', 'Seconds', '09'], ['$ms', 'Milliseconds', '125'],
   ], ['start', 'pause', 'resume', 'stop', 'reset', 'adjust']),
   createRuntime(config, now) {
-    const remaining = Math.max(0, Date.parse(config.targetAt) - now);
+    const remaining = Math.max(0, countdownTarget(config, now) - now);
     return {
       status: initialStatus(config.enabled, config.startOnProfileLoad),
       data: { valueAtAnchor: remaining, anchorAt: now, completionEmitted: false },
@@ -120,8 +157,8 @@ export const countdownFeature: LiveOutputFeature<CountdownLiveOutputConfig> = {
   },
   tick: renderDown,
   control(config, runtime, input, now) {
-    const resetValue = Math.max(0, Date.parse(config.targetAt) - now);
-    controlTimer(runtime, input, now, 'down', resetValue);
+    const resetValue = Math.max(0, countdownTarget(config, now) - now);
+    controlTimer(runtime, input, now, 'down', resetValue, true);
   },
 };
 
@@ -152,6 +189,9 @@ export const chronoUpFeature: LiveOutputFeature<ChronoUpLiveOutputConfig> = {
     };
   },
   tick(config, runtime, now) {
+    if (runtime.status === 'disabled') {
+      return { status: 'disabled', renderedText: '', nextTransitionAt: null, details: { elapsedMilliseconds: 0 } };
+    }
     const value = currentValue(runtime, now, 'up');
     return {
       status: runtime.status,

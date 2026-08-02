@@ -22,6 +22,7 @@ import type {
   PlatformId,
   PlatformLinkStatus,
   VoiceSpeakPayload,
+  LiveOutputsSnapshot,
 } from '../shared/types.js';
 
 // Foundation placeholder for future push-based state sync to renderer.
@@ -168,6 +169,10 @@ export class StateHub {
 
   pushMusicVolume(volume: number): void {
     this.rendererWindow?.webContents.send(IPC_CHANNELS.musicVolume, volume);
+  }
+
+  pushLiveOutputs(payload: LiveOutputsSnapshot): void {
+    this.rendererWindow?.webContents.send(IPC_CHANNELS.liveOutputsUpdate, payload);
   }
 
   private flushChatMessages(): void {

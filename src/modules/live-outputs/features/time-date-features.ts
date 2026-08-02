@@ -17,7 +17,7 @@ export const timeFeature: LiveOutputFeature<TimeLiveOutputConfig> = {
     return {
       status: config.enabled ? 'running' : 'disabled',
       renderedText: config.enabled ? renderClock(new Date(now), config) : '',
-      nextTransitionAt: new Date(Math.floor(now / 1_000) * 1_000 + 1_000).toISOString(),
+      nextTransitionAt: config.enabled ? new Date(Math.floor(now / 1_000) * 1_000 + 1_000).toISOString() : null,
       details: {},
     };
   },
@@ -33,7 +33,7 @@ export const dateFeature: LiveOutputFeature<DateLiveOutputConfig> = {
     return {
       status: config.enabled ? 'running' : 'disabled',
       renderedText: config.enabled ? applyTemplate(config.template, { '$date': formatted }) : '',
-      nextTransitionAt: new Date(Math.floor(now / 1_000) * 1_000 + 1_000).toISOString(),
+      nextTransitionAt: config.enabled ? new Date(Math.floor(now / 1_000) * 1_000 + 1_000).toISOString() : null,
       details: { formattedDate: formatted },
     };
   },

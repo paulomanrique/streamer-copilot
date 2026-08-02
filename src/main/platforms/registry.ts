@@ -1,4 +1,21 @@
-import type { PlatformAccount, PlatformAccountConnectionStatus, PlatformLinkSnapshot } from '../../shared/types.js';
+import type {
+  PlatformAccount,
+  PlatformAccountConnectionStatus,
+  PlatformCategory,
+  PlatformMetricDescriptor,
+  PlatformStreamMetadata,
+  PlatformStreamTarget,
+  PlatformLinkSnapshot,
+} from '../../shared/types.js';
+
+export interface MainPlatformStreamTools {
+  readonly metrics: PlatformMetricDescriptor[];
+  listTargets(accounts: PlatformAccount[]): Promise<PlatformStreamTarget[]> | PlatformStreamTarget[];
+  readMetric(target: PlatformStreamTarget, metricId: string): Promise<{ token: string; value: string; details: Record<string, unknown> }>;
+  getMetadata?(target: PlatformStreamTarget): Promise<PlatformStreamMetadata>;
+  searchCategories?(target: PlatformStreamTarget, query: string): Promise<PlatformCategory[]>;
+  updateMetadata?(target: PlatformStreamTarget, input: { title?: string; categoryId?: string }): Promise<PlatformStreamMetadata>;
+}
 
 /**
  * Main-process counterpart to the renderer's `src/renderer/platforms/registry.ts`.
@@ -19,6 +36,10 @@ export interface MainPlatformProvider {
    *  Drives the scheduling target list (UI + dispatch validation) so the set of
    *  schedulable platforms is derived from the registry, never hardcoded. */
   readonly supportsScheduledSend: boolean;
+
+  /** Optional live-output metrics and stream-metadata management. Consumers
+   * iterate the registry; no core component branches on provider ids. */
+  readonly streamTools?: MainPlatformStreamTools;
 
   /** Current connection state of `account`. May read provider-specific state. */
   getStatus(account: PlatformAccount): Promise<PlatformAccountConnectionStatus> | PlatformAccountConnectionStatus;

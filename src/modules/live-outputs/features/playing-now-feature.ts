@@ -25,7 +25,7 @@ export function createPlayingNowFeature(reader: PlayingNowReader): LiveOutputFea
   return {
     descriptor: descriptor('playing-now', 'playing-now', 'TextFiles/TrackInfo.txt', [
       ['$artist', 'Track artist', 'Artist'], ['$song', 'Track title', 'Song'], ['$album', 'Album', 'Album'],
-      ['$ARTIST', 'Uppercase artist', 'ARTIST'], ['$SONG', 'Uppercase title', 'SONG'], ['$ALBUM', 'Uppercase album', 'ALBUM'],
+      ['$artist_upper', 'Uppercase artist', 'ARTIST'], ['$song_upper', 'Uppercase title', 'SONG'], ['$album_upper', 'Uppercase album', 'ALBUM'],
     ], ['play', 'pause', 'stop', 'previous', 'next']),
     createRuntime(config, now) {
       return { status: config.enabled ? 'ready' : 'disabled', data: { dueAt: now, track: null, error: null } };
@@ -58,6 +58,7 @@ export function createPlayingNowFeature(reader: PlayingNowReader): LiveOutputFea
         status: state.error || track.state === 'error' ? 'degraded' : (track.state === 'paused' ? 'paused' : 'running'),
         renderedText: applyTemplate(config.format, {
           '$artist': artist, '$song': song, '$album': album,
+          '$artist_upper': artist.toLocaleUpperCase(), '$song_upper': song.toLocaleUpperCase(), '$album_upper': album.toLocaleUpperCase(),
           '$ARTIST': artist.toLocaleUpperCase(), '$SONG': song.toLocaleUpperCase(), '$ALBUM': album.toLocaleUpperCase(),
         }),
         nextTransitionAt: new Date(state.dueAt).toISOString(),

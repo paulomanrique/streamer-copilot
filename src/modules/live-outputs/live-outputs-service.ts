@@ -10,9 +10,10 @@ import type {
   LiveOutputRuntimeSnapshot,
   LiveOutputsSettings,
   LiveOutputsSnapshot,
+  PlatformStreamMetadataPreset,
   PlayingNowLiveOutputConfig,
 } from '../../shared/types.js';
-import { liveOutputConfigSchema, liveOutputControlInputSchema, liveOutputHotkeyBindingSchema } from '../../shared/schemas.js';
+import { liveOutputConfigSchema, liveOutputControlInputSchema, liveOutputHotkeyBindingSchema, platformStreamMetadataPresetSchema } from '../../shared/schemas.js';
 import { LiveOutputFeatureRegistry, type LiveOutputFeatureRuntime } from './feature-registry.js';
 import type { PlatformLiveMetricReader } from './features/platform-live-feature.js';
 import type { PlayingNowReader } from './features/playing-now-feature.js';
@@ -154,6 +155,37 @@ export class LiveOutputsService {
     return success(this.getSnapshot());
   }
 
+  async saveMetadataPreset(raw: unknown): Promise<LiveOutputOperationResult<LiveOutputsSnapshot>> {
+    if (!this.settings) return failure('INVALID_SETTINGS', 'Live outputs are not initialized');
+    const parsed = platformStreamMetadataPresetSchema.safeParse(raw);
+    if (!parsed.success) return failure('INVALID_SETTINGS', parsed.error.issues[0]?.message ?? 'Invalid metadata preset');
+    const preset = parsed.data as PlatformStreamMetadataPreset;
+    const duplicateName = this.settings.metadataPresets.find((item) => (
+      item.id !== preset.id
+      && item.platformId === preset.platformId
+      && item.name.localeCompare(preset.name, undefined, { sensitivity: 'accent' }) === 0
+    ));
+    if (duplicateName) return failure('INVALID_SETTINGS', 'A preset with this name already exists', 'name');
+    const index = this.settings.metadataPresets.findIndex((item) => item.id === preset.id);
+    if (index >= 0) this.settings.metadataPresets[index] = preset;
+    else this.settings.metadataPresets.push(preset);
+    this.settings = await this.settingsStore.save(this.settings);
+    this.pushSnapshot(true);
+    return success(this.getSnapshot());
+  }
+
+  async deleteMetadataPreset(raw: unknown): Promise<LiveOutputOperationResult<LiveOutputsSnapshot>> {
+    if (!this.settings) return failure('INVALID_SETTINGS', 'Live outputs are not initialized');
+    const id = typeof raw === 'object' && raw && typeof (raw as { id?: unknown }).id === 'string'
+      ? (raw as { id: string }).id
+      : '';
+    if (!this.settings.metadataPresets.some((item) => item.id === id)) return failure('INVALID_SETTINGS', 'Metadata preset not found');
+    this.settings.metadataPresets = this.settings.metadataPresets.filter((item) => item.id !== id);
+    this.settings = await this.settingsStore.save(this.settings);
+    this.pushSnapshot(true);
+    return success(this.getSnapshot());
+  }
+
   async regenerate(id: string): Promise<LiveOutputOperationResult<LiveOutputsSnapshot>> {
     if (!this.settings?.outputs.some((output) => output.id === id)) return failure('INVALID_SETTINGS', 'Live output not found');
     this.writer.clearCache();
@@ -187,7 +219,8 @@ export class LiveOutputsService {
         try {
           const result = await feature.tick(config, runtime, now);
           const errors: LiveOutputError[] = [];
-          if (config.enabled && config.destinations.file.enabled) {
+          const writesPlayingNowArtifacts = config.kind === 'playing-now' && (config.writeSeparateFiles || config.writeJson || config.writeArtwork);
+          if (config.enabled && (config.destinations.file.enabled || writesPlayingNowArtifacts)) {
             try {
               await this.writeArtifacts(config, result.renderedText, result.details ?? {});
             } catch (cause) {
@@ -197,6 +230,7 @@ export class LiveOutputsService {
           if (result.completedNow && isCompletionConfig(config) && config.playSound && config.soundPath) {
             this.options.playSound(config.soundPath);
           }
+          const previousSnapshot = this.snapshots.get(config.id);
           const snapshot: LiveOutputRuntimeSnapshot = {
             id: config.id,
             kind: config.kind,
@@ -214,8 +248,11 @@ export class LiveOutputsService {
               showProgress: config.kind === 'playing-now' ? config.showProgress : false,
             },
           };
+          if (previousSnapshot && sameSnapshotContent(previousSnapshot, snapshot)) snapshot.updatedAt = previousSnapshot.updatedAt;
           this.snapshots.set(config.id, snapshot);
-          if (config.destinations.browser.enabled) this.options.publishOverlay(`live-output:${config.id}`, snapshot);
+          if (config.destinations.browser.enabled && (force || snapshot.updatedAt !== previousSnapshot?.updatedAt)) {
+            this.options.publishOverlay(`live-output:${config.id}`, snapshot);
+          }
           if (result.completedNow && config.kind === 'chrono-down' && (config as ChronoDownLiveOutputConfig).startChronoUpOnComplete) {
             const chronoUp = this.settings.outputs.find((output) => output.kind === 'chrono-up');
             if (chronoUp) await this.control({ id: chronoUp.id, action: 'start' });
@@ -242,8 +279,10 @@ export class LiveOutputsService {
   }
 
   private async writeArtifacts(config: LiveOutputConfig, renderedText: string, details: Record<string, unknown>): Promise<void> {
-    await this.writer.writeText(config.destinations.file.relativePath, renderedText);
-    this.artifactUpdatedAt.set(`${config.id}:primary`, new Date().toISOString());
+    if (config.destinations.file.enabled) {
+      const changed = await this.writer.writeText(config.destinations.file.relativePath, renderedText);
+      if (changed) this.artifactUpdatedAt.set(`${config.id}:primary`, new Date().toISOString());
+    }
     if (config.kind !== 'playing-now') return;
     const playing = config as PlayingNowLiveOutputConfig;
     const artist = String(details.artist ?? '');
@@ -303,6 +342,12 @@ export class LiveOutputsService {
 
 function isCompletionConfig(config: LiveOutputConfig): config is LiveOutputConfig & CompletionEffectConfig {
   return config.kind === 'countdown' || config.kind === 'chrono-down';
+}
+
+function sameSnapshotContent(previous: LiveOutputRuntimeSnapshot, next: LiveOutputRuntimeSnapshot): boolean {
+  const { updatedAt: _previousUpdatedAt, ...previousContent } = previous;
+  const { updatedAt: _nextUpdatedAt, ...nextContent } = next;
+  return JSON.stringify(previousContent) === JSON.stringify(nextContent);
 }
 
 function success<T>(value: T): LiveOutputOperationResult<T> {

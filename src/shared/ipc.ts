@@ -275,6 +275,8 @@ export const IPC_CHANNELS = {
   liveOutputsRegenerate: 'live-outputs:regenerate',
   liveOutputsReveal: 'live-outputs:reveal',
   liveOutputsPickSound: 'live-outputs:pick-sound',
+  liveOutputsSaveMetadataPreset: 'live-outputs:save-metadata-preset',
+  liveOutputsDeleteMetadataPreset: 'live-outputs:delete-metadata-preset',
   liveOutputsUpdate: 'live-outputs:update',
   playingNowListSources: 'playing-now:list-sources',
   playingNowTestSource: 'playing-now:test-source',
@@ -544,6 +546,8 @@ export interface CopilotApi {
   regenerateLiveOutput: (input: { id: string }) => Promise<LiveOutputOperationResult<LiveOutputsSnapshot>>;
   revealLiveOutput: (input: { id: string; artifact?: string }) => Promise<LiveOutputOperationResult<void>>;
   pickLiveOutputSound: (input: { id: string }) => Promise<LiveOutputOperationResult<string | null>>;
+  saveLiveOutputMetadataPreset: (input: import('./types.js').PlatformStreamMetadataPreset) => Promise<LiveOutputOperationResult<LiveOutputsSnapshot>>;
+  deleteLiveOutputMetadataPreset: (input: { id: string }) => Promise<LiveOutputOperationResult<LiveOutputsSnapshot>>;
   onLiveOutputsUpdate: (listener: (payload: LiveOutputsSnapshot) => void) => () => void;
   listPlayingNowSources: () => Promise<PlayingNowSourceCapability[]>;
   testPlayingNowSource: (input: { sourceId: string }) => Promise<LiveOutputOperationResult<PlayingNowTrackSnapshot>>;

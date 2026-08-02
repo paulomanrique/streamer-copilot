@@ -25,6 +25,8 @@ import { PollRepository } from '../modules/polls/poll-repository.js';
 import { PollService, formatPollResult } from '../modules/polls/poll-service.js';
 import { RaffleDeadlineRunner } from '../modules/raffles/raffle-deadline-runner.js';
 import { OverlayServer } from './overlay-server.js';
+import { LiveOutputsMainModule } from './modules/live-outputs-main-module.js';
+import { MainFeatureRegistry } from './modules/registry.js';
 import { RaffleRepository } from '../modules/raffles/raffle-repository.js';
 import { RaffleService } from '../modules/raffles/raffle-service.js';
 import { SchedulerService, type ScheduledRunState, type ScheduledTask } from '../modules/scheduled/scheduler-service.js';
@@ -68,6 +70,7 @@ import { YouTubeApiChatAdapter, type YouTubeApiAccount } from '../platforms/yout
 import { buildYouTubeOAuth2Client, decryptSecret, encryptSecret, startYouTubeOAuthFlow } from '../platforms/youtube/api-auth.js';
 import { YTLiveClient } from './youtube-client.js';
 import { MainPlatformRegistry, type MainPlatformProvider } from './platforms/registry.js';
+import { createTwitchStreamTools } from './platforms/twitch-stream-tools.js';
 import { getAllAudioBase64 } from '@sefinek/google-tts-api';
 import { APP_NAME } from '../shared/constants.js';
 import { IPC_CHANNELS } from '../shared/ipc.js';
@@ -225,6 +228,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   const accountRepository = new AccountRepository(getActiveProfileDirectory);
   const mainPlatforms = new MainPlatformRegistry();
+  const mainFeatures = new MainFeatureRegistry();
   const raffleRepository = new RaffleRepository(getActiveProfileDirectory);
   const pollRepository = new PollRepository(getActiveProfileDirectory);
   const soundRepository = new SoundCommandRepository(getActiveProfileDirectory);
@@ -1871,7 +1875,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     // hard reset use `profilesSwitchAndRelaunch` instead.
     const snapshot = await profileStore.select(selectProfileInputSchema.parse(raw).profileId);
     const active = snapshot.profiles.find((p) => p.id === snapshot.activeProfileId);
-    if (active) activeProfileDirectory = active.directory;
+    if (active) {
+      activeProfileDirectory = active.directory;
+      await mainFeatures.switchProfileAll(activeProfileDirectory);
+    }
     chatService.clearRecent();
     suggestionService.clearSessionEntries();
     welcomeService.reset();
@@ -2273,13 +2280,16 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         }
       });
       server.on('error', (err) => { clearTimeout(timeout); reject(err); });
-      // R2: extra scopes for Twitch moderation API (ban/timeout/delete/chat-settings/raids/shoutouts/mods/vips).
+      // Twitch moderation plus live-output metadata/follower/hype-train scopes.
       const twitchScopes = [
         'chat:read', 'chat:edit',
         'moderator:manage:banned_users',
         'moderator:manage:chat_messages',
         'moderator:manage:chat_settings',
         'moderator:manage:shoutouts',
+        'moderator:read:followers',
+        'channel:read:hype_train',
+        'channel:manage:broadcast',
         'channel:manage:raids',
         'channel:manage:moderators',
         'channel:manage:vips',
@@ -2905,6 +2915,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const twitchProvider: MainPlatformProvider = {
     providerId: 'twitch',
     supportsScheduledSend: true,
+    streamTools: createTwitchStreamTools({
+      clientId: TWITCH_CLIENT_ID,
+      getAccount: (accountId) => accountRepository.get(accountId),
+    }),
     getAggregateStatus: () => ({ status: twitchStatus, primaryChannel: twitchChannel }),
     getStatus: (account) => {
       const status = twitchAccountStatus.get(account.id);
@@ -3345,6 +3359,30 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     });
   }
 
+  const liveOutputsModule = new LiveOutputsMainModule({
+    initialProfileDirectory: '',
+    overlayServer,
+    stateHub: options.stateHub,
+    platformRegistry: mainPlatforms,
+    accountRepository,
+    playSound: (relativePath) => {
+      void resolveProfileMediaPath(relativePath)
+        .then((filePath) => options.stateHub.pushSoundPlay({ filePath }))
+        .catch((cause) => logService.error('live-outputs', 'Completion sound is unavailable', {
+          relativePath,
+          error: cause instanceof Error ? cause.message : String(cause),
+        }));
+    },
+    logError: (message, metadata) => logService.error('live-outputs', message, metadata),
+  });
+  mainFeatures.register(liveOutputsModule);
+  void mainFeatures.initializeAll();
+  void activeProfileDirectoryReady
+    .then(() => mainFeatures.switchProfileAll(activeProfileDirectory))
+    .catch((cause) => logService.error('live-outputs', 'Failed to initialize profile outputs', {
+      error: cause instanceof Error ? cause.message : String(cause),
+    }));
+
   // Symmetric snapshot used by the renderer's initial-load path. Iterates the
   // provider registry and asks each for its aggregate status — no hardcoded
   // platform ids (each provider's getAggregateStatus owns its own logic).
@@ -3708,6 +3746,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     stopKickStatsPoll();
     musicService.reset();
     musicPlayerRef?.stop();
+    await mainFeatures.disposeAll();
     await Promise.allSettled([chatService.disconnectAll(), obsService.stop(), overlayServer.stop()]);
     Object.values(IPC_CHANNELS).forEach(c => ipcMain.removeHandler(c));
   };

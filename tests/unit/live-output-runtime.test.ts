@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { createDefaultChronoDownOutput, createDefaultTextRotatorOutput } from '../../src/modules/live-outputs/defaults.js';
-import { chronoDownFeature } from '../../src/modules/live-outputs/features/timer-features.js';
+import { createDefaultChronoDownOutput, createDefaultCountdownOutput, createDefaultPlayingNowOutput, createDefaultTextRotatorOutput } from '../../src/modules/live-outputs/defaults.js';
+import { createPlayingNowFeature } from '../../src/modules/live-outputs/features/playing-now-feature.js';
+import { chronoDownFeature, countdownFeature } from '../../src/modules/live-outputs/features/timer-features.js';
 import { textRotatorFeature } from '../../src/modules/live-outputs/features/text-rotator-feature.js';
 
 describe('live output runtimes', () => {
@@ -37,5 +38,36 @@ describe('live output runtimes', () => {
     const runtime = textRotatorFeature.createRuntime(config, 0);
     expect((await textRotatorFeature.tick(config, runtime, 0)).renderedText).toBe('One');
     expect((await textRotatorFeature.tick(config, runtime, 1_100)).renderedText).toBe('Two');
+  });
+
+  it('moves a use-today countdown to the current date in its timezone', async () => {
+    const now = Date.parse('2026-08-02T12:00:00.000Z');
+    const config = {
+      ...createDefaultCountdownOutput(),
+      enabled: true,
+      startOnProfileLoad: true,
+      useTodayOnProfileLoad: true,
+      timeZone: 'UTC',
+      targetAt: '2030-01-10T13:30:00.000Z',
+    };
+    const runtime = countdownFeature.createRuntime(config, now);
+    expect((await countdownFeature.tick(config, runtime, now)).renderedText).toBe('00:01:30:00');
+    await countdownFeature.control?.(config, runtime, { id: config.id, action: 'start' }, now + 3_600_000);
+    expect((await countdownFeature.tick(config, runtime, now + 3_600_000)).renderedText).toBe('00:00:30:00');
+  });
+
+  it('supports the documented Playing Now uppercase tokens', async () => {
+    const config = {
+      ...createDefaultPlayingNowOutput(),
+      enabled: true,
+      format: '$artist_upper — $song_upper — $album_upper',
+    };
+    const feature = createPlayingNowFeature(async () => ({
+      sourceId: 'player', sourceLabel: 'Player', state: 'playing',
+      artist: 'Artist', song: 'Song', album: 'Album', artworkPath: null,
+      positionSeconds: 1, durationSeconds: 2,
+    }));
+    const runtime = feature.createRuntime(config, 0);
+    expect((await feature.tick(config, runtime, 0)).renderedText).toBe('ARTIST — SONG — ALBUM');
   });
 });

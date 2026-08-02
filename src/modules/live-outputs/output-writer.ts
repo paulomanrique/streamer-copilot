@@ -4,7 +4,7 @@ import path from 'node:path';
 
 export class LiveOutputWriter {
   private readonly hashes = new Map<string, string>();
-  private readonly pending = new Map<string, Promise<void>>();
+  private readonly pending = new Map<string, Promise<boolean>>();
 
   constructor(private readonly profileDirectory: string) {}
 
@@ -18,15 +18,15 @@ export class LiveOutputWriter {
     return target;
   }
 
-  writeText(relativePath: string, content: string): Promise<void> {
+  writeText(relativePath: string, content: string): Promise<boolean> {
     return this.write(relativePath, Buffer.from(content, 'utf-8'));
   }
 
-  writeJson(relativePath: string, value: unknown): Promise<void> {
+  writeJson(relativePath: string, value: unknown): Promise<boolean> {
     return this.writeText(relativePath, `${JSON.stringify(value, null, 2)}\n`);
   }
 
-  writeBuffer(relativePath: string, content: Buffer): Promise<void> {
+  writeBuffer(relativePath: string, content: Buffer): Promise<boolean> {
     return this.write(relativePath, content);
   }
 
@@ -38,12 +38,12 @@ export class LiveOutputWriter {
     await Promise.allSettled(this.pending.values());
   }
 
-  private write(relativePath: string, content: Buffer): Promise<void> {
+  private write(relativePath: string, content: Buffer): Promise<boolean> {
     const target = this.resolve(relativePath);
     const hash = createHash('sha256').update(content).digest('hex');
-    const previous = this.pending.get(target) ?? Promise.resolve();
+    const previous = this.pending.get(target) ?? Promise.resolve(false);
     const next = previous.then(async () => {
-      if (this.hashes.get(target) === hash) return;
+      if (this.hashes.get(target) === hash) return false;
       await fs.mkdir(path.dirname(target), { recursive: true });
       const temporary = `${target}.${process.pid}.${randomUUID()}.tmp`;
       try {
@@ -57,6 +57,7 @@ export class LiveOutputWriter {
           await fs.rm(temporary, { force: true });
         }
         this.hashes.set(target, hash);
+        return true;
       } catch (cause) {
         await fs.rm(temporary, { force: true }).catch(() => undefined);
         throw cause;
