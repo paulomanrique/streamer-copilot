@@ -80,6 +80,7 @@ import {
   extractYtSubscriberCount,
   extractYtLiveFromPlayerResponse,
   extractYtConcurrentViewers,
+  extractYtVideoEngagement,
   normalizeKickChannelInput,
   escapeHtml,
 } from './youtube-helpers.js';
@@ -1247,52 +1248,55 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }
   };
 
-  const fetchYtLiveViewerCount = async (videoId: string): Promise<number | null> => {
+  const fetchYtLiveMetrics = async (
+    videoId: string,
+  ): Promise<Pick<LiveStreamInfo, 'viewerCount' | 'likeCount' | 'viewCount'>> => {
     const id = encodeURIComponent(videoId);
     const headers = {
       'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
       'Accept-Language': 'en-US,en;q=0.9',
     };
 
-    // Primary: /live_stats — cheap, plain-text counter that lights up while
-    // the stream is live. YouTube has tightened this endpoint's filtering
-    // and intermittently 404s it, so we fall back to parsing the watch page
-    // for `videoDetails.viewCount` when the primary returns nothing usable.
-    let primaryDetail: string;
-    try {
-      const resp = await net.fetch(`https://www.youtube.com/live_stats?v=${id}`, { headers });
-      if (resp.ok) {
-        const text = (await resp.text()).trim();
-        const count = parseInt(text, 10);
-        if (Number.isFinite(count) && count >= 0) return count;
-        primaryDetail = `live_stats returned non-numeric (${text.slice(0, 30)})`;
-      } else {
-        primaryDetail = `live_stats ${resp.status}`;
-      }
-    } catch (cause) {
-      primaryDetail = `live_stats threw (${cause instanceof Error ? cause.message : String(cause)})`;
+    // Fetch both sources together: /live_stats provides the cheapest exact
+    // concurrent count, while the watch page carries likes and cumulative
+    // views (and is also the safe concurrent-viewer fallback).
+    const [liveStatsResult, watchResult] = await Promise.all([
+      (async (): Promise<{ count: number | null; detail: string }> => {
+        try {
+          const response = await net.fetch(`https://www.youtube.com/live_stats?v=${id}`, { headers });
+          if (!response.ok) return { count: null, detail: `live_stats ${response.status}` };
+          const text = (await response.text()).trim();
+          const count = parseInt(text, 10);
+          return Number.isFinite(count) && count >= 0
+            ? { count, detail: 'live_stats ok' }
+            : { count: null, detail: `live_stats returned non-numeric (${text.slice(0, 30)})` };
+        } catch (cause) {
+          return { count: null, detail: `live_stats threw (${cause instanceof Error ? cause.message : String(cause)})` };
+        }
+      })(),
+      (async (): Promise<{ html: string | null; detail: string }> => {
+        try {
+          const response = await net.fetch(`https://www.youtube.com/watch?v=${id}`, { headers });
+          if (!response.ok) return { html: null, detail: `watch page ${response.status}` };
+          return { html: await response.text(), detail: 'watch page ok' };
+        } catch (cause) {
+          return { html: null, detail: `watch page threw (${cause instanceof Error ? cause.message : String(cause)})` };
+        }
+      })(),
+    ]);
+
+    if (!watchResult.html) {
+      logService.warn('youtube', 'YouTube engagement refresh failed', {
+        videoId,
+        liveStats: liveStatsResult.detail,
+        watchPage: watchResult.detail,
+      });
+      return { viewerCount: liveStatsResult.count, likeCount: null, viewCount: null };
     }
 
-    // Fallback: parse the watch page. extractYtConcurrentViewers reads the
-    // ytInitialPlayerResponse JSON's videoDetails.viewCount (which on live
-    // streams is the concurrent watcher count) and falls back to the
-    // "X watching now" badge string from ytInitialData.
-    try {
-      const resp = await net.fetch(`https://www.youtube.com/watch?v=${id}`, { headers });
-      if (!resp.ok) {
-        logService.warn('youtube', 'Viewer-count fallback failed', { videoId, primaryDetail, watchStatus: resp.status });
-        return null;
-      }
-      const html = await resp.text();
-      const count = extractYtConcurrentViewers(html);
-      if (count === null) {
-        logService.warn('youtube', 'Viewer-count fallback parsed no value', { videoId, primaryDetail, htmlLength: html.length });
-      }
-      return count;
-    } catch (cause) {
-      logService.warn('youtube', 'Viewer-count fallback threw', { videoId, primaryDetail, error: cause instanceof Error ? cause.message : String(cause) });
-      return null;
-    }
+    const engagement = extractYtVideoEngagement(watchResult.html);
+    const viewerCount = liveStatsResult.count ?? extractYtConcurrentViewers(watchResult.html);
+    return { viewerCount, ...engagement };
   };
 
   /**
@@ -1769,7 +1773,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   youtubeAdapter = new YouTubeChatAdapter({
     checkYouTubeLive,
-    fetchYtLiveViewerCount,
+    fetchYtLiveMetrics,
     openChatLogSession: (platform, videoId) => chatLogService.openSession(platform, videoId),
     closeChatLogSession: (platform, videoId) => chatLogService.closeSession(platform, videoId),
     // The scrape adapter's stream list is merged with the API adapter's list

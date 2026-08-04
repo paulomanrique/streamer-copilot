@@ -29,10 +29,9 @@ const MAX_CONCURRENT_STREAMS = 2;
 export interface YouTubeAdapterDependencies {
   /** Returns the live streams currently active for `handle`, or `null` if the lookup failed. */
   checkYouTubeLive: (handle: string) => Promise<LiveStreamInfo[] | null>;
-  /** Backfill for the initial viewer count when a scraper first attaches —
-   *  called once per new live; subsequent updates flow through YTLiveClient's
-   *  metadata-update event (every ~5s) instead of polling here. */
-  fetchYtLiveViewerCount: (videoId: string) => Promise<number | null>;
+  /** Refreshes public counters from the watch page. Concurrent viewers also
+   *  flow through YTLiveClient metadata updates between monitor cycles. */
+  fetchYtLiveMetrics: (videoId: string) => Promise<Pick<LiveStreamInfo, 'viewerCount' | 'likeCount' | 'viewCount'>>;
   /** Tells the host to open a chat-log session for the given platform (called when a new scraper starts). */
   openChatLogSession: (platform: 'youtube', videoId: string) => void;
   /** Tells the host to close a chat-log session (called when a scraper stops). */
@@ -57,6 +56,8 @@ interface StreamData {
    *  `computeYouTubeStreamLabels`. */
   title: string;
   viewerCount: number | null;
+  likeCount: number | null;
+  viewCount: number | null;
   subscriberCount: number | null;
   channelHandle: string | null;
 }
@@ -139,6 +140,8 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
       label: 'YouTube',
       title: '',
       viewerCount: null,
+      likeCount: null,
+      viewCount: null,
       subscriberCount: null,
       channelHandle: null,
     });
@@ -167,6 +170,8 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
         channelHandle: data?.channelHandle ?? null,
         label: data?.label ?? 'YouTube',
         viewerCount: data?.viewerCount ?? null,
+        likeCount: data?.likeCount ?? null,
+        viewCount: data?.viewCount ?? null,
         subscriberCount: data?.subscriberCount ?? null,
         liveUrl: `https://www.youtube.com/watch?v=${videoId}`,
       };
@@ -223,12 +228,17 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
       }
     }
 
-    // Backfill viewer count for streams where the scraping path didn't get one.
+    // Refresh all public counters. The streams listing normally provides the
+    // initial concurrent count, while likes and cumulative views come from the
+    // watch page itself.
     for (let i = 0; i < allLive.length; i++) {
-      if (allLive[i].viewCount === null) {
-        const count = await this.deps.fetchYtLiveViewerCount(allLive[i].videoId);
-        if (count !== null) allLive[i] = { ...allLive[i], viewCount: count };
-      }
+      const metrics = await this.deps.fetchYtLiveMetrics(allLive[i].videoId);
+      allLive[i] = {
+        ...allLive[i],
+        viewerCount: metrics.viewerCount ?? allLive[i].viewerCount,
+        likeCount: metrics.likeCount ?? allLive[i].likeCount,
+        viewCount: metrics.viewCount ?? allLive[i].viewCount,
+      };
     }
 
     // Update existing scrapers; stop any that are no longer live.
@@ -252,7 +262,9 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
         if (data) {
           this.streamData.set(videoId, {
             ...data,
-            viewerCount: updated.viewCount ?? data.viewerCount,
+            viewerCount: updated.viewerCount ?? data.viewerCount,
+            likeCount: updated.likeCount ?? data.likeCount,
+            viewCount: updated.viewCount ?? data.viewCount,
             subscriberCount: updated.subscriberCount ?? data.subscriberCount,
             // Channel handle / title can fill in late on the first poll cycle
             // when the initial probe missed them. Refresh so the labeler has
@@ -268,12 +280,14 @@ export class YouTubeChatAdapter implements PlatformChatAdapter {
     // Start scrapers for newly detected streams (up to MAX_CONCURRENT_STREAMS).
     let added = 0;
     for (let i = 0; i < Math.min(allLive.length, MAX_CONCURRENT_STREAMS); i++) {
-      const { videoId, title, viewCount, subscriberCount, channelHandle } = allLive[i];
+      const { videoId, title, viewerCount, likeCount, viewCount, subscriberCount, channelHandle } = allLive[i];
       if (this.scrapers.has(videoId)) continue;
       this.streamData.set(videoId, {
         label: 'YouTube',
         title,
-        viewerCount: viewCount,
+        viewerCount,
+        likeCount,
+        viewCount,
         subscriberCount,
         channelHandle: channelHandle ?? null,
       });

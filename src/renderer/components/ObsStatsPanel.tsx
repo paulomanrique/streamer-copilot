@@ -88,6 +88,11 @@ export function ObsStatsPanel({ stats, liveEntries, twitchLiveStatsByChannel }: 
                 isLive={entry.isLive}
                 secondaryValue={entry.secondaryValue}
                 secondaryLabel={entry.secondaryLabel ? t(entry.secondaryLabel) : undefined}
+                compactStats={entry.compactStats?.map((stat) => ({
+                  ...stat,
+                  label: t(stat.label),
+                  accessibleValue: stat.value === '—' ? t('unavailable') : stat.value,
+                }))}
               />
             ))}
           </div>
@@ -129,6 +134,7 @@ function ViewerCard({
   isLive,
   secondaryValue,
   secondaryLabel,
+  compactStats,
   valueLabel = 'viewers',
 }: {
   label: string;
@@ -137,6 +143,12 @@ function ViewerCard({
   isLive?: boolean;
   secondaryValue?: string;
   secondaryLabel?: string;
+  compactStats?: Array<{
+    shortLabel: string;
+    value: string;
+    label: string;
+    accessibleValue: string;
+  }>;
   valueLabel?: string;
 }) {
   return (
@@ -148,13 +160,32 @@ function ViewerCard({
         <span className={`text-xs ${meta.card.metaClass}`}>{label}</span>
         {isLive ? <span className="text-[10px] text-red-400 font-bold ml-0.5">LIVE</span> : null}
       </div>
-      <div className="text-base font-mono font-bold">{value}</div>
-      <div className="text-xs text-gray-500 mt-0.5">{valueLabel}</div>
-      {secondaryValue !== undefined && secondaryLabel ? (
-        <div className="text-xs mt-0.5">
-          <span className={meta.card.metaClass}>{secondaryValue}</span> <span className="text-gray-500">{secondaryLabel}</span>
+      {compactStats && compactStats.length > 0 ? (
+        <div className="mt-1 flex items-center justify-center gap-1 text-[11px] font-mono font-bold tabular-nums whitespace-nowrap">
+          {compactStats.map((stat, index) => (
+            <span
+              key={`${stat.shortLabel}:${stat.label}`}
+              className="inline-flex items-center gap-0.5"
+              title={`${stat.label}: ${stat.accessibleValue}`}
+              aria-label={`${stat.label}: ${stat.accessibleValue}`}
+            >
+              {index > 0 ? <span aria-hidden="true" className="mr-0.5 text-gray-600">/</span> : null}
+              <span aria-hidden="true" className={meta.card.metaClass}>{stat.shortLabel}</span>
+              <span aria-hidden="true">{stat.value}</span>
+            </span>
+          ))}
         </div>
-      ) : null}
+      ) : (
+        <>
+          <div className="text-base font-mono font-bold">{value}</div>
+          <div className="text-xs text-gray-500 mt-0.5">{valueLabel}</div>
+          {secondaryValue !== undefined && secondaryLabel ? (
+            <div className="text-xs mt-0.5">
+              <span className={meta.card.metaClass}>{secondaryValue}</span> <span className="text-gray-500">{secondaryLabel}</span>
+            </div>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }

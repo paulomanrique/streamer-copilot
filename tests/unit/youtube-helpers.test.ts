@@ -6,6 +6,7 @@ import {
   parseCompactCount,
   extractYtSubscriberCount,
   extractYtLiveVideoIds,
+  extractYtVideoEngagement,
   normalizeKickChannelInput,
   escapeHtml,
 } from '../../src/main/youtube-helpers.js';
@@ -118,7 +119,7 @@ describe('findLiveVideoIds', () => {
     expect(result).toHaveLength(1);
     expect(result[0].videoId).toBe('abc123');
     expect(result[0].title).toBe('My Live Stream');
-    expect(result[0].viewCount).toBe(1234);
+    expect(result[0].viewerCount).toBe(1234);
   });
 
   it('skips non-live videos', () => {
@@ -234,6 +235,76 @@ describe('extractYtLiveVideoIds', () => {
 
   it('returns empty array for missing ytInitialData', () => {
     expect(extractYtLiveVideoIds('no data')).toEqual([]);
+  });
+});
+
+describe('extractYtVideoEngagement', () => {
+  function watchPage(actions: unknown, viewCount = '98765') {
+    const player = { videoDetails: { viewCount } };
+    const initial = {
+      contents: {
+        twoColumnWatchNextResults: {
+          results: {
+            results: {
+              contents: [{
+                videoPrimaryInfoRenderer: { videoActions: actions },
+              }],
+            },
+          },
+        },
+      },
+    };
+    return `var ytInitialPlayerResponse = ${JSON.stringify(player)}; var ytInitialData = ${JSON.stringify(initial)};`;
+  }
+
+  it('extracts exact cumulative views and an accessibility-label like count', () => {
+    const html = watchPage({
+      menuRenderer: {
+        topLevelButtons: [{
+          segmentedLikeDislikeButtonRenderer: {
+            likeButton: {
+              toggleButtonRenderer: {
+                trackingParams: 'opaque123value',
+                defaultText: {
+                  accessibility: { accessibilityData: { label: '1,234 likes' } },
+                },
+              },
+            },
+          },
+        }],
+      },
+    });
+
+    expect(extractYtVideoEngagement(html)).toEqual({
+      likeCount: 1234,
+      viewCount: 98765,
+    });
+  });
+
+  it('supports compact localized counts in the newer like-button view model', () => {
+    const html = watchPage({
+      segmentedLikeDislikeButtonViewModel: {
+        likeButtonViewModel: {
+          toggleButtonViewModel: {
+            defaultButtonViewModel: {
+              buttonViewModel: { title: '2,5 mil' },
+            },
+          },
+        },
+      },
+    }, '120000');
+
+    expect(extractYtVideoEngagement(html)).toEqual({
+      likeCount: 2500,
+      viewCount: 120000,
+    });
+  });
+
+  it('returns null counters when the watch page has no supported metadata', () => {
+    expect(extractYtVideoEngagement('no youtube data')).toEqual({
+      likeCount: null,
+      viewCount: null,
+    });
   });
 });
 

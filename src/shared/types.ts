@@ -158,6 +158,17 @@ export interface PlatformLiveEntry {
   secondaryValue?: string;
   /** i18n key for the secondary stat label (e.g. 'followers' | 'subscribers'). */
   secondaryLabel?: string;
+  /** Optional compact stat strip rendered in place of the primary/secondary
+   *  layout. Providers own both the abbreviations and metric selection so the
+   *  shared dashboard card stays platform-agnostic. */
+  compactStats?: Array<{
+    /** Short visible marker, e.g. E / L / V. */
+    shortLabel: string;
+    /** Pre-formatted value with the provider's fallback. */
+    value: string;
+    /** i18n key used for the tooltip and accessible label. */
+    label: string;
+  }>;
 }
 
 export type ChatBadge = 'moderator' | 'subscriber' | 'member' | 'vip' | 'broadcaster' | (string & {});
@@ -254,6 +265,9 @@ export interface YouTubeStreamInfo {
   channelHandle: string | null;
   label: string;
   viewerCount: number | null;
+  likeCount: number | null;
+  /** Cumulative views reported by YouTube for the live video. */
+  viewCount: number | null;
   subscriberCount: number | null;
   liveUrl: string;
 }

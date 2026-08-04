@@ -41,7 +41,7 @@ export async function checkYouTubeLiveViaApi(
     if (videoIds.length === 0) return [];
 
     const [videosRes, channelsRes] = await Promise.all([
-      youtube.videos.list({ part: ['liveStreamingDetails', 'snippet'], id: videoIds }),
+      youtube.videos.list({ part: ['liveStreamingDetails', 'snippet', 'statistics'], id: videoIds }),
       youtube.channels.list({ part: ['statistics'], mine: true }),
     ]);
 
@@ -56,7 +56,9 @@ export async function checkYouTubeLiveViaApi(
       out.push({
         videoId: video.id,
         title: video.snippet?.title ?? '',
-        viewCount: concurrent,
+        viewerCount: concurrent,
+        likeCount: parseCount(video.statistics?.likeCount),
+        viewCount: parseCount(video.statistics?.viewCount),
         subscriberCount,
         channelHandle,
       });

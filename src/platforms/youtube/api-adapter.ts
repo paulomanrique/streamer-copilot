@@ -67,6 +67,8 @@ interface StreamData {
   accountId: string;
   label: string;
   viewerCount: number | null;
+  likeCount: number | null;
+  viewCount: number | null;
   subscriberCount: number | null;
   oauth: OAuth2Client;
 }
@@ -153,6 +155,8 @@ export class YouTubeApiChatAdapter implements PlatformChatAdapter {
         channelHandle: data?.label ?? null,
         label: data?.label ?? 'YouTube',
         viewerCount: data?.viewerCount ?? null,
+        likeCount: data?.likeCount ?? null,
+        viewCount: data?.viewCount ?? null,
         subscriberCount: data?.subscriberCount ?? null,
         liveUrl: `https://www.youtube.com/watch?v=${videoId}`,
       };
@@ -219,6 +223,7 @@ export class YouTubeApiChatAdapter implements PlatformChatAdapter {
 
     // Update existing clients; stop any that are no longer live.
     let removed = 0;
+    let metadataChanged = false;
     for (const [videoId, client] of this.clients) {
       const updated = discovered.find((s) => s.videoId === videoId);
       if (!updated) {
@@ -233,11 +238,18 @@ export class YouTubeApiChatAdapter implements PlatformChatAdapter {
       } else {
         const data = this.streamData.get(videoId);
         if (data) {
-          this.streamData.set(videoId, {
+          const next = {
             ...data,
-            viewerCount: updated.viewCount ?? data.viewerCount,
+            viewerCount: updated.viewerCount ?? data.viewerCount,
+            likeCount: updated.likeCount ?? data.likeCount,
+            viewCount: updated.viewCount ?? data.viewCount,
             subscriberCount: updated.subscriberCount ?? data.subscriberCount,
-          });
+          };
+          metadataChanged ||= next.viewerCount !== data.viewerCount
+            || next.likeCount !== data.likeCount
+            || next.viewCount !== data.viewCount
+            || next.subscriberCount !== data.subscriberCount;
+          this.streamData.set(videoId, next);
         }
       }
     }
@@ -251,7 +263,9 @@ export class YouTubeApiChatAdapter implements PlatformChatAdapter {
       this.streamData.set(stream.videoId, {
         accountId: stream.accountId,
         label: account.label,
-        viewerCount: stream.viewCount,
+        viewerCount: stream.viewerCount,
+        likeCount: stream.likeCount,
+        viewCount: stream.viewCount,
         subscriberCount: stream.subscriberCount,
         oauth: account.oauth,
       });
@@ -262,7 +276,7 @@ export class YouTubeApiChatAdapter implements PlatformChatAdapter {
       added++;
     }
 
-    if (removed > 0 || added > 0) this.deps.onStreamsChanged?.();
+    if (removed > 0 || added > 0 || metadataChanged) this.deps.onStreamsChanged?.();
   }
 
   private async startClient(videoId: string, account: YouTubeApiAccount): Promise<void> {

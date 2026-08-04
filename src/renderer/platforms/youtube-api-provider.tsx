@@ -146,8 +146,11 @@ registerPlatformProvider({
       cardLabel: stream.label || 'YouTube',
       value: stream.viewerCount !== null ? fmtNum(stream.viewerCount) : '—',
       valueLabel: 'viewers',
-      secondaryValue: stream.subscriberCount !== null ? fmtNum(stream.subscriberCount) : '—',
-      secondaryLabel: 'subscribers',
+      compactStats: [
+        { shortLabel: 'E', value: stream.viewerCount !== null ? fmtNum(stream.viewerCount) : '—', label: 'viewers' },
+        { shortLabel: 'L', value: stream.likeCount !== null ? fmtNum(stream.likeCount) : '—', label: 'likes' },
+        { shortLabel: 'V', value: stream.viewCount !== null ? fmtNum(stream.viewCount) : '—', label: 'views' },
+      ],
     };
   }),
   profileUrl: youtubeProfileUrl,

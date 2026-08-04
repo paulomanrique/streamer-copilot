@@ -6,6 +6,10 @@
 export interface LiveStreamInfo {
   videoId: string;
   title: string;
+  /** Current concurrent viewers. */
+  viewerCount: number | null;
+  likeCount: number | null;
+  /** Cumulative views for the live video. */
   viewCount: number | null;
   subscriberCount: number | null;
   channelHandle: string;
@@ -141,9 +145,17 @@ export function findLiveVideoIds(obj: unknown, found: LiveStreamInfo[] = []): Li
 
     if (isLive && !found.some((f) => f.videoId === record.videoId)) {
       const title = getYtText(record.title);
-      const viewCountRaw = getYtText(record.viewCountText);
-      const viewCount = viewCountRaw ? parseInt(viewCountRaw.replace(/[^0-9]/g, ''), 10) || null : null;
-      found.push({ videoId: record.videoId as string, title, viewCount, subscriberCount: null, channelHandle: '' });
+      const viewerCountRaw = getYtText(record.viewCountText);
+      const viewerCount = viewerCountRaw ? parseInt(viewerCountRaw.replace(/[^0-9]/g, ''), 10) || null : null;
+      found.push({
+        videoId: record.videoId as string,
+        title,
+        viewerCount,
+        likeCount: null,
+        viewCount: null,
+        subscriberCount: null,
+        channelHandle: '',
+      });
     }
   }
   for (const value of Object.values(record)) findLiveVideoIds(value, found);
@@ -246,7 +258,107 @@ export function extractYtLiveFromPlayerResponse(html: string): LiveStreamInfo | 
   const videoId = typeof videoDetails.videoId === 'string' ? videoDetails.videoId : null;
   if (!videoId) return null;
   const title = typeof videoDetails.title === 'string' ? videoDetails.title : '';
-  return { videoId, title, viewCount: null, subscriberCount: null, channelHandle: '' };
+  const engagement = extractYtVideoEngagement(html);
+  return {
+    videoId,
+    title,
+    viewerCount: null,
+    likeCount: engagement.likeCount,
+    viewCount: engagement.viewCount,
+    subscriberCount: null,
+    channelHandle: '',
+  };
+}
+
+export interface YouTubeVideoEngagement {
+  likeCount: number | null;
+  viewCount: number | null;
+}
+
+/**
+ * Extracts public engagement totals from a YouTube watch page.
+ *
+ * The cumulative view count comes from `videoDetails.viewCount`, which is an
+ * exact integer. Likes live in the primary video's action row and YouTube has
+ * shipped several renderer shapes for that button, so the search is scoped to
+ * `videoPrimaryInfoRenderer.videoActions` and accepts both exact accessibility
+ * labels and compact button titles (for example `1.2K` / `2,5 mil`).
+ */
+export function extractYtVideoEngagement(html: string): YouTubeVideoEngagement {
+  const player = parseYtInitialPlayerResponse(html);
+  const videoDetails = player?.videoDetails as Record<string, unknown> | undefined;
+  const viewCount = parseUnsignedInteger(videoDetails?.viewCount);
+
+  const initial = parseYtInitialData(html);
+  const actions = initial ? findPrimaryVideoActions(initial) : null;
+  const likeCount = actions ? findLikeCount(actions) : null;
+  return { likeCount, viewCount };
+}
+
+function findPrimaryVideoActions(initial: Record<string, unknown>): unknown | null {
+  const contents = (((initial.contents as Record<string, unknown> | undefined)
+    ?.twoColumnWatchNextResults as Record<string, unknown> | undefined)
+    ?.results as Record<string, unknown> | undefined)
+    ?.results as Record<string, unknown> | undefined;
+  const items = contents?.contents as unknown[] | undefined;
+  if (!Array.isArray(items)) return null;
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue;
+    const primary = (item as Record<string, unknown>).videoPrimaryInfoRenderer as Record<string, unknown> | undefined;
+    if (primary?.videoActions) return primary.videoActions;
+  }
+  return null;
+}
+
+function findLikeCount(node: unknown, likeContext = false): number | null {
+  if (!node || typeof node !== 'object') return null;
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      const count = findLikeCount(item, likeContext);
+      if (count !== null) return count;
+    }
+    return null;
+  }
+
+  const record = node as Record<string, unknown>;
+  for (const [key, value] of Object.entries(record)) {
+    const nextLikeContext = likeContext || /like(?:button|count|viewmodel|renderer)/i.test(key);
+    if (nextLikeContext) {
+      const literal = typeof value === 'string' || typeof value === 'number'
+        ? String(value)
+        : value && typeof value === 'object'
+          ? getYtText(value)
+          : '';
+      // Do not treat opaque values such as trackingParams as counts merely
+      // because they sit below a like-button node. Only visible/count-bearing
+      // fields (or an explicit localized like label) are trusted.
+      const countField = /title|label|text|count|accessibility/i.test(key);
+      const count = parseYouTubeDisplayCount(
+        literal,
+        countField || /like|curtida|gostei/i.test(literal),
+      );
+      if (count !== null) return count;
+    }
+    const nested = findLikeCount(value, nextLikeContext);
+    if (nested !== null) return nested;
+  }
+  return null;
+}
+
+function parseYouTubeDisplayCount(raw: string, trustedContext: boolean): number | null {
+  const normalized = raw.replace(/\u00a0/g, ' ').trim();
+  if (!normalized || (!trustedContext && !/like|curtida|gostei/i.test(normalized))) return null;
+  const match = normalized.match(/(\d[\d.,\s]*)(?:\s*)(mil|mi|bi|k|m|b)?/i);
+  if (!match) return null;
+  if (match[2]) return parseCompactCount(`${match[1]} ${match[2]}`);
+  const digits = match[1].replace(/[^0-9]/g, '');
+  return digits ? parseUnsignedInteger(digits) : null;
+}
+
+function parseUnsignedInteger(raw: unknown): number | null {
+  if (typeof raw !== 'string' && typeof raw !== 'number') return null;
+  const n = Number(raw);
+  return Number.isSafeInteger(n) && n >= 0 ? n : null;
 }
 
 /**
