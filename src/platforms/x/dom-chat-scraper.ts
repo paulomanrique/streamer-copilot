@@ -15,6 +15,11 @@ export interface XDomChatMessage extends XChatMessage {
   isInitial: boolean;
 }
 
+interface XDomSendResult {
+  sent: boolean;
+  reason?: string;
+}
+
 const X_BROWSER_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36';
 const CONSOLE_PREFIX = 'COPILOT_X_CHAT:';
@@ -70,13 +75,40 @@ export class XDomChatScraper {
       const parsed = parseXDomChatConsoleMessage(message);
       if (parsed) this.onMessage(parsed);
     });
-    await browserWindow.loadURL(broadcastUrl, { userAgent: X_BROWSER_USER_AGENT });
-    await this.injectScraper();
+    try {
+      await browserWindow.loadURL(broadcastUrl, { userAgent: X_BROWSER_USER_AGENT });
+      await this.injectScraper();
+    } catch (cause) {
+      this.stop();
+      throw cause;
+    }
   }
 
   stop(): void {
     if (this.window && !this.window.isDestroyed()) this.window.destroy();
     this.window = null;
+  }
+
+  async sendMessage(content: string): Promise<void> {
+    const payload = content.trim();
+    if (!payload) throw new Error('X chat message cannot be empty');
+    if (!this.window || this.window.isDestroyed()) {
+      throw new Error('X chat page is not connected');
+    }
+
+    const result = await this.window.webContents.executeJavaScript(
+      this.buildSendScript(payload),
+      true,
+    ) as XDomSendResult | null;
+
+    if (result?.sent === true) return;
+    if (result?.reason === 'input-not-found') {
+      throw new Error('Log in to X in Platforms before sending messages.');
+    }
+    if (result?.reason === 'rejected') {
+      throw new Error('X did not accept the chat message. Check the account session and chat permissions.');
+    }
+    throw new Error('X chat message could not be sent');
   }
 
   private async createBrowserWindow(): Promise<BrowserWindowRuntime | null> {
@@ -244,5 +276,98 @@ export class XDomChatScraper {
       })()
     `;
     await this.window.webContents.executeJavaScript(script, true);
+  }
+
+  private buildSendScript(content: string): string {
+    const escaped = JSON.stringify(content);
+    return `
+      (async () => {
+        const payload = ${escaped};
+        const visible = (element) => element instanceof HTMLElement
+          && element.getClientRects().length > 0
+          && getComputedStyle(element).visibility !== 'hidden';
+        const inputs = Array.from(document.querySelectorAll('textarea'));
+        const input = inputs.find((candidate) => visible(candidate)
+          && !candidate.disabled
+          && !candidate.readOnly
+          && candidate.getAttribute('aria-hidden') !== 'true');
+        if (!(input instanceof HTMLTextAreaElement)) {
+          return { sent: false, reason: 'input-not-found' };
+        }
+
+        input.focus();
+        const valueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+        if (valueSetter) valueSetter.call(input, payload);
+        else input.value = payload;
+        input.dispatchEvent(new InputEvent('input', {
+          bubbles: true,
+          composed: true,
+          data: payload,
+          inputType: 'insertText',
+        }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+
+        const waitForClear = (timeoutMs) => new Promise((resolve) => {
+          const startedAt = Date.now();
+          const poll = () => {
+            if (!input.isConnected || input.value.trim() !== payload) {
+              resolve(true);
+              return;
+            }
+            if (Date.now() - startedAt >= timeoutMs) {
+              resolve(false);
+              return;
+            }
+            setTimeout(poll, 50);
+          };
+          setTimeout(poll, 50);
+        });
+
+        for (const eventName of ['keydown', 'keypress', 'keyup']) {
+          input.dispatchEvent(new KeyboardEvent(eventName, {
+            key: 'Enter',
+            code: 'Enter',
+            keyCode: 13,
+            which: 13,
+            bubbles: true,
+            composed: true,
+            cancelable: true,
+          }));
+        }
+        if (await waitForClear(500)) return { sent: true };
+
+        let scope = input.parentElement;
+        let sendButton = null;
+        for (let depth = 0; scope && depth < 6; depth += 1, scope = scope.parentElement) {
+          const buttons = Array.from(scope.querySelectorAll('button')).filter((button) => visible(button)
+            && !button.disabled
+            && button.getAttribute('aria-disabled') !== 'true');
+          const preferred = buttons.find((button) => {
+            const marker = [
+              button.id,
+              button.getAttribute('data-testid'),
+              button.getAttribute('aria-label'),
+              button.getAttribute('title'),
+              button.getAttribute('type'),
+            ].filter(Boolean).join(' ').toLowerCase();
+            return /send|submit|message|chat|post|tweet/.test(marker);
+          });
+          if (preferred) {
+            sendButton = preferred;
+            break;
+          }
+          if (buttons.length === 1) {
+            sendButton = buttons[0];
+            break;
+          }
+        }
+
+        if (!sendButton) return { sent: false, reason: 'rejected' };
+        sendButton.click();
+        return await waitForClear(2_000)
+          ? { sent: true }
+          : { sent: false, reason: 'rejected' };
+      })()
+    `;
   }
 }

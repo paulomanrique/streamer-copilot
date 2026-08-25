@@ -30,7 +30,7 @@ export interface XAdapterOptions {
 }
 
 /**
- * Read-only adapter for X (Twitter) broadcast chat. One adapter = one broadcast.
+ * Adapter for X (Twitter) broadcast chat. One adapter = one broadcast.
  * `connect()` resolves the live broadcast (auto-detect from handle, else the
  * pasted URL), loads history, and opens the live WebSocket. It throws when no
  * live broadcast can be resolved — the host's watching/retry loop (app-context)
@@ -97,16 +97,18 @@ export class XChatAdapter implements PlatformChatAdapter {
         },
       );
 
-      if (!bootstrap.chatReadable) {
-        this.domScraper = new XDomChatScraper(
-          (msg) => this.emitParsedMessage(msg, bootstrap, streamLabel, hostLower, msg.isInitial),
-          this.options.log,
-        );
-        try {
-          await this.domScraper.start(bootstrap.url);
-        } catch (cause) {
-          this.options.log?.(`X signed-in chat fallback failed: ${cause instanceof Error ? cause.message : String(cause)}`);
-        }
+      // Keep the signed-in broadcast page available for outbound messages. On
+      // low-latency/restricted chats it also supplies inbound messages because
+      // the guest socket exposes occupancy only.
+      this.domScraper = new XDomChatScraper(
+        (msg) => this.emitParsedMessage(msg, bootstrap, streamLabel, hostLower, msg.isInitial),
+        this.options.log,
+      );
+      try {
+        await this.domScraper.start(bootstrap.url);
+      } catch (cause) {
+        this.domScraper = null;
+        this.options.log?.(`X signed-in chat page failed: ${cause instanceof Error ? cause.message : String(cause)}`);
       }
 
       this.connected = true;
@@ -133,8 +135,14 @@ export class XChatAdapter implements PlatformChatAdapter {
     this.options.onStatusChange?.('disconnected');
   }
 
-  async sendMessage(_content: string): Promise<void> {
-    throw new Error('X broadcast chat is read-only — sending is not supported');
+  async sendMessage(content: string): Promise<void> {
+    if (!this.connected || !this.bootstrap) {
+      throw new Error('X adapter is not connected to a live broadcast');
+    }
+    if (!this.domScraper) {
+      throw new Error('X chat page is not available for sending');
+    }
+    await this.domScraper.sendMessage(content);
   }
 
   onMessage(handler: (msg: ChatMessage) => void): () => void {

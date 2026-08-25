@@ -1176,7 +1176,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     return 'disconnected';
   };
 
-  // ── X (Twitter broadcasts) — read-only, same watching/retry model as TikTok ──
+  // ── X (Twitter broadcasts) — same watching/retry model as TikTok ──
   const xStatusListeners = new Set<() => void>();
   let xPrimaryHandle: string | null = null;
   const xMultiAdapter = new XMultiChatAdapter();
@@ -2373,8 +2373,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
   ipcMain.handle(IPC_CHANNELS.xOpenLogin, async (event) => {
     // Opens an X login on the default session so auth_token/ct0 persist there —
-    // the live auto-detector reads them at request time. The chat read itself
-    // stays anonymous (guest token), so these cookies never leak into reads.
+    // the live auto-detector and hidden broadcast page use them at request time.
+    // Guest API and chat-socket requests remain anonymous.
     const parent = BrowserWindow.fromWebContents(event.sender) ?? undefined;
     const win = new BrowserWindow({
       width: 600,
@@ -2686,7 +2686,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   })();
 
   // Auto-reconnect X broadcasts on startup — one watcher per enabled x account.
-  // Each watcher retries until the streamer goes live (read-only).
+  // Each watcher retries until the streamer goes live.
   void (async () => {
     await activeProfileDirectoryReady;
     try {
@@ -3247,7 +3247,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   const xProvider: MainPlatformProvider = {
     providerId: 'x',
-    supportsScheduledSend: false,
+    supportsScheduledSend: true,
     getAggregateStatus: () => ({ status: aggregateXStatus(), primaryChannel: xPrimaryHandle }),
     getStatus: (account) => {
       const status = xAccountStatus.get(account.id);

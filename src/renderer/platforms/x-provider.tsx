@@ -41,16 +41,15 @@ function XAuthStep({ draft, updateDraft, channel, setChannel, setError }: AuthSt
           className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-100"
         />
         <p className="text-xs text-gray-500 mt-2">
-          Read-only access to the broadcast chat. The user must be live. With an X login the app auto-detects
-          the live broadcast from the handle each time the user goes live.
+          The user must be live. With an X login the app auto-detects the broadcast and can read and send
+          chat messages through the signed-in session.
         </p>
       </div>
       <div className="rounded border border-gray-700 bg-gray-900/50 p-3">
         <p className="text-xs text-gray-300 font-medium mb-1">Entrar no X</p>
         <p className="text-xs text-gray-500 mb-3">
-          Necessário para a <strong className="text-gray-300">detecção automática</strong> da live (o X não
-          expõe isso sem login). A leitura do chat continua anônima. Abre uma janela de login do X; os cookies
-          ficam guardados na sessão do app.
+          Necessário para a <strong className="text-gray-300">detecção automática</strong> da live e para
+          enviar mensagens no chat. Abre uma janela de login do X; os cookies ficam guardados na sessão do app.
         </p>
         <button
           type="button"
@@ -106,7 +105,7 @@ registerPlatformProvider({
   hasNativeBadgeUrls: false,
   supportedRoles: ['everyone', 'moderator', 'broadcaster'],
   hasSubscriberTiers: false,
-  canSendMessages: false,
+  canSendMessages: true,
   liveEntries: ({ liveStats, status, primaryChannel }) => {
     const keys = Object.keys(liveStats);
     const handles = keys.length > 0 ? keys : (status === 'connected' && primaryChannel ? [primaryChannel] : []);

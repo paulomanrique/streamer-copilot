@@ -7,7 +7,7 @@ import { XChatAdapter, type XAdapterOptions } from './adapter.js';
  * Aggregates per-account XChatAdapter instances behind a single
  * `PlatformChatAdapter` registration. Mirrors the TikTok multi-adapter: each
  * account owns its own broadcast connection; the wrapper fans messages/events
- * out to listeners. Read-only.
+ * out to listeners and routes outbound messages through a connected child.
  */
 export interface XAccountOptions extends Omit<XAdapterOptions, 'onStatusChange'> {
   accountId: string;
@@ -46,8 +46,18 @@ export class XMultiChatAdapter implements PlatformChatAdapter {
     }
   }
 
-  async sendMessage(_content: string): Promise<void> {
-    throw new Error('X broadcast chat is read-only — sending is not supported');
+  async sendMessage(content: string): Promise<void> {
+    let lastError: unknown = null;
+    for (const { adapter } of this.children.values()) {
+      try {
+        await adapter.sendMessage(content);
+        return;
+      } catch (cause) {
+        lastError = cause;
+      }
+    }
+    if (lastError instanceof Error) throw lastError;
+    throw new Error('No connected X adapter to send through');
   }
 
   hasConnectedChild(): boolean {
