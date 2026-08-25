@@ -197,7 +197,9 @@ export class XDomChatScraper {
     const script = `
       (() => {
         if (window.__COPILOT_X_CHAT_SCRAPER__) {
-          window.__COPILOT_X_CHAT_SCRAPER__.scan?.();
+          const current = window.__COPILOT_X_CHAT_SCRAPER__;
+          if (current.scheduleScan) current.scheduleScan();
+          else current.scan?.();
           return true;
         }
 
@@ -205,11 +207,12 @@ export class XDomChatScraper {
         const state = {
           seenRows: new WeakSet(),
           observer: null,
-          bodyObserver: null,
           root: null,
           initialScanDone: false,
           sequence: 0,
           statusLogged: false,
+          scanTimer: null,
+          maintenanceTimer: null,
         };
         window.__COPILOT_X_CHAT_SCRAPER__ = state;
 
@@ -279,8 +282,14 @@ export class XDomChatScraper {
         };
 
         const emit = (payload) => console.log('${CONSOLE_PREFIX}' + JSON.stringify(payload));
+        const quietVideos = () => {
+          document.querySelectorAll('video').forEach((video) => {
+            video.muted = true;
+            video.pause();
+          });
+        };
         const scan = () => {
-          const root = findRoot();
+          const root = state.root?.isConnected ? state.root : findRoot();
           if (!root) {
             if (!state.statusLogged) {
               state.statusLogged = true;
@@ -302,9 +311,10 @@ export class XDomChatScraper {
             state.observer?.disconnect();
             state.root = root;
             state.initialScanDone = false;
-            state.observer = new MutationObserver(() => scan());
+            state.observer = new MutationObserver(() => scheduleScan());
             state.observer.observe(root, { childList: true, subtree: true });
             console.log('${LOG_PREFIX}X chat scraper attached to ' + root.querySelectorAll(avatarSelector).length + ' visible rows');
+            quietVideos();
           }
           const isInitial = !state.initialScanDone;
           const rows = Array.from(root.querySelectorAll(avatarSelector)).map((avatar) => findRow(avatar, root));
@@ -313,15 +323,27 @@ export class XDomChatScraper {
             if (payload) emit(payload);
           }
           state.initialScanDone = true;
-          document.querySelectorAll('video').forEach((video) => {
-            video.muted = true;
-            video.pause();
-          });
           return true;
         };
+        const scheduleScan = () => {
+          if (state.scanTimer !== null) return;
+          state.scanTimer = setTimeout(() => {
+            state.scanTimer = null;
+            scan();
+          }, 50);
+        };
         state.scan = scan;
-        state.bodyObserver = new MutationObserver(() => scan());
-        state.bodyObserver.observe(document.documentElement, { childList: true, subtree: true });
+        state.scheduleScan = scheduleScan;
+        // The chat root has its own coalesced observer. A low-frequency timer
+        // only rediscovers the root after X replaces the panel and keeps media
+        // paused, avoiding a whole-page scan for every unrelated DOM mutation.
+        state.maintenanceTimer = setInterval(() => {
+          quietVideos();
+          if (!state.root?.isConnected) {
+            state.root = null;
+            scheduleScan();
+          }
+        }, 2_000);
         scan();
         return true;
       })()

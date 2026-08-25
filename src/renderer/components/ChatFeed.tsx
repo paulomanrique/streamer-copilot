@@ -160,8 +160,6 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
   const [inputValue,    setInputValue]    = useState('');
   const [inputPlatform, setInputPlatform] = useState(() => connectedPlatforms[0] ?? '');
   const [sendError, setSendError] = useState<string | null>(null);
-  const [avatarCache,   setAvatarCache]   = useState<Map<string, string>>(new Map());
-  const requestedAvatarsRef = useRef<Set<string>>(new Set());
   // Highlighted message id flows from main → store via onHighlightedMessageChange
   // (useIpcListeners). The component never owns this state directly so the
   // chat-dock POST path and the main-window click path stay in sync.
@@ -247,34 +245,6 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
   // our own scrollToEnd on items.length change races with the library's
   // scroll handler and can make `isAtEnd` flicker false during the scroll
   // (showing the "New Messages Below" button when the user didn't scroll).
-
-  // ── batch-fetch avatars for non-Twitch platforms ──────────────────
-  useEffect(() => {
-    const seen = new Set<string>();
-    const toFetch: string[] = [];
-    for (const item of items) {
-      if (item.kind !== 'message') continue;
-      const { message } = item;
-      // Skip the avatar lookup when the adapter already attached badges/avatar
-      // info to the message (Twitch via tmi.js) — the row uses those directly.
-      if (getPlatformProviderOrFallback(message.platform).hasNativeBadgeUrls || message.avatarUrl) continue;
-      const login = message.author.toLowerCase();
-      if (!seen.has(login) && !requestedAvatarsRef.current.has(login)) {
-        seen.add(login);
-        toFetch.push(login);
-      }
-    }
-    if (toFetch.length === 0) return;
-    toFetch.forEach((l) => requestedAvatarsRef.current.add(l));
-    void window.copilot.twitchGetUserAvatars(toFetch).then((result) => {
-      setAvatarCache((prev) => {
-        const next = new Map(prev);
-        for (const [login, url] of Object.entries(result)) next.set(login.toLowerCase(), url);
-        return next;
-      });
-    });
-  // avatarCache intentionally omitted — requestedAvatarsRef is the guard against double-fetching
-  }, [items]);
 
   // ── close context menu on outside click / Escape ───────────────────
   const hideMenu = useCallback(() => {
@@ -407,14 +377,13 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
       ) : (
         <ChatMessageRow
           message={item.message}
-          avatarUrl={avatarCache.get(item.message.author.toLowerCase()) || undefined}
           highlighted={highlightedMessageId === item.message.id}
           showStreamLabel={multiStreamPlatforms.has(item.message.platform)}
           onHighlight={highlightMessage}
           onContextMenuRequest={handleContextMenu}
         />
       ),
-    [avatarCache, handleContextMenu, multiStreamPlatforms, highlightedMessageId, highlightMessage],
+    [handleContextMenu, multiStreamPlatforms, highlightedMessageId, highlightMessage],
   );
 
   const selectSuggestionList = async (listId: string) => {
@@ -836,7 +805,6 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
 
 interface ChatMessageRowProps {
   message: ChatMessage;
-  avatarUrl?: string;
   highlighted: boolean;
   /** True when this message's platform has more than one distinct
    *  streamLabel in flight — the row swaps its badge text for the channel
@@ -848,7 +816,7 @@ interface ChatMessageRowProps {
   onContextMenuRequest: (event: React.MouseEvent, platform: string, author: string, userId?: string, messageId?: string) => void;
 }
 
-const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highlighted, showStreamLabel, onHighlight, onContextMenuRequest }: ChatMessageRowProps) {
+const ChatMessageRow = memo(function ChatMessageRow({ message, highlighted, showStreamLabel, onHighlight, onContextMenuRequest }: ChatMessageRowProps) {
   const meta = getPlatformProviderOrFallback(message.platform);
   const badgeLabel = (showStreamLabel && message.streamLabel) ? message.streamLabel : meta.displayName;
   const showBadgeLabel = !meta.hideDefaultChatBadgeLabel || badgeLabel !== meta.displayName;
@@ -877,7 +845,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highli
   const isMod = message.badges.some((b) => b.startsWith('moderator/') || b === 'moderator');
   const authorColor = resolveAuthorColor(message);
 
-  const effectiveAvatarUrl = message.avatarUrl || avatarUrl;
+  const effectiveAvatarUrl = message.avatarUrl;
   const messageContent = useMemo(() => renderMessageContent(message), [message]);
 
   return (
