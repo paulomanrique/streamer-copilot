@@ -14,7 +14,7 @@ import {
   type XChatBootstrap,
   type XChatMessage,
 } from './x-chat-client.js';
-import { XDomChatScraper } from './dom-chat-scraper.js';
+import { XDomChatScraper, type XDomChatSender } from './dom-chat-scraper.js';
 
 export interface XAdapterOptions {
   /** Streamer's @handle (used for auto-detect + the per-stream label). */
@@ -26,6 +26,7 @@ export interface XAdapterOptions {
   onError?: (error: unknown) => void;
   onLiveStats?: (stats: { viewerCount: number }) => void;
   onBroadcastResolved?: (broadcastId: string) => void;
+  onSenderResolved?: (sender: XDomChatSender) => void;
   log?: (msg: string) => void;
 }
 
@@ -133,7 +134,8 @@ export class XChatAdapter implements PlatformChatAdapter {
     if (!this.domScraper) {
       throw new Error('X chat page is not available for sending');
     }
-    await this.domScraper.sendMessage(content);
+    const sender = await this.domScraper.sendMessage(content);
+    if (sender) this.options.onSenderResolved?.(sender);
   }
 
   onMessage(handler: (msg: ChatMessage) => void): () => void {

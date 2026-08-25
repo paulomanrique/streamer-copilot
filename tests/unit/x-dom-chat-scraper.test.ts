@@ -40,7 +40,20 @@ describe('X DOM chat scraper', () => {
     };
     const content = `It's live: "hello" 👋`;
 
-    await scraper.sendMessage(content);
+    const send = scraper.sendMessage(content);
+    await Promise.resolve();
+    (scraper as unknown as { handleConsoleMessage: (message: string) => void }).handleConsoleMessage(
+      `COPILOT_X_CHAT:${JSON.stringify({
+        username: 'paulomanrique',
+        displayName: 'Paulo Manrique',
+        text: content,
+        timestampMs: Date.now(),
+        uuid: 'sent-message',
+        isInitial: false,
+      })}`,
+    );
+
+    await expect(send).resolves.toEqual({ username: 'paulomanrique', displayName: 'Paulo Manrique' });
 
     expect(executeJavaScript).toHaveBeenCalledOnce();
     expect(executeJavaScript.mock.calls[0]?.[0]).toContain(`const payload = ${JSON.stringify(content)};`);

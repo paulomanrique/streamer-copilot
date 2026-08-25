@@ -20,6 +20,16 @@ interface XDomSendResult {
   reason?: string;
 }
 
+export interface XDomChatSender {
+  username: string;
+  displayName: string;
+}
+
+interface PendingSenderWaiter {
+  content: string;
+  finish: (sender: XDomChatSender | null) => void;
+}
+
 const X_BROWSER_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36';
 const CONSOLE_PREFIX = 'COPILOT_X_CHAT:';
@@ -54,6 +64,7 @@ export function parseXDomChatConsoleMessage(message: string): XDomChatMessage | 
 
 export class XDomChatScraper {
   private window: BrowserWindowRuntime | null = null;
+  private readonly pendingSenderWaiters = new Set<PendingSenderWaiter>();
 
   constructor(
     private readonly onMessage: (message: XDomChatMessage) => void,
@@ -68,12 +79,7 @@ export class XDomChatScraper {
     browserWindow.webContents.setAudioMuted(true);
     browserWindow.webContents.on('console-message', (...args: unknown[]) => {
       const message = typeof args[2] === 'string' ? args[2] : '';
-      if (message.startsWith(LOG_PREFIX)) {
-        this.log?.(message.slice(LOG_PREFIX.length));
-        return;
-      }
-      const parsed = parseXDomChatConsoleMessage(message);
-      if (parsed) this.onMessage(parsed);
+      this.handleConsoleMessage(message);
     });
     try {
       await browserWindow.loadURL(broadcastUrl, { userAgent: X_BROWSER_USER_AGENT });
@@ -87,21 +93,31 @@ export class XDomChatScraper {
   stop(): void {
     if (this.window && !this.window.isDestroyed()) this.window.destroy();
     this.window = null;
+    for (const waiter of [...this.pendingSenderWaiters]) waiter.finish(null);
   }
 
-  async sendMessage(content: string): Promise<void> {
+  async sendMessage(content: string): Promise<XDomChatSender | null> {
     const payload = content.trim();
     if (!payload) throw new Error('X chat message cannot be empty');
     if (!this.window || this.window.isDestroyed()) {
       throw new Error('X chat page is not connected');
     }
 
-    const result = await this.window.webContents.executeJavaScript(
-      this.buildSendScript(payload),
-      true,
-    ) as XDomSendResult | null;
+    const senderWaiter = this.createSenderWaiter(payload);
 
-    if (result?.sent === true) return;
+    let result: XDomSendResult | null;
+    try {
+      result = await this.window.webContents.executeJavaScript(
+        this.buildSendScript(payload),
+        true,
+      ) as XDomSendResult | null;
+    } catch (cause) {
+      senderWaiter.cancel();
+      throw cause;
+    }
+
+    if (result?.sent === true) return senderWaiter.promise;
+    senderWaiter.cancel();
     if (result?.reason === 'input-not-found') {
       throw new Error('Log in to X in Platforms before sending messages.');
     }
@@ -109,6 +125,41 @@ export class XDomChatScraper {
       throw new Error('X did not accept the chat message. Check the account session and chat permissions.');
     }
     throw new Error('X chat message could not be sent');
+  }
+
+  private handleConsoleMessage(message: string): void {
+    if (message.startsWith(LOG_PREFIX)) {
+      this.log?.(message.slice(LOG_PREFIX.length));
+      return;
+    }
+    const parsed = parseXDomChatConsoleMessage(message);
+    if (!parsed) return;
+    if (!parsed.isInitial) {
+      const waiter = [...this.pendingSenderWaiters].find((candidate) => candidate.content === parsed.text);
+      waiter?.finish({ username: parsed.username, displayName: parsed.displayName });
+    }
+    this.onMessage(parsed);
+  }
+
+  private createSenderWaiter(content: string): {
+    promise: Promise<XDomChatSender | null>;
+    cancel: () => void;
+  } {
+    let finish!: (sender: XDomChatSender | null) => void;
+    const promise = new Promise<XDomChatSender | null>((resolve) => {
+      const waiter: PendingSenderWaiter = {
+        content,
+        finish: (sender) => {
+          if (!this.pendingSenderWaiters.delete(waiter)) return;
+          clearTimeout(timeout);
+          resolve(sender);
+        },
+      };
+      finish = waiter.finish;
+      const timeout = setTimeout(() => waiter.finish(null), 2_000);
+      this.pendingSenderWaiters.add(waiter);
+    });
+    return { promise, cancel: () => finish(null) };
   }
 
   private async createBrowserWindow(): Promise<BrowserWindowRuntime | null> {

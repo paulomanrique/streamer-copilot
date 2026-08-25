@@ -41,6 +41,9 @@ export interface AuthStepProps {
 export interface PlatformVisuals {
   /** SVG `d` for a 24×24 viewBox glyph. */
   icon: string;
+  /** Hides the textual platform name beside the icon in compact chat badges.
+   * Stream/channel labels still render when they are needed for disambiguation. */
+  hideDefaultChatBadgeLabel?: boolean;
   /** Chat row + chat badge styling (ChatFeed). */
   badge: {
     bg: string;

@@ -540,6 +540,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   let twitchChannel: string | null = null;
   // Maps platform → display name of the account that sends messages (used to skip self-welcomes)
   const selfSenderName: Partial<Record<string, string>> = {};
+  // Display name used for the immediate local echo after an outbound send.
+  const selfSenderDisplayName: Partial<Record<string, string>> = {};
   /** Per-channel stats poll. Mirrors the Twitch pattern so multiple Kick
    *  channels can have their own viewer/follower counts pumped in parallel. */
   const kickStatsTimers = new Map<string, ReturnType<typeof setInterval>>();
@@ -3163,6 +3165,10 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
           xAccountBroadcastId.set(accountId, broadcastId);
           chatLogService.openSession('x', broadcastId);
         },
+        onSenderResolved: (sender) => {
+          selfSenderName.x = sender.username.toLowerCase();
+          selfSenderDisplayName.x = sender.displayName;
+        },
         log: (msg) => logService.info('x', msg, { accountId, handle }),
         onError: (cause) => logXConnectionError('Connection error', handle, cause),
         onStatusChange: (status) => {
@@ -3848,7 +3854,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   }
 
   async function pushLocalOutboundMessage(platform: PlatformId, content: string): Promise<void> {
-    let author = 'Streamer Copilot';
+    let author = selfSenderDisplayName[platform] ?? 'Streamer Copilot';
     if (platform === 'twitch') {
       const store = await getTwitchCredentialsStore();
       const creds = store ? await store.load() : null;

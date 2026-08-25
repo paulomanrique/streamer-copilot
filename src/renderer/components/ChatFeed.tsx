@@ -851,6 +851,7 @@ interface ChatMessageRowProps {
 const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highlighted, showStreamLabel, onHighlight, onContextMenuRequest }: ChatMessageRowProps) {
   const meta = getPlatformProviderOrFallback(message.platform);
   const badgeLabel = (showStreamLabel && message.streamLabel) ? message.streamLabel : meta.displayName;
+  const showBadgeLabel = !meta.hideDefaultChatBadgeLabel || badgeLabel !== meta.displayName;
   const isCommand = message.content.startsWith('!');
   const subscriberTiers = useAppStore((s) => s.subscriberTiers);
 
@@ -899,7 +900,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highli
             <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor">
               <path d={meta.icon} />
             </svg>
-            {badgeLabel}
+            {showBadgeLabel ? badgeLabel : null}
           </span>
 
           {/* Avatar — shown for platforms whose messages don't ship with
@@ -919,9 +920,9 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, avatarUrl, highli
                 className="inline-flex items-center justify-center w-5 h-5 rounded-full shrink-0"
                 style={{ backgroundColor: `${authorColor}28` }}
               >
-                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor" style={{ color: authorColor }}>
-                  <path d={meta.icon} />
-                </svg>
+                <span className="text-[10px] font-bold" style={{ color: authorColor }}>
+                  {Array.from(message.author.trim())[0]?.toUpperCase() ?? '?'}
+                </span>
               </span>
             )
           )}
