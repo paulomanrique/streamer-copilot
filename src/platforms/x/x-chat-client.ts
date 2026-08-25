@@ -94,10 +94,6 @@ export interface XChatBootstrap {
   host: string | null;
   title: string | null;
   viewerCount: number;
-  /** Raw X chat permission type, e.g. 'StreamTypePublic' / 'StreamTypeOnlyFriends'. */
-  chatPermissionType: string | null;
-  /** Whether the public chatman socket is expected to deliver chat messages. */
-  chatReadable: boolean;
 }
 
 export interface XChatMessage {
@@ -350,13 +346,11 @@ export async function bootstrapChat(broadcastId: string, guestToken: string): Pr
   const mediaKey = typeof broadcast?.media_key === 'string' ? broadcast.media_key : null;
   if (!mediaKey) throw new Error(`No media_key for X broadcast ${broadcastId} (is it live?)`);
 
-  const status = await requestJson<{ chatToken?: string; chatPermissionType?: string }>(
+  const status = await requestJson<{ chatToken?: string }>(
     `https://x.com/i/api/1.1/live_video_stream/status/${encodeURIComponent(mediaKey)}?client=web&use_syndication_guest_id=false&cookie_set_host=x.com`,
     { headers: xApiHeaders(guestToken) },
   );
   if (!status.chatToken) throw new Error(`No chatToken for X broadcast ${broadcastId}`);
-  const chatPermissionType = typeof status.chatPermissionType === 'string' ? status.chatPermissionType : null;
-  const chatReadable = !chatPermissionType || chatPermissionType === 'StreamTypePublic';
 
   const access = await requestJson<{
     access_token?: string;
@@ -381,8 +375,6 @@ export async function bootstrapChat(broadcastId: string, guestToken: string): Pr
     host: typeof broadcast?.username === 'string' ? broadcast.username : null,
     title: typeof broadcast?.status === 'string' ? broadcast.status : null,
     viewerCount: toCount(broadcast?.total_watching ?? broadcast?.num_watching ?? broadcast?.total_watched),
-    chatPermissionType,
-    chatReadable,
   };
 }
 

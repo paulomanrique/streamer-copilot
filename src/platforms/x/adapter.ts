@@ -67,14 +67,6 @@ export class XChatAdapter implements PlatformChatAdapter {
       const bootstrap = await bootstrapChat(broadcastId, guestToken);
       this.bootstrap = bootstrap;
       this.options.onBroadcastResolved?.(bootstrap.broadcastId);
-      // Low-latency/restricted broadcasts often expose only occupancy on the
-      // legacy guest socket. The signed-in hidden page below supplies the real
-      // chat; keep this log useful when that session is missing.
-      if (!bootstrap.chatReadable) {
-        this.options.log?.(
-          `X broadcast chat uses the signed-in page fallback (${bootstrap.chatPermissionType ?? 'non-public'}).`,
-        );
-      }
       const streamLabel = normalizeHandle(this.options.handle) || bootstrap.host || undefined;
       const hostLower = bootstrap.host?.toLowerCase() ?? null;
 
@@ -97,9 +89,8 @@ export class XChatAdapter implements PlatformChatAdapter {
         },
       );
 
-      // Keep the signed-in broadcast page available for outbound messages. On
-      // low-latency/restricted chats it also supplies inbound messages because
-      // the guest socket exposes occupancy only.
+      // Keep the signed-in broadcast page available for outbound messages and
+      // for inbound messages omitted by some modes of the legacy guest socket.
       this.domScraper = new XDomChatScraper(
         (msg) => this.emitParsedMessage(msg, bootstrap, streamLabel, hostLower, msg.isInitial),
         this.options.log,
