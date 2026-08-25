@@ -1183,6 +1183,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   let xMultiRegistered = false;
   const xAccountStatus = new Map<string, PlatformLinkStatus>();
   const xAccountHandle = new Map<string, string>();
+  const xAccountBroadcastId = new Map<string, string>();
   const xWatchingAccounts = new Set<string>();
   const xRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -3156,6 +3157,12 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         accountId,
         handle,
         broadcastUrl,
+        onBroadcastResolved: (broadcastId) => {
+          const previous = xAccountBroadcastId.get(accountId);
+          if (previous && previous !== broadcastId) chatLogService.closeSession('x', previous);
+          xAccountBroadcastId.set(accountId, broadcastId);
+          chatLogService.openSession('x', broadcastId);
+        },
         log: (msg) => logService.info('x', msg, { accountId, handle }),
         onError: (cause) => logXConnectionError('Connection error', handle, cause),
         onStatusChange: (status) => {
@@ -3170,6 +3177,9 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       return { ok: true };
     } catch (cause) {
       try { await xMultiAdapter.removeAccount(accountId); } catch { /* ignore */ }
+      const broadcastId = xAccountBroadcastId.get(accountId);
+      if (broadcastId) chatLogService.closeSession('x', broadcastId);
+      xAccountBroadcastId.delete(accountId);
       return { ok: false, error: cause };
     }
   }
@@ -3195,7 +3205,6 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     xAccountStatus.set(accountId, 'connecting');
     xAccountHandle.set(accountId, handle);
     xPrimaryHandle = handle;
-    chatLogService.openSession('x', handle);
     suggestionService.clearSessionEntries();
     selfSenderName.x = handle.toLowerCase();
     setXStatus();
@@ -3220,15 +3229,17 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     xWatchingAccounts.delete(accountId);
     clearXRetryFor(accountId);
     const handle = xAccountHandle.get(accountId);
+    const broadcastId = xAccountBroadcastId.get(accountId);
     xAccountStatus.delete(accountId);
     xAccountHandle.delete(accountId);
+    xAccountBroadcastId.delete(accountId);
     if (xMultiAdapter.hasAccount(accountId)) {
       await xMultiAdapter.removeAccount(accountId);
     }
     if (handle) options.stateHub.pushPlatformLiveStats('x', handle, null);
+    if (broadcastId) chatLogService.closeSession('x', broadcastId);
     if (!xMultiAdapter.hasConnectedChild()) {
       xPrimaryHandle = null;
-      chatLogService.closeSessionsForPlatform('x');
     }
     setXStatus();
     broadcastAccountsForProvider('x');

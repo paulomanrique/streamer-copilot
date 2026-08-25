@@ -14,6 +14,7 @@ import {
   type XChatBootstrap,
   type XChatMessage,
 } from './x-chat-client.js';
+import { XDomChatScraper } from './dom-chat-scraper.js';
 
 export interface XAdapterOptions {
   /** Streamer's @handle (used for auto-detect + the per-stream label). */
@@ -24,6 +25,7 @@ export interface XAdapterOptions {
   onStatusChange?: (status: PlatformLinkStatus) => void;
   onError?: (error: unknown) => void;
   onLiveStats?: (stats: { viewerCount: number }) => void;
+  onBroadcastResolved?: (broadcastId: string) => void;
   log?: (msg: string) => void;
 }
 
@@ -40,7 +42,9 @@ export class XChatAdapter implements PlatformChatAdapter {
 
   private connected = false;
   private stopLive: (() => void) | null = null;
+  private domScraper: XDomChatScraper | null = null;
   private bootstrap: XChatBootstrap | null = null;
+  private readonly recentMessageFingerprints = new Map<string, number>();
   private readonly messageHandlers = new Set<(msg: ChatMessage) => void>();
   private readonly eventHandlers = new Set<(ev: StreamEvent) => void>();
 
@@ -62,14 +66,13 @@ export class XChatAdapter implements PlatformChatAdapter {
 
       const bootstrap = await bootstrapChat(broadcastId, guestToken);
       this.bootstrap = bootstrap;
-      // The live + viewer count work for any public broadcast, but anonymous
-      // guests can only read the chat when it's public. Surface friends-only /
-      // restricted chats explicitly so an empty feed isn't a silent mystery.
+      this.options.onBroadcastResolved?.(bootstrap.broadcastId);
+      // Low-latency/restricted broadcasts often expose only occupancy on the
+      // legacy guest socket. The signed-in hidden page below supplies the real
+      // chat; keep this log useful when that session is missing.
       if (!bootstrap.chatReadable) {
         this.options.log?.(
-          `X broadcast for "@${normalizeHandle(this.options.handle)}" is live, but its chat is restricted ` +
-          `(${bootstrap.chatPermissionType ?? 'non-public'}) — messages can't be read anonymously. ` +
-          `Live status and viewer count still work.`,
+          `X broadcast chat uses the signed-in page fallback (${bootstrap.chatPermissionType ?? 'non-public'}).`,
         );
       }
       const streamLabel = normalizeHandle(this.options.handle) || bootstrap.host || undefined;
@@ -94,6 +97,18 @@ export class XChatAdapter implements PlatformChatAdapter {
         },
       );
 
+      if (!bootstrap.chatReadable) {
+        this.domScraper = new XDomChatScraper(
+          (msg) => this.emitParsedMessage(msg, bootstrap, streamLabel, hostLower, msg.isInitial),
+          this.options.log,
+        );
+        try {
+          await this.domScraper.start(bootstrap.url);
+        } catch (cause) {
+          this.options.log?.(`X signed-in chat fallback failed: ${cause instanceof Error ? cause.message : String(cause)}`);
+        }
+      }
+
       this.connected = true;
       this.options.onLiveStats?.({ viewerCount: bootstrap.viewerCount });
       this.options.onStatusChange?.('connected');
@@ -111,6 +126,9 @@ export class XChatAdapter implements PlatformChatAdapter {
       try { this.stopLive(); } catch { /* ignore */ }
       this.stopLive = null;
     }
+    this.domScraper?.stop();
+    this.domScraper = null;
+    this.recentMessageFingerprints.clear();
     this.bootstrap = null;
     this.options.onStatusChange?.('disconnected');
   }
@@ -159,7 +177,27 @@ export class XChatAdapter implements PlatformChatAdapter {
   }
 
   private emitMsg(msg: ChatMessage): void {
+    const fingerprint = `${msg.userId ?? msg.author}\n${msg.content}`;
+    const now = Date.now();
+    const previous = this.recentMessageFingerprints.get(fingerprint);
+    if (previous !== undefined && now - previous < 10_000) return;
+    this.recentMessageFingerprints.set(fingerprint, now);
+    if (this.recentMessageFingerprints.size > 2_000) {
+      for (const [key, seenAt] of this.recentMessageFingerprints) {
+        if (now - seenAt > 60_000) this.recentMessageFingerprints.delete(key);
+      }
+    }
     for (const h of this.messageHandlers) { try { h(msg); } catch { /* ignore */ } }
+  }
+
+  private emitParsedMessage(
+    msg: XChatMessage,
+    bootstrap: XChatBootstrap,
+    streamLabel: string | undefined,
+    hostLower: string | null,
+    isHistory: boolean,
+  ): void {
+    this.emitMsg(this.toChatMessage(msg, bootstrap, streamLabel, hostLower, isHistory));
   }
 }
 

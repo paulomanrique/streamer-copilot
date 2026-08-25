@@ -96,9 +96,7 @@ export interface XChatBootstrap {
   viewerCount: number;
   /** Raw X chat permission type, e.g. 'StreamTypePublic' / 'StreamTypeOnlyFriends'. */
   chatPermissionType: string | null;
-  /** Whether the chat is readable by an anonymous guest. False for friends-only
-   *  / restricted broadcasts — the connection still works (live + viewer count),
-   *  but no chat messages are delivered to a guest. */
+  /** Whether the public chatman socket is expected to deliver chat messages. */
   chatReadable: boolean;
 }
 
@@ -357,9 +355,6 @@ export async function bootstrapChat(broadcastId: string, guestToken: string): Pr
     { headers: xApiHeaders(guestToken) },
   );
   if (!status.chatToken) throw new Error(`No chatToken for X broadcast ${broadcastId}`);
-  // Anonymous guests can only read the chat when it's public. Friends-only /
-  // restricted broadcasts (chatPermissionType !== 'StreamTypePublic') still
-  // bootstrap and report viewers, but deliver no chat messages to a guest.
   const chatPermissionType = typeof status.chatPermissionType === 'string' ? status.chatPermissionType : null;
   const chatReadable = !chatPermissionType || chatPermissionType === 'StreamTypePublic';
 
