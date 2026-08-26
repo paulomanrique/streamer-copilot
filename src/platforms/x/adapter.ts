@@ -56,9 +56,14 @@ export class XChatAdapter implements PlatformChatAdapter {
     this.options.onStatusChange?.('connecting');
     try {
       const guestToken = await activateGuestToken();
+      // An explicitly configured broadcast URL wins over auto-detection: the
+      // streamer only fills it in to force a specific broadcast (auto-detect
+      // picked the wrong/stale one, or isn't available without an X login).
+      // Letting detection win would make editing the URL a no-op.
+      const pastedBroadcastId = parseBroadcastId(this.options.broadcastUrl);
       const broadcastId =
-        (await resolveLiveBroadcastId(this.options.handle, guestToken, this.options.log))
-        ?? parseBroadcastId(this.options.broadcastUrl);
+        pastedBroadcastId
+        ?? (await resolveLiveBroadcastId(this.options.handle, guestToken, this.options.log));
       if (!broadcastId) {
         throw new Error(
           `X broadcast not found for "@${normalizeHandle(this.options.handle)}". The user must be live, or paste the broadcast URL.`,

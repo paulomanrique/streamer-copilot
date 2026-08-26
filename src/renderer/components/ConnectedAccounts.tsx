@@ -143,7 +143,7 @@ export function ConnectedAccounts() {
                   </div>
                   <div className="flex gap-1 items-center">
                     {provider?.AccountActions ? (
-                      <provider.AccountActions account={account} />
+                      <provider.AccountActions account={account} onChanged={() => void refresh()} />
                     ) : null}
                     {provider?.login ? (
                       <button

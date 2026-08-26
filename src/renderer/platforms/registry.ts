@@ -129,8 +129,10 @@ export interface PlatformProvider extends PlatformVisuals, PlatformBehavior {
   /** Extra buttons rendered on the account card — before Login/Connect/Disconnect.
    *  Each provider declares here provider-specific actions that don't fit the
    *  common bar (e.g. YouTube needs "Trocar canal" to pick which channel of
-   *  the Google account sends messages). */
-  AccountActions?: ComponentType<{ account: PlatformAccount }>;
+   *  the Google account sends messages). `onChanged` re-reads the account list
+   *  so an action that edits the account itself (label, channel, providerData)
+   *  doesn't leave the card — and its own `account` prop — stale. */
+  AccountActions?: ComponentType<{ account: PlatformAccount; onChanged: () => void }>;
   /** Returns null if valid, otherwise an error message. */
   validate?(channel: string, providerData: Record<string, unknown>): string | null;
   /** Default label suggestion when user hasn't typed one. */

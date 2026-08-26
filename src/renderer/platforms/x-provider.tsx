@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import type { XLiveStats } from '../../shared/types.js';
 import { registerPlatformProvider, type AuthStepProps } from './registry.js';
+import { XAccountActions } from './x-broadcast-url-editor.js';
 import { fmtNum } from './live-entry.js';
 
 function normalizeXHandle(raw: string): string {
@@ -61,7 +62,7 @@ function XAuthStep({ draft, updateDraft, channel, setChannel, setError }: AuthSt
         </button>
       </div>
       <div>
-        <label className="block text-xs uppercase text-gray-500 mb-1">Broadcast URL (fallback, optional)</label>
+        <label className="block text-xs uppercase text-gray-500 mb-1">Broadcast URL (opcional)</label>
         <input
           type="text"
           placeholder="https://x.com/i/broadcasts/..."
@@ -70,7 +71,8 @@ function XAuthStep({ draft, updateDraft, channel, setChannel, setError }: AuthSt
           className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-100"
         />
         <p className="text-xs text-gray-500 mt-2">
-          Sem login (ou se a auto-detecção falhar), cole a URL da live aqui e ela será usada direto.
+          Cole a URL da live para forçar uma transmissão específica — ela tem prioridade sobre a
+          auto-detecção. Pode trocar depois em Conexões → X → <strong className="text-gray-300">URL da live</strong>.
         </p>
       </div>
     </div>
@@ -130,6 +132,7 @@ registerPlatformProvider({
     return username ? `https://x.com/${encodeURIComponent(username)}` : '';
   },
   AuthStep: XAuthStep,
+  AccountActions: XAccountActions,
   validate(channel) {
     if (!channel) return 'X handle is required';
     return null;
