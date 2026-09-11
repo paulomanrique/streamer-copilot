@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo } from 'react';
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
 
 import type { AppLanguage } from '../../shared/types.js';
@@ -28,10 +28,19 @@ export function I18nProvider({ language, setLanguage, children }: I18nProviderPr
     document.documentElement.lang = language;
   }, [language]);
 
+  // Language as of the last commit. Layout effects run inside the commit,
+  // before the MutationObserver callbacks it triggers, so a translation pass
+  // queued by the pt-BR observer can tell the UI already moved on.
+  const languageRef = useRef(language);
+  useLayoutEffect(() => {
+    languageRef.current = language;
+  }, [language]);
+
   useEffect(() => {
     if (language !== 'pt-BR') return undefined;
 
     let isApplying = false;
+    let frame: number | null = null;
     const translateNode = (node: Node) => {
       if (node.nodeType === Node.TEXT_NODE) {
         if (node.parentElement?.closest('[data-no-i18n="true"]')) return;
@@ -55,6 +64,12 @@ export function I18nProvider({ language, setLanguage, children }: I18nProviderPr
     };
 
     const applyTranslations = () => {
+      frame = null;
+      // Switching pt-BR → en-US remounts the UI in English; that remount is a
+      // DOM mutation the still-connected observer schedules a pass for. Without
+      // this guard the pass re-translated the fresh English UI to Portuguese
+      // after the observer was already gone, leaving it stuck half-translated.
+      if (languageRef.current !== 'pt-BR') return;
       if (isApplying || !document.body) return;
       isApplying = true;
       translateNode(document.body);
@@ -62,7 +77,9 @@ export function I18nProvider({ language, setLanguage, children }: I18nProviderPr
     };
 
     applyTranslations();
-    const observer = new MutationObserver(() => window.requestAnimationFrame(applyTranslations));
+    const observer = new MutationObserver(() => {
+      if (frame === null) frame = window.requestAnimationFrame(applyTranslations);
+    });
     observer.observe(document.body, {
       childList: true,
       subtree: true,
@@ -71,7 +88,10 @@ export function I18nProvider({ language, setLanguage, children }: I18nProviderPr
       attributeFilter: ['placeholder', 'title', 'aria-label'],
     });
 
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (frame !== null) window.cancelAnimationFrame(frame);
+    };
   }, [language]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
