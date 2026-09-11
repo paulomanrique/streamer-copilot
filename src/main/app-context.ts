@@ -4225,10 +4225,24 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         resolved.add('twitch');
         continue;
       }
-      if (target === 'kick') resolved.add('kick');
+      if (target === 'kick') {
+        resolved.add('kick');
+        continue;
+      }
       // tiktok: read-only adapter, announcements are silently skipped.
+      if (isRegistryProviderSendable(target)) resolved.add(target);
     }
     return Array.from(resolved);
+  }
+
+  /** Registry-driven fallback for platforms without a bespoke branch in the
+   *  target resolvers (X, LinkedIn, …): the provider accepts outbound sends
+   *  and reports itself connected. */
+  function isRegistryProviderSendable(target: PlatformId): boolean {
+    const provider = mainPlatforms.get(target);
+    if (!provider?.supportsScheduledSend) return false;
+    const snapshot = provider.getAggregateStatus();
+    return !(snapshot instanceof Promise) && snapshot.status === 'connected';
   }
 
   function resolveDispatchTargets(requestedTargets: PlatformId[]): PlatformId[] {
@@ -4247,6 +4261,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
         if (youtubeApiAdapter.hasActiveStreams()) resolved.add('youtube-api');
         continue;
       }
+      if (isRegistryProviderSendable(target)) resolved.add(target);
     }
     return Array.from(resolved);
   }
