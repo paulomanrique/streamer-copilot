@@ -70,6 +70,11 @@ export default function App() {
   const [profileFormDirectory, setProfileFormDirectory] = useState('');
   const [profileFormLanguage, setProfileFormLanguage] = useState<AppLanguage>(DEFAULT_APP_LANGUAGE);
   const [selectorProfileId, setSelectorProfileId] = useState('');
+  /** Profile whose session main is running. Stays null until a profile is
+   *  confirmed (picker, remembered auto-select, or the only profile) — the
+   *  workspace only mounts after that, so nothing reads the previous
+   *  profile's accounts, lives or lists in the meantime. */
+  const [sessionProfileId, setSessionProfileId] = useState<string | null>(null);
   const [rememberProfileSelection, setRememberProfileSelection] = useState(false);
   const [currentSection, setCurrentSection] = useState<AppSection>('dashboard');
   const [generalSettings, setGeneralSettings] = useState<GeneralSettings>(DEFAULT_GENERAL_SETTINGS);
@@ -105,23 +110,17 @@ export default function App() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [info, snapshot, recentChat, nextGeneralSettings, platformStatuses, tiers, lists] = await Promise.all([
+        // Profile-scoped data (chat, platform statuses, tiers, lists) loads in
+        // onSelectProfile, once main has started the chosen profile's session.
+        const [info, snapshot, nextGeneralSettings] = await Promise.all([
           window.copilot.getAppInfo(),
           window.copilot.listProfiles(),
-          window.copilot.getRecentChat(),
           window.copilot.getGeneralSettings(),
-          window.copilot.getPlatformStatuses(),
-          window.copilot.getSubscriberTiers(),
-          window.copilot.listUserLists(),
         ]);
         setAppInfo(info);
         setProfiles(snapshot);
         applyAppLanguageFromSnapshot(snapshot);
-        setChatSnapshot(recentChat);
         setGeneralSettings(nextGeneralSettings);
-        hydratePlatformStatuses(platformStatuses);
-        setSubscriberTiers(tiers);
-        setUserLists(lists);
         setSelectorProfileId(snapshot.activeProfileId);
         setRememberProfileSelection(snapshot.autoSelectActiveProfile);
         // Smart skip: don't bother prompting when there's only one profile,
@@ -157,11 +156,20 @@ export default function App() {
   const onSelectProfile = async (profileId: string) => {
     try {
       const snapshot = await window.copilot.selectProfile({ profileId });
-      const recentChat = await window.copilot.getRecentChat();
+      const [recentChat, platformStatuses, tiers, lists] = await Promise.all([
+        window.copilot.getRecentChat(),
+        window.copilot.getPlatformStatuses(),
+        window.copilot.getSubscriberTiers(),
+        window.copilot.listUserLists(),
+      ]);
       setProfiles(snapshot);
       applyAppLanguageFromSnapshot(snapshot);
       setChatSnapshot(recentChat);
+      hydratePlatformStatuses(platformStatuses);
+      setSubscriberTiers(tiers);
+      setUserLists(lists);
       setSelectorProfileId(snapshot.activeProfileId);
+      setSessionProfileId(snapshot.activeProfileId);
       setError(null);
       return snapshot;
     } catch (cause) {
@@ -189,9 +197,20 @@ export default function App() {
     applyAppLanguageFromSnapshot(snapshot);
   };
 
+  /** With a session running, main only registers a new profile (the active
+   *  one can't move under a live session) — relaunch into it instead. */
+  const enterNewProfile = async (snapshot: ProfilesSnapshot) => {
+    if (!sessionProfileId) return false;
+    const created = snapshot.profiles.find((profile) => !profiles.some((known) => known.id === profile.id));
+    if (!created) return false;
+    await onSwitchProfile(created.id);
+    return true;
+  };
+
   const createProfile = async (name: string, directory: string, appLanguage: AppLanguage) => {
     try {
       const snapshot = await window.copilot.createProfile({ name: name.trim(), directory, appLanguage });
+      if (await enterNewProfile(snapshot)) return;
       applyProfilesSnapshot(snapshot);
       setSelectorProfileId(snapshot.activeProfileId);
       setIsProfileFormOpen(false);
@@ -228,6 +247,7 @@ export default function App() {
         name: name.trim(),
         directory,
       });
+      if (await enterNewProfile(snapshot)) return;
       applyProfilesSnapshot(snapshot);
       setIsProfileFormOpen(false);
       setProfileFormDirectory('');
@@ -320,7 +340,7 @@ export default function App() {
   };
 
   const activeProfileName = activeProfile?.name ?? '-';
-  const hasActiveProfile = Boolean(activeProfileId);
+  const hasActiveProfile = Boolean(sessionProfileId);
 
   const saveGeneralSettings = async (settings: GeneralSettings) => {
     try {

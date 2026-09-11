@@ -155,7 +155,7 @@ import {
   twitchLoginListSchema,
   twitchBadgeIdListSchema,
 } from '../shared/schemas.js';
-import type { AppInfo, ChatMessage, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, MusicQueueItem, MusicRequestSettings, OverlayDefaults, OverlayPreferencesMap, PlatformAccount, PlatformId, PlatformLinkStatus, Raffle, SoundSettings, StreamEvent, StreamEventType, SubscriberTierCatalog, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, UserList, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
+import type { AppInfo, ChatMessage, KickAuthStatus, KickConnectionStatus, KickLiveStats, KickSettings, MusicQueueItem, MusicRequestSettings, OverlayDefaults, OverlayPreferencesMap, PlatformAccount, PlatformId, PlatformLinkStatus, ProfilesSnapshot, Raffle, SoundSettings, StreamEvent, StreamEventType, SubscriberTierCatalog, TextSettings, TikTokConnectionStatus, TwitchConnectionStatus, TwitchLiveStats, UserList, WelcomeSettings, YouTubeSettings, YouTubeStreamInfo } from '../shared/types.js';
 
 const TWITCH_CLIENT_ID = 'vtwg8tzuv1nlip4qh9n6sxx2p76g0s';
 const TWITCH_REDIRECT_PORT = 32999;
@@ -366,26 +366,23 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     if (store) musicSettingsCache = await store.load();
   };
 
-  // Load caches on startup (non-blocking, best-effort).
-  // Also resolve the active profile directory so all per-profile JSON repos are immediately usable.
-  // Resolve active profile directory before starting OBS, which needs it synchronously via hasUserSettings().
-  // Returns a promise so obsService.start() can be deferred until after the directory is known.
-  const activeProfileDirectoryReady = (async () => {
-    const snapshot = await profileStore.list();
-    const active = snapshot.profiles.find((p) => p.id === snapshot.activeProfileId);
-    if (active) activeProfileDirectory = active.directory;
-  })();
-  void reloadSoundSettingsCache();
-  void reloadTextSettingsCache();
-  void reloadWelcomeSettingsCache();
-  void reloadMusicSettingsCache();
-  void activeProfileDirectoryReady.then(() => reloadSubscriberTiersCache());
-  void activeProfileDirectoryReady.then(() => reloadUserListsCache());
-  void activeProfileDirectoryReady.then(async () => {
+  // The profile session starts when the renderer confirms a profile through
+  // `profilesSelect` (boot picker, remembered auto-select, or the only
+  // profile). Everything profile-bound — platform auto-connects, YouTube
+  // monitoring, OBS, per-profile caches — waits for it. Resolving from
+  // profiles.json at boot instead connected the LAST active profile's lives
+  // before the user picked one, and the picked profile inherited them.
+  // Moving to another profile once a session runs relaunches the app.
+  let sessionProfileId: string | null = null;
+  let startProfileSession!: () => void;
+  const profileSessionReady = new Promise<void>((resolve) => { startProfileSession = resolve; });
+  void profileSessionReady.then(() => reloadSubscriberTiersCache());
+  void profileSessionReady.then(() => reloadUserListsCache());
+  void profileSessionReady.then(async () => {
     await reloadOverlayPreferencesCache();
     overlayServer.setOverlayPreferences(overlayPreferencesCache);
   });
-  void activeProfileDirectoryReady.then(async () => {
+  void profileSessionReady.then(async () => {
     await reloadOverlayDefaultsCache();
     overlayServer.setOverlayDefaults(overlayDefaultsCache);
   });
@@ -495,7 +492,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       }
     },
   });
-  void activeProfileDirectoryReady.then(() => musicService.loadPersistedQueue());
+  void profileSessionReady.then(() => musicService.loadPersistedQueue());
 
   let rendererSpeechSynthesisAvailable = process.platform !== 'linux';
   let isShuttingDown = false;
@@ -1907,43 +1904,37 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   ipcMain.handle(IPC_CHANNELS.profilesList, async () => profileStore.list());
   ipcMain.handle(IPC_CHANNELS.profilesSelect, async (_, raw) => {
-    // Used by the boot-time profile picker (no app state yet) and any caller
-    // that wants a soft selection without restarting. Long-lived services
-    // (adapters, OAuth, schedulers, settings caches) keep their state — for a
-    // hard reset use `profilesSwitchAndRelaunch` instead.
-    const snapshot = await profileStore.select(selectProfileInputSchema.parse(raw).profileId);
-    const active = snapshot.profiles.find((p) => p.id === snapshot.activeProfileId);
-    if (active) {
-      activeProfileDirectory = active.directory;
-      await mainFeatures.switchProfileAll(activeProfileDirectory);
+    // Starts the profile session (see `profileSessionReady`). Re-selecting the
+    // running profile (a renderer reload) is a no-op; selecting a different
+    // one relaunches, because adapters, retry timers, caches and live stats
+    // are all bound to the running profile.
+    const { profileId } = selectProfileInputSchema.parse(raw);
+    if (sessionProfileId && sessionProfileId !== profileId) {
+      return switchProfileAndRelaunch(profileId);
     }
-    chatService.clearRecent();
-    suggestionService.clearSessionEntries();
-    welcomeService.reset();
-    musicService.reset();
-    // Cooldown maps are keyed by command id; cloned profiles share ids, so a
-    // cooldown from the previous profile would silently block the "same"
-    // command in the new one.
-    soundService.reset();
-    textService.reset();
-    voiceService.reset();
-    await reloadSoundSettingsCache();
-    await reloadTextSettingsCache();
-    await reloadWelcomeSettingsCache();
-    await reloadMusicSettingsCache();
-    // Re-broadcast every platform's aggregate status now the profile is active,
-    // so accounts already connected from a previous session show as connected in
-    // the renderer (the initial getPlatformStatuses can run before the profile
-    // resolves). Generic over the registry — no per-platform branches.
+    const snapshot = await profileStore.select(profileId);
+    const active = snapshot.profiles.find((p) => p.id === snapshot.activeProfileId);
+    if (active && !sessionProfileId) {
+      sessionProfileId = active.id;
+      activeProfileDirectory = active.directory;
+      await Promise.all([
+        reloadSoundSettingsCache(),
+        reloadTextSettingsCache(),
+        reloadWelcomeSettingsCache(),
+        reloadMusicSettingsCache(),
+      ]);
+      startProfileSession();
+    }
+    // A reloaded renderer starts from an empty store — re-send every
+    // platform's aggregate status. Generic over the registry.
     for (const provider of mainPlatforms.list()) void pushAggregateStatus(provider);
     return snapshot;
   });
 
-  ipcMain.handle(IPC_CHANNELS.profilesSwitchAndRelaunch, async (_, raw) => {
-    // Used from the settings list, where the user is already running a
-    // profile. Switching mid-session touches every long-lived service — we
-    // relaunch instead of trying to reset them in place.
-    const snapshot = await profileStore.select(selectProfileInputSchema.parse(raw).profileId);
+  async function switchProfileAndRelaunch(profileId: string): Promise<ProfilesSnapshot> {
+    // Switching mid-session touches every long-lived service — we relaunch
+    // instead of trying to reset them in place.
+    const snapshot = await profileStore.select(profileId);
     // Reset the boot auto-select flag — if the user is consciously switching
     // profiles, the next launch should ask again.
     await profileStore.setAutoSelectActiveProfile(false);
@@ -1963,15 +1954,38 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       }
     });
     return snapshot;
-  });
+  }
+
+  ipcMain.handle(IPC_CHANNELS.profilesSwitchAndRelaunch, async (_, raw) => (
+    // Used from the settings list, where the user is already running a profile.
+    switchProfileAndRelaunch(selectProfileInputSchema.parse(raw).profileId)
+  ));
   ipcMain.handle(IPC_CHANNELS.profilesSetAutoSelect, async (_, raw) => {
     const i = setAutoSelectActiveProfileSchema.parse(raw);
     return profileStore.setAutoSelectActiveProfile(i.autoSelect);
   });
-  ipcMain.handle(IPC_CHANNELS.profilesCreate, async (_, raw) => { const i = createProfileInputSchema.parse(raw); return profileStore.create(i.name, i.directory, i.appLanguage); });
+  // With a session running, create/clone only add the profile: moving
+  // profiles.json's active id under a live session split main between two
+  // profiles. The renderer relaunches into the new profile instead.
+  ipcMain.handle(IPC_CHANNELS.profilesCreate, async (_, raw) => {
+    const i = createProfileInputSchema.parse(raw);
+    return profileStore.create(i.name, i.directory, i.appLanguage, { activate: sessionProfileId === null });
+  });
   ipcMain.handle(IPC_CHANNELS.profilesRename, async (_, raw) => { const i = renameProfileInputSchema.parse(raw); return profileStore.rename(i.profileId, i.name); });
-  ipcMain.handle(IPC_CHANNELS.profilesClone, async (_, raw) => { const i = cloneProfileInputSchema.parse(raw); return profileStore.clone(i.profileId, i.name, i.directory); });
-  ipcMain.handle(IPC_CHANNELS.profilesDelete, async (_, raw) => profileStore.delete(deleteProfileInputSchema.parse(raw).profileId));
+  ipcMain.handle(IPC_CHANNELS.profilesClone, async (_, raw) => {
+    const i = cloneProfileInputSchema.parse(raw);
+    return profileStore.clone(i.profileId, i.name, i.directory, { activate: sessionProfileId === null });
+  });
+  ipcMain.handle(IPC_CHANNELS.profilesDelete, async (_, raw) => {
+    const { profileId } = deleteProfileInputSchema.parse(raw);
+    const snapshot = await profileStore.delete(profileId);
+    // Deleting the running profile leaves nothing bound to run — relaunch
+    // into the profile the store fell back to.
+    if (sessionProfileId === profileId && snapshot.activeProfileId) {
+      return switchProfileAndRelaunch(snapshot.activeProfileId);
+    }
+    return snapshot;
+  });
   ipcMain.handle(IPC_CHANNELS.profilesPickDirectory, async (e) => {
     const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender)!, { properties: ['openDirectory', 'createDirectory'] });
     return r.canceled ? null : r.filePaths[0];
@@ -2641,7 +2655,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   // on boot. Only fall back to the legacy single-credentials store when no
   // Twitch accounts exist (back-compat for installs that haven't migrated).
   void (async () => {
-    await activeProfileDirectoryReady;
+    await profileSessionReady;
     try {
       const accounts = await accountRepository.list();
       const twitchAccounts = accounts.filter(
@@ -2689,6 +2703,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   })();
 
   void (async () => {
+    await profileSessionReady;
     if (!youtubeAdapter) return;
     const settings = await loadYoutubeSettings().catch(() => null);
     if (!settings) return;
@@ -2707,7 +2722,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   void (async () => {
     // Wait for the profile directory to resolve — accountRepository.list()
     // throws otherwise during cold start.
-    await activeProfileDirectoryReady;
+    await profileSessionReady;
     try {
       await refreshYoutubeApiAccounts();
     } catch (cause) {
@@ -2720,7 +2735,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   // a multi-adapter child per enabled tiktok account. Fall back to the legacy
   // single-account settings store for installs that haven't migrated.
   void (async () => {
-    await activeProfileDirectoryReady;
+    await profileSessionReady;
     try {
       const accounts = await accountRepository.list();
       const tiktokAccounts = accounts.filter((a) => a.providerId === 'tiktok' && a.enabled);
@@ -2760,7 +2775,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   // Auto-reconnect X broadcasts on startup — one watcher per enabled x account.
   // Each watcher retries until the streamer goes live.
   void (async () => {
-    await activeProfileDirectoryReady;
+    await profileSessionReady;
     try {
       const accounts = await accountRepository.list();
       const xAccounts = accounts.filter((a) => a.providerId === 'x' && a.enabled);
@@ -2784,7 +2799,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   // Auto-reconnect LinkedIn lives on startup — one watcher per enabled account.
   void (async () => {
-    await activeProfileDirectoryReady;
+    await profileSessionReady;
     try {
       const accounts = await accountRepository.list();
       for (const account of accounts.filter((a) => a.providerId === 'linkedin' && a.enabled)) {
@@ -2808,7 +2823,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   // a multi-adapter child per enabled kick account. Fall back to the legacy
   // single-account settings store for installs that haven't migrated.
   void (async () => {
-    await activeProfileDirectoryReady;
+    await profileSessionReady;
     try {
       const accounts = await accountRepository.list();
       const kickAccounts = accounts.filter((a) => a.providerId === 'kick' && a.enabled);
@@ -3636,7 +3651,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
   mainFeatures.register(liveOutputsModule);
   void mainFeatures.initializeAll();
-  void activeProfileDirectoryReady
+  void profileSessionReady
     .then(() => mainFeatures.switchProfileAll(activeProfileDirectory))
     .catch((cause) => logService.error('live-outputs', 'Failed to initialize profile outputs', {
       error: cause instanceof Error ? cause.message : String(cause),
@@ -3880,7 +3895,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
 
   async function backfillAccountsFromLegacyStores(): Promise<void> {
-    await activeProfileDirectoryReady;
+    await profileSessionReady;
     const existing = await accountRepository.list();
     const seenProviders = new Set(existing.map((a) => a.providerId));
 
@@ -3990,10 +4005,14 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       error: cause instanceof Error ? cause.message : String(cause),
     });
   });
-  raffleDeadlineRunner.start();
-  pollDeadlineRunner.start();
-  schedulerService.start();
-  void activeProfileDirectoryReady.then(() => obsService.start());
+  // Profile-bound runners read the profile's raffles, polls and scheduled
+  // commands — nothing to run until a profile session starts.
+  void profileSessionReady.then(() => {
+    raffleDeadlineRunner.start();
+    pollDeadlineRunner.start();
+    schedulerService.start();
+    return obsService.start();
+  });
 
   return async () => {
     isShuttingDown = true;

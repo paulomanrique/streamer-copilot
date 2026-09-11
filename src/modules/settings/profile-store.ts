@@ -88,7 +88,14 @@ export class ProfileStore {
     return await this.toSnapshot(state);
   }
 
-  async create(name: string, directory: string, appLanguage: AppLanguage): Promise<ProfilesSnapshot> {
+  /** `activate: false` only registers the profile — used while another
+   *  profile's session is running, so the active id doesn't move under it. */
+  async create(
+    name: string,
+    directory: string,
+    appLanguage: AppLanguage,
+    options: { activate?: boolean } = {},
+  ): Promise<ProfilesSnapshot> {
     const state = await this.readState();
     const normalizedName = name.trim();
     const normalizedDirectory = path.resolve(directory);
@@ -104,7 +111,7 @@ export class ProfileStore {
       directory: normalizedDirectory,
       lastUsedAt: new Date().toISOString(),
     });
-    state.activeProfileId = profileId;
+    if (options.activate !== false) state.activeProfileId = profileId;
 
     await this.writeState(state);
     await this.ensureProfileFiles(state, { createMissingDirectories: true });
@@ -127,7 +134,12 @@ export class ProfileStore {
     return await this.toSnapshot(state);
   }
 
-  async clone(profileId: string, name: string, directory: string): Promise<ProfilesSnapshot> {
+  async clone(
+    profileId: string,
+    name: string,
+    directory: string,
+    options: { activate?: boolean } = {},
+  ): Promise<ProfilesSnapshot> {
     const state = await this.readState();
     const source = state.profiles.find((profile) => profile.id === profileId);
     if (!source) throw new Error(`Profile not found: ${profileId}`);
@@ -168,7 +180,7 @@ export class ProfileStore {
       directory: normalizedDirectory,
       lastUsedAt: new Date().toISOString(),
     });
-    state.activeProfileId = cloneId;
+    if (options.activate !== false) state.activeProfileId = cloneId;
 
     await this.writeState(state);
     return await this.toSnapshot(state);

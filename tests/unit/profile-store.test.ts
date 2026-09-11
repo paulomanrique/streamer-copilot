@@ -67,6 +67,21 @@ describe('ProfileStore', () => {
     await expect(readFile(path.join(profileDirectory, 'settings.json'), 'utf-8')).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
+  it('keeps the running profile active when creating or cloning with activate: false', async () => {
+    const userDataPath = await createTempDir();
+    const store = new ProfileStore(userDataPath);
+    const running = await store.create('Running', path.join(userDataPath, 'running'), 'en-US');
+    const runningId = running.activeProfileId;
+
+    const created = await store.create('Next', path.join(userDataPath, 'next'), 'en-US', { activate: false });
+    expect(created.activeProfileId).toBe(runningId);
+    expect(created.profiles.map((profile) => profile.name)).toEqual(['Running', 'Next']);
+
+    const cloned = await store.clone(runningId, 'Copy', path.join(userDataPath, 'copy'), { activate: false });
+    expect(cloned.activeProfileId).toBe(runningId);
+    expect((await store.list()).activeProfileId).toBe(runningId);
+  });
+
   it('writes pt-BR app language settings when creating a profile', async () => {
     const userDataPath = await createTempDir();
     const profileDirectory = path.join(userDataPath, 'pt-profile');
