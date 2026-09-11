@@ -6,6 +6,7 @@ import { resolveFromRole } from '../../modules/commands/permission-utils.js';
 import { READ_ONLY_CAPABILITIES, type PlatformChatAdapter } from '../base.js';
 import {
   LinkedInDomChatScraper,
+  LinkedInLoginRequiredError,
   type LinkedInDomComment,
   type LinkedInDomSender,
   type LinkedInPageState,
@@ -127,6 +128,17 @@ export class LinkedInChatAdapter implements PlatformChatAdapter {
   // ── Internal ────────────────────────────────────────────────────────────
 
   private handleState(state: LinkedInPageState): void {
+    if (this.connected && state.loginRequired) {
+      // LinkedIn ended the session mid-live (e.g. signed out elsewhere) and a
+      // watchdog reload landed on the login wall. Staying "connected" there
+      // would read nothing forever — surface it so the streamer signs in again.
+      this.connected = false;
+      this.scraper?.stop();
+      this.scraper = null;
+      this.options.onError?.(new LinkedInLoginRequiredError());
+      this.options.onStatusChange?.('error');
+      return;
+    }
     if (state.selfName && state.selfName !== this.selfName) {
       this.selfName = state.selfName;
       // The signed-in member is who sends; knowing the name up front labels

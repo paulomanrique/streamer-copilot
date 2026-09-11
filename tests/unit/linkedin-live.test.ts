@@ -222,3 +222,27 @@ describe('LinkedIn DOM chat scraper', () => {
     await expect(scraper.sendMessage('hello')).rejects.toThrow('Log in to LinkedIn');
   });
 });
+
+describe('LinkedIn chat adapter', () => {
+  it('drops to error when the live page lands on the login wall mid-session', async () => {
+    const { LinkedInChatAdapter } = await import('../../src/platforms/linkedin/adapter.js');
+    const onStatusChange = vi.fn();
+    const onError = vi.fn();
+    const stop = vi.fn();
+    const adapter = new LinkedInChatAdapter({ channel: 'paulo', liveUrl: 'https://www.linkedin.com/events/7504203994987237376/', onStatusChange, onError });
+    const internals = adapter as unknown as {
+      connected: boolean;
+      scraper: unknown;
+      handleState: (state: unknown) => void;
+    };
+    internals.connected = true;
+    internals.scraper = { stop };
+
+    internals.handleState({ ready: false, loginRequired: true, isLive: false, viewerCount: null, path: '/login/', selfName: null });
+
+    expect(stop).toHaveBeenCalledOnce();
+    expect(onStatusChange).toHaveBeenLastCalledWith('error');
+    expect(onError.mock.calls[0]?.[0]).toBeInstanceOf(Error);
+    await expect(adapter.sendMessage('hi')).rejects.toThrow('not connected');
+  });
+});
