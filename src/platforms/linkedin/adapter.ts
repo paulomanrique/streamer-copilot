@@ -48,6 +48,9 @@ export class LinkedInChatAdapter implements PlatformChatAdapter {
   private lastStatsKey = '';
   /** Comments rendered before connect() settles the live id. */
   private pendingComments: LinkedInDomComment[] = [];
+  /** The page is reloaded to recover from network drops and re-renders every
+   *  comment it still lists; only the ones not seen yet go out. */
+  private readonly seenCommentIds = new Set<string>();
   private readonly messageHandlers = new Set<(msg: ChatMessage) => void>();
   private readonly eventHandlers = new Set<(ev: StreamEvent) => void>();
 
@@ -99,6 +102,7 @@ export class LinkedInChatAdapter implements PlatformChatAdapter {
     this.liveId = null;
     this.lastStatsKey = '';
     this.pendingComments = [];
+    this.seenCommentIds.clear();
     this.options.onStatusChange?.('disconnected');
   }
 
@@ -142,6 +146,8 @@ export class LinkedInChatAdapter implements PlatformChatAdapter {
       this.pendingComments.push(comment);
       return;
     }
+    if (this.seenCommentIds.has(comment.commentId)) return;
+    this.seenCommentIds.add(comment.commentId);
     const isHistory = comment.isInitial && comment.timestampMs < this.connectStartedAt - HISTORY_GRACE_MS;
     const isBroadcaster = this.selfName !== null && comment.name === this.selfName;
     const role: PlatformRole = { broadcaster: isBroadcaster };

@@ -11,6 +11,7 @@ type BrowserWindowRuntime = {
     setAudioMuted: (muted: boolean) => void;
     setFrameRate?: (fps: number) => void;
     getURL: () => string;
+    removeAllListeners?: (eventName: string) => void;
   };
 };
 
@@ -52,7 +53,16 @@ const LINKEDIN_BROWSER_USER_AGENT =
 const CHAT_PREFIX = 'COPILOT_LINKEDIN_CHAT:';
 const STATE_PREFIX = 'COPILOT_LINKEDIN_STATE:';
 const LOG_PREFIX = 'COPILOT_LINKEDIN_LOG:';
+const BEAT_PREFIX = 'COPILOT_LINKEDIN_BEAT';
 const READY_TIMEOUT_MS = 45_000;
+const WATCHDOG_INTERVAL_MS = 30_000;
+/** The page script beats every 15s; missing several means it's hung or gone. */
+const HEARTBEAT_TIMEOUT_MS = 90_000;
+/** A live's viewer counter moves every few seconds to a minute. Nothing at all
+ *  — no comment, no counter change — for this long means the page's realtime
+ *  feed died (e.g. a DNS outage, which never flips navigator.onLine). */
+const STALE_LIVE_MS = 5 * 60_000;
+const RELOAD_BACKOFF_MS = [5_000, 15_000, 30_000, 60_000];
 const LOGIN_PATH = /^\/(?:login|uas\/login|authwall|checkpoint|signup)/;
 
 export class LinkedInLoginRequiredError extends Error {
@@ -108,8 +118,16 @@ export function parseLinkedInPageStateMessage(message: string): LinkedInPageStat
  */
 export class LinkedInDomChatScraper {
   private window: BrowserWindowRuntime | null = null;
+  private pageUrl = '';
   private readonly pendingSenderWaiters = new Set<PendingSenderWaiter>();
   private readyWaiter: { resolve: (state: LinkedInPageState) => void; reject: (cause: Error) => void } | null = null;
+  private watchdogTimer: ReturnType<typeof setInterval> | null = null;
+  private reloadTimer: ReturnType<typeof setTimeout> | null = null;
+  private reloadAttempts = 0;
+  private lastBeatAt = 0;
+  private lastActivityAt = 0;
+  private lastStateKey = '';
+  private isLive = false;
 
   constructor(
     private readonly onComment: (comment: LinkedInDomComment) => void,
@@ -121,6 +139,7 @@ export class LinkedInDomChatScraper {
    *  Throws when the session is logged out or the page never shows a live. */
   async start(pageUrl: string): Promise<LinkedInPageState> {
     this.stop();
+    this.pageUrl = pageUrl;
     const browserWindow = await this.createBrowserWindow();
     if (!browserWindow) throw new Error('LinkedIn adapter could not create the chat scraper window');
     this.window = browserWindow;
@@ -153,7 +172,9 @@ export class LinkedInDomChatScraper {
       }
       if (this.isLoginUrl(browserWindow.webContents.getURL())) throw new LinkedInLoginRequiredError();
       await this.injectScraper();
-      return await ready;
+      const state = await ready;
+      this.startWatchdog(browserWindow);
+      return state;
     } catch (cause) {
       this.stop();
       throw cause;
@@ -164,6 +185,11 @@ export class LinkedInDomChatScraper {
   }
 
   stop(): void {
+    if (this.watchdogTimer) clearInterval(this.watchdogTimer);
+    if (this.reloadTimer) clearTimeout(this.reloadTimer);
+    this.watchdogTimer = null;
+    this.reloadTimer = null;
+    this.reloadAttempts = 0;
     if (this.window && !this.window.isDestroyed()) this.window.destroy();
     this.window = null;
     for (const waiter of [...this.pendingSenderWaiters]) waiter.finish(null);
@@ -205,6 +231,51 @@ export class LinkedInDomChatScraper {
 
   // ── Internal ────────────────────────────────────────────────────────────
 
+  /** Keeps a long-running live readable: LinkedIn's page doesn't recover its
+   *  realtime feed after network drops, so reload it when it looks dead. The
+   *  scraper re-attaches on did-finish-load and callers dedupe by comment id,
+   *  so a reload only ever adds the comments missed while it was down. */
+  private startWatchdog(browserWindow: BrowserWindowRuntime): void {
+    const now = Date.now();
+    this.lastBeatAt = now;
+    this.lastActivityAt = now;
+    browserWindow.webContents.on('did-fail-load', (...args: unknown[]) => {
+      const [, errorCode, errorDescription, , isMainFrame] = args as [unknown, number, string, string, boolean];
+      // -3 is ERR_ABORTED: redirects and our own reloads.
+      if (isMainFrame === false || errorCode === -3) return;
+      this.scheduleReload(`load failed: ${errorDescription || errorCode}`);
+    });
+    browserWindow.webContents.on('render-process-gone', () => this.scheduleReload('page process gone'));
+    browserWindow.webContents.on('did-finish-load', () => { this.reloadAttempts = 0; });
+    this.watchdogTimer = setInterval(() => {
+      const idle = Date.now();
+      if (idle - this.lastBeatAt > HEARTBEAT_TIMEOUT_MS) {
+        this.scheduleReload('page stopped responding');
+      } else if (this.isLive && idle - this.lastActivityAt > STALE_LIVE_MS) {
+        this.scheduleReload('no live activity for 5 minutes');
+      }
+    }, WATCHDOG_INTERVAL_MS);
+  }
+
+  private scheduleReload(reason: string): void {
+    if (this.reloadTimer || !this.window || this.window.isDestroyed()) return;
+    const delay = RELOAD_BACKOFF_MS[Math.min(this.reloadAttempts, RELOAD_BACKOFF_MS.length - 1)];
+    this.reloadAttempts += 1;
+    this.log?.(`Reloading the LinkedIn live page in ${delay / 1000}s (${reason})`);
+    this.reloadTimer = setTimeout(() => {
+      this.reloadTimer = null;
+      const window = this.window;
+      if (!window || window.isDestroyed()) return;
+      // Reset the clocks so the reload itself gets a full window to recover.
+      this.lastBeatAt = Date.now();
+      this.lastActivityAt = Date.now();
+      window.loadURL(this.pageUrl, { userAgent: LINKEDIN_BROWSER_USER_AGENT }).catch((cause: unknown) => {
+        const code = cause && typeof cause === 'object' && 'code' in cause ? String(cause.code) : '';
+        if (code !== 'ERR_ABORTED') this.scheduleReload(`reload failed: ${cause instanceof Error ? cause.message : String(cause)}`);
+      });
+    }, delay);
+  }
+
   private isLoginUrl(url: string): boolean {
     try {
       return LOGIN_PATH.test(new URL(url).pathname);
@@ -214,12 +285,23 @@ export class LinkedInDomChatScraper {
   }
 
   private handleConsoleMessage(message: string): void {
+    if (message.startsWith(BEAT_PREFIX)) {
+      this.lastBeatAt = Date.now();
+      return;
+    }
     if (message.startsWith(LOG_PREFIX)) {
       this.log?.(message.slice(LOG_PREFIX.length));
       return;
     }
     const state = parseLinkedInPageStateMessage(message);
     if (state) {
+      this.lastBeatAt = Date.now();
+      this.isLive = state.isLive;
+      const key = `${state.isLive}:${state.viewerCount}`;
+      if (key !== this.lastStateKey) {
+        this.lastStateKey = key;
+        this.lastActivityAt = Date.now();
+      }
       if (state.loginRequired) this.readyWaiter?.reject(new LinkedInLoginRequiredError());
       else if (state.ready) this.readyWaiter?.resolve(state);
       this.onState(state);
@@ -227,6 +309,7 @@ export class LinkedInDomChatScraper {
     }
     const comment = parseLinkedInDomCommentMessage(message);
     if (!comment) return;
+    this.lastActivityAt = Date.now();
     // Not gated on isInitial: in a live with no comments yet, our own first
     // comment is also the page's first row.
     const waiter = [...this.pendingSenderWaiters].find((candidate) => candidate.content === comment.text);
@@ -502,6 +585,8 @@ const SCRAPER_SCRIPT = `
       if (!state.root?.isConnected) state.root = null;
       scheduleScan();
     }, 5_000);
+    // Liveness signal for the main-process watchdog.
+    setInterval(() => console.log('${BEAT_PREFIX}'), 15_000);
     scheduleScan();
     return true;
   })()
