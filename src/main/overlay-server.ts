@@ -3,7 +3,7 @@ import https from 'node:https';
 import { createRequire } from 'node:module';
 
 import type { AddressInfo } from 'node:net';
-import { ANDROID_VR_USER_AGENT } from './music-stream-resolver.js';
+import type { ResolvedAudioStream } from './music-stream-resolver.js';
 
 import { OVERLAY_FONTS } from '../shared/constants.js';
 import type { RecentChatSnapshot } from '../shared/ipc.js';
@@ -133,7 +133,7 @@ export class OverlayServer {
    * matching User-Agent and forwards bytes from the same origin as the
    * browser source (127.0.0.1:port), so no preflight.
    */
-  private readonly audioSourceByVideoId = new Map<string, string>();
+  private readonly audioSourceByVideoId = new Map<string, ResolvedAudioStream>();
   /**
    * Latest overlay preferences seeded from the per-profile JSON store. The
    * boot script of an overlay reads its slice via GET /overlay-prefs/state
@@ -590,8 +590,8 @@ export class OverlayServer {
    *  same-origin URL the browser source should use as `<audio src>`. The
    *  proxy keeps only the most recent handful of videoIds so the map
    *  doesn't grow unbounded. */
-  setNowPlayingAudioSource(videoId: string, sourceUrl: string): string {
-    this.audioSourceByVideoId.set(videoId, sourceUrl);
+  setNowPlayingAudioSource(videoId: string, source: ResolvedAudioStream): string {
+    this.audioSourceByVideoId.set(videoId, source);
     if (this.audioSourceByVideoId.size > 16) {
       const oldest = this.audioSourceByVideoId.keys().next().value;
       if (oldest) this.audioSourceByVideoId.delete(oldest);
@@ -3205,29 +3205,26 @@ ${buildOverlayStyleScript('highlight-message')}
  * googlevideo cross-checks UA against the `c=` query param. Other relevant
  * headers are forwarded in both directions.
  */
-function proxyAudio(sourceUrl: string, req: http.IncomingMessage, res: http.ServerResponse): void {
+function proxyAudio(source: ResolvedAudioStream, req: http.IncomingMessage, res: http.ServerResponse): void {
   let upstream: URL;
   try {
-    upstream = new URL(sourceUrl);
+    upstream = new URL(source.url);
   } catch {
     res.writeHead(502, { 'Content-Type': 'text/plain' });
     res.end('Bad source URL');
     return;
   }
 
-  // googlevideo rejects any request WITHOUT a `Range` header with 403
-  // (verified empirically: no Range -> 403, any Range -> 206). Chromium's
-  // `<audio>` typically issues the first request without a Range — it
-  // wants the whole file — which lands squarely on the 403. Forcing
-  // `bytes=0-` here makes googlevideo return 206 from the first request,
-  // and `<audio>` handles 206 fine.
+  // Some googlevideo clients reject requests WITHOUT a `Range` header with
+  // 403. Chromium's `<audio>` typically issues the first request without a
+  // Range — it wants the whole file — so forcing `bytes=0-` here makes the
+  // first response a 206, which `<audio>` handles fine.
   //
-  // User-Agent must EXACTLY match the client that signed the URL — the
-  // resolver uses ANDROID_VR and googlevideo cross-checks the UA against
-  // the `c=` query param. A mismatched UA tends to 403 on c=-sensitive
-  // URLs.
+  // User-Agent must EXACTLY match the client that signed the URL —
+  // googlevideo cross-checks the UA against the `c=` query param, and the
+  // resolver reports which UA goes with the client it picked.
   const headers: http.OutgoingHttpHeaders = {
-    'User-Agent': ANDROID_VR_USER_AGENT,
+    'User-Agent': source.userAgent,
     Range: (req.headers.range as string | undefined) ?? 'bytes=0-',
   };
   if (req.headers['accept-encoding']) headers['Accept-Encoding'] = req.headers['accept-encoding'] as string;

@@ -1,5 +1,5 @@
 import type { MusicPlayCommand, MusicPlayerEvent } from '../shared/types.js';
-import { MusicStreamResolver } from './music-stream-resolver.js';
+import type { MusicStreamResolver, ResolvedAudioStream } from './music-stream-resolver.js';
 import type { OverlayServer } from './overlay-server.js';
 
 interface NowPlayingPayload {
@@ -58,9 +58,9 @@ export class MusicPlayer {
     this.currentRequestedBy = cmd.requestedBy ?? null;
     this.currentDurationSeconds = cmd.durationSeconds ?? 0;
 
-    let streamUrl: string | null;
+    let stream: ResolvedAudioStream;
     try {
-      streamUrl = await this.resolver.resolveAudioUrl(cmd.videoId);
+      stream = await this.resolver.resolveAudioStream(cmd.videoId);
     } catch (cause) {
       const detail = cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause);
       console.warn(`[music-player] Failed to resolve stream URL for ${cmd.videoId}: ${detail}`, cause);
@@ -73,7 +73,7 @@ export class MusicPlayer {
       return;
     }
 
-    void this.publishState('playing', streamUrl);
+    void this.publishState('playing', stream);
 
     // Without a real player we can't observe the actual end, so we schedule a
     // soft-ended timer based on the track duration. The renderer state becomes
@@ -102,7 +102,7 @@ export class MusicPlayer {
     void this.publishState('idle', null);
   }
 
-  private async publishState(state: NowPlayingPayload['state'], streamUrl?: string | null): Promise<void> {
+  private async publishState(state: NowPlayingPayload['state'], resolved?: ResolvedAudioStream | null): Promise<void> {
     if (!this.currentItemId || state === 'idle') {
       this.overlayServer.publish('now-playing', {
         currentItem: null,
@@ -113,17 +113,17 @@ export class MusicPlayer {
       return;
     }
 
-    let url = streamUrl;
-    if (url === undefined && this.currentVideoId) {
-      try { url = await this.resolver.resolveAudioUrl(this.currentVideoId); }
-      catch { url = null; }
+    let stream = resolved;
+    if (stream === undefined && this.currentVideoId) {
+      try { stream = await this.resolver.resolveAudioStream(this.currentVideoId); }
+      catch { stream = null; }
     }
 
-    // Registra a URL no proxy do overlay server (resolve CORS + 403 do
-    // googlevideo) e emite o URL same-origin que o `<audio>` consegue tocar.
+    // Register the URL with the overlay server's proxy (works around
+    // googlevideo's CORS + 403) and publish the same-origin URL `<audio>` can play.
     let publishedUrl: string | null = null;
-    if (url && this.currentVideoId) {
-      publishedUrl = this.overlayServer.setNowPlayingAudioSource(this.currentVideoId, url);
+    if (stream && this.currentVideoId) {
+      publishedUrl = this.overlayServer.setNowPlayingAudioSource(this.currentVideoId, stream);
     }
 
     this.overlayServer.publish('now-playing', {
