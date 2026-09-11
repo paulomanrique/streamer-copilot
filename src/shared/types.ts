@@ -108,7 +108,7 @@ export interface LanguageOption {
  * without editing the core type. Validation at the IPC boundary is shape-only
  * (`z.string()` + slug regex), not membership in this list.
  */
-export type PlatformId = 'twitch' | 'youtube' | 'youtube-api' | 'kick' | 'tiktok' | 'x' | (string & {});
+export type PlatformId = 'twitch' | 'youtube' | 'youtube-api' | 'kick' | 'tiktok' | 'x' | 'linkedin' | (string & {});
 
 /**
  * Unified link status for every platform connection. Per-platform unions
@@ -240,6 +240,14 @@ export interface KickLiveStats {
 export interface XLiveStats {
   viewerCount: number;
   isLive: boolean;
+}
+
+export interface LinkedInLiveStats {
+  /** Null until the theater page shows its viewer counter. */
+  viewerCount: number | null;
+  isLive: boolean;
+  /** Event theater URL the account is reading. */
+  liveUrl: string;
 }
 
 export type StreamEventType = 'subscription' | 'superchat' | 'raid' | 'cheer' | 'follow' | 'gift';

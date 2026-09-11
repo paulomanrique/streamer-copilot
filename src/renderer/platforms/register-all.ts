@@ -13,3 +13,4 @@ import './youtube-api-provider.js';
 import './kick-provider.js';
 import './tiktok-provider.js';
 import './x-provider.js';
+import './linkedin-provider.js';

@@ -60,6 +60,7 @@ import { KickTokenStore, type KickAuthSession, type KickAuthToken } from '../pla
 import { TikTokSettingsStore } from '../platforms/tiktok/settings-store.js';
 import { TikTokMultiChatAdapter } from '../platforms/tiktok/multi-adapter.js';
 import { XMultiChatAdapter } from '../platforms/x/multi-adapter.js';
+import { LinkedInMultiChatAdapter } from '../platforms/linkedin/multi-adapter.js';
 import { TwitchCredentialsStore } from '../platforms/twitch/credentials-store.js';
 import { type TwitchChatAdapter } from '../platforms/twitch/adapter.js';
 import { TwitchMultiChatAdapter } from '../platforms/twitch/multi-adapter.js';
@@ -1206,6 +1207,36 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   const setXStatus = (): void => {
     options.stateHub.pushPlatformStatus('x', aggregateXStatus(), xPrimaryHandle);
     for (const listener of xStatusListeners) listener();
+  };
+
+  // ── LinkedIn Live — same watching/retry model as X ──
+  const linkedinStatusListeners = new Set<() => void>();
+  let linkedinPrimaryChannel: string | null = null;
+  const linkedinMultiAdapter = new LinkedInMultiChatAdapter();
+  let linkedinMultiRegistered = false;
+  const linkedinAccountStatus = new Map<string, PlatformLinkStatus>();
+  const linkedinAccountChannel = new Map<string, string>();
+  const linkedinAccountLiveId = new Map<string, string>();
+  const linkedinWatchingAccounts = new Set<string>();
+  const linkedinRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  const ensureLinkedInMultiRegistered = async (): Promise<void> => {
+    if (linkedinMultiRegistered) return;
+    linkedinMultiRegistered = true;
+    await chatService.replaceAdapter(linkedinMultiAdapter);
+  };
+
+  const aggregateLinkedInStatus = (): PlatformLinkStatus => {
+    const statuses = Array.from(linkedinAccountStatus.values());
+    if (statuses.some((s) => s === 'connected')) return 'connected';
+    if (statuses.some((s) => s === 'connecting')) return 'connecting';
+    if (statuses.some((s) => s === 'error')) return 'error';
+    return 'disconnected';
+  };
+
+  const setLinkedInStatus = (): void => {
+    options.stateHub.pushPlatformStatus('linkedin', aggregateLinkedInStatus(), linkedinPrimaryChannel);
+    for (const listener of linkedinStatusListeners) listener();
   };
 
   const checkYouTubeLive = async (handle: string): Promise<LiveStreamInfo[] | null> => {
@@ -2414,6 +2445,45 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
     await closed;
   });
+  ipcMain.handle(IPC_CHANNELS.linkedinOpenLogin, async (event) => {
+    // Opens a LinkedIn login on the default session so li_at persists there —
+    // the hidden live page reads and posts comments as the signed-in member.
+    const parent = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+    const win = new BrowserWindow({
+      width: 600,
+      height: 800,
+      parent,
+      modal: Boolean(parent),
+      title: 'LinkedIn Login',
+      autoHideMenuBar: true,
+    });
+
+    win.webContents.on('did-navigate', (_, url) => {
+      const target = new URL(url);
+      // LinkedIn lands on the feed once logged in — close the popup shortly after.
+      if (target.hostname.endsWith('linkedin.com') && target.pathname.startsWith('/feed')) {
+        setTimeout(() => {
+          if (!win.isDestroyed()) win.close();
+        }, 1500);
+      }
+    });
+
+    const closed = new Promise<void>((resolve) => {
+      win.once('closed', () => resolve());
+    });
+
+    try {
+      await win.loadURL('https://www.linkedin.com/login');
+    } catch (cause) {
+      const code = cause && typeof cause === 'object' && 'code' in cause ? String(cause.code) : '';
+      if (code !== 'ERR_ABORTED' && code !== 'ERR_FAILED') {
+        if (!win.isDestroyed()) win.close();
+        throw cause;
+      }
+    }
+
+    await closed;
+  });
   ipcMain.handle(IPC_CHANNELS.youtubeCheckLive, async (_, handle: unknown) => {
     const streams = await checkYouTubeLive(lookupStringInputSchema.parse(handle));
     return { videoIds: (streams ?? []).map((s) => s.videoId) };
@@ -2709,6 +2779,28 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
       }
     } catch (cause) {
       logService.warn('x', 'Auto-reconnect orchestration failed', { error: cause instanceof Error ? cause.message : String(cause) });
+    }
+  })();
+
+  // Auto-reconnect LinkedIn lives on startup — one watcher per enabled account.
+  void (async () => {
+    await activeProfileDirectoryReady;
+    try {
+      const accounts = await accountRepository.list();
+      for (const account of accounts.filter((a) => a.providerId === 'linkedin' && a.enabled)) {
+        try {
+          await connectLinkedInAccount(account.id, account.channel, linkedinLiveUrlOf(account));
+          logService.info('linkedin', 'Auto-reconnected account', { channel: account.channel, accountId: account.id });
+        } catch (cause) {
+          logService.warn('linkedin', 'Auto-reconnect failed', {
+            accountId: account.id,
+            channel: account.channel,
+            error: cause instanceof Error ? cause.message : String(cause),
+          });
+        }
+      }
+    } catch (cause) {
+      logService.warn('linkedin', 'Auto-reconnect orchestration failed', { error: cause instanceof Error ? cause.message : String(cause) });
     }
   })();
 
@@ -3279,6 +3371,152 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     },
   };
 
+  // LinkedIn lives (like X) only bind a chat session once the live page shows
+  // its comments panel, so they share the watching/retry-until-live model.
+  const LINKEDIN_RETRY_MS = 60_000;
+
+  function linkedinLiveUrlOf(account: PlatformAccount): string | undefined {
+    return typeof account.providerData.liveUrl === 'string' ? account.providerData.liveUrl : undefined;
+  }
+
+  function clearLinkedInRetryFor(accountId: string): void {
+    const timer = linkedinRetryTimers.get(accountId);
+    if (timer) { clearTimeout(timer); linkedinRetryTimers.delete(accountId); }
+  }
+
+  async function tryConnectLinkedInAccount(accountId: string, channel: string, liveUrl?: string): Promise<{ ok: boolean; error?: unknown }> {
+    try {
+      await ensureLinkedInMultiRegistered();
+      await linkedinMultiAdapter.addAccount({
+        accountId,
+        channel,
+        liveUrl,
+        onLiveResolved: (liveId) => {
+          const previous = linkedinAccountLiveId.get(accountId);
+          if (previous && previous !== liveId) chatLogService.closeSession('linkedin', previous);
+          linkedinAccountLiveId.set(accountId, liveId);
+          chatLogService.openSession('linkedin', liveId);
+        },
+        onSenderResolved: (sender) => {
+          selfSenderName.linkedin = sender.name.toLowerCase();
+          selfSenderDisplayName.linkedin = sender.name;
+        },
+        log: (msg) => logService.info('linkedin', msg, { accountId, channel }),
+        onError: (cause) => {
+          const metadata = {
+            channel,
+            error: cause instanceof Error ? cause.message : String(cause),
+            stack: cause instanceof Error ? cause.stack : undefined,
+          };
+          logService.error('linkedin', 'Connection error', metadata);
+          console.error('[linkedin] Connection error', metadata);
+        },
+        onStatusChange: (status) => {
+          if (status === 'connected') linkedinWatchingAccounts.delete(accountId);
+          linkedinAccountStatus.set(accountId, status);
+          linkedinPrimaryChannel = channel;
+          setLinkedInStatus();
+          broadcastAccountsForProvider('linkedin');
+        },
+        onLiveStats: (stats) => options.stateHub.pushPlatformLiveStats('linkedin', channel, stats),
+      });
+      return { ok: true };
+    } catch (cause) {
+      try { await linkedinMultiAdapter.removeAccount(accountId); } catch { /* ignore */ }
+      const liveId = linkedinAccountLiveId.get(accountId);
+      if (liveId) chatLogService.closeSession('linkedin', liveId);
+      linkedinAccountLiveId.delete(accountId);
+      return { ok: false, error: cause };
+    }
+  }
+
+  function scheduleLinkedInRetry(accountId: string, channel: string, liveUrl?: string): void {
+    clearLinkedInRetryFor(accountId);
+    if (!linkedinWatchingAccounts.has(accountId)) return;
+    const timer = setTimeout(() => {
+      linkedinRetryTimers.delete(accountId);
+      if (!linkedinWatchingAccounts.has(accountId)) return;
+      void tryConnectLinkedInAccount(accountId, channel, liveUrl).then((result) => {
+        if (!linkedinWatchingAccounts.has(accountId)) return;
+        if (result.ok) return;
+        scheduleLinkedInRetry(accountId, channel, liveUrl);
+      });
+    }, LINKEDIN_RETRY_MS);
+    linkedinRetryTimers.set(accountId, timer);
+  }
+
+  async function connectLinkedInAccount(accountId: string, channel: string, liveUrl?: string): Promise<void> {
+    linkedinWatchingAccounts.delete(accountId);
+    clearLinkedInRetryFor(accountId);
+    linkedinAccountStatus.set(accountId, 'connecting');
+    linkedinAccountChannel.set(accountId, channel);
+    linkedinPrimaryChannel = channel;
+    suggestionService.clearSessionEntries();
+    setLinkedInStatus();
+
+    const result = await tryConnectLinkedInAccount(accountId, channel, liveUrl);
+    if (result.ok) return;
+
+    // No live URL, logged out, or the live hasn't started: retrying only helps
+    // the last case, but it's cheap and recovers once the streamer goes live.
+    linkedinWatchingAccounts.add(accountId);
+    broadcastAccountsForProvider('linkedin');
+    logService.info('linkedin', 'Live not readable yet — will retry', {
+      accountId,
+      channel,
+      retryMs: LINKEDIN_RETRY_MS,
+      reason: result.error instanceof Error ? result.error.message || result.error.name : String(result.error),
+    });
+    scheduleLinkedInRetry(accountId, channel, liveUrl);
+  }
+
+  async function disconnectLinkedInAccount(accountId: string): Promise<void> {
+    linkedinWatchingAccounts.delete(accountId);
+    clearLinkedInRetryFor(accountId);
+    const channel = linkedinAccountChannel.get(accountId);
+    const liveId = linkedinAccountLiveId.get(accountId);
+    linkedinAccountStatus.delete(accountId);
+    linkedinAccountChannel.delete(accountId);
+    linkedinAccountLiveId.delete(accountId);
+    if (linkedinMultiAdapter.hasAccount(accountId)) {
+      await linkedinMultiAdapter.removeAccount(accountId);
+    }
+    if (channel) options.stateHub.pushPlatformLiveStats('linkedin', channel, null);
+    if (liveId) chatLogService.closeSession('linkedin', liveId);
+    if (!linkedinMultiAdapter.hasConnectedChild()) {
+      linkedinPrimaryChannel = null;
+    }
+    setLinkedInStatus();
+    broadcastAccountsForProvider('linkedin');
+  }
+
+  const linkedinProvider: MainPlatformProvider = {
+    providerId: 'linkedin',
+    supportsScheduledSend: true,
+    getAggregateStatus: () => ({ status: aggregateLinkedInStatus(), primaryChannel: linkedinPrimaryChannel }),
+    getStatus: (account) => {
+      const status = linkedinAccountStatus.get(account.id);
+      if (status === 'connected') return 'connected';
+      if (linkedinWatchingAccounts.has(account.id)) return 'watching';
+      if (status === 'connecting') return 'connecting';
+      if (status === 'error') return 'error';
+      return 'disconnected';
+    },
+    async connect(account) {
+      await connectLinkedInAccount(account.id, account.channel, linkedinLiveUrlOf(account));
+    },
+    async disconnect(account) {
+      await disconnectLinkedInAccount(account.id);
+    },
+    async purgeStores(account) {
+      if (account) await disconnectLinkedInAccount(account.id);
+    },
+    onStatusChange(listener) {
+      linkedinStatusListeners.add(listener);
+      return () => linkedinStatusListeners.delete(listener);
+    },
+  };
+
   const youtubeStatusListeners = new Set<() => void>();
   const youtubeProvider: MainPlatformProvider = {
     providerId: 'youtube',
@@ -3369,7 +3607,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     },
   };
 
-  for (const provider of [twitchProvider, kickProvider, tiktokProvider, xProvider, youtubeProvider, youtubeApiProvider]) {
+  for (const provider of [twitchProvider, kickProvider, tiktokProvider, xProvider, linkedinProvider, youtubeProvider, youtubeApiProvider]) {
     mainPlatforms.register(provider);
     provider.onStatusChange(() => {
       broadcastAccountsForProvider(provider.providerId);
