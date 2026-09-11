@@ -47,10 +47,9 @@ function XAuthStep({ draft, updateDraft, channel, setChannel, setError }: AuthSt
         </p>
       </div>
       <div className="rounded border border-gray-700 bg-gray-900/50 p-3">
-        <p className="text-xs text-gray-300 font-medium mb-1">Entrar no X</p>
+        <p className="text-xs text-gray-300 font-medium mb-1">Sign in to X</p>
         <p className="text-xs text-gray-500 mb-3">
-          Necessário para a <strong className="text-gray-300">detecção automática</strong> da live e para
-          enviar mensagens no chat. Abre uma janela de login do X; os cookies ficam guardados na sessão do app.
+          Required for <strong className="text-gray-300">automatic detection</strong> of the live and to send chat messages. Opens an X login window; cookies stay in this app&apos;s session.
         </p>
         <button
           type="button"
@@ -58,11 +57,11 @@ function XAuthStep({ draft, updateDraft, channel, setChannel, setError }: AuthSt
           onClick={() => void openLogin()}
           className="px-4 py-2 rounded bg-slate-600/30 border border-slate-500/40 text-slate-200 hover:bg-slate-600/40 disabled:opacity-50 text-sm"
         >
-          {openingLogin ? 'Abrindo login…' : 'Entrar no X'}
+          {openingLogin ? 'Opening login…' : 'Sign in to X'}
         </button>
       </div>
       <div>
-        <label className="block text-xs uppercase text-gray-500 mb-1">Broadcast URL (opcional)</label>
+        <label className="block text-xs uppercase text-gray-500 mb-1">Broadcast URL (optional)</label>
         <input
           type="text"
           placeholder="https://x.com/i/broadcasts/..."
@@ -71,8 +70,7 @@ function XAuthStep({ draft, updateDraft, channel, setChannel, setError }: AuthSt
           className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-100"
         />
         <p className="text-xs text-gray-500 mt-2">
-          Cole a URL da live para forçar uma transmissão específica — ela tem prioridade sobre a
-          auto-detecção. Pode trocar depois em Conexões → X → <strong className="text-gray-300">URL da live</strong>.
+          Paste the live URL to force a specific broadcast — it takes priority over auto-detection. You can change it later under Connections → X → <strong className="text-gray-300">Live URL</strong>.
         </p>
       </div>
     </div>

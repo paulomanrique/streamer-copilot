@@ -59,7 +59,7 @@ function OverlayLink({ title, description, url, obsHints, customize }: OverlayLi
               onClick={() => customize.onCustomize(customize.overlayId)}
               className="text-xs text-violet-300 hover:text-violet-200"
             >
-              Personalizar
+              Customize
             </button>
           ) : null}
           {url ? (
@@ -164,7 +164,7 @@ export function OverlaysPage() {
           onClick={() => setEditor({ kind: 'builder', mode: { kind: 'defaults' } })}
           className="shrink-0 px-3 py-2 rounded bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-colors"
         >
-          Editar visual padrão
+          Edit default look
         </button>
       </header>
 
@@ -219,37 +219,37 @@ export function OverlaysPage() {
       />
 
       <OverlayLink
-        title="Chat — Overlay (em tela)"
-        description="Para Browser Source no OBS — fundo transparente e fonte 1.5× maior por padrão, pra mostrar o chat sobre o cenário/jogo."
+        title="Chat — Overlay (on stream)"
+        description="For an OBS Browser Source — transparent background and 1.5× larger font by default, to show chat over the scene/game."
         url={info?.urls.chat ?? null}
         obsHints={[
-          'Add as Browser Source no OBS.',
-          'Tamanho recomendado: 480 × 720 (coluna lateral) ou ajuste pro seu cenário.',
-          'Ajuste fino opcional via query: ?scale=2 (mais grande), ?transparent=0 (forçar opaco).',
-          'Já vem com fundo transparente — sem precisar mexer no Custom CSS.',
+          'Add as Browser Source in OBS.',
+          'Recommended size: 480 × 720 (side column) or match your scene.',
+          'Optional fine-tuning via query: ?scale=2 (larger), ?transparent=0 (force opaque).',
+          'Comes with a transparent background — no Custom CSS needed.',
         ]}
         customize={{ overlayId: 'chat-overlay', onCustomize: openOverlayBuilder }}
       />
 
       <OverlayLink
-        title="Chat — Dock (painel)"
-        description="Para Custom Browser Dock no OBS — fundo opaco e fonte em tamanho normal, pra ler o chat enquanto você apresenta."
+        title="Chat — Dock (panel)"
+        description="For a Custom Browser Dock in OBS — opaque background and normal-sized font, to read chat while you present."
         url={info?.urls.chatDock ?? null}
         obsHints={[
-          'OBS → Docks → Custom Browser Docks → Add: cole a URL.',
-          'Dá pra encaixar entre as outras docks ou flutuar no segundo monitor.',
-          'Ajuste fino opcional via query: ?scale=1.2 (texto um pouco maior).',
+          'OBS → Docks → Custom Browser Docks → Add: paste the URL.',
+          'You can dock it among the other docks or float it on a second monitor.',
+          'Optional fine-tuning via query: ?scale=1.2 (slightly larger text).',
         ]}
       />
 
       <OverlayLink
-        title="Destaque de mensagem"
-        description="Card grande com a mensagem destacada — duplo-clique numa mensagem do chat (ou item Highlight no menu de contexto) envia ela pra esse overlay. O dock do OBS também aceita duplo-clique."
+        title="Message highlight"
+        description="Large card with the highlighted message — double-click a chat message (or the Highlight item in the context menu) to send it to this overlay. The OBS dock also accepts a double-click."
         url={info?.urls.highlightMessage ?? null}
         obsHints={[
-          'Adicione como Browser Source no OBS.',
-          'Cubra toda a tela (1920×1080) — o card se posiciona no canto escolhido em "Personalizar".',
-          'A mensagem some sozinha depois do tempo configurado (ou fica até o próximo highlight).',
+          'Add as Browser Source in OBS.',
+          'Cover the full canvas (1920×1080) — the card sits in the corner chosen under "Customize".',
+          'The message hides on its own after the configured time (or stays until the next highlight).',
         ]}
         customize={{ overlayId: 'highlight-message', onCustomize: openOverlayBuilder }}
       />

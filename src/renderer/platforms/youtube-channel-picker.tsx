@@ -73,9 +73,9 @@ export function YouTubeAccountActions({ account: _account }: { account: Platform
         type="button"
         onClick={() => setOpen(true)}
         className="px-2 py-1 rounded bg-red-600/20 border border-red-500/40 text-xs text-red-200 hover:bg-red-600/30"
-        title="Escolher o canal que vai enviar mensagens"
+        title="Choose the channel that will send messages"
       >
-        Canal
+        Channel
       </button>
 
       {open ? (
@@ -83,20 +83,19 @@ export function YouTubeAccountActions({ account: _account }: { account: Platform
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !saving && setOpen(false)} />
           <div className="relative bg-gray-900 border border-gray-700 rounded-xl w-full max-w-md shadow-2xl">
             <header className="px-5 py-4 border-b border-gray-700">
-              <h3 className="font-semibold text-gray-100">Trocar canal do YouTube</h3>
+              <h3 className="font-semibold text-gray-100">Switch YouTube channel</h3>
               <p className="text-xs text-gray-500 mt-1">
-                Escolha qual canal do seu login Google será usado para enviar mensagens.
+                Choose which channel from your Google login will be used to send messages.
               </p>
             </header>
             <div className="p-5 space-y-3 max-h-[60vh] overflow-y-auto">
               {loading ? (
-                <p className="text-sm text-gray-500">Carregando canais...</p>
+                <p className="text-sm text-gray-500">Loading channels...</p>
               ) : error ? (
                 <p className="text-sm text-rose-400">{error}</p>
               ) : channels.length === 0 ? (
                 <p className="text-sm text-gray-500">
-                  Nenhum canal disponível. Faça login no YouTube primeiro pelo botão
-                  &quot;Login&quot; do card desta conta.
+                  No channels available. Sign in to YouTube first using the &quot;Login&quot; button on this account card.
                 </p>
               ) : (
                 channels.map((channel) => {
@@ -119,8 +118,8 @@ export function YouTubeAccountActions({ account: _account }: { account: Platform
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm text-gray-100 truncate">{channel.name || '(sem nome)'}</span>
-                          {isCurrent ? <span className="text-[10px] uppercase text-violet-300">atual</span> : null}
+                          <span className="text-sm text-gray-100 truncate">{channel.name || '(unnamed)'}</span>
+                          {isCurrent ? <span className="text-[10px] uppercase text-violet-300">current</span> : null}
                         </div>
                         {channel.handle ? (
                           <span className="text-xs text-gray-500 truncate">{channel.handle}</span>
@@ -138,7 +137,7 @@ export function YouTubeAccountActions({ account: _account }: { account: Platform
                 disabled={saving}
                 className="px-3 py-1.5 rounded bg-gray-800 hover:bg-gray-700 text-sm text-gray-300 disabled:opacity-50"
               >
-                Cancelar
+                Cancel
               </button>
               <button
                 type="button"
@@ -146,7 +145,7 @@ export function YouTubeAccountActions({ account: _account }: { account: Platform
                 disabled={saving || !pendingPageId || pendingPageId === currentPageId}
                 className="px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-sm text-white disabled:opacity-50"
               >
-                {saving ? 'Salvando...' : 'Salvar'}
+                {saving ? 'Saving...' : 'Save'}
               </button>
             </footer>
           </div>

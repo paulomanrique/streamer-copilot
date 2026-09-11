@@ -23,18 +23,12 @@ export function XAccountActions({ account, onChanged }: { account: PlatformAccou
       account={account}
       onChanged={onChanged}
       dataKey="broadcastUrl"
-      title="URL da live do X"
-      subtitle={<>Conta <span className="text-gray-300">{account.label}</span> · @{account.channel}</>}
+      title="X live URL"
+      subtitle={<>Account <span className="text-gray-300">{account.label}</span> · @{account.channel}</>}
       inputLabel="Broadcast URL"
       placeholder="https://x.com/i/broadcasts/..."
-      help={
-        <>
-          A URL informada aqui tem prioridade sobre a auto-detecção da live. Cada transmissão
-          ganha uma URL nova, então cole a da live atual. Deixe em branco para voltar à
-          auto-detecção pelo @handle.
-        </>
-      }
-      invalidMessage="URL inválida. Use https://x.com/i/broadcasts/<id> (ou apenas o id)."
+      help="The URL set here takes priority over live auto-detection. Each broadcast gets a new URL, so paste the current live. Leave blank to fall back to auto-detection by @handle."
+      invalidMessage="Invalid URL. Use https://x.com/i/broadcasts/<id> (or just the id)."
       isValid={isValidBroadcastRef}
     />
   );

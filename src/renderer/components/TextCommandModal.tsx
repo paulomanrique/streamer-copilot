@@ -124,7 +124,7 @@ export function TextCommandModal({
         return;
       }
       if (permissions.length === 0) {
-        setError('Adicione pelo menos uma permissão');
+        setError('Add at least one permission');
         return;
       }
     }
@@ -242,7 +242,7 @@ export function TextCommandModal({
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-400 mb-1.5">Permissões</label>
+                      <label className="block text-xs text-gray-400 mb-1.5">Permissions</label>
                       <PermissionListPicker value={permissions} onChange={setPermissions} />
                     </div>
                     <div>

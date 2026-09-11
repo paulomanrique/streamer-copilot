@@ -99,7 +99,7 @@ export function SoundCommandModal({ open, onClose, onSave, initialData, settings
       return;
     }
     if (commandEnabled && permissions.length === 0) {
-      setError('Adicione pelo menos uma permissão para que o comando possa ser usado');
+      setError('Add at least one permission so the command can be used');
       return;
     }
     if (commandEnabled) {
@@ -233,7 +233,7 @@ export function SoundCommandModal({ open, onClose, onSave, initialData, settings
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-400 mb-1.5">Permissões</label>
+                      <label className="block text-xs text-gray-400 mb-1.5">Permissions</label>
                       <PermissionListPicker value={permissions} onChange={setPermissions} />
                     </div>
                     <div>

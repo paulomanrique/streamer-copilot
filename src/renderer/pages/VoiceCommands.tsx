@@ -159,7 +159,7 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
     // it obvious why the command "doesn't respond" (no one is allowed).
     const effectivePermissions = overrides?.permissions ?? permissions;
     if (effectivePermissions.length === 0) {
-      setError('Adicione pelo menos uma permissão em "Quem pode usar" — sem nenhuma entrada, ninguém consegue usar o comando.');
+      setError('Add at least one permission under "Who can use" — with no entries, nobody can use the command.');
       return;
     }
     setIsBusy(true);
@@ -256,7 +256,7 @@ export function VoiceCommandsPage(props: VoiceCommandsPageProps) {
 
         {/* Permissions */}
         <div className="px-5 py-4">
-          <label className="block text-sm text-gray-400 mb-2">Quem pode usar</label>
+          <label className="block text-sm text-gray-400 mb-2">Who can use</label>
           <PermissionListPicker value={permissions} onChange={setPermissions} />
         </div>
 

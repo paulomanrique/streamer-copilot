@@ -138,7 +138,7 @@ export function SuggestionsPage() {
       return;
     }
     if (permissions.length === 0) {
-      setError('Adicione pelo menos uma permissão');
+      setError('Add at least one permission');
       return;
     }
 
@@ -286,7 +286,7 @@ export function SuggestionsPage() {
                     {entryCounts[list.id] ?? 0} entries
                     {list.allowDuplicates ? '' : ' · unique per user'}
                     {' · '}
-                    {list.permissions.length} {list.permissions.length === 1 ? 'permissão' : 'permissões'}
+                    {list.permissions.length} {list.permissions.length === 1 ? t('permission') : t('permissions')}
                   </div>
                 </div>
 
@@ -493,7 +493,7 @@ export function SuggestionsPage() {
 
               {/* Permissions */}
               <div>
-                <label className="block text-sm text-gray-300 mb-2">Quem pode sugerir</label>
+                <label className="block text-sm text-gray-300 mb-2">Who can suggest</label>
                 <PermissionListPicker value={permissions} onChange={setPermissions} />
               </div>
 

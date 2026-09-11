@@ -118,7 +118,7 @@ export function OverrideField({
             onChange={(e) => onToggleActive(!e.target.checked)}
             className="accent-violet-500 w-3 h-3"
           />
-          padrão
+          default
         </label>
       </div>
       <div className={active ? '' : 'opacity-50 pointer-events-none'}>

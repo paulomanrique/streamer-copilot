@@ -9,6 +9,7 @@ import type {
 } from '../../shared/types.js';
 import { TextCommandModal } from '../components/TextCommandModal.js';
 import { ToggleSwitch } from '../components/ToggleSwitch.js';
+import { useI18n } from '../i18n/I18nProvider.js';
 
 const DEFAULT_TEXT_SETTINGS: TextSettings = {
   defaultCooldownSeconds: 0,
@@ -23,6 +24,7 @@ function formatTime(value: string | null): string {
 }
 
 export function TextCommandsPage() {
+  const { t } = useI18n();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<TextCommand | null>(null);
   const [rows, setRows] = useState<TextCommand[]>([]);
@@ -256,7 +258,7 @@ export function TextCommandsPage() {
                   <td className="px-4 py-3 text-gray-300 max-w-xs truncate">{row.response}</td>
                   <td className="px-4 py-3">
                     <span className="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">
-                      {row.permissions.length} {row.permissions.length === 1 ? 'permissão' : 'permissões'}
+                      {row.permissions.length} {row.permissions.length === 1 ? t('permission') : t('permissions')}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-gray-400 text-sm">

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 
 import type { PlatformId, SubscriberTierEntry } from '../../shared/types.js';
+import { useI18n } from '../i18n/I18nProvider.js';
 import { listPlatformProviders } from '../platforms/registry.js';
 import { useAppStore } from '../store.js';
 
@@ -45,17 +46,15 @@ export function SubscriberTiersPage() {
   return (
     <div className="p-6 space-y-6">
       <header>
-        <h2 className="text-lg font-semibold text-gray-100">Tiers de assinante</h2>
+        <h2 className="text-lg font-semibold text-gray-100">Subscriber Tiers</h2>
         <p className="text-sm text-gray-400 mt-1">
-          Ordene os níveis de membro de cada plataforma para que o gating &quot;tier mínimo&quot;
-          dos comandos funcione corretamente. Twitch é fixo. YouTube aprende automaticamente conforme
-          membros aparecem no chat.
+          Order each platform&apos;s membership levels so command &quot;minimum tier&quot; gating works correctly. Twitch is fixed. YouTube learns automatically as members show up in chat.
         </p>
         {error ? <p className="text-sm text-red-400 mt-2">{error}</p> : null}
       </header>
 
       {providers.length === 0 ? (
-        <p className="text-sm text-gray-500">Nenhum tier observado ainda. Conecte-se ao chat para que o sistema aprenda os níveis.</p>
+        <p className="text-sm text-gray-500">No tiers observed yet. Connect to chat so the system can learn the levels.</p>
       ) : null}
 
       {providers.map(({ provider, entries }) => (
@@ -81,6 +80,7 @@ interface PlatformTierSectionProps {
 }
 
 function PlatformTierSection({ platformId, displayName, entries, disabled, onSave }: PlatformTierSectionProps) {
+  const { t, language } = useI18n();
   const sorted = useMemo(() => [...entries].sort((a, b) => a.order - b.order), [entries]);
   const readOnly = sorted.every((e) => e.source !== 'scraped');
 
@@ -103,7 +103,9 @@ function PlatformTierSection({ platformId, displayName, entries, disabled, onSav
       <div className="flex items-baseline justify-between mb-3">
         <h3 className="text-base font-medium text-gray-200">{displayName}</h3>
         <span className="text-xs text-gray-500">
-          {readOnly ? 'Read-only' : `${sorted.length} nível${sorted.length === 1 ? '' : 'is'}`}
+          {readOnly ? 'Read-only' : language === 'pt-BR'
+            ? `${sorted.length} nível${sorted.length === 1 ? '' : 'is'}`
+            : `${sorted.length} ${sorted.length === 1 ? t('level') : t('levels')}`}
         </span>
       </div>
       <ul className="space-y-1">
@@ -138,7 +140,7 @@ function PlatformTierSection({ platformId, displayName, entries, disabled, onSav
                   onClick={() => move(index, -1)}
                   disabled={disabled || index === 0}
                   className="w-6 h-6 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs disabled:opacity-40"
-                  aria-label="Mover para cima"
+                  aria-label="Move up"
                 >
                   ↑
                 </button>
@@ -147,7 +149,7 @@ function PlatformTierSection({ platformId, displayName, entries, disabled, onSav
                   onClick={() => move(index, 1)}
                   disabled={disabled || index === sorted.length - 1}
                   className="w-6 h-6 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs disabled:opacity-40"
-                  aria-label="Mover para baixo"
+                  aria-label="Move down"
                 >
                   ↓
                 </button>

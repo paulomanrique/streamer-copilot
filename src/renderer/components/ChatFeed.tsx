@@ -636,9 +636,9 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
           {ctxMenu.userId ? (
             <>
               <div className="border-t border-gray-700 my-1" />
-              <div className="px-3 py-1 text-[10px] uppercase tracking-wide text-gray-500 font-semibold">Adicionar a lista</div>
+              <div className="px-3 py-1 text-[10px] uppercase tracking-wide text-gray-500 font-semibold">Add to list</div>
               {userLists.length === 0 ? (
-                <div className="px-3 py-1.5 text-[11px] text-gray-500 italic">Nenhuma lista ainda</div>
+                <div className="px-3 py-1.5 text-[11px] text-gray-500 italic">No lists yet</div>
               ) : (
                 userLists.map((list) => (
                   <button
@@ -684,7 +684,7 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
                           });
                         }
                       } catch (cause) {
-                        setModActionError(cause instanceof Error ? cause.message : 'Falha ao criar a lista de usuários');
+                        setModActionError(cause instanceof Error ? cause.message : t('Failed to create the user list'));
                       }
                     })();
                     setNewListMode(false);
@@ -704,7 +704,7 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
                         setNewListName('');
                       }
                     }}
-                    placeholder="Nome da lista"
+                    placeholder="List name"
                     autoFocus
                     className="flex-1 bg-gray-800 border border-gray-600 rounded text-xs text-gray-200 px-2 py-1 focus:outline-none focus:border-violet-500"
                   />
@@ -725,7 +725,7 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
                   <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
-                  + Nova lista...
+                  + New list...
                 </button>
               )}
             </>

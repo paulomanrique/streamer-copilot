@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import type { ScheduledStatusItem, SoundCommand, SoundCommandUpsertInput, SoundSettings } from '../../shared/types.js';
 import { SoundCommandModal } from '../components/SoundCommandModal.js';
 import { ToggleSwitch } from '../components/ToggleSwitch.js';
+import { useI18n } from '../i18n/I18nProvider.js';
 
 const DEFAULT_SOUND_SETTINGS: SoundSettings = {
   defaultCooldownSeconds: 0,
@@ -23,6 +24,7 @@ function formatTime(value: string | null): string {
 }
 
 export function SoundCommandsPage() {
+  const { t } = useI18n();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<SoundCommand | null>(null);
   const [rows, setRows] = useState<SoundCommand[]>([]);
@@ -229,7 +231,7 @@ export function SoundCommandsPage() {
                   <td className="px-4 py-3 text-gray-400 text-xs">{getFileName(row.filePath)}</td>
                   <td className="px-4 py-3">
                     <span className="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">
-                      {row.permissions.length} {row.permissions.length === 1 ? 'permissão' : 'permissões'}
+                      {row.permissions.length} {row.permissions.length === 1 ? t('permission') : t('permissions')}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-gray-400 text-sm">

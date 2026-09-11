@@ -12,6 +12,7 @@ import type {
   RaffleSnapshot,
   RaffleUpdateInput,
 } from '../../shared/types.js';
+import { useI18n } from '../i18n/I18nProvider.js';
 import { listPlatformProviders } from '../platforms/registry.js';
 import '../platforms/register-all.js';
 import { useAppStore } from '../store.js';
@@ -31,7 +32,7 @@ const DEFAULT_FORM: RaffleCreateInput = {
   staffTriggerCommand: '!roll',
   openAnnouncementTemplate: '',
   eliminationAnnouncementTemplate: '',
-  winnerAnnouncementTemplate: 'Parabens {winner}, voce venceu o sorteio {title}!',
+  winnerAnnouncementTemplate: 'Congrats {winner}, you won the {title} raffle!',
   spinSoundFile: null,
   eliminatedSoundFile: null,
   winnerSoundFile: null,
@@ -139,18 +140,20 @@ function canRunAction(status: Raffle['status'], action: RaffleControlAction): bo
 function buildPlatformOptions(
   platformStatus: Partial<Record<PlatformId, PlatformLinkStatus>>,
   platformPrimaryChannel: Partial<Record<PlatformId, string | null>>,
+  t: (text: string) => string,
 ): PlatformOption[] {
   return listPlatformProviders().map((provider) => {
     const id = provider.id as PlatformId;
     const channel = platformPrimaryChannel[id];
     const hint = platformStatus[id] === 'connected'
-      ? (channel ? `Conectado (${channel})` : 'Conectado')
-      : 'Não conectado';
+      ? (channel ? `${t('Connected')} (${channel})` : t('Connected'))
+      : t('Not connected');
     return { id, label: provider.displayName, hint };
   });
 }
 
 export function RafflesPage() {
+  const { t } = useI18n();
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const [raffle, setRaffle] = useState<Raffle | null>(null);
   const [snapshot, setSnapshot] = useState<RaffleSnapshot | null>(null);
@@ -158,8 +161,8 @@ export function RafflesPage() {
   const platformStatus = useAppStore((s) => s.platformStatus);
   const platformPrimaryChannel = useAppStore((s) => s.platformPrimaryChannel);
   const platformOptions = useMemo(
-    () => buildPlatformOptions(platformStatus, platformPrimaryChannel),
-    [platformStatus, platformPrimaryChannel],
+    () => buildPlatformOptions(platformStatus, platformPrimaryChannel, t),
+    [platformStatus, platformPrimaryChannel, t],
   );
   const [form, setForm] = useState<RaffleFormState>(createFormState(null, []));
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -260,7 +263,9 @@ export function RafflesPage() {
   }
 
   function resetForm(): void {
-    setForm(createFormState(null, platformOptions));
+    const next = createFormState(null, platformOptions);
+    next.winnerAnnouncementTemplate = t('Congrats {winner}, you won the {title} raffle!');
+    setForm(next);
     setModalError(null);
   }
 
@@ -389,8 +394,7 @@ export function RafflesPage() {
 
         {deadlineExpired ? (
           <div className="mb-4 px-4 py-3 rounded-lg bg-yellow-500/10 border border-yellow-400/30 text-sm text-yellow-200">
-            O prazo de inscrições deste sorteio já passou — ninguém consegue entrar.
-            Edite o sorteio e defina um prazo futuro (ou deixe o campo vazio) antes de abrir as inscrições.
+            This raffle&apos;s entry deadline has already passed — nobody can join. Edit the raffle and set a future deadline (or leave the field empty) before opening entries.
           </div>
         ) : null}
 
@@ -447,8 +451,8 @@ export function RafflesPage() {
                   <button type="button" disabled={isBusy || !canRunAction(currentStatus, 'spin')} onClick={() => void runAction('spin')} className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-violet-600 text-gray-300 hover:text-white transition-colors disabled:opacity-40 disabled:hover:bg-gray-700 disabled:hover:text-gray-300">Spin</button>
                   <button type="button" disabled={isBusy || !canRunAction(currentStatus, 'finalize')} onClick={() => void runAction('finalize')} className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-fuchsia-600 text-gray-300 hover:text-white transition-colors disabled:opacity-40 disabled:hover:bg-gray-700 disabled:hover:text-gray-300">Finalize</button>
                   <button type="button" disabled={isBusy || !canRunAction(currentStatus, 'cancel')} onClick={() => void runAction('cancel')} className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-red-700 text-gray-300 hover:text-white transition-colors disabled:opacity-40 disabled:hover:bg-gray-700 disabled:hover:text-gray-300">Cancel</button>
-                  <button type="button" disabled={isBusy || !canRunAction(currentStatus, 'reset')} onClick={() => void runAction('reset')} className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors disabled:opacity-40 disabled:hover:bg-gray-700" title="Volta para rascunho mantendo os participantes">Reset</button>
-                  <button type="button" disabled={isBusy || !canRunAction(currentStatus, 'start_over')} onClick={() => void runAction('start_over')} className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-orange-600 text-gray-300 hover:text-white transition-colors disabled:opacity-40 disabled:hover:bg-gray-700 disabled:hover:text-gray-300" title="Apaga participantes, rodadas e vencedor — recomeça do zero">Start over</button>
+                  <button type="button" disabled={isBusy || !canRunAction(currentStatus, 'reset')} onClick={() => void runAction('reset')} className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors disabled:opacity-40 disabled:hover:bg-gray-700" title="Returns to draft while keeping participants">Reset</button>
+                  <button type="button" disabled={isBusy || !canRunAction(currentStatus, 'start_over')} onClick={() => void runAction('start_over')} className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-orange-600 text-gray-300 hover:text-white transition-colors disabled:opacity-40 disabled:hover:bg-gray-700 disabled:hover:text-gray-300" title="Clears participants, rounds, and winner — starts from scratch">Start over</button>
                 </div>
               </div>
 

@@ -23,10 +23,10 @@ interface OverlayVisualBuilderProps {
 // expect changes to land there.
 const OVERLAY_OPTIONS: Array<{ id: OverlayId; label: string }> = [
   { id: 'chat-overlay', label: 'Chat — Overlay' },
-  { id: 'highlight-message', label: 'Destaque de mensagem' },
+  { id: 'highlight-message', label: 'Message highlight' },
   { id: 'now-playing', label: 'Now playing' },
-  { id: 'raffles', label: 'Sorteio' },
-  { id: 'polls', label: 'Enquete' },
+  { id: 'raffles', label: 'Raffle' },
+  { id: 'polls', label: 'Poll' },
 ];
 
 const HIGHLIGHT_DEFAULTS = {
@@ -36,12 +36,12 @@ const HIGHLIGHT_DEFAULTS = {
 };
 
 const HIGHLIGHT_POSITION_OPTIONS: Array<{ value: HighlightMessagePosition; label: string }> = [
-  { value: 'top-left', label: 'Sup. esq.' },
-  { value: 'top-center', label: 'Sup. centro' },
-  { value: 'top-right', label: 'Sup. dir.' },
-  { value: 'bottom-left', label: 'Inf. esq.' },
-  { value: 'bottom-center', label: 'Inf. centro' },
-  { value: 'bottom-right', label: 'Inf. dir.' },
+  { value: 'top-left', label: 'Top left' },
+  { value: 'top-center', label: 'Top center' },
+  { value: 'top-right', label: 'Top right' },
+  { value: 'bottom-left', label: 'Bottom left' },
+  { value: 'bottom-center', label: 'Bottom center' },
+  { value: 'bottom-right', label: 'Bottom right' },
 ];
 
 const DEFAULT_VALUES = {
@@ -230,7 +230,6 @@ export function OverlayVisualBuilder({ mode, onBack, info }: OverlayVisualBuilde
   const overlayLabel = mode.kind === 'overlay'
     ? OVERLAY_OPTIONS.find((o) => o.id === mode.id)?.label ?? ''
     : '';
-  const headerTitle = isDefaults ? 'Editar visual padrão' : `Personalizar — ${overlayLabel}`;
   const iframeUrl = withPreviewFlag(urlFor(info, previewId));
 
   return (
@@ -241,26 +240,28 @@ export function OverlayVisualBuilder({ mode, onBack, info }: OverlayVisualBuilde
           onClick={onBack}
           className="text-sm text-violet-300 hover:text-violet-200"
         >
-          ← Voltar
+          ← Back
         </button>
-        <h2 className="text-base font-semibold">{headerTitle}</h2>
+        <h2 className="text-base font-semibold">
+          {isDefaults ? 'Edit default look' : <>Customize — {overlayLabel}</>}
+        </h2>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-6">
         <section className="rounded-lg border border-gray-700 bg-gray-800/40 p-4 space-y-5">
           <p className="text-xs text-gray-500">
             {isDefaults
-              ? 'Os valores aqui valem como padrão para todos os overlays. Cada overlay pode sobrescrever pelo botão "Personalizar".'
-              : 'Cada ajuste aqui sobrescreve o visual padrão só para este overlay. Marque "padrão" para voltar a herdar.'}
+              ? 'Values here apply as the default for every overlay. Each overlay can override them with the "Customize" button.'
+              : 'Each tweak here overrides the default look for this overlay only. Check "default" to inherit again.'}
           </p>
 
-          <Group title="Fundo">
+          <Group title="Background">
             {wrap('backgroundColor', (
-              <ColorField label="Cor" value={fields.backgroundColor} onChange={(v) => setField('backgroundColor', v)} />
+              <ColorField label="Color" value={fields.backgroundColor} onChange={(v) => setField('backgroundColor', v)} />
             ))}
             {wrap('backgroundOpacity', (
               <SliderField
-                label="Opacidade"
+                label="Opacity"
                 value={fields.backgroundOpacity}
                 min={0} max={1} step={0.01}
                 format={(v) => `${Math.round(v * 100)}%`}
@@ -269,10 +270,10 @@ export function OverlayVisualBuilder({ mode, onBack, info }: OverlayVisualBuilde
             ))}
           </Group>
 
-          <Group title="Borda">
+          <Group title="Border">
             {wrap('borderRadius', (
               <SliderField
-                label="Arredondamento"
+                label="Rounding"
                 value={fields.borderRadius}
                 min={0} max={32} step={1}
                 format={(v) => `${v}px`}
@@ -280,11 +281,11 @@ export function OverlayVisualBuilder({ mode, onBack, info }: OverlayVisualBuilde
               />
             ))}
             {wrap('borderColor', (
-              <ColorField label="Cor" value={fields.borderColor} onChange={(v) => setField('borderColor', v)} />
+              <ColorField label="Color" value={fields.borderColor} onChange={(v) => setField('borderColor', v)} />
             ))}
             {wrap('borderWidth', (
               <SliderField
-                label="Espessura"
+                label="Thickness"
                 value={fields.borderWidth}
                 min={0} max={6} step={1}
                 format={(v) => `${v}px`}
@@ -293,21 +294,21 @@ export function OverlayVisualBuilder({ mode, onBack, info }: OverlayVisualBuilde
             ))}
           </Group>
 
-          <Group title="Fonte">
+          <Group title="Font">
             {wrap('fontFamily', (
               <SelectField
-                label="Família"
+                label="Family"
                 value={fields.fontFamily}
                 options={OVERLAY_FONTS.map((f) => ({ value: f.key, label: f.label }))}
                 onChange={(v) => setField('fontFamily', v)}
               />
             ))}
             {wrap('fontColor', (
-              <ColorField label="Cor" value={fields.fontColor} onChange={(v) => setField('fontColor', v)} />
+              <ColorField label="Color" value={fields.fontColor} onChange={(v) => setField('fontColor', v)} />
             ))}
             {wrap('fontSize', (
               <SliderField
-                label="Tamanho"
+                label="Size"
                 value={fields.fontSize}
                 min={10} max={28} step={1}
                 format={(v) => `${v}px`}
@@ -316,20 +317,20 @@ export function OverlayVisualBuilder({ mode, onBack, info }: OverlayVisualBuilde
             ))}
           </Group>
 
-          <Group title="Cor de destaque">
+          <Group title="Accent color">
             {wrap('accentColor', (
               <ColorField label="Accent" value={fields.accentColor} onChange={(v) => setField('accentColor', v)} />
             ))}
             <p className="text-xs text-gray-500">
-              Tinge: nome de comando no chat, tag "AO VIVO" + ponteiro + hub + glow do vencedor no sorteio, tag "ENQUETE", título do player de música, barras do analisador de espectro e a pílula do @autor no destaque de mensagem.
+              Tints: command name in chat, the "LIVE" tag + pointer + hub + winner glow on the raffle, the "POLL" tag, the music player title, spectrum analyzer bars, and the @author pill on the message highlight.
             </p>
           </Group>
 
           {mode.kind === 'overlay' && mode.id === 'highlight-message' ? (
-            <Group title="Destaque de mensagem">
+            <Group title="Message highlight">
               {wrapHighlight('maxWidthPx', (
                 <SliderField
-                  label="Largura máxima"
+                  label="Max width"
                   value={prefs.maxWidthPx ?? HIGHLIGHT_DEFAULTS.maxWidthPx}
                   min={320} max={1600} step={10}
                   format={(v) => `${v}px`}
@@ -338,7 +339,7 @@ export function OverlayVisualBuilder({ mode, onBack, info }: OverlayVisualBuilde
               ))}
               {wrapHighlight('position', (
                 <SelectField
-                  label="Posição"
+                  label="Position"
                   value={prefs.position ?? HIGHLIGHT_DEFAULTS.position}
                   options={HIGHLIGHT_POSITION_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
                   onChange={(v) => setHighlightField('position', v as HighlightMessagePosition)}
@@ -346,7 +347,7 @@ export function OverlayVisualBuilder({ mode, onBack, info }: OverlayVisualBuilde
               ))}
               {wrapHighlight('autoHideSeconds', (
                 <SliderField
-                  label="Sumir após"
+                  label="Hide after"
                   value={prefs.autoHideSeconds ?? HIGHLIGHT_DEFAULTS.autoHideSeconds}
                   min={0} max={120} step={1}
                   format={(v) => (v === 0 ? 'manual' : `${v}s`)}
@@ -354,7 +355,7 @@ export function OverlayVisualBuilder({ mode, onBack, info }: OverlayVisualBuilde
                 />
               ))}
               <p className="text-xs text-gray-500">
-                Duplo-clique numa mensagem do chat (ou item "Highlight" no menu de contexto) envia ela para esse overlay. Mesma mensagem clicada de novo limpa o destaque.
+                Double-click a chat message (or the "Highlight" item in the context menu) to send it to this overlay. Clicking the same message again clears the highlight.
               </p>
             </Group>
           ) : null}
@@ -365,14 +366,14 @@ export function OverlayVisualBuilder({ mode, onBack, info }: OverlayVisualBuilde
               onClick={reset}
               className="text-xs text-violet-300 hover:text-violet-200"
             >
-              {isDefaults ? 'Restaurar visual padrão' : 'Voltar a herdar tudo do padrão'}
+              {isDefaults ? 'Restore default look' : 'Inherit everything from the default again'}
             </button>
           </div>
         </section>
 
         <section className="rounded-lg border border-gray-700 bg-gray-800/40 p-4 flex flex-col gap-3 min-h-[600px]">
           <header className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold text-gray-100">Preview ao vivo</h3>
+            <h3 className="text-sm font-semibold text-gray-100">Live preview</h3>
             <select
               value={previewId}
               onChange={(e) => setPreviewId(e.target.value as OverlayId)}
@@ -394,7 +395,7 @@ export function OverlayVisualBuilder({ mode, onBack, info }: OverlayVisualBuilde
               />
             ) : (
               <div className="absolute inset-0 flex items-center justify-center text-xs text-gray-500">
-                Servidor de overlay não está rodando
+                Overlay server is not running
               </div>
             )}
           </div>

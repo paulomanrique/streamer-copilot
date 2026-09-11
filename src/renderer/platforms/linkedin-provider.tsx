@@ -31,23 +31,22 @@ function LinkedInAuthStep({ draft, updateDraft, channel, setChannel, setError }:
   return (
     <div className="space-y-4">
       <div>
-        <label className="block text-xs uppercase text-gray-500 mb-1">Perfil ou página</label>
+        <label className="block text-xs uppercase text-gray-500 mb-1">Profile or page</label>
         <input
           type="text"
-          placeholder="linkedin.com/in/voce ou linkedin.com/company/pagina"
+          placeholder="linkedin.com/in/you or linkedin.com/company/page"
           value={channel}
           onChange={(e) => setChannel(normalizeLinkedInChannel(e.target.value))}
           className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-100"
         />
         <p className="text-xs text-gray-500 mt-2">
-          Identifica a conta no app. Os comentários são lidos da página da live, não do perfil.
+          Identifies the account in the app. Comments are read from the live page, not the profile.
         </p>
       </div>
       <div className="rounded border border-gray-700 bg-gray-900/50 p-3">
-        <p className="text-xs text-gray-300 font-medium mb-1">Entrar no LinkedIn</p>
+        <p className="text-xs text-gray-300 font-medium mb-1">Sign in to LinkedIn</p>
         <p className="text-xs text-gray-500 mb-3">
-          <strong className="text-gray-300">Obrigatório.</strong> O LinkedIn só mostra lives para quem está logado.
-          O app lê e envia comentários pela sua sessão; os cookies ficam guardados na sessão do app.
+          <strong className="text-gray-300">Required.</strong> LinkedIn only shows lives to signed-in users. The app reads and sends comments through your session; cookies stay in this app&apos;s session.
         </p>
         <button
           type="button"
@@ -55,11 +54,11 @@ function LinkedInAuthStep({ draft, updateDraft, channel, setChannel, setError }:
           onClick={() => void openLogin()}
           className="px-4 py-2 rounded bg-sky-600/30 border border-sky-500/40 text-sky-100 hover:bg-sky-600/40 disabled:opacity-50 text-sm"
         >
-          {openingLogin ? 'Abrindo login…' : 'Entrar no LinkedIn'}
+          {openingLogin ? 'Opening login…' : 'Sign in to LinkedIn'}
         </button>
       </div>
       <div>
-        <label className="block text-xs uppercase text-gray-500 mb-1">URL da live</label>
+        <label className="block text-xs uppercase text-gray-500 mb-1">Live URL</label>
         <input
           type="text"
           placeholder={LIVE_URL_PLACEHOLDER}
@@ -68,8 +67,7 @@ function LinkedInAuthStep({ draft, updateDraft, channel, setChannel, setError }:
           className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-100"
         />
         <p className="text-xs text-gray-500 mt-2">
-          Link do evento ou do post da live. Cada live tem uma URL nova — dá pra trocar depois em
-          Conexões → LinkedIn → <strong className="text-gray-300">URL da live</strong>.
+          Event or live post link. Each live gets a new URL — you can change it later under Connections → LinkedIn → <strong className="text-gray-300">Live URL</strong>.
         </p>
       </div>
     </div>
@@ -82,12 +80,12 @@ function LinkedInAccountActions({ account, onChanged }: { account: PlatformAccou
       account={account}
       onChanged={onChanged}
       dataKey="liveUrl"
-      title="URL da live do LinkedIn"
-      subtitle={<>Conta <span className="text-gray-300">{account.label}</span></>}
-      inputLabel="URL da live"
+      title="LinkedIn live URL"
+      subtitle={<>Account <span className="text-gray-300">{account.label}</span></>}
+      inputLabel="Live URL"
       placeholder={LIVE_URL_PLACEHOLDER}
-      help={<>Cole o link do evento ou do post da live atual. Cada live do LinkedIn ganha uma URL nova.</>}
-      invalidMessage="URL inválida. Use o link do evento (linkedin.com/events/…) ou do post da live."
+      help={<>Paste the current event or live post link. Each LinkedIn live gets a new URL.</>}
+      invalidMessage="Invalid URL. Use the event link (linkedin.com/events/…) or the live post."
       isValid={isValidLiveUrl}
     />
   );

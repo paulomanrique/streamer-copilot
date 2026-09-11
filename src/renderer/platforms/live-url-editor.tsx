@@ -89,9 +89,9 @@ export function LiveUrlAccountAction({
         type="button"
         onClick={() => setOpen(true)}
         className="px-2 py-1 rounded bg-slate-600/30 border border-slate-500/40 text-xs text-slate-200 hover:bg-slate-600/40"
-        title="Trocar a URL da live usada por esta conta"
+        title="Change the live URL used by this account"
       >
-        URL da live
+        Live URL
       </button>
 
       {open ? (
@@ -127,7 +127,7 @@ export function LiveUrlAccountAction({
                 disabled={saving}
                 className="px-3 py-1.5 rounded bg-gray-800 hover:bg-gray-700 text-sm text-gray-300 disabled:opacity-50"
               >
-                Cancelar
+                Cancel
               </button>
               <button
                 type="button"
@@ -135,7 +135,7 @@ export function LiveUrlAccountAction({
                 disabled={saving || value.trim() === stored.trim()}
                 className="px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-sm text-white disabled:opacity-50"
               >
-                {saving ? 'Salvando...' : 'Salvar'}
+                {saving ? 'Saving...' : 'Save'}
               </button>
             </footer>
           </div>

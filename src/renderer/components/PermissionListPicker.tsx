@@ -7,6 +7,7 @@ import type {
   PermissionRoleId,
   PlatformId,
 } from '../../shared/types.js';
+import { useI18n } from '../i18n/I18nProvider.js';
 import { listPlatformProviders } from '../platforms/registry.js';
 import { useAppStore } from '../store.js';
 
@@ -36,6 +37,7 @@ const ROLE_LABELS: Record<PermissionLevel, string> = {
  * blocked at selection time.
  */
 export function PermissionListPicker({ value, onChange }: PermissionListPickerProps) {
+  const { t } = useI18n();
   const subscriberTiers = useAppStore((s) => s.subscriberTiers);
   const userLists = useAppStore((s) => s.userLists);
   const platformStatus = useAppStore((s) => s.platformStatus);
@@ -132,7 +134,7 @@ export function PermissionListPicker({ value, onChange }: PermissionListPickerPr
       setNewListName('');
       setNewListError(null);
     } catch (cause) {
-      setNewListError(cause instanceof Error ? cause.message : 'Falha ao criar a lista');
+      setNewListError(cause instanceof Error ? cause.message : t('Failed to create the list'));
     }
   };
 
@@ -140,7 +142,7 @@ export function PermissionListPicker({ value, onChange }: PermissionListPickerPr
     <div className="space-y-2">
       <div className="flex flex-wrap gap-1.5 min-h-[28px]">
         {value.length === 0 ? (
-          <span className="text-xs text-gray-500 self-center">Ninguém pode usar ainda — adicione abaixo.</span>
+          <span className="text-xs text-gray-500 self-center">Nobody can use this yet — add below.</span>
         ) : (
           value.map((entry, index) => (
             <EntryChip key={entryKey(entry)} entry={entry} onRemove={() => removeAt(index)} />
@@ -155,7 +157,7 @@ export function PermissionListPicker({ value, onChange }: PermissionListPickerPr
           onClick={() => setDropdownOpen((v) => !v)}
           className="px-3 py-1.5 rounded bg-gray-800 hover:bg-gray-700 text-sm text-gray-200 border border-gray-700"
         >
-          + Adicionar
+          + Add
         </button>
         {dropdownOpen && dropdownPos ? createPortal((
           <div
@@ -164,7 +166,7 @@ export function PermissionListPicker({ value, onChange }: PermissionListPickerPr
             className="max-h-[420px] overflow-y-auto rounded-lg border border-gray-700 bg-gray-900 shadow-xl"
           >
             {/* Listas */}
-            <DropdownSection title="Listas">
+            <DropdownSection title="Lists">
               {userLists.map((list) => {
                 const entry: PermissionEntry = { kind: 'list', listId: list.id };
                 const already = hasEntry(entry);
@@ -197,7 +199,7 @@ export function PermissionListPicker({ value, onChange }: PermissionListPickerPr
                         setNewListError(null);
                       }
                     }}
-                    placeholder="Nome da lista"
+                    placeholder="List name"
                     autoFocus
                     className="flex-1 bg-gray-800 border border-gray-600 rounded text-xs text-gray-200 px-2 py-1 focus:outline-none focus:border-violet-500"
                   />
@@ -210,7 +212,7 @@ export function PermissionListPicker({ value, onChange }: PermissionListPickerPr
                   </button>
                 </form>
               ) : (
-                <DropdownItem label="+ Nova lista..." onClick={() => { setNewListMode(true); setNewListName(''); setNewListError(null); }} accent />
+                <DropdownItem label="+ New list..." onClick={() => { setNewListMode(true); setNewListName(''); setNewListError(null); }} accent />
               )}
               {newListError ? (
                 <p className="px-3 py-1 text-xs text-red-400">{newListError}</p>
@@ -224,9 +226,9 @@ export function PermissionListPicker({ value, onChange }: PermissionListPickerPr
               * everyone. Existing chips keep rendering regardless, so stale
               * entries remain visible and removable. */}
             {connectedProviders.length === 0 ? (
-              <DropdownSection title="Plataformas">
+              <DropdownSection title="Platforms">
                 <p className="px-3 py-1.5 text-xs text-gray-500">
-                  Nenhuma plataforma conectada — conecte em Plataformas para liberar papéis por plataforma.
+                  No platforms connected — connect under Platforms to unlock per-platform roles.
                 </p>
               </DropdownSection>
             ) : null}
@@ -250,7 +252,7 @@ export function PermissionListPicker({ value, onChange }: PermissionListPickerPr
                       return (
                         <DropdownItem
                           key={role}
-                          label="Subscriber (qualquer tier)"
+                          label="Subscriber (any tier)"
                           disabled={hasEntry({ kind: 'platform-role', platform: platformId, role: 'subscriber' })}
                           onClick={() => addEntry({ kind: 'platform-role', platform: platformId, role: 'subscriber' })}
                         />
@@ -305,6 +307,7 @@ function entriesEqual(a: PermissionEntry, b: PermissionEntry): boolean {
 }
 
 function EntryChip({ entry, onRemove }: { entry: PermissionEntry; onRemove: () => void }) {
+  const { t } = useI18n();
   const userLists = useAppStore((s) => s.userLists);
   const subscriberTiers = useAppStore((s) => s.subscriberTiers);
   const providers = useMemo(() => listPlatformProviders(), []);
@@ -312,7 +315,7 @@ function EntryChip({ entry, onRemove }: { entry: PermissionEntry; onRemove: () =
   const label = useMemo(() => {
     if (entry.kind === 'list') {
       const list = userLists.find((l) => l.id === entry.listId);
-      return `Lista: ${list?.name ?? 'desconhecida'}`;
+      return `${t('List')}: ${list?.name ?? t('unknown')}`;
     }
     const provider = providers.find((p) => p.id === entry.platform);
     const platformName = provider?.displayName ?? entry.platform;
@@ -323,7 +326,7 @@ function EntryChip({ entry, onRemove }: { entry: PermissionEntry; onRemove: () =
       return `${platformName} • ${tierEntry?.label ?? tierId}`;
     }
     return `${platformName} • ${ROLE_LABELS[role as PermissionLevel] ?? role}`;
-  }, [entry, userLists, subscriberTiers, providers]);
+  }, [entry, userLists, subscriberTiers, providers, t]);
 
   return (
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-600/20 border border-violet-500/40 text-xs text-violet-200">
@@ -332,7 +335,7 @@ function EntryChip({ entry, onRemove }: { entry: PermissionEntry; onRemove: () =
         type="button"
         onClick={onRemove}
         className="text-violet-300 hover:text-white text-xs leading-none ml-0.5"
-        aria-label="Remover"
+        aria-label="Remove"
       >
         ×
       </button>
@@ -401,7 +404,7 @@ function CollapsiblePlatformSection({
           <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         {title}
-        <span className="normal-case tracking-normal font-normal text-emerald-400">• conectado</span>
+        <span className="normal-case tracking-normal font-normal text-emerald-400">• connected</span>
       </button>
       {expanded ? <div className="pb-1">{children}</div> : null}
     </div>
