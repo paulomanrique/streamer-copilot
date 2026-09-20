@@ -4,13 +4,14 @@ import type { PlatformRole } from '../../shared/platform.js';
 import type { PlatformCapabilities } from '../../shared/moderation.js';
 import { resolveFromRole } from '../../modules/commands/permission-utils.js';
 import { READ_ONLY_CAPABILITIES, type PlatformChatAdapter } from '../base.js';
+import { parseTwitchEmotes } from './emotes.js';
 
 /**
  * Subset of tmi.js IRC tags. Covers fields used by this adapter.
  * Values are string | boolean | number for simple tags, or
- * Record<string, string> for composite tags like `badges`.
+ * Records for composite tags like `badges` and `emotes`.
  */
-type TmiTags = Record<string, string | boolean | number | Record<string, string> | undefined>;
+type TmiTags = Record<string, string | boolean | number | Record<string, string> | Record<string, string[]> | null | undefined>;
 
 type TmiLikeClient = {
   connect: () => Promise<unknown>;
@@ -176,6 +177,7 @@ export class TwitchChatAdapter implements PlatformChatAdapter {
         platform: 'twitch',
         author: this.resolveAuthor(tags, channel),
         content: message,
+        contentParts: parseTwitchEmotes(message, tags.emotes),
         badges: this.resolveBadges(tags),
         color: typeof tags.color === 'string' && tags.color ? tags.color : undefined,
         badgeUrls: this.options.resolveBadgeUrls ? this.options.resolveBadgeUrls((tags.badges as string | Record<string, string>) ?? '') : undefined,

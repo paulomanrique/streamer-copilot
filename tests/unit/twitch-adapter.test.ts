@@ -55,6 +55,64 @@ describe('TwitchChatAdapter', () => {
   });
 
   describe('message events', () => {
+    it('emits ordered images for repeated native emotes while preserving the original content', () => {
+      const content = 'Oi Kappa PogChamp Kappa!';
+      stub.emit('message', '#testchannel', {
+        emotes: { '25': ['18-22', '3-7'], '305954156': ['9-16'] },
+      }, content, false);
+
+      expect(messages[0].content).toBe(content);
+      expect(messages[0].contentParts).toEqual([
+        { type: 'text', text: 'Oi ' },
+        { type: 'emote', name: 'Kappa', imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/25/default/dark/2.0' },
+        { type: 'text', text: ' ' },
+        { type: 'emote', name: 'PogChamp', imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/305954156/default/dark/2.0' },
+        { type: 'text', text: ' ' },
+        { type: 'emote', name: 'Kappa', imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/25/default/dark/2.0' },
+        { type: 'text', text: '!' },
+      ]);
+    });
+
+    it('uses Unicode code point offsets and supports emotesv2 IDs', () => {
+      stub.emit('message', '#testchannel', {
+        emotes: { emotesv2_example: ['4-8'] },
+      }, '😀é🎉 Kappa 👍', false);
+
+      expect(messages[0].contentParts).toEqual([
+        { type: 'text', text: '😀é🎉 ' },
+        { type: 'emote', name: 'Kappa', imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_example/default/dark/2.0' },
+        { type: 'text', text: ' 👍' },
+      ]);
+    });
+
+    it('supports messages made entirely of emotes', () => {
+      stub.emit('message', '#testchannel', { emotes: { '25': ['0-4'] } }, 'Kappa', false);
+
+      expect(messages[0].contentParts).toEqual([
+        { type: 'emote', name: 'Kappa', imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/25/default/dark/2.0' },
+      ]);
+    });
+
+    it.each([undefined, null, {}, '', { '25': ['bad', '-1-4', '4-0', '0-99', '0-1.5'] }])(
+      'preserves plain text when emote metadata is absent or invalid (%j)', (emotes) => {
+        stub.emit('message', '#testchannel', { emotes }, 'Hello 😀 Kappa', false);
+
+        expect(messages[0].content).toBe('Hello 😀 Kappa');
+        expect(messages[0].contentParts).toBeUndefined();
+      },
+    );
+
+    it('ignores malformed and overlapping ranges without dropping message text', () => {
+      stub.emit('message', '#testchannel', {
+        emotes: { '25': ['bad', '0-99', '0-4', '0-4', '2-5', 123], invalid: '6-10' },
+      }, 'Kappa hello', false);
+
+      expect(messages[0].contentParts).toEqual([
+        { type: 'emote', name: 'Kappa', imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/25/default/dark/2.0' },
+        { type: 'text', text: ' hello' },
+      ]);
+    });
+
     it('emits chat messages with author and content', () => {
       stub.emit('message', '#testchannel', {
         'display-name': 'TestUser',
