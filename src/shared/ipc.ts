@@ -9,6 +9,7 @@ import type {
   EventLogEntry,
   EventLogFilters,
   GeneralSettings,
+  WindowSyncEvent,
   ObsConnectionSettings,
   ObsStatsSnapshot,
   PlatformId,
@@ -92,6 +93,9 @@ export type { ChatSession, ChatLogMessage };
 export const IPC_CHANNELS = {
   appGetInfo: 'app:get-info',
   appOpenExternalUrl: 'app:open-external-url',
+  appOpenSettingsWindow: 'app:open-settings-window',
+  windowSyncSend: 'window-sync:send',
+  windowSyncUpdate: 'window-sync:update',
   profilesList: 'profiles:list',
   profilesSelect: 'profiles:select',
   profilesSwitchAndRelaunch: 'profiles:switch-and-relaunch',
@@ -299,6 +303,11 @@ export interface RecentChatSnapshot {
 export interface CopilotApi {
   getAppInfo: () => Promise<AppInfo>;
   openExternalUrl: (url: string) => Promise<void>;
+  /** Opens the settings window, or focuses it when it is already open. */
+  openSettingsWindow: () => Promise<void>;
+  /** Relays a sync event to every other app window (see WindowSyncEvent). */
+  broadcastWindowSync: (event: WindowSyncEvent) => Promise<void>;
+  onWindowSync: (listener: (event: WindowSyncEvent) => void) => () => void;
   listProfiles: () => Promise<ProfilesSnapshot>;
   selectProfile: (input: SelectProfileInput) => Promise<ProfilesSnapshot>;
   /** Hard switch — persists the new active profile and relaunches the app

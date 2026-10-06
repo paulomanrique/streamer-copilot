@@ -7,13 +7,13 @@ import type { PlatformCapabilities } from '../../shared/moderation.js';
 import { useI18n } from '../i18n/I18nProvider.js';
 import { useAppStore } from '../store.js';
 import { EventBanner } from './EventBanner.js';
+import { ActivityLogList, ActivityTypeFilterMenu, allActivityTypes, type ActivityTypeFilter } from './ActivityLog.js';
 import { getPlatformDisplayName, getPlatformProviderOrFallback, listPlatformProviders } from '../platforms/registry.js';
 import {
   computeStableChatFeedRows,
   DEFAULT_MAX_CHAT_FEED_ROWS,
   deriveChatFeedRows,
   type ChatFeedRow,
-  type FeedMode,
   type StableChatFeedRowsState,
 } from './ChatFeed.logic.js';
 
@@ -152,7 +152,9 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
   const inputRef = useRef<HTMLInputElement | null>(null);
   const menuRef  = useRef<HTMLDivElement | null>(null);
 
-  const [feedMode,       setFeedMode]       = useState<FeedMode>('all');
+  // The feed area shows either the merged chat or the activity log.
+  const [view,           setView]           = useState<'chat' | 'activity'>('chat');
+  const [activityTypes,  setActivityTypes]  = useState<ActivityTypeFilter>(() => allActivityTypes(true));
   // Default-on for every registered platform; clicks toggle in place.
   const [platformFilter, setPlatformFilter] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(listPlatformProviders().map((m) => [m.id, true])),
@@ -233,13 +235,17 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
     () => deriveChatFeedRows({
       messages,
       events,
-      feedMode,
       platformEnabled,
       maxRows: DEFAULT_MAX_CHAT_FEED_ROWS,
     }),
-    [events, feedMode, messages, platformEnabled],
+    [events, messages, platformEnabled],
   );
   const items = useStableRows(rawItems);
+
+  const activityEvents = useMemo(
+    () => events.filter((event) => activityTypes[event.type] !== false && platformEnabled(event.platform)),
+    [activityTypes, events, platformEnabled],
+  );
 
   // Auto-scroll is fully owned by LegendList's `maintainScrollAtEnd` — adding
   // our own scrollToEnd on items.length change races with the library's
@@ -309,7 +315,16 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
       );
       setSuggestionEntries((prev) => ({ ...prev, [snapshot.list.id]: snapshot.entries }));
     });
-    return () => disconnect();
+    // Lists are created/deleted in the settings window; replace the catalog
+    // and drop the selection when its list is gone.
+    const disconnectSync = window.copilot.onWindowSync((event) => {
+      if (event.kind !== 'suggestion-lists') return;
+      void window.copilot.listSuggestionLists().then((lists) => {
+        setSuggestionLists(lists);
+        setSelectedListId((current) => (current && lists.some((l) => l.id === current) ? current : null));
+      });
+    });
+    return () => { disconnect(); disconnectSync(); };
   }, []);
 
   // ── adjust menu position after render ──────────────────────────────
@@ -421,23 +436,22 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
   };
 
   return (
-    <div className="flex flex-col w-[60%] border-r border-gray-800">
+    <div className="flex flex-col flex-1 min-w-0">
       {/* ── header ─────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800 shrink-0 gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <h2 className="text-sm font-semibold text-gray-200 shrink-0">Unified Chat</h2>
           <div className="inline-flex items-center gap-0.5 bg-gray-900/70 border border-gray-700/60 rounded-xl p-1 text-xs overflow-x-auto max-w-full">
-            <button type="button" onClick={() => { setFeedMode('all'); setSelectedListId(null); }}
-              className={feedMode === 'all' && !selectedListId
+            <button type="button" onClick={() => { setView('chat'); setSelectedListId(null); setIsAtBottom(true); }}
+              className={view === 'chat' && !selectedListId
                 ? 'px-3 py-1.5 rounded-lg bg-violet-600 text-white font-medium shrink-0 transition-all duration-150 shadow-sm shadow-violet-900/50'
                 : 'px-3 py-1.5 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-gray-700/60 shrink-0 transition-all duration-150'}>
               All Chats
             </button>
-            <button type="button" onClick={() => { setFeedMode('superchat'); setSelectedListId(null); }}
-              className={feedMode === 'superchat' && !selectedListId
+            <button type="button" onClick={() => { setView('activity'); setSelectedListId(null); }}
+              className={view === 'activity' && !selectedListId
                 ? 'px-3 py-1.5 rounded-lg bg-violet-600 text-white font-medium shrink-0 transition-all duration-150 shadow-sm shadow-violet-900/50'
                 : 'px-3 py-1.5 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-gray-700/60 shrink-0 transition-all duration-150'}>
-              Super Chats Only
+              {t('Activity Log')}
             </button>
             {suggestionLists.map((list) => {
               const active = selectedListId === list.id;
@@ -462,6 +476,7 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
 
         {!selectedListId && (
           <div className="flex items-center gap-1.5 shrink-0">
+            {view === 'activity' ? <ActivityTypeFilterMenu value={activityTypes} onChange={setActivityTypes} /> : null}
             {connectedPlatforms.map((id) => {
               const meta = getPlatformProviderOrFallback(id);
               const on = platformFilter[id] !== false;
@@ -482,13 +497,20 @@ export function ChatFeed({ messages, events, connectedPlatforms, recommendationT
       <div className="flex-1 min-h-0 relative">
         {(() => {
           const selectedList = selectedListId ? (suggestionLists.find((l) => l.id === selectedListId) ?? null) : null;
-          return selectedList ? (
-            <SuggestionEntriesPanel
-              list={selectedList}
-              entries={suggestionEntries[selectedList.id] ?? []}
-              onClear={() => void clearSelectedEntries()}
-            />
-          ) : (
+          if (selectedList) {
+            return (
+              <SuggestionEntriesPanel
+                list={selectedList}
+                entries={suggestionEntries[selectedList.id] ?? []}
+                onClear={() => void clearSelectedEntries()}
+              />
+            );
+          }
+          if (view === 'activity') {
+            const anyTypeEnabled = Object.values(activityTypes).some(Boolean);
+            return <ActivityLogList events={activityEvents} emptyLabel={anyTypeEnabled ? undefined : t('No event types are enabled.')} />;
+          }
+          return (
           <>
             {items.length === 0 ? (
               <div className="flex h-full items-center justify-center text-sm text-gray-500">

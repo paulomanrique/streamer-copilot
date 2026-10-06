@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { ObsStatsSnapshot, PlatformLiveEntry, TwitchLiveStats } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
-import { getPlatformProviderOrFallback } from '../platforms/registry.js';
+import { getPlatformProviderOrFallback, type PlatformProvider } from '../platforms/registry.js';
 
 interface ObsStatsPanelProps {
   stats: ObsStatsSnapshot;
-  /** Uniform live entries from the registry — drives the viewer cards. */
+  /** Uniform live entries from the registry — drives the viewer chips. */
   liveEntries: PlatformLiveEntry[];
   /** Twitch-only hype-train slice (no cross-platform analog). */
   twitchLiveStatsByChannel: Record<string, TwitchLiveStats>;
 }
 
+/** Compact, single-row stream stats for the top bar: OBS (scene, uptime,
+ *  dropped frames), one chip per live entry and the hype train when one runs. */
 export function ObsStatsPanel({ stats, liveEntries, twitchLiveStatsByChannel }: ObsStatsPanelProps) {
   const { t } = useI18n();
 
@@ -45,89 +48,78 @@ export function ObsStatsPanel({ stats, liveEntries, twitchLiveStatsByChannel }: 
   }, [hype]);
 
   return (
-    <div className="border-b border-gray-800 p-4 shrink-0">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-gray-200">OBS Studio</h2>
-          <span className={`text-xs font-medium ${stats.connected ? 'text-cyan-400' : 'text-gray-500'}`}>
-            {stats.connected ? t('CONNECTED') : t('OFFLINE')}
-          </span>
+    <div className="flex items-center gap-2 min-w-0">
+      <div className="flex items-center gap-4 h-9 px-3 rounded-lg bg-gray-800/60 border border-gray-700/50 shrink-0">
+        <div className="flex items-center gap-1.5" title={stats.connected ? t('CONNECTED') : t('OFFLINE')}>
+          <span className={`w-2 h-2 rounded-full ${stats.connected ? 'bg-cyan-400' : 'bg-gray-600'}`} />
+          <span className="text-xs font-semibold text-gray-300">OBS</span>
         </div>
-        <span className="text-xs text-gray-500">
-          {t('Scene')}: <span className="text-gray-300">{stats.sceneName}</span>
-        </span>
+        <Stat label={t('Scene')}>
+          <span className="block max-w-[160px] truncate text-gray-200" title={stats.sceneName}>{stats.sceneName}</span>
+        </Stat>
+        <Stat label={t('Time')}>
+          <span className="font-mono text-violet-400">{stats.uptimeLabel}</span>
+        </Stat>
+        <Stat label={`${t('Dropped Frames')} (${t('network')})`} short={t('network')}>
+          <span className="font-mono text-red-400">{stats.droppedFrames}</span>
+        </Stat>
+        <Stat label={`${t('Dropped Frames')} (${t('render')})`} short={t('render')}>
+          <span className="font-mono text-yellow-400">{stats.droppedFramesRender}</span>
+        </Stat>
       </div>
 
-      <div className="grid grid-cols-4 gap-2">
-        <div className="bg-gray-800/60 rounded-lg p-2.5 text-center">
-          <div className="text-base font-mono font-bold text-violet-400">{stats.uptimeLabel}</div>
-          <div className="text-xs text-gray-500 mt-0.5">{t('Time')}</div>
-        </div>
-        <div className="bg-gray-800/60 rounded-lg p-2.5 text-center">
-          <div className="text-base font-mono font-bold text-red-400">{stats.droppedFrames}</div>
-          <div className="text-xs text-gray-500 mt-0.5 leading-tight">{t('Dropped Frames')}<br />({t('network')})</div>
-        </div>
-        <div className="bg-gray-800/60 rounded-lg p-2.5 text-center">
-          <div className="text-base font-mono font-bold text-orange-400">{stats.droppedFrames}</div>
-          <div className="text-xs text-gray-500 mt-0.5 leading-tight">{t('Dropped Frames')}<br />({t('encoder')})</div>
-        </div>
-        <div className="bg-gray-800/60 rounded-lg p-2.5 text-center">
-          <div className="text-base font-mono font-bold text-yellow-400">{stats.droppedFramesRender}</div>
-          <div className="text-xs text-gray-500 mt-0.5 leading-tight">{t('Dropped Frames')}<br />({t('render')})</div>
-        </div>
+      {liveEntries.map((entry) => (
+        <ViewerChip
+          key={entry.key}
+          label={entry.cardLabel}
+          meta={getPlatformProviderOrFallback(entry.platformId)}
+          value={entry.value}
+          valueLabel={t(entry.valueLabel)}
+          isLive={entry.isLive}
+          secondaryValue={entry.secondaryValue}
+          secondaryLabel={entry.secondaryLabel ? t(entry.secondaryLabel) : undefined}
+          compactStats={entry.compactStats?.map((stat) => ({
+            ...stat,
+            label: t(stat.label),
+            accessibleValue: stat.value === '—' ? t('unavailable') : stat.value,
+          }))}
+        />
+      ))}
 
-        {liveEntries.length > 0 ? (
-          <div className="col-span-4 grid grid-cols-2 gap-2">
-            {liveEntries.map((entry) => (
-              <ViewerCard
-                key={entry.key}
-                label={entry.cardLabel}
-                meta={getPlatformProviderOrFallback(entry.platformId)}
-                value={entry.value}
-                valueLabel={t(entry.valueLabel)}
-                isLive={entry.isLive}
-                secondaryValue={entry.secondaryValue}
-                secondaryLabel={entry.secondaryLabel ? t(entry.secondaryLabel) : undefined}
-                compactStats={entry.compactStats?.map((stat) => ({
-                  ...stat,
-                  label: t(stat.label),
-                  accessibleValue: stat.value === '—' ? t('unavailable') : stat.value,
-                }))}
-              />
-            ))}
+      {hype && (
+        <div
+          className="relative flex items-center gap-2 h-9 pl-2.5 pr-3 rounded-lg overflow-hidden bg-gradient-to-r from-purple-900/40 to-blue-900/40 border border-purple-500/30 shrink-0"
+          title={`${hype.progress.toLocaleString()} / ${hype.goal.toLocaleString()} pts`}
+        >
+          <span className="text-base leading-none">🚂</span>
+          <div className="flex flex-col leading-none">
+            <span className="text-[10px] font-bold text-purple-200 uppercase tracking-wider">{t('Hype Train lvl')} {hype.level}</span>
+            <span className="text-[10px] font-mono font-bold text-purple-300 mt-1">{timeLeft}</span>
           </div>
-        ) : null}
-
-        {/* Hype Train Indicator */}
-        {hype && (
-          <div className="col-span-4 mt-2 bg-gradient-to-r from-purple-900/40 to-blue-900/40 border border-purple-500/30 rounded-lg p-2.5 shadow-lg shadow-purple-500/5">
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="flex items-center gap-2">
-                <span className="text-base leading-none">🚂</span>
-                <span className="text-[10px] font-bold text-purple-200 uppercase tracking-widest">{t('Hype Train lvl')} {hype.level}</span>
-              </div>
-              <span className="text-[10px] font-mono font-bold text-purple-300 bg-purple-500/20 px-1.5 py-0.5 rounded border border-purple-500/20">
-                {timeLeft}
-              </span>
-            </div>
-            <div className="relative h-1.5 bg-gray-950 rounded-full overflow-hidden border border-white/5">
-              <div 
-                className="absolute left-0 top-0 h-full bg-gradient-to-r from-purple-500 via-blue-400 to-cyan-400 transition-all duration-1000 ease-out"
-                style={{ width: `${Math.min(100, (hype.progress / hype.goal) * 100)}%` }}
-              />
-            </div>
-            <div className="flex justify-between mt-1.5 text-[9px] font-bold text-gray-500 uppercase tracking-tighter">
-              <span className="text-purple-400/80">{hype.progress.toLocaleString()} pts</span>
-              <span>{t('Goal')}: {hype.goal.toLocaleString()}</span>
-            </div>
+          <div className="absolute left-0 bottom-0 h-0.5 w-full bg-gray-950/60">
+            <div
+              className="h-full bg-gradient-to-r from-purple-500 via-blue-400 to-cyan-400 transition-all duration-1000 ease-out"
+              style={{ width: `${Math.min(100, (hype.progress / hype.goal) * 100)}%` }}
+            />
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function ViewerCard({
+/** Two-line stat: tiny caption over the value. `short` is the visible caption
+ *  when the full label is too long for the bar; the full one stays in the tooltip. */
+function Stat({ label, short, children }: { label: string; short?: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col leading-none min-w-0" title={label}>
+      <span className="text-[10px] text-gray-500 uppercase tracking-wide">{short ?? label}</span>
+      <span className="text-xs font-bold mt-1">{children}</span>
+    </div>
+  );
+}
+
+function ViewerChip({
   label,
   meta,
   value,
@@ -138,7 +130,7 @@ function ViewerCard({
   valueLabel = 'viewers',
 }: {
   label: string;
-  meta: import('../platforms/registry.js').PlatformProvider;
+  meta: PlatformProvider;
   value: string;
   isLive?: boolean;
   secondaryValue?: string;
@@ -152,40 +144,42 @@ function ViewerCard({
   valueLabel?: string;
 }) {
   return (
-    <div className={`border rounded-lg p-2.5 text-center ${meta.card.classes}`}>
-      <div className="flex items-center justify-center gap-1 mb-0.5">
-        <svg className={`w-3 h-3 ${meta.card.metaClass}`} viewBox="0 0 24 24" fill="currentColor">
-          <path d={meta.icon} />
-        </svg>
-        <span className={`text-xs ${meta.card.metaClass}`}>{label}</span>
-        {isLive ? <span className="text-[10px] text-red-400 font-bold ml-0.5">LIVE</span> : null}
+    <div className={`flex items-center gap-2 h-9 px-2.5 border rounded-lg shrink-0 ${meta.card.classes}`}>
+      <svg className={`w-3.5 h-3.5 shrink-0 ${meta.card.metaClass}`} viewBox="0 0 24 24" fill="currentColor">
+        <path d={meta.icon} />
+      </svg>
+      <div className="flex flex-col leading-none">
+        <span className={`flex items-center gap-1 text-[10px] ${meta.card.metaClass}`}>
+          {label}
+          {isLive ? <span className="w-1.5 h-1.5 rounded-full bg-red-500 pulse-dot" title="LIVE" /> : null}
+        </span>
+        {compactStats && compactStats.length > 0 ? (
+          <span className="mt-1 flex items-center gap-1 text-xs font-mono font-bold tabular-nums whitespace-nowrap">
+            {compactStats.map((stat, index) => (
+              <span
+                key={`${stat.shortLabel}:${stat.label}`}
+                className="inline-flex items-center gap-0.5"
+                title={`${stat.label}: ${stat.accessibleValue}`}
+                aria-label={`${stat.label}: ${stat.accessibleValue}`}
+              >
+                {index > 0 ? <span aria-hidden="true" className="mr-0.5 text-gray-600">/</span> : null}
+                <span aria-hidden="true" className={meta.card.metaClass}>{stat.shortLabel}</span>
+                <span aria-hidden="true">{stat.value}</span>
+              </span>
+            ))}
+          </span>
+        ) : (
+          <span className="mt-1 text-xs font-mono font-bold whitespace-nowrap">
+            {value}
+            <span className="ml-1 font-sans font-normal text-[10px] text-gray-500">{valueLabel}</span>
+            {secondaryValue !== undefined && secondaryLabel ? (
+              <span className="ml-1.5 font-sans font-normal text-[10px]" title={secondaryLabel}>
+                <span className={meta.card.metaClass}>{secondaryValue}</span> <span className="text-gray-500">{secondaryLabel}</span>
+              </span>
+            ) : null}
+          </span>
+        )}
       </div>
-      {compactStats && compactStats.length > 0 ? (
-        <div className="mt-1 flex items-center justify-center gap-1 text-[11px] font-mono font-bold tabular-nums whitespace-nowrap">
-          {compactStats.map((stat, index) => (
-            <span
-              key={`${stat.shortLabel}:${stat.label}`}
-              className="inline-flex items-center gap-0.5"
-              title={`${stat.label}: ${stat.accessibleValue}`}
-              aria-label={`${stat.label}: ${stat.accessibleValue}`}
-            >
-              {index > 0 ? <span aria-hidden="true" className="mr-0.5 text-gray-600">/</span> : null}
-              <span aria-hidden="true" className={meta.card.metaClass}>{stat.shortLabel}</span>
-              <span aria-hidden="true">{stat.value}</span>
-            </span>
-          ))}
-        </div>
-      ) : (
-        <>
-          <div className="text-base font-mono font-bold">{value}</div>
-          <div className="text-xs text-gray-500 mt-0.5">{valueLabel}</div>
-          {secondaryValue !== undefined && secondaryLabel ? (
-            <div className="text-xs mt-0.5">
-              <span className={meta.card.metaClass}>{secondaryValue}</span> <span className="text-gray-500">{secondaryLabel}</span>
-            </div>
-          ) : null}
-        </>
-      )}
     </div>
   );
 }

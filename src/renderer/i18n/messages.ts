@@ -221,6 +221,7 @@ const ptUi: Record<string, string> = {
   'Copy links to share each live output on social media.': 'Copie links para compartilhar cada saída ao vivo nas redes sociais.',
   'No live outputs detected.': 'Nenhuma saída ao vivo detectada.',
   'Activity Log': 'Log de atividades',
+  'No activity yet.': 'Nenhuma atividade ainda.',
   'OBS Chat Overlay': 'Overlay de chat OBS',
   'Add this URL to an OBS Browser Source to show the live chat on stream.': 'Adicione esta URL a uma Fonte de Navegador do OBS para mostrar o chat ao vivo na transmissão.',
   'Filter': 'Filtrar',

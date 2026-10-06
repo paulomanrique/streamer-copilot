@@ -135,6 +135,7 @@ import {
   overlayDefaultsSchema,
   overlayPreferencesSetInputSchema,
   highlightMessageInputSchema,
+  windowSyncEventSchema,
   userListCreateInputSchema,
   userListRenameInputSchema,
   userListIdInputSchema,
@@ -174,6 +175,7 @@ interface AppContextOptions {
   stateHub: StateHub;
   userDataPath: string;
   getWindow: () => BrowserWindow | null;
+  openSettingsWindow: () => Promise<void>;
 }
 
 const CONTEXT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -1723,8 +1725,8 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
     const notification = new Notification({ title, body: bodyParts.join(' · ') });
     notification.on('click', () => {
-      const win = BrowserWindow.getAllWindows()[0];
-      if (win) {
+      const win = options.getWindow();
+      if (win && !win.isDestroyed()) {
         if (!win.isVisible()) win.show();
         win.focus();
       }
@@ -1900,6 +1902,13 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const url = String(raw ?? '').trim();
     if (!/^https?:\/\//i.test(url)) throw new Error('Only http(s) links are allowed');
     await shell.openExternal(url);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.appOpenSettingsWindow, async () => {
+    await options.openSettingsWindow();
+  });
+  ipcMain.handle(IPC_CHANNELS.windowSyncSend, async (event, raw) => {
+    options.stateHub.relayWindowSync(event.sender, windowSyncEventSchema.parse(raw));
   });
 
   ipcMain.handle(IPC_CHANNELS.profilesList, async () => profileStore.list());
@@ -2223,8 +2232,16 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
 
   // Suggestions Handlers
   ipcMain.handle(IPC_CHANNELS.suggestionsList, async () => suggestionService.listLists());
-  ipcMain.handle(IPC_CHANNELS.suggestionsUpsert, async (_, raw) => suggestionService.upsertList(suggestionListUpsertInputSchema.parse(raw) as import('../shared/types.js').SuggestionListUpsertInput));
-  ipcMain.handle(IPC_CHANNELS.suggestionsDelete, async (_, raw) => suggestionService.deleteList(suggestionListDeleteInputSchema.parse(raw).id));
+  ipcMain.handle(IPC_CHANNELS.suggestionsUpsert, async (_, raw) => {
+    const result = await suggestionService.upsertList(suggestionListUpsertInputSchema.parse(raw) as import('../shared/types.js').SuggestionListUpsertInput);
+    options.stateHub.pushWindowSync({ kind: 'suggestion-lists' });
+    return result;
+  });
+  ipcMain.handle(IPC_CHANNELS.suggestionsDelete, async (_, raw) => {
+    const result = await suggestionService.deleteList(suggestionListDeleteInputSchema.parse(raw).id);
+    options.stateHub.pushWindowSync({ kind: 'suggestion-lists' });
+    return result;
+  });
   ipcMain.handle(IPC_CHANNELS.suggestionsEntries, async (_, listId) => suggestionService.getEntries(String(listId ?? '')));
   ipcMain.handle(IPC_CHANNELS.suggestionsClearEntries, async (_, listId) => suggestionService.clearEntries(String(listId ?? '')));
 
@@ -3001,9 +3018,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   // ── R6: Accounts (multi-account) ─────────────────────────────────────────
 
   function pushAccountStatus(status: import('../shared/types.js').PlatformAccountStatus): void {
-    const win = options.getWindow();
-    if (!win || win.isDestroyed()) return;
-    win.webContents.send(IPC_CHANNELS.accountsStatus, status);
+    options.stateHub.pushAccountStatus(status);
   }
 
   /** Re-broadcast every account of `providerId` after an internal status change. */
@@ -3775,6 +3790,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const input = accountCreateInputSchema.parse(raw);
     const created = await accountRepository.upsert(input);
     if (created.providerId === 'youtube-api') await refreshYoutubeApiAccounts();
+    options.stateHub.pushWindowSync({ kind: 'accounts' });
     // Auto-connect right after creation when the account opted in. The wizard
     // saves with autoConnect+enabled by default, so the user expects the new
     // network to come up without an extra "Connect" click. Fire-and-forget —
@@ -3807,6 +3823,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     const input = accountUpdateInputSchema.parse(raw);
     const updated = await accountRepository.upsert(input);
     if (updated.providerId === 'youtube-api') await refreshYoutubeApiAccounts();
+    options.stateHub.pushWindowSync({ kind: 'accounts' });
     return updated;
   });
 
@@ -3834,6 +3851,7 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
     }
     await accountRepository.delete(input.id);
     if (account?.providerId === 'youtube-api') await refreshYoutubeApiAccounts();
+    options.stateHub.pushWindowSync({ kind: 'accounts' });
   });
 
   ipcMain.handle(IPC_CHANNELS.accountsConnect, async (_, raw) => {

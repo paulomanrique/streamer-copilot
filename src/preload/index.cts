@@ -11,6 +11,7 @@ import type {
   EventLogEntry,
   EventLogFilters,
   GeneralSettings,
+  WindowSyncEvent,
   ObsConnectionSettings,
   ObsStatsSnapshot,
   ProfileSettings,
@@ -79,6 +80,9 @@ import type {
 const IPC_CHANNELS = {
   appGetInfo: 'app:get-info',
   appOpenExternalUrl: 'app:open-external-url',
+  appOpenSettingsWindow: 'app:open-settings-window',
+  windowSyncSend: 'window-sync:send',
+  windowSyncUpdate: 'window-sync:update',
   profilesList: 'profiles:list',
   profilesSelect: 'profiles:select',
   profilesSwitchAndRelaunch: 'profiles:switch-and-relaunch',
@@ -275,6 +279,13 @@ const IPC_CHANNELS = {
 const copilotApi: CopilotApi = {
   getAppInfo: () => ipcRenderer.invoke(IPC_CHANNELS.appGetInfo),
   openExternalUrl: (url: string) => ipcRenderer.invoke(IPC_CHANNELS.appOpenExternalUrl, url),
+  openSettingsWindow: () => ipcRenderer.invoke(IPC_CHANNELS.appOpenSettingsWindow) as Promise<void>,
+  broadcastWindowSync: (event: WindowSyncEvent) => ipcRenderer.invoke(IPC_CHANNELS.windowSyncSend, event) as Promise<void>,
+  onWindowSync: (listener: (event: WindowSyncEvent) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: WindowSyncEvent) => listener(payload);
+    ipcRenderer.on(IPC_CHANNELS.windowSyncUpdate, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.windowSyncUpdate, wrappedListener); };
+  },
   listProfiles: () => ipcRenderer.invoke(IPC_CHANNELS.profilesList),
   selectProfile: (input: SelectProfileInput) => ipcRenderer.invoke(IPC_CHANNELS.profilesSelect, input),
   switchProfileAndRelaunch: (input: SelectProfileInput) => ipcRenderer.invoke(IPC_CHANNELS.profilesSwitchAndRelaunch, input),

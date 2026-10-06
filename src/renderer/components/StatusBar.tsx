@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
 
-import type { PlatformAccount, PlatformAccountConnectionStatus } from '../../shared/types.js';
+import type { PlatformAccount, PlatformAccountConnectionStatus, PlatformLiveEntry } from '../../shared/types.js';
 import { useI18n } from '../i18n/I18nProvider.js';
 import { getPlatformProviderOrFallback } from '../platforms/registry.js';
+import { LiveIndicator } from './LiveIndicator.js';
 
 interface StatusBarProps {
   activeProfileName: string;
   obsConnected: boolean;
+  /** Uniform live entries from the registry — drive the LIVE indicator. */
+  liveEntries: PlatformLiveEntry[];
 }
 
 function dotClass(providerId: string, status: PlatformAccountConnectionStatus): string {
@@ -16,7 +19,7 @@ function dotClass(providerId: string, status: PlatformAccountConnectionStatus): 
   return 'bg-gray-600';
 }
 
-export function StatusBar({ activeProfileName, obsConnected }: StatusBarProps) {
+export function StatusBar({ activeProfileName, obsConnected, liveEntries }: StatusBarProps) {
   const { messages, t } = useI18n();
   const [accounts, setAccounts] = useState<PlatformAccount[]>([]);
   const [statuses, setStatuses] = useState<Record<string, PlatformAccountConnectionStatus>>({});
@@ -50,9 +53,15 @@ export function StatusBar({ activeProfileName, obsConnected }: StatusBarProps) {
     const unsub = window.copilot.onAccountStatus((status) => {
       setStatuses((prev) => ({ ...prev, [status.accountId]: status.status }));
     });
+    // Accounts are managed in the settings window — re-list only when the
+    // catalog itself changes.
+    const unsubSync = window.copilot.onWindowSync((event) => {
+      if (event.kind === 'accounts') void refresh();
+    });
     return () => {
       cancelled = true;
       unsub();
+      unsubSync();
     };
   }, []);
 
@@ -93,6 +102,8 @@ export function StatusBar({ activeProfileName, obsConnected }: StatusBarProps) {
           {t('Profile')}: <span className="text-gray-300">{activeProfileName}</span>
         </span>
       </div>
+
+      <LiveIndicator liveEntries={liveEntries} />
     </footer>
   );
 }

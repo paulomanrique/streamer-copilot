@@ -1,7 +1,5 @@
 import type { ChatMessage, StreamEvent } from '../../shared/types.js';
 
-export type FeedMode = 'all' | 'superchat';
-
 export type ChatFeedRow =
   | { kind: 'message'; id: string; order: number; message: ChatMessage }
   | { kind: 'event'; id: string; order: number; event: StreamEvent };
@@ -16,29 +14,27 @@ export const DEFAULT_MAX_CHAT_FEED_ROWS = 500;
 export function deriveChatFeedRows(input: {
   messages: ChatMessage[];
   events: StreamEvent[];
-  feedMode: FeedMode;
   platformEnabled: (platform: string) => boolean;
   maxRows?: number;
 }): ChatFeedRow[] {
   const maxRows = input.maxRows ?? DEFAULT_MAX_CHAT_FEED_ROWS;
   const rows: ChatFeedRow[] = [];
 
-  if (input.feedMode !== 'superchat') {
-    for (const message of input.messages) {
-      if (!input.platformEnabled(message.platform)) continue;
-      rows.push({
-        kind: 'message',
-        id: `message:${message.id}`,
-        order: getReceivedOrder(message),
-        message,
-      });
-    }
+  for (const message of input.messages) {
+    if (!input.platformEnabled(message.platform)) continue;
+    rows.push({
+      kind: 'message',
+      id: `message:${message.id}`,
+      order: getReceivedOrder(message),
+      message,
+    });
   }
 
   for (const event of input.events) {
     if (!input.platformEnabled(event.platform)) continue;
-    if (input.feedMode === 'superchat' && event.type !== 'superchat') continue;
-    if (input.feedMode !== 'superchat' && event.type !== 'raid' && event.type !== 'superchat') continue;
+    // Only raids and super chats are inlined in the chat; the rest live in
+    // the activity log.
+    if (event.type !== 'raid' && event.type !== 'superchat') continue;
     rows.push({
       kind: 'event',
       id: `event:${event.id}`,

@@ -784,6 +784,18 @@ const chatMessageContentPartSchema = z.union([
   }),
 ]);
 
+export const windowSyncEventSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('general-settings') }),
+  z.object({ kind: z.literal('profiles') }),
+  z.object({
+    kind: z.literal('voice-prefs'),
+    languageCode: z.string().min(1).max(32),
+    voiceRate: z.number().min(0.1).max(10),
+    voiceVolume: z.number().min(0).max(1),
+  }),
+  z.object({ kind: z.literal('voice-prefs-request') }),
+]);
+
 export const highlightMessageInputSchema = z.object({
   message: z.object({
     id: z.string().min(1).max(200),

@@ -8,6 +8,21 @@ export interface AppInfo {
   nodeVersion: string;
 }
 
+/** Renderer-to-renderer sync between the app windows (main + settings),
+ *  relayed by main. Each window owns its own React state, so a change saved
+ *  in one window tells the others what to refetch or apply. */
+export type WindowSyncEvent =
+  | { kind: 'general-settings' }
+  | { kind: 'profiles' }
+  | { kind: 'voice-prefs'; languageCode: string; voiceRate: number; voiceVolume: number }
+  /** Sent by a freshly opened settings window; the main window answers with
+   *  'voice-prefs' (those prefs live only in the main window's memory). */
+  | { kind: 'voice-prefs-request' }
+  /** Emitted by main after account / suggestion-list CRUD so views that load
+   *  those catalogs once (status bar chips, chat-feed list tabs) refetch. */
+  | { kind: 'accounts' }
+  | { kind: 'suggestion-lists' };
+
 export interface GeneralSettings {
   startOnLogin: boolean;
   minimizeToTray: boolean;

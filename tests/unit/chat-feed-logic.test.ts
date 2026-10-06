@@ -28,33 +28,30 @@ function event(id: string, order: number, type: StreamEvent['type'] = 'superchat
 }
 
 describe('deriveChatFeedRows', () => {
-  it('keeps superchats in chronological flow in all mode', () => {
+  it('keeps superchats in chronological flow', () => {
     const rows = deriveChatFeedRows({
       messages: [message('m1', 1), message('m2', 3)],
       events: [event('s1', 2)],
-      feedMode: 'all',
       platformEnabled: () => true,
     });
 
     expect(rows.map((row) => row.id)).toEqual(['message:m1', 'event:s1', 'message:m2']);
   });
 
-  it('shows only superchat events in superchat mode', () => {
+  it('inlines only raids and superchats, leaving other events to the activity log', () => {
     const rows = deriveChatFeedRows({
       messages: [message('m1', 1)],
-      events: [event('raid1', 2, 'raid'), event('s1', 3, 'superchat')],
-      feedMode: 'superchat',
+      events: [event('raid1', 2, 'raid'), event('s1', 3, 'superchat'), event('f1', 4, 'follow')],
       platformEnabled: () => true,
     });
 
-    expect(rows.map((row) => row.id)).toEqual(['event:s1']);
+    expect(rows.map((row) => row.id)).toEqual(['message:m1', 'event:raid1', 'event:s1']);
   });
 
   it('applies platform filters before returning rows', () => {
     const rows = deriveChatFeedRows({
       messages: [message('m1', 1, 'twitch'), message('m2', 2, 'kick')],
       events: [event('s1', 3)],
-      feedMode: 'all',
       platformEnabled: (platform) => platform !== 'twitch',
     });
 
@@ -67,7 +64,6 @@ describe('computeStableChatFeedRows', () => {
     const rows = deriveChatFeedRows({
       messages: [message('m1', 1)],
       events: [],
-      feedMode: 'all',
       platformEnabled: () => true,
     });
     const first = computeStableChatFeedRows(rows, { byId: new Map(), result: [] });

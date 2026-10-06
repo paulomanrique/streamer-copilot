@@ -38,6 +38,7 @@ const APP_ICON_FILE = 'icon.png';
 app.setName(USER_DATA_DIR_NAME);
 
 let mainWindow: BrowserWindow | null = null;
+let settingsWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let teardownContext: (() => Promise<void>) | null = null;
 let stopAutoUpdater: (() => void) | null = null;
@@ -48,12 +49,9 @@ let isRunningQuitCleanup = false;
 let didFinishQuitCleanup = false;
 const stateHub = new StateHub();
 
-async function createMainWindow(): Promise<void> {
-  mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 1024,
-    minHeight: 680,
+function createAppWindow(size: { width: number; height: number; minWidth: number; minHeight: number }): BrowserWindow {
+  const window = new BrowserWindow({
+    ...size,
     show: false,
     backgroundColor: '#0b1020',
     icon: getAppIconPath(),
@@ -65,23 +63,67 @@ async function createMainWindow(): Promise<void> {
     },
   });
 
-  stateHub.attachWindow(mainWindow);
-
-  // The app is a single-page renderer; it never legitimately opens a second
-  // window or navigates the top frame away from its own bundle. Route any
+  // App windows only ever render the renderer bundle; window.open is never
+  // legitimate (the settings window is opened by main over IPC). Route any
   // window.open / target=_blank to the OS browser (http(s) only) and block
   // stray top-level navigations, opening external links externally instead.
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  window.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
     return { action: 'deny' };
   });
-  mainWindow.webContents.on('will-navigate', (event, url) => {
+  window.webContents.on('will-navigate', (event, url) => {
     const appUrl = process.env.VITE_DEV_SERVER_URL;
     const isAppNavigation = appUrl ? url.startsWith(appUrl) : url.startsWith('file://');
     if (isAppNavigation) return;
     event.preventDefault();
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
   });
+
+  return window;
+}
+
+/** Loads the renderer bundle. `role` picks which UI the renderer mounts
+ *  (see src/renderer/window-role.ts); the main window passes none. */
+async function loadRenderer(window: BrowserWindow, role?: 'settings'): Promise<void> {
+  const devServerUrl = process.env.VITE_DEV_SERVER_URL;
+  if (devServerUrl) {
+    const url = new URL(devServerUrl);
+    if (role) url.searchParams.set('window', role);
+    await window.loadURL(url.toString());
+  } else {
+    await window.loadFile(RENDERER_INDEX_PATH, role ? { query: { window: role } } : undefined);
+  }
+}
+
+async function openSettingsWindow(): Promise<void> {
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    if (settingsWindow.isMinimized()) settingsWindow.restore();
+    settingsWindow.show();
+    settingsWindow.focus();
+    return;
+  }
+
+  const window = createAppWindow({ width: 1180, height: 800, minWidth: 900, minHeight: 600 });
+  settingsWindow = window;
+  stateHub.attachAuxWindow(window);
+  window.once('ready-to-show', () => window.show());
+  window.on('closed', () => {
+    stateHub.detachAuxWindow(window);
+    if (settingsWindow === window) settingsWindow = null;
+  });
+  try {
+    await loadRenderer(window, 'settings');
+  } catch (cause) {
+    // Don't cache a window that never loaded — the next click must retry.
+    window.destroy();
+    throw cause;
+  }
+}
+
+async function createMainWindow(): Promise<void> {
+  mainWindow = createAppWindow({ width: 1280, height: 800, minWidth: 1024, minHeight: 680 });
+
+  stateHub.attachWindow(mainWindow);
 
   mainWindow.once('ready-to-show', () => {
     mainWindow?.maximize();
@@ -110,15 +152,12 @@ async function createMainWindow(): Promise<void> {
   mainWindow.on('closed', () => {
     mainWindow = null;
     stateHub.detachWindow();
+    // Settings is a satellite of the main window — it has no media host or
+    // dashboard of its own, so it never outlives it.
+    if (settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.close();
   });
 
-  const devServerUrl = process.env.VITE_DEV_SERVER_URL;
-
-  if (devServerUrl) {
-    await mainWindow.loadURL(devServerUrl);
-  } else {
-    await mainWindow.loadFile(RENDERER_INDEX_PATH);
-  }
+  await loadRenderer(mainWindow);
 }
 
 app.whenReady().then(async () => {
@@ -150,6 +189,7 @@ app.whenReady().then(async () => {
     stateHub,
     userDataPath: app.getPath('userData'),
     getWindow: () => mainWindow,
+    openSettingsWindow,
   });
 
   await createMainWindow();

@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { DEFAULT_APP_LANGUAGE } from '../shared/constants.js';
-import type { AppInfo, AppLanguage, GeneralSettings, PlatformId, ProfileSettings, ProfilesSnapshot, TwitchLiveStats } from '../shared/types.js';
+import type { AppLanguage, GeneralSettings, PlatformId, ProfileSettings, ProfilesSnapshot, TwitchLiveStats, WindowSyncEvent } from '../shared/types.js';
 import { useAppStore } from './store.js';
 import { listPlatformProviders } from './platforms/registry.js';
 import { I18nProvider } from './i18n/I18nProvider.js';
@@ -10,7 +10,6 @@ import { AppHeader } from './components/AppHeader.js';
 import { DashboardSummary } from './components/DashboardSummary.js';
 import { ProfileFormModal } from './components/ProfileFormModal.js';
 import { ProfileSelectorModal } from './components/ProfileSelectorModal.js';
-import type { AppSection } from './components/SectionTabs.js';
 import { SectionErrorBoundary } from './components/AppErrorBoundary.js';
 import { StatusMessages } from './components/StatusMessages.js';
 import { ToastStack } from './components/ToastStack.js';
@@ -19,6 +18,7 @@ import { useAudioQueue } from './hooks/useAudioQueue.js';
 import { useMusicPlayer } from './hooks/useMusicPlayer.js';
 import { useIpcListeners } from './hooks/useIpcListeners.js';
 import { useToasts } from './hooks/useToasts.js';
+import { WINDOW_ROLE } from './window-role.js';
 
 const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   startOnLogin: false,
@@ -30,6 +30,20 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
 };
 
 type ProfileFormMode = 'create' | 'rename' | 'clone';
+
+/** Tells the other app windows what changed. Fire-and-forget: a missing peer
+ *  window is the normal case, not an error. */
+function notifyWindows(event: WindowSyncEvent): void {
+  void window.copilot.broadcastWindowSync(event).catch(() => null);
+}
+
+/** Media playback (sound commands, TTS, music) runs in the main window only;
+ *  main never routes playback pushes to the settings window either. */
+function PlaybackHost(props: { voiceRate: number; voiceVolume: number; languageCode: string; onError: (message: string) => void }) {
+  useAudioQueue(props);
+  useMusicPlayer();
+  return null;
+}
 
 export default function App() {
   const {
@@ -60,7 +74,6 @@ export default function App() {
     })),
     [platformLiveStats, platformStatus, platformPrimaryChannel],
   );
-  const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isProfileSelectorOpen, setIsProfileSelectorOpen] = useState(false);
@@ -76,7 +89,6 @@ export default function App() {
    *  profile's accounts, lives or lists in the meantime. */
   const [sessionProfileId, setSessionProfileId] = useState<string | null>(null);
   const [rememberProfileSelection, setRememberProfileSelection] = useState(false);
-  const [currentSection, setCurrentSection] = useState<AppSection>('dashboard');
   const [generalSettings, setGeneralSettings] = useState<GeneralSettings>(DEFAULT_GENERAL_SETTINGS);
   const [appLanguage, setAppLanguage] = useState<AppLanguage>(DEFAULT_APP_LANGUAGE);
   const [languageCode, setLanguageCode] = useState('en-US');
@@ -90,10 +102,12 @@ export default function App() {
     pushToast(messages[appLanguage].errors.rendererError, message);
   }, [appLanguage, pushToast]);
 
-  // Extracted hooks for audio, TTS, and IPC listeners
-  useAudioQueue({ voiceRate, voiceVolume, languageCode, onError: pushError });
-  useMusicPlayer();
   useIpcListeners();
+
+  // Latest voice prefs for answering a settings window's request without
+  // re-subscribing the sync listener on every slider move.
+  const voicePrefsRef = useRef({ languageCode, voiceRate, voiceVolume });
+  voicePrefsRef.current = { languageCode, voiceRate, voiceVolume };
 
   const activeProfile = useMemo(
     () => profiles.find((profile) => profile.id === activeProfileId) ?? null,
@@ -112,17 +126,22 @@ export default function App() {
       try {
         // Profile-scoped data (chat, platform statuses, tiers, lists) loads in
         // onSelectProfile, once main has started the chosen profile's session.
-        const [info, snapshot, nextGeneralSettings] = await Promise.all([
-          window.copilot.getAppInfo(),
+        const [snapshot, nextGeneralSettings] = await Promise.all([
           window.copilot.listProfiles(),
           window.copilot.getGeneralSettings(),
         ]);
-        setAppInfo(info);
         setProfiles(snapshot);
         applyAppLanguageFromSnapshot(snapshot);
         setGeneralSettings(nextGeneralSettings);
         setSelectorProfileId(snapshot.activeProfileId);
         setRememberProfileSelection(snapshot.autoSelectActiveProfile);
+        // The settings window only opens from a running session — attach to
+        // it instead of selecting (which would restart the profile session).
+        if (WINDOW_ROLE === 'settings') {
+          await hydrateSession(snapshot);
+          notifyWindows({ kind: 'voice-prefs-request' });
+          return;
+        }
         // Smart skip: don't bother prompting when there's only one profile,
         // or when the user already opted in to auto-select via the picker's
         // "don't ask again" checkbox. Falls through to the picker otherwise.
@@ -148,28 +167,38 @@ export default function App() {
   }, [setChatSnapshot, setProfiles, hydratePlatformStatuses, setSubscriberTiers, setUserLists]);
 
   useEffect(() => {
-    if (!isLoading && !activeProfileId) {
+    if (WINDOW_ROLE === 'main' && !isLoading && !activeProfileId) {
       setIsProfileSelectorOpen(true);
     }
   }, [activeProfileId, isLoading]);
 
+  useEffect(() => {
+    if (WINDOW_ROLE !== 'settings') return;
+    document.title = `${messages[appLanguage].settings.title} — Streamer Copilot`;
+  }, [appLanguage]);
+
+  /** Loads the profile-scoped data of the session main is running. */
+  const hydrateSession = async (snapshot: ProfilesSnapshot) => {
+    const [recentChat, platformStatuses, tiers, lists] = await Promise.all([
+      window.copilot.getRecentChat(),
+      window.copilot.getPlatformStatuses(),
+      window.copilot.getSubscriberTiers(),
+      window.copilot.listUserLists(),
+    ]);
+    setProfiles(snapshot);
+    applyAppLanguageFromSnapshot(snapshot);
+    setChatSnapshot(recentChat);
+    hydratePlatformStatuses(platformStatuses);
+    setSubscriberTiers(tiers);
+    setUserLists(lists);
+    setSelectorProfileId(snapshot.activeProfileId);
+    setSessionProfileId(snapshot.activeProfileId);
+  };
+
   const onSelectProfile = async (profileId: string) => {
     try {
       const snapshot = await window.copilot.selectProfile({ profileId });
-      const [recentChat, platformStatuses, tiers, lists] = await Promise.all([
-        window.copilot.getRecentChat(),
-        window.copilot.getPlatformStatuses(),
-        window.copilot.getSubscriberTiers(),
-        window.copilot.listUserLists(),
-      ]);
-      setProfiles(snapshot);
-      applyAppLanguageFromSnapshot(snapshot);
-      setChatSnapshot(recentChat);
-      hydratePlatformStatuses(platformStatuses);
-      setSubscriberTiers(tiers);
-      setUserLists(lists);
-      setSelectorProfileId(snapshot.activeProfileId);
-      setSessionProfileId(snapshot.activeProfileId);
+      await hydrateSession(snapshot);
       setError(null);
       return snapshot;
     } catch (cause) {
@@ -197,6 +226,42 @@ export default function App() {
     applyAppLanguageFromSnapshot(snapshot);
   };
 
+  /** Applies a snapshot this window produced and tells the other windows. */
+  const commitProfilesSnapshot = (snapshot: ProfilesSnapshot) => {
+    applyProfilesSnapshot(snapshot);
+    notifyWindows({ kind: 'profiles' });
+  };
+
+  // Changes saved in another window (settings ↔ main) — refetch or apply.
+  // Applying never re-broadcasts, so the windows can't ping-pong.
+  useEffect(() => {
+    return window.copilot.onWindowSync((event) => {
+      if (event.kind === 'general-settings') {
+        void window.copilot.getGeneralSettings().then(setGeneralSettings).catch(() => null);
+      } else if (event.kind === 'profiles') {
+        void window.copilot.listProfiles().then(applyProfilesSnapshot).catch(() => null);
+      } else if (event.kind === 'voice-prefs') {
+        setLanguageCode(event.languageCode);
+        setVoiceRate(event.voiceRate);
+        setVoiceVolume(event.voiceVolume);
+      } else if (event.kind === 'voice-prefs-request' && WINDOW_ROLE === 'main') {
+        notifyWindows({ kind: 'voice-prefs', ...voicePrefsRef.current });
+      }
+    });
+    // applyProfilesSnapshot only calls state setters, so the mount-time
+    // closure stays correct.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const changeVoicePrefs = (next: Partial<{ languageCode: string; voiceRate: number; voiceVolume: number }>) => {
+    const prefs = { ...voicePrefsRef.current, ...next };
+    voicePrefsRef.current = prefs;
+    setLanguageCode(prefs.languageCode);
+    setVoiceRate(prefs.voiceRate);
+    setVoiceVolume(prefs.voiceVolume);
+    notifyWindows({ kind: 'voice-prefs', ...prefs });
+  };
+
   /** With a session running, main only registers a new profile (the active
    *  one can't move under a live session) — relaunch into it instead. */
   const enterNewProfile = async (snapshot: ProfilesSnapshot) => {
@@ -211,7 +276,7 @@ export default function App() {
     try {
       const snapshot = await window.copilot.createProfile({ name: name.trim(), directory, appLanguage });
       if (await enterNewProfile(snapshot)) return;
-      applyProfilesSnapshot(snapshot);
+      commitProfilesSnapshot(snapshot);
       setSelectorProfileId(snapshot.activeProfileId);
       setIsProfileFormOpen(false);
       setProfileFormDirectory('');
@@ -228,7 +293,7 @@ export default function App() {
 
     try {
       const snapshot = await window.copilot.renameProfile({ profileId: activeProfileId, name: name.trim() });
-      applyProfilesSnapshot(snapshot);
+      commitProfilesSnapshot(snapshot);
       setIsProfileFormOpen(false);
       setProfileFormName('');
       setError(null);
@@ -248,7 +313,7 @@ export default function App() {
         directory,
       });
       if (await enterNewProfile(snapshot)) return;
-      applyProfilesSnapshot(snapshot);
+      commitProfilesSnapshot(snapshot);
       setIsProfileFormOpen(false);
       setProfileFormDirectory('');
       setProfileFormName('');
@@ -267,7 +332,7 @@ export default function App() {
 
     try {
       const snapshot = await window.copilot.deleteProfile({ profileId: activeProfileId });
-      applyProfilesSnapshot(snapshot);
+      commitProfilesSnapshot(snapshot);
       setError(null);
     } catch (cause) {
       pushError(cause instanceof Error ? cause.message : messages[appLanguage].errors.failedToDeleteProfile);
@@ -331,7 +396,7 @@ export default function App() {
     // unchecked it after a previous run had it on — both directions matter.
     try {
       const updated = await window.copilot.setAutoSelectActiveProfile({ autoSelect: rememberProfileSelection });
-      applyProfilesSnapshot(updated);
+      commitProfilesSnapshot(updated);
     } catch (cause) {
       pushError(cause instanceof Error ? cause.message : messages[appLanguage].errors.failedToSelectProfile);
     }
@@ -346,6 +411,7 @@ export default function App() {
     try {
       const saved = await window.copilot.saveGeneralSettings(settings);
       setGeneralSettings(saved);
+      notifyWindows({ kind: 'general-settings' });
       setError(null);
     } catch (cause) {
       pushError(cause instanceof Error ? cause.message : messages[appLanguage].errors.failedToSaveGeneralSettings);
@@ -364,6 +430,7 @@ export default function App() {
           profile.id === activeProfileId ? { ...profile, appLanguage: saved.appLanguage } : profile,
         ),
       });
+      notifyWindows({ kind: 'profiles' });
       setError(null);
       return saved;
     } catch (cause) {
@@ -376,30 +443,29 @@ export default function App() {
     <I18nProvider language={appLanguage} setLanguage={setAppLanguage}>
     <main key={appLanguage} className="h-screen overflow-hidden bg-gray-950 text-gray-200 flex flex-col">
       <section className="w-screen flex-1 min-h-0 bg-gray-950 flex flex-col">
-        {hasActiveProfile ? (
+        {hasActiveProfile && WINDOW_ROLE === 'main' ? (
           <AppHeader
-            appInfo={appInfo}
-            currentSection={currentSection}
-            onChangeSection={setCurrentSection}
+            obsStats={obsStats}
             liveEntries={liveEntries}
+            twitchLiveStatsByChannel={twitchLiveStatsByChannel}
+            onOpenSettings={() => void window.copilot.openSettingsWindow().catch((cause) => pushError(cause instanceof Error ? cause.message : String(cause)))}
           />
         ) : null}
 
         <StatusMessages isLoading={isLoading} error={error} />
 
-        {hasActiveProfile && currentSection === 'dashboard' ? (
+        {hasActiveProfile && WINDOW_ROLE === 'main' ? (
           <SectionErrorBoundary sectionName="Dashboard">
           <ConnectedDashboardSummary
             activeProfileName={activeProfileName}
-            obsStats={obsStats}
-            twitchLiveStatsByChannel={twitchLiveStatsByChannel}
+            obsConnected={obsStats.connected}
             liveEntries={liveEntries}
             recommendationTemplate={generalSettings.recommendationTemplate}
           />
           </SectionErrorBoundary>
         ) : null}
 
-        {hasActiveProfile && currentSection === 'settings' ? (
+        {hasActiveProfile && WINDOW_ROLE === 'settings' ? (
           <SectionErrorBoundary sectionName="Settings">
           <SettingsWorkspace
             activeProfileId={activeProfileId}
@@ -415,18 +481,18 @@ export default function App() {
             appLanguage={appLanguage}
             onSaveProfileSettings={saveProfileSettings}
             languageCode={languageCode}
-            onChangeLanguageCode={setLanguageCode}
+            onChangeLanguageCode={(code) => changeVoicePrefs({ languageCode: code })}
             voiceRate={voiceRate}
             voiceVolume={voiceVolume}
-            onChangeVoiceRate={setVoiceRate}
-            onChangeVoiceVolume={setVoiceVolume}
+            onChangeVoiceRate={(rate) => changeVoicePrefs({ voiceRate: rate })}
+            onChangeVoiceVolume={(volume) => changeVoicePrefs({ voiceVolume: volume })}
           />
           </SectionErrorBoundary>
         ) : null}
       </section>
 
       <ProfileSelectorModal
-        open={isProfileSelectorOpen || (!isLoading && !hasActiveProfile)}
+        open={WINDOW_ROLE === 'main' && (isProfileSelectorOpen || (!isLoading && !hasActiveProfile))}
         profiles={profiles}
         selectorProfileId={selectorProfileId}
         rememberSelection={rememberProfileSelection}
@@ -452,6 +518,11 @@ export default function App() {
 
       <ToastStack toasts={toasts} />
     </main>
+    {/* Outside the language-keyed <main>: a language change must not remount
+        the audio queue (the old one would keep draining in parallel). */}
+    {WINDOW_ROLE === 'main' ? (
+      <PlaybackHost voiceRate={voiceRate} voiceVolume={voiceVolume} languageCode={languageCode} onError={pushError} />
+    ) : null}
     </I18nProvider>
   );
 }
