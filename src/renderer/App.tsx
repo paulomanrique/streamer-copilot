@@ -18,6 +18,7 @@ import { useAudioQueue } from './hooks/useAudioQueue.js';
 import { useMusicPlayer } from './hooks/useMusicPlayer.js';
 import { useIpcListeners } from './hooks/useIpcListeners.js';
 import { useToasts } from './hooks/useToasts.js';
+import { useSpeechGuard } from './hooks/useSpeechGuard.js';
 import { WINDOW_ROLE } from './window-role.js';
 
 const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
@@ -39,8 +40,9 @@ function notifyWindows(event: WindowSyncEvent): void {
 
 /** Media playback (sound commands, TTS, music) runs in the main window only;
  *  main never routes playback pushes to the settings window either. */
-function PlaybackHost(props: { voiceRate: number; voiceVolume: number; languageCode: string; onError: (message: string) => void }) {
-  useAudioQueue(props);
+function PlaybackHost({ sessionProfileId, ...props }: { sessionProfileId: string | null; voiceRate: number; voiceVolume: number; languageCode: string; onError: (message: string) => void }) {
+  const waitUntilClear = useSpeechGuard(props.onError, sessionProfileId);
+  useAudioQueue({ ...props, waitUntilClear });
   useMusicPlayer();
   return null;
 }
@@ -521,7 +523,7 @@ export default function App() {
     {/* Outside the language-keyed <main>: a language change must not remount
         the audio queue (the old one would keep draining in parallel). */}
     {WINDOW_ROLE === 'main' ? (
-      <PlaybackHost voiceRate={voiceRate} voiceVolume={voiceVolume} languageCode={languageCode} onError={pushError} />
+      <PlaybackHost sessionProfileId={sessionProfileId} voiceRate={voiceRate} voiceVolume={voiceVolume} languageCode={languageCode} onError={pushError} />
     ) : null}
     </I18nProvider>
   );

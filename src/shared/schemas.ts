@@ -784,6 +784,18 @@ const chatMessageContentPartSchema = z.union([
   }),
 ]);
 
+export const SPEECH_GUARD_LIMITS = {
+  thresholdDb: { min: -90, max: 0 },
+  holdSeconds: { min: 0, max: 30 },
+} as const;
+
+export const speechGuardSettingsSchema = z.object({
+  enabled: z.boolean(),
+  deviceId: z.string().max(512).nullable(),
+  thresholdDb: z.number().min(SPEECH_GUARD_LIMITS.thresholdDb.min).max(SPEECH_GUARD_LIMITS.thresholdDb.max),
+  holdSeconds: z.number().min(SPEECH_GUARD_LIMITS.holdSeconds.min).max(SPEECH_GUARD_LIMITS.holdSeconds.max),
+});
+
 export const windowSyncEventSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('general-settings') }),
   z.object({ kind: z.literal('profiles') }),

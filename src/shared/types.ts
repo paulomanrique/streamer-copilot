@@ -23,6 +23,19 @@ export type WindowSyncEvent =
   | { kind: 'accounts' }
   | { kind: 'suggestion-lists' };
 
+/** Holds the sound/TTS queue while the streamer is talking. The main window
+ *  samples the microphone; a queued item only plays once the level has stayed
+ *  below `thresholdDb` for `holdSeconds`. */
+export interface SpeechGuardSettings {
+  enabled: boolean;
+  /** MediaDeviceInfo.deviceId of the microphone; null = system default. */
+  deviceId: string | null;
+  /** Level in dBFS (0 = full scale, more negative = quieter) that counts as talking. */
+  thresholdDb: number;
+  /** Seconds of silence required after talking before the queue resumes. */
+  holdSeconds: number;
+}
+
 export interface GeneralSettings {
   startOnLogin: boolean;
   minimizeToTray: boolean;

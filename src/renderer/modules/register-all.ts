@@ -11,6 +11,7 @@
  * profile-management callbacks aren't yet available through a store hook).
  */
 import './sound-settings-module.js';
+import './speech-guard-settings-module.js';
 import './text-settings-module.js';
 import './welcome-settings-module.js';
 import './music-settings-module.js';

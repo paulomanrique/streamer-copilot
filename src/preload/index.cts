@@ -12,6 +12,7 @@ import type {
   EventLogFilters,
   GeneralSettings,
   WindowSyncEvent,
+  SpeechGuardSettings,
   ObsConnectionSettings,
   ObsStatsSnapshot,
   ProfileSettings,
@@ -81,6 +82,9 @@ const IPC_CHANNELS = {
   appGetInfo: 'app:get-info',
   appOpenExternalUrl: 'app:open-external-url',
   appOpenSettingsWindow: 'app:open-settings-window',
+  speechGuardGetSettings: 'speech-guard:get-settings',
+  speechGuardSaveSettings: 'speech-guard:save-settings',
+  speechGuardSettingsUpdate: 'speech-guard:settings-update',
   windowSyncSend: 'window-sync:send',
   windowSyncUpdate: 'window-sync:update',
   profilesList: 'profiles:list',
@@ -285,6 +289,13 @@ const copilotApi: CopilotApi = {
     const wrappedListener = (_event: Electron.IpcRendererEvent, payload: WindowSyncEvent) => listener(payload);
     ipcRenderer.on(IPC_CHANNELS.windowSyncUpdate, wrappedListener);
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.windowSyncUpdate, wrappedListener); };
+  },
+  getSpeechGuardSettings: () => ipcRenderer.invoke(IPC_CHANNELS.speechGuardGetSettings) as Promise<SpeechGuardSettings>,
+  saveSpeechGuardSettings: (input: SpeechGuardSettings) => ipcRenderer.invoke(IPC_CHANNELS.speechGuardSaveSettings, input) as Promise<SpeechGuardSettings>,
+  onSpeechGuardSettingsUpdate: (listener: (settings: SpeechGuardSettings) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: SpeechGuardSettings) => listener(payload);
+    ipcRenderer.on(IPC_CHANNELS.speechGuardSettingsUpdate, wrappedListener);
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.speechGuardSettingsUpdate, wrappedListener); };
   },
   listProfiles: () => ipcRenderer.invoke(IPC_CHANNELS.profilesList),
   selectProfile: (input: SelectProfileInput) => ipcRenderer.invoke(IPC_CHANNELS.profilesSelect, input),

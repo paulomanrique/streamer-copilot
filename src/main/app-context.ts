@@ -35,6 +35,7 @@ import { ProfileStore } from '../modules/settings/profile-store.js';
 import { SoundCommandRepository } from '../modules/sounds/sound-repository.js';
 import { SoundService } from '../modules/sounds/sound-service.js';
 import { SoundSettingsStore } from '../modules/sounds/sound-settings-store.js';
+import { DEFAULT_SPEECH_GUARD_SETTINGS, SpeechGuardSettingsStore } from '../modules/speech-guard/speech-guard-settings-store.js';
 import { SubscriberTiersStore } from '../modules/subscriber-tiers/subscriber-tiers-store.js';
 import { UserListsStore } from '../modules/user-lists/user-lists-store.js';
 import { SuggestionRepository } from '../modules/suggestions/suggestion-repository.js';
@@ -136,6 +137,7 @@ import {
   overlayPreferencesSetInputSchema,
   highlightMessageInputSchema,
   windowSyncEventSchema,
+  speechGuardSettingsSchema,
   userListCreateInputSchema,
   userListRenameInputSchema,
   userListIdInputSchema,
@@ -2131,6 +2133,23 @@ export function createAppContext(options: AppContextOptions): () => Promise<void
   });
   ipcMain.handle(IPC_CHANNELS.soundsReadFile, async (_, p) => (await fs.readFile(await resolveProfileMediaPath(String(p)))).toString('base64'));
   ipcMain.handle(IPC_CHANNELS.soundsPreviewPlay, async (_, raw) => soundService.previewPlay(soundPlayPayloadSchema.parse(raw)));
+  const getSpeechGuardSettingsStore = async (): Promise<SpeechGuardSettingsStore | null> => {
+    const snapshot = await profileStore.list();
+    const active = snapshot.profiles.find((p) => p.id === snapshot.activeProfileId);
+    return active ? new SpeechGuardSettingsStore(active.directory) : null;
+  };
+  ipcMain.handle(IPC_CHANNELS.speechGuardGetSettings, async () => {
+    const store = await getSpeechGuardSettingsStore();
+    return store ? store.load() : { ...DEFAULT_SPEECH_GUARD_SETTINGS };
+  });
+  ipcMain.handle(IPC_CHANNELS.speechGuardSaveSettings, async (_, raw) => {
+    const store = await getSpeechGuardSettingsStore();
+    if (!store) throw new Error('No active profile');
+    const saved = await store.save(speechGuardSettingsSchema.parse(raw));
+    // The main window's audio queue applies the new gate live.
+    options.stateHub.pushSpeechGuardSettings(saved);
+    return saved;
+  });
   ipcMain.handle(IPC_CHANNELS.soundsGetSettings, async () => {
     const store = await getSoundSettingsStore();
     return store ? store.load() : soundSettingsCache;

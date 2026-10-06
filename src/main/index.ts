@@ -49,7 +49,10 @@ let isRunningQuitCleanup = false;
 let didFinishQuitCleanup = false;
 const stateHub = new StateHub();
 
-function createAppWindow(size: { width: number; height: number; minWidth: number; minHeight: number }): BrowserWindow {
+function createAppWindow(
+  size: { width: number; height: number; minWidth: number; minHeight: number },
+  options: { backgroundThrottling?: boolean } = {},
+): BrowserWindow {
   const window = new BrowserWindow({
     ...size,
     show: false,
@@ -60,6 +63,7 @@ function createAppWindow(size: { width: number; height: number; minWidth: number
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      backgroundThrottling: options.backgroundThrottling ?? true,
     },
   });
 
@@ -121,7 +125,10 @@ async function openSettingsWindow(): Promise<void> {
 }
 
 async function createMainWindow(): Promise<void> {
-  mainWindow = createAppWindow({ width: 1280, height: 800, minWidth: 1024, minHeight: 680 });
+  // The main window hosts media playback and samples the microphone for the
+  // speech guard; it usually sits hidden or behind OBS, where Chromium would
+  // throttle its timers to ~1/s and the guard would react a second late.
+  mainWindow = createAppWindow({ width: 1280, height: 800, minWidth: 1024, minHeight: 680 }, { backgroundThrottling: false });
 
   stateHub.attachWindow(mainWindow);
 

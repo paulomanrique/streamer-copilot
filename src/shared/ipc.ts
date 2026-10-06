@@ -10,6 +10,7 @@ import type {
   EventLogFilters,
   GeneralSettings,
   WindowSyncEvent,
+  SpeechGuardSettings,
   ObsConnectionSettings,
   ObsStatsSnapshot,
   PlatformId,
@@ -94,6 +95,9 @@ export const IPC_CHANNELS = {
   appGetInfo: 'app:get-info',
   appOpenExternalUrl: 'app:open-external-url',
   appOpenSettingsWindow: 'app:open-settings-window',
+  speechGuardGetSettings: 'speech-guard:get-settings',
+  speechGuardSaveSettings: 'speech-guard:save-settings',
+  speechGuardSettingsUpdate: 'speech-guard:settings-update',
   windowSyncSend: 'window-sync:send',
   windowSyncUpdate: 'window-sync:update',
   profilesList: 'profiles:list',
@@ -308,6 +312,10 @@ export interface CopilotApi {
   /** Relays a sync event to every other app window (see WindowSyncEvent). */
   broadcastWindowSync: (event: WindowSyncEvent) => Promise<void>;
   onWindowSync: (listener: (event: WindowSyncEvent) => void) => () => void;
+  getSpeechGuardSettings: () => Promise<SpeechGuardSettings>;
+  saveSpeechGuardSettings: (input: SpeechGuardSettings) => Promise<SpeechGuardSettings>;
+  /** Async push when the speech-guard settings change (from any window). */
+  onSpeechGuardSettingsUpdate: (listener: (settings: SpeechGuardSettings) => void) => () => void;
   listProfiles: () => Promise<ProfilesSnapshot>;
   selectProfile: (input: SelectProfileInput) => Promise<ProfilesSnapshot>;
   /** Hard switch — persists the new active profile and relaunches the app

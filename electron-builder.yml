@@ -18,6 +18,11 @@ publish:
 mac:
   icon: build/icon.icns
   category: public.app-category.utilities
+  extendInfo:
+    # Speech guard: the main window listens to the microphone to hold queued
+    # sounds while the streamer is talking. Without this key macOS denies
+    # microphone access to the packaged app.
+    NSMicrophoneUsageDescription: Streamer Copilot listens to your microphone to hold queued sounds while you are talking.
   target:
     - dmg
     - zip

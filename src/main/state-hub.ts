@@ -24,6 +24,7 @@ import type {
   VoiceSpeakPayload,
   LiveOutputsSnapshot,
   PlatformAccountStatus,
+  SpeechGuardSettings,
   WindowSyncEvent,
 } from '../shared/types.js';
 
@@ -58,6 +59,10 @@ export class StateHub {
 
   detachAuxWindow(window: BrowserWindow): void {
     this.auxWindows.delete(window);
+  }
+
+  pushSpeechGuardSettings(payload: SpeechGuardSettings): void {
+    this.broadcast(IPC_CHANNELS.speechGuardSettingsUpdate, payload);
   }
 
   pushAccountStatus(payload: PlatformAccountStatus): void {

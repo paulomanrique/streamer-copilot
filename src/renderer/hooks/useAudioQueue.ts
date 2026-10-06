@@ -15,6 +15,9 @@ interface AudioQueueOptions {
   voiceVolume: number;
   languageCode: string;
   onError: (message: string) => void;
+  /** Awaited before each item plays — the speech guard holds the queue here
+   *  while the streamer is talking. */
+  waitUntilClear?: () => Promise<void>;
 }
 
 /**
@@ -22,16 +25,16 @@ interface AudioQueueOptions {
  * TTS, welcome sounds, raffle sounds, etc.) with a configurable gap
  * between items so they don't overlap.
  */
-export function useAudioQueue({ voiceRate, voiceVolume, languageCode, onError }: AudioQueueOptions): void {
+export function useAudioQueue({ voiceRate, voiceVolume, languageCode, onError, waitUntilClear }: AudioQueueOptions): void {
   const queueRef = useRef<QueueItem[]>([]);
   const isPlayingRef = useRef(false);
   const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
-  const optionsRef = useRef({ voiceRate, voiceVolume, languageCode, onError });
+  const optionsRef = useRef({ voiceRate, voiceVolume, languageCode, onError, waitUntilClear });
 
   // Keep options ref in sync so the processQueue closure always reads latest values
   useEffect(() => {
-    optionsRef.current = { voiceRate, voiceVolume, languageCode, onError };
-  }, [voiceRate, voiceVolume, languageCode, onError]);
+    optionsRef.current = { voiceRate, voiceVolume, languageCode, onError, waitUntilClear };
+  }, [voiceRate, voiceVolume, languageCode, onError, waitUntilClear]);
 
   // Load system voices for TTS
   useEffect(() => {
@@ -55,11 +58,16 @@ export function useAudioQueue({ voiceRate, voiceVolume, languageCode, onError }:
   }, []);
 
   const processQueue = useCallback(async () => {
-    if (isPlayingRef.current) return;
-    const item = queueRef.current.shift();
-    if (!item) return;
-
+    if (isPlayingRef.current || queueRef.current.length === 0) return;
     isPlayingRef.current = true;
+
+    // Hold while the streamer is talking; the item stays queued meanwhile.
+    await optionsRef.current.waitUntilClear?.();
+    const item = queueRef.current.shift();
+    if (!item) {
+      isPlayingRef.current = false;
+      return;
+    }
     const opts = optionsRef.current;
 
     try {
